@@ -1,0 +1,13 @@
+//> output "1"
+//> output "2"
+//> output "3"
+
+import std/core;
+import std/format;
+import std/io;
+
+func main() {
+	for a in [1, 2, 3] {
+		println(format(a));
+	}
+}

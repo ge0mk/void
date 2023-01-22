@@ -1,0 +1,32 @@
+import std/core;
+
+struct Foo {
+	var a: int;
+	var b: bool;
+	var c: byte;
+
+	func constructor(this: &&Foo) -> void = default;
+	func constructor(this: &&Foo, other: Foo) -> void = default;
+	func destructor(this: &&Foo) -> void = default;
+	operator =(this: &&Foo, other: Foo) -> void = default;
+	operator ==(this: Foo, other: Foo) -> bool = default;
+}
+
+func main() {
+	var a: Foo;
+	assert(a.a == 0);
+	assert(a.b == false);
+	assert(a.c == '\0'b);
+
+	var b = a;
+	assert(a == b);
+
+	a.a = 5;
+	assert(a != b);
+
+	var c: Foo;
+	assert(a != c);
+
+	c = a;
+	assert(a == c);
+}

@@ -1,0 +1,14 @@
+//> test-ec "0"
+
+import std/core;
+import std/set;
+import std/string;
+
+func main() {
+	var a: Set!<String>;
+	must a.add("hello");
+	must a.add("world");
+
+	assert(a.contains("hello"));
+	assert(!a.contains("abc"));
+}

@@ -1,0 +1,17 @@
+import std/core;
+
+func abs(x: f64) -> f64 {
+	return -x if x < 0.0 else x;
+}
+
+func eq(a: f64, b: f64) -> bool {
+	return abs(a - b) < 0.001;
+}
+
+func main() {
+	assert(3.0 as int == 3);
+	assert((3.0 + 2.0) as int == 5);
+
+	assert(eq(3 as f64, 3.0));
+	assert(eq(5 as f64, 3.0 + 2.0));
+}

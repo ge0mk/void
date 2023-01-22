@@ -1,0 +1,5 @@
+//> error "invalid parameters for unwrap operator"
+
+import std/core;
+
+operator unwrap(this: i64, foo: i64) -> i64;

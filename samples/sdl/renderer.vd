@@ -1,0 +1,61 @@
+import std/core;
+
+import sdl/window;
+
+enum RendererFlags {
+	case Software      = 0x00000001;
+	case Accelerated   = 0x00000002;
+	case PresentVSync  = 0x00000004;
+	case TargetTexture = 0x00000008;
+
+	operator |(this: RendererFlags, other: RendererFlags) -> RendererFlags = default;
+}
+
+struct Renderer {}
+
+[extern_name: "SDL_CreateRenderer"]
+extern func createRenderer(window: vptr!<Window>, index: i32, flags: RendererFlags) -> vptr!<Renderer>;
+
+[extern_name: "SDL_DestroyRenderer"]
+extern func destroy(renderer: vptr!<Renderer>) -> void;
+
+[extern_name: "SDL_RenderClear"]
+extern func clear(renderer: vptr!<Renderer>) -> void;
+
+[extern_name: "SDL_RenderPresent"]
+extern func present(renderer: vptr!<Renderer>) -> void;
+
+extern func SDL_SetRenderDrawColor(renderer: vptr!<Renderer>, r: u8, g: u8, b: u8, a: u8) -> i32;
+
+extern func SDL_RenderDrawRect(renderer: vptr!<Renderer>, rect: cptr!<Rect>) -> i32;
+extern func SDL_RenderFillRect(renderer: vptr!<Renderer>, rect: cptr!<Rect>) -> i32;
+
+struct Rect {
+	var x: i32;
+	var y: i32;
+	var width: i32;
+	var height: i32;
+
+	func constructor(this: &&Rect, x: i32, y: i32, width: i32, height: i32) {
+		this.x = x;
+		this.y = y;
+		this.width = width;
+		this.height = height;
+	}
+
+	func destructor(this: &&Rect) {}
+}
+
+extend Renderer {
+	func setDrawColor(renderer: vptr!<Renderer>, r: u8, g: u8, b: u8, a: u8) -> void {
+		discard SDL_SetRenderDrawColor(renderer, r, g, b, a);
+	}
+
+	func drawRect(renderer: vptr!<Renderer>, rect: Rect) {
+		discard SDL_RenderDrawRect(renderer, cptr!<Rect>::addressOf(&rect));
+	}
+
+	func fillRect(renderer: vptr!<Renderer>, rect: Rect) {
+		discard SDL_RenderFillRect(renderer, cptr!<Rect>::addressOf(&rect));
+	}
+}

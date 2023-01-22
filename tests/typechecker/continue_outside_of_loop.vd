@@ -1,0 +1,7 @@
+//> error "continue stmt must be inside a loop"
+
+import std/core;
+
+func main() {
+	continue;
+}

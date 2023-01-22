@@ -1,0 +1,15 @@
+//> error "operator as redeclared with equal return type"
+
+import std/core;
+
+template <T: type = int>
+operator as(x: byte) -> uint {
+	return 0;
+}
+
+template <T: type = uint>
+operator as(x: byte) -> uint {
+	return 0;
+}
+
+func main() {}

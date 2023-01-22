@@ -1,0 +1,5 @@
+//> error "return type and this param type must have same reference strength"
+
+import std/core;
+
+operator unwrap(this: i64) -> &&bool;

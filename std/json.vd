@@ -1,0 +1,168 @@
+import std/core;
+import std/string;
+import std/list;
+import std/map;
+import std/format;
+
+variant Value {
+	case Null;
+	case Boolean: bool;
+	case Number: int;
+	case String: String;
+	case Array: List!<Value>;
+	case Object: Map!<String, Value>;
+
+	func constructor(this: &&Value) {
+		this.constructor!<0>();
+	}
+
+	operator ==(this: Value, other: Value) -> bool = default;
+}
+
+func skipWhitespace(str: &String, index: &&uint) {
+	while isSpace(str[index] ?? '\0'b) {
+		index++;
+	}
+}
+
+func parse(str: &String, index: &&uint) -> Result!<Value> {
+	skipWhitespace(&str, &&index);
+	match try str[index] {
+		case '['b -> {
+			index++;
+			skipWhitespace(&str, &&index);
+
+			var children: List!<Value>;
+			while (try str[index]) != ']'b {
+				const child = try parse(&str, &&index);
+				try children.append(child);
+
+				skipWhitespace(&str, &&index);
+				if try str[index] != ']'b {
+					if try str[index] == ','b {
+						index++;
+						skipWhitespace(&str, &&index);
+					} else {
+						throw Error::EINVAL;
+					}
+				}
+			}
+			index++;
+
+			return Ok(Value::Array(children));
+		}
+		case '{'b -> {
+			index++;
+			skipWhitespace(&str, &&index);
+
+			var children: Map!<String, Value>;
+			while (try str[index]) != '}'b {
+				var key = try parse(&str, &&index);
+				var name = key as String else {
+					throw Error::EINVAL;
+				}
+
+				skipWhitespace(&str, &&index);
+				if (try str[index]) != ':'b {
+					throw Error::EINVAL;
+				}
+				index++;
+
+				const value = try parse(&str, &&index);
+				try children.set(name, value);
+
+				skipWhitespace(&str, &&index);
+				if try str[index] != '}'b {
+					if try str[index] == ','b {
+						index++;
+						skipWhitespace(&str, &&index);
+					} else {
+						throw Error::EINVAL;
+					}
+				}
+			}
+			index++;
+
+			return Ok(Value::Object(children));
+		}
+		case '"'b -> {
+			index++;
+
+			const start = index;
+			while (try str[index]) != '"'b {
+				index++;
+			}
+			const end = index;
+			index++;
+
+			const val = String(try str[start..end]);
+			return Ok(Value::String(val));
+		}
+		else -> {
+			if isAlpha(try str[index]) {
+				const start = index;
+				while isAlpha(str[index] ?? '\0'b) {
+					index++;
+				}
+
+				const keyword = String(try str[start..index]);
+				if keyword == "null" {
+					return Ok(Value::Null);
+				} else if keyword == "true" {
+					return Ok(Value::Boolean(true));
+				} else if keyword == "false" {
+					return Ok(Value::Boolean(false));
+				} else {
+					throw Error::EINVAL;
+				}
+			} else {
+				var number = try parseNumber(str, index);
+				index += number.length;
+				return Ok(Value::Number(number.toInt()));
+			}
+		}
+	}
+}
+
+func parse(str: String) -> Result!<Value> {
+	var index = 0u;
+	const result = try parse(&str, &&index);
+	skipWhitespace(&str, &&index);
+	if index < str.size() {
+		throw Error::EINVAL;
+	}
+	return Ok(result);
+}
+
+func format(this: Value) -> String {
+	match this {
+		case Null -> return "null";
+		case Boolean: val -> return format(val);
+		case Number: val -> return format(val);
+		case String: val -> return "\"" + val + "\"";
+		case Array: children -> {
+			var result = "[";
+			for i in 0u..children.size() {
+				if i != 0 {
+					result += ", ";
+				}
+				result += (must children[i]).format();
+			}
+			return result + "]";
+		}
+		case Object: children -> {
+			var result = "{";
+			var first = true;
+			for entry in children {
+				if first {
+					first = false;
+				} else {
+					result += ", ";
+				}
+
+				result += "\"" + entry.key + "\": " + entry.value.format();
+			}
+			return result + "}";
+		}
+	}
+}

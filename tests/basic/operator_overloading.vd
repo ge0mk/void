@@ -1,0 +1,24 @@
+//> test-ec "5"
+
+import std/core;
+
+struct MyInt {
+	var value: int;
+
+	func constructor(this: &&MyInt, value: int) -> void {
+		this.value = value;
+	}
+
+	func destructor(this: &&MyInt) -> void {}
+
+	operator +(this: MyInt, other: MyInt) -> MyInt {
+		return MyInt(this.value + other.value);
+	}
+}
+
+func main() -> int {
+	const a = MyInt(1);
+	const b = MyInt(4);
+	const c = a + b;
+	return c.value;
+}

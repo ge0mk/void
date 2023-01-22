@@ -1,0 +1,6 @@
+import std/core;
+
+func main() {
+	var a = Optional!<int>::None;
+	assert(!a.hasValue());
+}

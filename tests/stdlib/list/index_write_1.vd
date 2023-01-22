@@ -1,0 +1,12 @@
+//> test-ec "5"
+
+import std/core;
+import std/list;
+
+func main() -> int {
+	var a = List!<int>(10u, 0);
+	assert(a.size() == 10u);
+
+	(must a[0u]) = 5;
+	return must a[0u];
+}

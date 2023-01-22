@@ -1,0 +1,13 @@
+//> error "can't take var reference of const value"
+
+import std/core;
+
+func foo(x: &&int) -> void {
+	x = 5;
+}
+
+func main() -> int {
+	const a = 0;
+	foo(&&a);
+	return a;
+}

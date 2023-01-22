@@ -1,0 +1,10 @@
+import std/core;
+
+func main() {
+	var a = [1, 2, 3, 4];
+	for &&b in a {
+		b += 2;
+	}
+
+	assert((must a[2u]) == 5);
+}

@@ -1,0 +1,13 @@
+//> test-ec "5"
+
+import std/core;
+
+func foo(x: &&int) -> void {
+	x = 5;
+}
+
+func main() -> int {
+	var a = 0;
+	foo(&&a);
+	return a;
+}

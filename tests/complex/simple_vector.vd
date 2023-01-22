@@ -1,0 +1,58 @@
+//> output "{ 4 | 6 }"
+
+import std/core;
+import std/string;
+import std/format;
+import std/io;
+
+struct vec2 {
+	var x: int;
+	var y: int;
+
+	func constructor(this: &&vec2) -> void {
+		this.x = 0;
+		this.y = 0;
+		println("vec2::constructor");
+	}
+
+	func constructor(this: &&vec2, x: int, y: int) -> void {
+		this.x = x;
+		this.y = y;
+		println("vec2::constructor");
+	}
+
+	func constructor(this: &&vec2, other: vec2) -> void {
+		this.x = other.x;
+		this.y = other.y;
+		println("vec2::constructor");
+	}
+
+	func destructor(this: &&vec2) -> void {
+		println("vec2::destructor");
+	}
+
+	operator +(this: vec2, other: vec2) -> vec2 {
+		return vec2(this.x + other.x, this.y + other.y);
+	}
+}
+
+func print(v: vec2) -> void {
+	print("{ ");
+	print(format(v.x));
+	print(" | ");
+	print(format(v.y));
+	print(" }");
+}
+
+func println(v: vec2) -> void {
+	print("{ ");
+	print(format(v.x));
+	print(" | ");
+	print(format(v.y));
+	println(" }");
+}
+
+func main() -> int {
+	println(vec2(1, 2) + vec2(3, 4));
+	return 0;
+}

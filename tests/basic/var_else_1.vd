@@ -1,0 +1,15 @@
+//> test-arg "hello"
+//> output "hello"
+//> test-ec "0"
+
+import std/core;
+import std/string;
+import std/io;
+
+func main(args: Range!<String>) -> int {
+	var str = args[1u] else {
+		return 1;
+	}
+	println(str);
+	return 0;
+}

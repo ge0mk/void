@@ -1,0 +1,17 @@
+import std/core;
+
+template <T: type>
+struct Foo {
+	func constructor(this: &&Foo!<T>) {}
+	func destructor(this: &&Foo!<T>) {}
+}
+
+template <S: uint>
+struct Bar {
+	func constructor(this: &&Bar!<S>) {}
+	func destructor(this: &&Bar!<S>) {}
+}
+
+func main() {
+	var x: Foo!<Bar!<5>>;
+}

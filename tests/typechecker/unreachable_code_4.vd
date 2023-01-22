@@ -1,0 +1,11 @@
+//> test-ec "1"
+
+import std/core;
+
+func main() -> int {
+	while false {
+		return 0;
+	}
+
+	return 1;
+}

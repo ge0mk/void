@@ -1,0 +1,13 @@
+import std/core;
+import std/list;
+
+func main() {
+	var a = List!<int>();
+
+	must a.append(1);
+	must a.append(2);
+	must a.append(3);
+
+	must a.insert(0u, 5);
+	assert((must a[0u]) == 5);
+}

@@ -1,0 +1,15 @@
+import std/core;
+
+func foo(val: byte) -> bool {
+	match val {
+		case 'a'b | 'b'b | 'c'b -> return true;
+		else -> return false;
+	}
+}
+
+func main() {
+	assert(foo('a'b) == true);
+	assert(foo('b'b) == true);
+	assert(foo('c'b) == true);
+	assert(foo('d'b) == false);
+}

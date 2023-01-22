@@ -1,0 +1,11 @@
+import std/core;
+import std/string;
+import std/path;
+
+func main() {
+	var a = Path(".") / "tests"/ "stdlib" / "path" / "foo.txt";
+	assert(a.toString() == "./tests/stdlib/path/foo.txt");
+	assert(a.filename() == "foo.txt");
+	assert(a.stem() == "./tests/stdlib/path/foo");
+	assert(a.extension() == "txt");
+}

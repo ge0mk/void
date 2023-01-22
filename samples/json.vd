@@ -1,0 +1,32 @@
+import std/core;
+import std/file;
+import std/json;
+import std/string;
+import std/io;
+import std/format;
+
+func main(args: Range!<String>) -> int {
+	const path = args[1u] else {
+		eprintln("usage: json <path>");
+		return 1;
+	}
+
+	var file = open(path, OpenMode::read) else {
+		eprintln("couldn't open file " + path);
+		return 1;
+	}
+
+	const content = file.readAll() else {
+		eprintln("couldn't read file");
+		return 1;
+	}
+
+	const json = json::parse(content) else {
+		eprintln("invalid json");
+		return 1;
+	}
+
+	println(json.format());
+
+	return 0;
+}

@@ -1,0 +1,17 @@
+//> output "0"
+//> output "1"
+//> output "2"
+//> output "3"
+//> output "4"
+
+import std/core;
+import std/format;
+import std/io;
+
+func main() -> int {
+	for i in 0..5 {
+		println(format(i));
+	}
+
+	return 0;
+}

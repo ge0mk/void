@@ -1,0 +1,13 @@
+import std/core;
+import std/string;
+import std/list;
+
+func main() {
+	var a: List!<String>;
+	must a.append("hello");
+	must a.append("world");
+	must a.append("123");
+
+	var b = must " / ".join(a);
+	assert(b == "hello / world / 123");
+}

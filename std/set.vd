@@ -1,0 +1,271 @@
+import std/core;
+import std/libc/stdlib;
+
+template <T: type>
+struct Set {
+	var data: vptr!<T>;
+	var size: uint;
+	var capacity: uint;
+
+	func constructor(this: &&Set!<T>) -> void {
+		this.data = vptr::null() as vptr!<T>;
+		this.size = 0u;
+		this.capacity = 0u;
+	}
+
+	func constructor(this: &&Set!<T>, range: Range!<T>) -> void {
+		this.data = vptr::null() as vptr!<T>;
+		this.size = 0u;
+		this.capacity = 0u;
+		must this.add(range);
+	}
+
+	func constructor(this: &&Set!<T>, other: Set!<T>) -> void {
+		this.data = vptr::null() as vptr!<T>;
+		this.size = 0u;
+		this.capacity = 0u;
+
+		must this.grow(other.size());
+		for index in 0u..other.size() {
+			this.data[index].constructor(other.data[index]);
+		}
+		this.size = other.size();
+	}
+
+	operator =(this: &&Set!<T>, other: Set!<T>) -> void {
+		this.clear();
+		must this.grow(other.size());
+
+		for index in 0u..other.size() {
+			this.data[index].constructor(other.data[index]);
+		}
+		this.size = other.size();
+	}
+
+	func destructor(this: &&Set!<T>) -> void {
+		this.clear();
+
+		if this.data != vptr::null() {
+			libc::stdlib::free(this.data as vptr);
+		}
+	}
+
+	func size(this: Set!<T>) -> uint {
+		return this.size;
+	}
+
+	func isEmpty(this: Set!<T>) -> bool {
+		return this.size == 0u;
+	}
+
+	func data(this: Set!<T>) -> cptr!<T> {
+		return this.data as cptr!<T>;
+	}
+
+	func range(this: Set!<T>) -> Range!<T> {
+		return Range!<T>(this.data as cptr!<T>, this.size);
+	}
+
+	func iterator(this: Set!<T>) -> RangeIterator!<T> {
+		return RangeIterator!<T>(this.data as cptr!<T>, this.data as cptr!<T> + this.size);
+	}
+
+	func getInsertPos(this: Set!<T>, value: T) -> uint {
+		var min = 0u;
+		var max = this.size;
+		var index = this.size / 2u;
+
+		while min < max {
+			const order = value <=> this.data[index];
+			if order < 0 {
+				max = index;
+			} else if order > 0 {
+				min = index + 1u;
+			} else {
+				break;
+			}
+			index = (min + max) / 2u;
+		}
+
+		return index;
+	}
+
+	func contains(this: Set!<T>, value: T) -> bool {
+		if this.size == 0 {
+			return false;
+		} else {
+			return this.data[this.getInsertPos(value)] == value;
+		}
+	}
+
+	func add(this: &&Set!<T>, value: T) -> Result!<void> {
+		const index = this.getInsertPos(value);
+		if index < this.size {
+			if this.data[index] == value {
+				return Ok;
+			}
+		}
+
+		try this.grow();
+
+		memmove!<T>(this.data + index + 1, this.data as cptr!<T> + index, this.size - index);
+
+		this.data[index].constructor(value);
+		this.size += 1u;
+
+		return Ok;
+	}
+
+	func add(this: &&Set!<T>, range: Range!<T>) -> Result!<void> {
+		for value in range {
+			try this.add(value);
+		}
+		return Ok;
+	}
+
+	func add(this: &&Set!<T>, other: Set!<T>) -> Result!<void> {
+		for value in other {
+			try this.add(value);
+		}
+		return Ok;
+	}
+
+	func remove(this: &&Set!<T>, value: T) -> void {
+		const index = this.getInsertPos(value);
+		if index >= this.size {
+			return;
+		}
+
+		if this.data[index] != value {
+			return;
+		}
+
+		this.data[index].destructor();
+		this.size -= 1u;
+		memmove!<T>(this.data + index, this.data as cptr!<T> + index + 1, this.size - index);
+	}
+
+	func remove(this: &&Set!<T>, range: Range!<T>) -> void {
+		for value in range {
+			this.remove(value);
+		}
+	}
+
+	func remove(this: &&Set!<T>, other: Set!<T>) -> void {
+		for value in other {
+			this.remove(value);
+		}
+	}
+
+	func clear(this: &&Set!<T>) -> void {
+		for index in 0u..this.size() {
+			this.data[index].destructor();
+		}
+		this.size = 0u;
+	}
+
+	operator ==(this: Set!<T>, other: Set!<T>) -> bool {
+		if this.size() != other.size() {
+			return false;
+		}
+
+		for i in 0u..this.size() {
+			if this.data[i] != other.data[i] {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	// union
+	operator |(this: Set!<T>, other: Set!<T>) -> Set!<T> {
+		var result = this;
+
+		for element in other {
+			must result.add(element);
+		}
+
+		return result;
+	}
+
+	// intersection
+	operator &(this: Set!<T>, other: Set!<T>) -> Set!<T> {
+		var result = Set!<T>();
+
+		for element in this {
+			if other.contains(element) {
+				must result.add(element);
+			}
+		}
+
+		return result;
+	}
+
+	// difference
+	operator -(this: Set!<T>, other: Set!<T>) -> Set!<T> {
+		var result = Set!<T>();
+
+		for element in this {
+			if !other.contains(element) {
+				must result.add(element);
+			}
+		}
+
+		return result;
+	}
+
+	// symetric difference
+	operator ^(this: Set!<T>, other: Set!<T>) -> Set!<T> {
+		var result = Set!<T>();
+
+		for element in this {
+			if !other.contains(element) {
+				must result.add(element);
+			}
+		}
+
+		for element in other {
+			if !this.contains(element) {
+				must result.add(element);
+			}
+		}
+
+		return result;
+	}
+
+	// ensure that memory for at least one more element is available
+	func grow(this: &&Set!<T>) -> Result!<void> {
+		if this.size < this.capacity {
+			return Ok;
+		}
+
+		return this.grow(this.size * 3u / 2u + 1u);
+	}
+
+	// ensure that memory for at least 'new_capacity' elements is available
+	func grow(this: &&Set!<T>, new_capacity: uint) -> Result!<void> {
+		if new_capacity < this.capacity {
+			return Ok;
+		}
+
+		const old_capacity = this.capacity;
+
+		if this.data == vptr::null() {
+			this.data = libc::stdlib::malloc(new_capacity * sizeOf!<T>()) as vptr!<T>;
+		} else {
+			this.data = libc::stdlib::realloc(this.data as vptr, new_capacity * sizeOf!<T>()) as vptr!<T>;
+		}
+
+		if this.data == vptr::null() {
+			throw Error::ENOMEM;
+		}
+
+		this.capacity = new_capacity;
+		if new_capacity > old_capacity {
+			memset!<T>(this.data + old_capacity, '\0'b, new_capacity - old_capacity);
+		}
+
+		return Ok;
+	}
+}

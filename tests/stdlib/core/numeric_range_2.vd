@@ -1,0 +1,13 @@
+//> test-ec "20"
+// 0 + 2 + 4 + 6 + 8 == 20
+
+import std/core;
+
+func main() -> int {
+	var acc = 0;
+	for i in 0..10|2 {
+		acc += i;
+	}
+
+	return acc;
+}

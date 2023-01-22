@@ -1,0 +1,8 @@
+//> error "unreachable code"
+
+import std/core;
+
+func main() -> int {
+	abort();
+	return 1;
+}

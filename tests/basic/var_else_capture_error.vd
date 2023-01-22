@@ -1,0 +1,15 @@
+//> test-ec "42"
+
+import std/core;
+
+func foo() -> Result!<int, int> {
+	return Result!<int, int>::Error(42);
+}
+
+func main() -> int {
+	var a = foo() else: error {
+		return error;
+	}
+
+	return 0;
+}

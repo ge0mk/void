@@ -1,0 +1,16 @@
+import std/core;
+import std/map;
+
+func main() {
+	var a: Map!<int, int>;
+	must a.set(4, 1);
+	must a.set(3, 2);
+	must a.set(2, 3);
+	must a.set(1, 4);
+
+	assert(a.size() == 4);
+	assert(a.get(4).value() == 1);
+	assert(a.get(3).value() == 2);
+	assert(a.get(2).value() == 3);
+	assert(a.get(1).value() == 4);
+}

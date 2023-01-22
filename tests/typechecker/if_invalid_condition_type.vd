@@ -1,0 +1,11 @@
+//> error "condition has invalid type"
+
+import std/core;
+
+func main() -> int {
+	if 1 {
+		return 0;
+	} else {
+		return 2;
+	}
+}

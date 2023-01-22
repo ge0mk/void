@@ -1,0 +1,9 @@
+import std/core;
+import std/list;
+
+func main() {
+	var a = [1, 2, 3];
+
+	var b: List!<int> = a.range();
+	assert(b.size() == 3u);
+}

@@ -1,0 +1,10 @@
+//> test-ec "10"
+
+import std/core;
+import std/shared;
+
+func main() -> int {
+	var x = Shared!<int>::new(0);
+	x = 10;
+	return x;
+}

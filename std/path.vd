@@ -1,0 +1,202 @@
+import std/core;
+import std/libc/dirent;
+import std/libc/stdio;
+import std/libc/unistd;
+import std/list;
+import std/string;
+
+struct PathIterator {
+	var path: Path;
+	var dir: vptr!<DIR>;
+
+	func constructor(this: &&PathIterator, path: Path) -> void {
+		this.path = path;
+		const c_path = path.toString() + '\0'b;
+		this.dir = opendir(c_path.data());
+	}
+
+	func destructor(this: &&PathIterator) -> void {
+		discard closedir(this.dir);
+	}
+
+	func next(this: &&PathIterator) -> Optional!<Path> {
+		const entry = readdir(this.dir);
+		if entry == vptr::null() {
+			return None;
+		}
+
+		const entry_name = String::fromCString(entry[0].d_name.data() as cptr!<byte>);
+		return Some(this.path / entry_name);
+	}
+}
+
+struct RecursivePathIterator {
+	var current_path: List!<String>;
+	var dir_stack: List!<vptr!<DIR>>;
+
+	func constructor(this: &&RecursivePathIterator, path: Path) -> void {
+		this.current_path = path.segments;
+		const c_path = path.toString() + '\0'b;
+		this.dir_stack.constructor();
+		must this.dir_stack.append(opendir(c_path.data()));
+	}
+
+	func destructor(this: &&RecursivePathIterator) -> void {
+		for dir in this.dir_stack {
+			discard closedir(dir);
+		}
+	}
+
+	func next(this: &&RecursivePathIterator) -> Optional!<Path> {
+		if this.dir_stack.isEmpty() {
+			return None;
+		}
+
+		const current_dir = this.dir_stack.last().value();
+		const entry = readdir(current_dir);
+		if entry == vptr::null() {
+			must this.dir_stack.removeLast();
+			must this.current_path.removeLast();
+			return this.next();
+		}
+
+		const entry_name = String::fromCString(entry[0].d_name.data() as cptr!<byte>);
+
+		// file
+		if entry[0].d_type == DT::REG {
+			return Some(Path(this.current_path + entry_name));
+		}
+
+		// child directory
+		if entry[0].d_type == DT::DIR && entry_name != "." && entry_name != ".." {
+			must this.current_path.append(entry_name);
+			const c_path = must "/".join(this.current_path) + '\0'b;
+			must this.dir_stack.append(opendir(c_path.data()));
+		}
+
+		return this.next();
+	}
+}
+
+struct PathRange {
+	var path: Path;
+
+	func constructor(this: &&PathRange, path: Path) -> void {
+		this.path = path;
+	}
+
+	func constructor(this: &&PathRange, other: PathRange) -> void = default;
+	func destructor(this: &&PathRange) -> void = default;
+
+	func iterator(this: PathRange) -> PathIterator {
+		return PathIterator(this.path);
+	}
+}
+
+struct RecursivePathRange {
+	var path: Path;
+
+	func constructor(this: &&RecursivePathRange, path: Path) -> void {
+		this.path = path;
+	}
+
+	func constructor(this: &&RecursivePathRange, other: PathRange) -> void = default;
+	func destructor(this: &&RecursivePathRange) -> void = default;
+
+	func iterator(this: RecursivePathRange) -> RecursivePathIterator {
+		return RecursivePathIterator(this.path);
+	}
+}
+
+struct Path {
+	var segments: List!<String>;
+
+	func constructor(this: &&Path) -> void = default;
+	func constructor(this: &&Path, other: Path) -> void = default;
+
+	func constructor(this: &&Path, str: String) {
+		this.segments = must str.split('/'b);
+	}
+
+	func constructor(this: &&Path, segments: List!<String>) {
+		this.segments = segments;
+	}
+
+	operator =(this: &&Path, other: Path) -> void = default;
+
+	func destructor(this: &&Path) -> void = default;
+
+	func toString(this: Path) -> String {
+		return must "/".join(this.segments);
+	}
+
+	operator /(this: Path, other: String) -> Path {
+		return Path(this.segments + other);
+	}
+
+	operator /(this: Path, other: Path) -> Path {
+		return Path(this.segments + other.segments);
+	}
+
+	func filename(this: Path) -> String {
+		return this.segments.last() ?? "";
+	}
+
+	func stem(this: Path) -> String {
+		const str = this.toString();
+		const pos = str.rfind('.'b);
+		const extension_start = pos ?? str.size();
+		return String(must str[0u..extension_start]);
+	}
+
+	func extension(this: Path) -> String {
+		const filename = this.filename();
+		const pos = filename.rfind('.'b);
+		const extension_start = pos.value() + 1 if pos.hasValue() else filename.size();
+		return String(must filename[extension_start..filename.size()]);
+	}
+
+	func exists(this: Path) -> bool {
+		return this.isFile() || this.isDirectory();
+	}
+
+	func isFile(this: Path) -> bool {
+		const cpath = this.toString() + '\0'b;
+		const cmode = "r\0";
+		const cfile = libc::stdio::fopen(cpath.data(), cmode.data());
+
+		if cfile == vptr::null() {
+			return false;
+		}
+
+		libc::stdio::fclose(cfile);
+		return true;
+	}
+
+	func isDirectory(this: Path) -> bool {
+		const cpath = this.toString() + '\0'b;
+		const cdir = libc::dirent::opendir(cpath.data());
+
+		if cdir == vptr::null() {
+			return false;
+		}
+
+		discard libc::dirent::closedir(cdir);
+		return true;
+	}
+
+	func cwd() -> Path {
+		var buffer: [byte, 4096];
+		discard libc::unistd::getcwd(buffer.data(), buffer.size());
+		must buffer[buffer.size() - 1] = '\0'b;
+		return Path(String::fromCString(buffer.data() as cptr!<byte>));
+	}
+
+	func range(this: Path) -> PathRange {
+		return PathRange(this);
+	}
+
+	func recursiveRange(this: Path) -> RecursivePathRange {
+		return RecursivePathRange(this);
+	}
+}

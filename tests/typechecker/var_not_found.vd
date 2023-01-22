@@ -1,0 +1,7 @@
+//> error "variable foo not found"
+
+import std/core;
+
+func main() -> int {
+	return foo;
+}

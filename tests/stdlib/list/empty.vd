@@ -1,0 +1,8 @@
+import std/core;
+import std/list;
+
+func main() {
+	var a: List!<int>;
+	assert(a.size() == 0u);
+	assert(a.isEmpty());
+}

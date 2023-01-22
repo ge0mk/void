@@ -1,0 +1,9 @@
+import std/core;
+import std/string;
+import std/json;
+
+func main() {
+	const a = must json::parse("null");
+	assert(a is Null);
+	assert(a.format() == "null");
+}

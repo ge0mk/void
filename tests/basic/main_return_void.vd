@@ -1,0 +1,5 @@
+//> test-ec "0"
+
+import std/core;
+
+func main() {}

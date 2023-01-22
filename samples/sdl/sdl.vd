@@ -1,0 +1,32 @@
+import std/core;
+import std/string;
+
+import sdl/window;
+import sdl/event;
+import sdl/renderer;
+
+enum SDL {
+	case Timer          = 0x00000001;
+	case Audio          = 0x00000010;
+	case Video          = 0x00000020;  // implies Events
+	case Joystick       = 0x00000200;  // implies Events
+	case Haptic         = 0x00001000;
+	case Gamecontroller = 0x00002000;  // implies Joystick
+	case Events         = 0x00004000;
+	case Sensor         = 0x00008000;
+	case Everything     = 0x0000f231;
+}
+
+[extern_name: "SDL_Init"]
+extern func init(flags: SDL) -> i32;
+
+[extern_name: "SDL_Quit"]
+extern func quit() -> void;
+
+[extern_name: "SDL_GetTicks"]
+extern func getTicks() -> u32;
+
+func createWindow(title: String, x: int, y: int, width: int, height: int, flags: WindowFlags) -> vptr!<Window> {
+	const ctitle = title + '\0'b;
+	return SDL_CreateWindow(ctitle.data(), x as i32, y as i32, width as i32, height as i32, flags);
+}

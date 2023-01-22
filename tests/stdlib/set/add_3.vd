@@ -1,0 +1,14 @@
+import std/core;
+import std/set;
+
+func main() {
+	var a = Set!<int>();
+	must a.add(2);
+	must a.add(1);
+	must a.add(0);
+
+	assert(a.size() == 3);
+	assert(a.contains(0));
+	assert(a.contains(1));
+	assert(a.contains(2));
+}

@@ -1,0 +1,9 @@
+//> test-ec "10"
+
+import std/core;
+
+func main() -> int {
+	var i = 0;
+	while i < 10; i++ {}
+	return i;
+}

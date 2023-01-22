@@ -1,0 +1,36 @@
+import std/core;
+
+enum WindowFlags {
+	case None              = 0x00000000;
+	case Fullscreen        = 0x00000001;
+	case OpenGL            = 0x00000002;
+	case Shown             = 0x00000004;
+	case Hidden            = 0x00000008;
+	case Borderless        = 0x00000010;
+	case Resizable         = 0x00000020;
+	case Minimized         = 0x00000040;
+	case Maximized         = 0x00000080;
+	case MouseGrabbed      = 0x00000100;
+	case InputFocus        = 0x00000200;
+	case MouseFocus        = 0x00000400;
+	case FullscreenDesktop = 0x00001001;
+	case Foreign           = 0x00000800;
+	case AllowHighDPI      = 0x00002000;
+	case MouseCapture      = 0x00004000;
+	case AlwaysOnTop       = 0x00008000;
+	case SkipTaskBar       = 0x00010000;
+	case Utility           = 0x00020000;
+	case Tooltip           = 0x00040000;
+	case PopupMenu         = 0x00080000;
+	case KeyboardGrabbed   = 0x00100000;
+	case Vulkan            = 0x10000000;
+	case Metal             = 0x20000000;
+	case InputGrabbed      = 0x00000100;
+}
+
+struct Window {}
+
+extern func SDL_CreateWindow(title: cptr!<byte>, x: i32, y: i32, w: i32, h: i32, flags: WindowFlags) -> vptr!<Window>;
+
+[extern_name: "SDL_DestroyWindow"]
+extern func destroy(window: vptr!<Window>) -> void;

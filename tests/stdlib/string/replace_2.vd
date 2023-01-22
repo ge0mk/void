@@ -1,0 +1,8 @@
+import std/core;
+import std/string;
+
+func main() {
+	var a = "abxef";
+	must a.replace('x'b, "cd");
+	assert(a == "abcdef");
+}

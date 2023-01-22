@@ -1,0 +1,32 @@
+//> output "+"
+//> output "-"
+
+import std/core;
+import std/string;
+import std/io;
+
+struct Foo {
+	func constructor(this: &&Foo) {
+		println("+");
+	}
+
+	func destructor(this: &&Foo) {
+		println("-");
+	}
+}
+
+func foo() -> Result!<int, int> {
+	throw 0;
+}
+
+func bar(a: Foo, b: int) {}
+
+func baz() -> Result!<void, int> {
+	bar(Foo(), try foo());
+	return Ok;
+}
+
+func main() {
+	const r = baz();
+	assert(r is Error);
+}

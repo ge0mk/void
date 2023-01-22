@@ -1,0 +1,8 @@
+import std/core;
+import std/string;
+
+func main() {
+	var a = "abc";
+	must a.insert(1u, "xyz");
+	assert(a == "axyzbc");
+}

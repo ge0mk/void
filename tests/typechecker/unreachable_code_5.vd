@@ -1,0 +1,17 @@
+//> error "unreachable code"
+
+import std/core;
+
+variant Foo {
+	case A;
+	case B;
+}
+
+func main() -> int {
+	match Foo::A {
+		case A -> return 0;
+		else -> return 1;
+	}
+
+	return 2;
+}

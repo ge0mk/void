@@ -1,0 +1,18 @@
+//> test-arg "hello"
+//> output "hello"
+
+import std/core;
+import std/string;
+import std/io;
+
+func main(args: Range!<String>) {
+	assert(args.size() == 2u);
+
+	const a = args[1u];
+	assert(a is Ok);
+	println(a.value());
+
+	const b = args[3u];
+	assert(b is Error);
+	assert(b.error() == Error::ERANGE);
+}

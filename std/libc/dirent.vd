@@ -1,0 +1,29 @@
+import std/core;
+
+struct DIR {}
+
+enum DT: u8 {
+	case UNKNOWN = 0;
+	case FIFO = 1;
+	case CHR = 2;
+	case DIR = 4;
+	case BLK = 6;
+	case REG = 8;
+	case LNK = 10;
+	case SOCK = 12;
+	case WHT = 14;
+}
+
+struct dirent {
+	var d_ino: i64;
+	var d_off: i64;
+	var d_reclen: u16;
+	var d_type: DT;
+	var d_name: [byte, 256];
+}
+
+extern func closedir(dir: vptr!<DIR>) -> i32;
+extern func opendir(name: cptr!<byte>) -> vptr!<DIR>;
+extern func fdopendir(fd: i32) -> vptr!<DIR>;
+
+extern func readdir(dir: vptr!<DIR>) -> vptr!<dirent>;

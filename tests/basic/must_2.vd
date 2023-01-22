@@ -1,0 +1,15 @@
+//> test-crash
+
+import std/core;
+
+func foo(err: bool) -> Result!<int, Error> {
+	if err {
+		throw Error::EINVAL;
+	} else {
+		return Result!<int, Error>::Ok(5);
+	}
+}
+
+func main() {
+	const r = must foo(true);
+}

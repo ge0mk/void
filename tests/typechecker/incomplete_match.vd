@@ -1,0 +1,10 @@
+//> error "match stmt doesn't cover all possible cases"
+
+import std/core;
+
+func main() {
+	match 5 {
+		case 1 -> {}
+		case 2 -> {}
+	}
+}

@@ -1,0 +1,9 @@
+import std/core;
+
+func foo() -> Result!<void, Error> {
+	return Ok();
+}
+
+func main() {
+	assert(foo() is Ok);
+}

@@ -1,0 +1,702 @@
+pragma generate_core_builtins;
+
+extend int {
+	operator ..(start: int, end: int) -> NumericRange!<int> {
+		return NumericRange!<int>(start, end, 1i);
+	}
+
+	func min(a: int, b: int) -> int {
+		return a if a < b else b;
+	}
+
+	func max(a: int, b: int) -> int {
+		return a if a > b else b;
+	}
+}
+
+extend uint {
+	operator ..(start: uint, end: uint) -> NumericRange!<uint> {
+		return NumericRange!<uint>(start, end, 1u);
+	}
+
+	func min(a: uint, b: uint) -> uint {
+		return a if a < b else b;
+	}
+
+	func max(a: uint, b: uint) -> uint {
+		return a if a > b else b;
+	}
+}
+
+template <Size: uint>
+extend int {
+	operator ..(start: int!<Size>, end: int!<Size>) -> NumericRange!<int!<Size>> {
+		return NumericRange!<int!<Size>>(start, end, 1 as int!<Size>);
+	}
+
+	func min(a: int!<Size>, b: int!<Size>) -> int!<Size> {
+		return a if a < b else b;
+	}
+
+	func max(a: int!<Size>, b: int!<Size>) -> int!<Size> {
+		return a if a > b else b;
+	}
+}
+
+template <Size: uint>
+extend uint {
+	operator ..(start: uint!<Size>, end: uint!<Size>) -> NumericRange!<uint!<Size>> {
+		return NumericRange!<uint!<Size>>(start, end, 1 as uint!<Size>);
+	}
+
+	func min(a: uint!<Size>, b: uint!<Size>) -> uint!<Size> {
+		return a if a < b else b;
+	}
+
+	func max(a: uint!<Size>, b: uint!<Size>) -> uint!<Size> {
+		return a if a > b else b;
+	}
+}
+
+enum Error: i32 {
+	case OK = 0;
+	case EPERM = 1;
+	case ENOENT = 2;
+	case ESRCH = 3;
+	case EINTR = 4;
+	case EIO = 5;
+	case ENXIO = 6;
+	case E2BIG = 7;
+	case ENOEXEC = 8;
+	case EBADF = 9;
+	case ECHILD = 10;
+	case EAGAIN = 11;
+	case ENOMEM = 12;
+	case EACCES = 13;
+	case EFAULT = 14;
+	case ENOTBLK = 15;
+	case EBUSY = 16;
+	case EEXIST = 17;
+	case EXDEV = 18;
+	case ENODEV = 19;
+	case ENOTDIR = 20;
+	case EISDIR = 21;
+	case EINVAL = 22;
+	case ENFILE = 23;
+	case EMFILE = 24;
+	case ENOTTY = 25;
+	case ETXTBSY = 26;
+	case EFBIG = 27;
+	case ENOSPC = 28;
+	case ESPIPE = 29;
+	case EROFS = 30;
+	case EMLINK = 31;
+	case EPIPE = 32;
+	case EDOM = 33;
+	case ERANGE = 34;
+	case EDEADLK = 35;
+	case ENAMETOOLONG = 36;
+	case ENOLCK = 37;
+	case ENOSYS = 38;
+	case ENOTEMPTY = 39;
+	case ELOOP = 40;
+	case EWOULDBLOCK = 11;
+	case ENOMSG = 42;
+	case EIDRM = 43;
+	case ECHRNG = 44;
+	case EL2NSYNC = 45;
+	case EL3HLT = 46;
+	case EL3RST = 47;
+	case ELNRNG = 48;
+	case EUNATCH = 49;
+	case ENOCSI = 50;
+	case EL2HLT = 51;
+	case EBADE = 52;
+	case EBADR = 53;
+	case EXFULL = 54;
+	case ENOANO = 55;
+	case EBADRQC = 56;
+	case EBADSLT = 57;
+	case EDEADLOCK = 35;
+	case EBFONT = 59;
+	case ENOSTR = 60;
+	case ENODATA = 61;
+	case ETIME = 62;
+	case ENOSR = 63;
+	case ENONET = 64;
+	case ENOPKG = 65;
+	case EREMOTE = 66;
+	case ENOLINK = 67;
+	case EADV = 68;
+	case ESRMNT = 69;
+	case ECOMM = 70;
+	case EPROTO = 71;
+	case EMULTIHOP = 72;
+	case EDOTDOT = 73;
+	case EBADMSG = 74;
+	case EOVERFLOW = 75;
+	case ENOTUNIQ = 76;
+	case EBADFD = 77;
+	case EREMCHG = 78;
+	case ELIBACC = 79;
+	case ELIBBAD = 80;
+	case ELIBSCN = 81;
+	case ELIBMAX = 82;
+	case ELIBEXEC = 83;
+	case EILSEQ = 84;
+	case ERESTART = 85;
+	case ESTRPIPE = 86;
+	case EUSERS = 87;
+	case ENOTSOCK = 88;
+	case EDESTADDRREQ = 89;
+	case EMSGSIZE = 90;
+	case EPROTOTYPE = 91;
+	case ENOPROTOOPT = 92;
+	case EPROTONOSUPPORT = 93;
+	case ESOCKTNOSUPPORT = 94;
+	case EOPNOTSUPP = 95;
+	case EPFNOSUPPORT = 96;
+	case EAFNOSUPPORT = 97;
+	case EADDRINUSE = 98;
+	case EADDRNOTAVAIL = 99;
+	case ENETDOWN = 100;
+	case ENETUNREACH = 101;
+	case ENETRESET = 102;
+	case ECONNABORTED = 103;
+	case ECONNRESET = 104;
+	case ENOBUFS = 105;
+	case EISCONN = 106;
+	case ENOTCONN = 107;
+	case ESHUTDOWN = 108;
+	case ETOOMANYREFS = 109;
+	case ETIMEDOUT = 110;
+	case ECONNREFUSED = 111;
+	case EHOSTDOWN = 112;
+	case EHOSTUNREACH = 113;
+	case EALREADY = 114;
+	case EINPROGRESS = 115;
+	case ESTALE = 116;
+	case EUCLEAN = 117;
+	case ENOTNAM = 118;
+	case ENAVAIL = 119;
+	case EISNAM = 120;
+	case EREMOTEIO = 121;
+	case EDQUOT = 122;
+	case ENOMEDIUM = 123;
+	case EMEDIUMTYPE = 124;
+	case ECANCELED = 125;
+	case ENOKEY = 126;
+	case EKEYEXPIRED = 127;
+	case EKEYREVOKED = 128;
+	case EKEYREJECTED = 129;
+	case EOWNERDEAD = 130;
+	case ENOTRECOVERABLE = 131;
+	case ERFKILL = 132;
+	case EHWPOISON = 133;
+	case ENOTSUP = 95;
+
+	case EOF = -1;
+}
+
+func assert(cond: bool) -> void {
+	if !cond {
+		abort();
+	}
+}
+
+template <T: type>
+struct NumericRange {
+	var start: T;
+	var end: T;
+	var step: T;
+
+	func constructor(this: &&NumericRange!<T>, other: NumericRange!<T>) -> void {
+		this.start = other.start;
+		this.end = other.end;
+		this.step = other.step;
+	}
+
+	func constructor(this: &&NumericRange!<T>, start: T, end: T, step: T) -> void {
+		this.start = start;
+		this.end = end;
+		this.step = step;
+	}
+
+	func destructor(this: &&NumericRange!<T>) -> void {}
+
+	operator | (this: NumericRange!<T>, step: T) -> NumericRange!<T> {
+		return NumericRange!<T>(this.start, this.end, step);
+	}
+
+	func iterator(this: NumericRange!<T>) -> NumericIterator!<T> {
+		return NumericIterator!<T>(this.start, this.end, this.step);
+	}
+
+	func size(this: NumericRange!<T>) -> T {
+		return (this.end - this.start) / this.step;
+	}
+}
+
+template <T: type>
+struct NumericIterator {
+	var value: T;
+	var end: T;
+	var step: T;
+
+	func constructor(this: &&NumericIterator!<T>, start: T, end: T, step: T) -> void {
+		this.value = start;
+		this.end = end;
+		this.step = step;
+	}
+
+	func destructor(this: &&NumericIterator!<T>) -> void {}
+
+	func next(this: &&NumericIterator!<T>) -> Optional!<T> {
+		if this.value >= this.end {
+			return None;
+		}
+
+		const result = this.value;
+		this.value += this.step;
+
+		return Some(result);
+	}
+}
+
+template <T: type>
+struct Range {
+	var data: cptr!<T>;
+	var size: uint;
+
+	func constructor(this: &&Range!<T>, data: cptr!<T>, size: uint) -> void {
+		this.data = data;
+		this.size = size;
+	}
+
+	func constructor(this: &&Range!<T>, other: Range!<T>) -> void {
+		this.data = other.data;
+		this.size = other.size;
+	}
+
+	operator =(this: &&Range!<T>, other: Range!<T>) -> void {
+		this.data = other.data;
+		this.size = other.size;
+	}
+
+	func destructor(this: &&Range!<T>) -> void {}
+
+	func data(this: &Range!<T>) -> cptr!<T> {
+		return this.data;
+	}
+
+	func size(this: &Range!<T>) -> uint {
+		return this.size;
+	}
+
+	operator [](this: &Range!<T>, index: uint) -> Result!<&T, Error> {
+		if index >= this.size {
+			throw Error::ERANGE;
+		}
+
+		return Ok(&this.data[index]);
+	}
+
+	func iterator(this: &Range!<T>) -> RangeIterator!<T> {
+		return RangeIterator!<T>(this.data, this.data + this.size);
+	}
+}
+
+template <T: type>
+struct RangeIterator {
+	var current: cptr!<T>;
+	var end: cptr!<T>;
+
+	func constructor(this: &&RangeIterator!<T>, begin: cptr!<T>, end: cptr!<T>) -> void {
+		this.current = begin;
+		this.end = end;
+	}
+
+	func destructor(this: &&RangeIterator!<T>) -> void {}
+
+	func next(this: &&RangeIterator!<T>) -> Optional!<&T> {
+		if this.current >= this.end {
+			return None;
+		}
+
+		const r = Optional!<&T>::Some(&this.current.value());
+		this.current = this.current + 1;
+		return r;
+	}
+}
+
+template <T: type>
+struct VRange {
+	var data: vptr!<T>;
+	var size: uint;
+
+	func constructor(this: &&VRange!<T>, data: vptr!<T>, size: uint) -> void {
+		this.data = data;
+		this.size = size;
+	}
+
+	func constructor(this: &&VRange!<T>, other: VRange!<T>) -> void {
+		this.data = other.data;
+		this.size = other.size;
+	}
+
+	operator =(this: &&VRange!<T>, other: VRange!<T>) -> void {
+		this.data = other.data;
+		this.size = other.size;
+	}
+
+	func destructor(this: &&VRange!<T>) -> void {}
+
+	func data(this: &VRange!<T>) -> vptr!<T> {
+		return this.data;
+	}
+
+	func size(this: &VRange!<T>) -> uint {
+		return this.size;
+	}
+
+	operator [](this: &VRange!<T>, index: uint) -> Result!<&&T, Error> {
+		if index >= this.size {
+			throw Error::ERANGE;
+		}
+
+		return Ok(&&this.data[index]);
+	}
+
+	func iterator(this: &VRange!<T>) -> VRangeIterator!<T> {
+		return VRangeIterator!<T>(this.data, this.data + this.size);
+	}
+}
+
+template <T: type>
+struct VRangeIterator {
+	var current: vptr!<T>;
+	var end: vptr!<T>;
+
+	func constructor(this: &&VRangeIterator!<T>, begin: vptr!<T>, end: vptr!<T>) -> void {
+		this.current = begin;
+		this.end = end;
+	}
+
+	func destructor(this: &&VRangeIterator!<T>) -> void {}
+
+	func next(this: &&VRangeIterator!<T>) -> Optional!<&&T> {
+		if this.current >= this.end {
+			return None;
+		}
+
+		const r = Optional!<&&T>::Some(&&this.current.value());
+		this.current = this.current + 1;
+		return r;
+	}
+}
+
+template <T: type>
+variant Optional {
+	case None;
+	case Some: T;
+
+	func hasValue(this: Optional!<T>) -> bool {
+		return this is Some;
+	}
+
+	func value(this: Optional!<T>) -> T {
+		comptime if isVarRef!<T>() {
+			match this {
+				case Some: &&value -> return &&value;
+				else -> abort();
+			}
+		} else if isConstRef!<T>() {
+			match this {
+				case Some: &value -> return &value;
+				else -> abort();
+			}
+		} else {
+			match this {
+				case Some: value -> return value;
+				else -> abort();
+			}
+		}
+	}
+
+	operator ??(this: Optional!<T>, other: T) -> T {
+		comptime if isVarRef!<T>() {
+			match this {
+				case Some: &&value -> return &&value;
+				else -> return &&other;
+			}
+		} else if isConstRef!<T>() {
+			match this {
+				case Some: &value -> return &value;
+				else -> return &other;
+			}
+		} else {
+			match this {
+				case Some: value -> return value;
+				else -> return other;
+			}
+		}
+	}
+
+	operator ??(this: Optional!<T>, other: Optional!<T>) -> Optional!<T> {
+		match this {
+			case Some -> return this;
+			else -> return other;
+		}
+	}
+}
+
+template <Tok: type, Terr: type>
+variant Result {
+	case Ok: Tok;
+	case Error: Terr;
+
+	func hasValue(this: Result!<Tok, Terr>) -> bool {
+		return this is Ok;
+	}
+
+	func hasError(this: Result!<Tok, Terr>) -> bool {
+		return this is Error;
+	}
+
+	func value(this: Result!<Tok, Terr>) -> Tok {
+		comptime if isVarRef!<Tok>() {
+			match this {
+				case Ok: &&value -> return &&value;
+				else -> abort();
+			}
+		} else if isConstRef!<Tok>() {
+			match this {
+				case Ok: &value -> return &value;
+				else -> abort();
+			}
+		} else {
+			match this {
+				case Ok: value -> return value;
+				else -> abort();
+			}
+		}
+	}
+
+	func error(this: Result!<Tok, Terr>) -> Terr {
+		match this {
+			case Error: error -> return error;
+			else -> abort();
+		}
+	}
+
+	operator ??(this: Result!<Tok, Terr>, other: Tok) -> Tok {
+		comptime if isVarRef!<Tok>() {
+			match this {
+				case Ok: &&value -> return &&value;
+				else -> return &&other;
+			}
+		} else if isConstRef!<Tok>() {
+			match this {
+				case Ok: &value -> return &value;
+				else -> return &other;
+			}
+		} else {
+			match this {
+				case Ok: value -> return value;
+				else -> return other;
+			}
+		}
+	}
+}
+
+template <Tok: type = void, Terr: type>
+variant Result {
+	case Ok;
+	case Error: Terr;
+
+	func hasValue(this: Result!<Tok, Terr>) -> bool {
+		return this is Ok;
+	}
+
+	func hasError(this: Result!<Tok, Terr>) -> bool {
+		return this is Error;
+	}
+
+	func value(this: Result!<Tok, Terr>) -> void {}
+
+	func error(this: Result!<Tok, Terr>) -> Terr {
+		match this {
+			case Error: error -> return error;
+			else -> abort();
+		}
+	}
+}
+
+template <Tok: type>
+variant Result {
+	case Ok: Tok;
+	case Error: Error;
+
+	func hasValue(this: Result!<Tok>) -> bool {
+		return this is Ok;
+	}
+
+	func hasError(this: Result!<Tok>) -> bool {
+		return this is Error;
+	}
+
+	func value(this: Result!<Tok>) -> Tok {
+		comptime if isVarRef!<Tok>() {
+			match this {
+				case Ok: &&value -> return &&value;
+				else -> abort();
+			}
+		} else if isConstRef!<Tok>() {
+			match this {
+				case Ok: &value -> return &value;
+				else -> abort();
+			}
+		} else {
+			match this {
+				case Ok: value -> return value;
+				else -> abort();
+			}
+		}
+	}
+
+	func error(this: Result!<Tok>) -> Error {
+		match this {
+			case Error: error -> return error;
+			else -> abort();
+		}
+	}
+
+	operator ??(this: Result!<Tok>, other: Tok) -> Tok {
+		comptime if isVarRef!<Tok>() {
+			match this {
+				case Ok: &&value -> return &&value;
+				else -> return &&other;
+			}
+		} else if isConstRef!<Tok>() {
+			match this {
+				case Ok: &value -> return &value;
+				else -> return &other;
+			}
+		} else {
+			match this {
+				case Ok: value -> return value;
+				else -> return other;
+			}
+		}
+	}
+}
+
+template <Tok: type = void>
+variant Result {
+	case Ok;
+	case Error: Error;
+
+	func hasValue(this: Result!<Tok>) -> bool {
+		return this is Ok;
+	}
+
+	func hasError(this: Result!<Tok>) -> bool {
+		return this is Error;
+	}
+
+	func value(this: Result!<Tok>) -> void {}
+
+	func error(this: Result!<Tok>) -> Error {
+		match this {
+			case Error: error -> return error;
+			else -> abort();
+		}
+	}
+}
+
+template <T: type, Size: uint>
+extend Array {
+	func iterator(this: &Array!<T, Size>) -> RangeIterator!<T> {
+		return RangeIterator!<T>(this.data(), this.data() + Size);
+	}
+
+	func iterator(this: &&Array!<T, Size>) -> VRangeIterator!<T> {
+		return VRangeIterator!<T>(this.data(), this.data() + Size);
+	}
+
+	operator [](this: &Array!<T, Size>, index: uint) -> Result!<&T> {
+		if index < 0u || index >= Size {
+			throw Error::ERANGE;
+		}
+
+		return Ok(&this.data()[index]);
+	}
+
+	operator [](this: &&Array!<T, Size>, index: uint) -> Result!<&&T> {
+		if index < 0u || index >= Size {
+			throw Error::ERANGE;
+		}
+
+		return Ok(&&this.data()[index]);
+	}
+
+	operator [](this: &Array!<T, Size>, range: NumericRange!<uint>) -> Result!<Range!<T>> {
+		if range.start < 0u || range.end >= Size {
+			throw Error::ERANGE;
+		}
+
+		if range.start >= range.end || range.step != 1u {
+			throw Error::EINVAL;
+		}
+
+		return Ok(Range!<T>(this.data() + range.start, range.end - range.start));
+	}
+
+	operator [](this: &&Array!<T, Size>, range: NumericRange!<uint>) -> Result!<VRange!<T>> {
+		if range.start < 0u || range.end >= Size {
+			throw Error::ERANGE;
+		}
+
+		if range.start >= range.end || range.step != 1u {
+			throw Error::EINVAL;
+		}
+
+		return Ok(VRange!<T>(this.data() + range.start, range.end - range.start));
+	}
+
+	func range(this: &Array!<T, Size>) -> Range!<T> {
+		return Range!<T>(this.data(), this.size());
+	}
+
+	func range(this: &&Array!<T, Size>) -> VRange!<T> {
+		return VRange!<T>(this.data(), this.size());
+	}
+
+	func find(this: &Array!<T, Size>, value: T) -> Optional!<uint> {
+		for index in 0u..this.size() {
+			if this.data()[index] == value {
+				return Some(index);
+			}
+		}
+
+		return None;
+	}
+
+	func contains(this: &Array!<T, Size>, value: T) -> bool {
+		return this.find(value) is Some;
+	}
+
+	operator ==(this: &Array!<T, Size>, other: Array!<T, Size>) -> bool {
+		if this.size() != other.size() {
+			return false;
+		}
+
+		for i in 0u..this.size() {
+			if this.data()[i] != other.data()[i] {
+				return false;
+			}
+		}
+
+		return true;
+	}
+}

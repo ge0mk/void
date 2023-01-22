@@ -1,0 +1,16 @@
+//> test-ec "9"
+
+import std/core;
+
+func main() -> int {
+	var i = 0;
+	var k = 0;
+	while i < 10 {
+		i++;
+		if i == 5 {
+			continue;
+		}
+		k++;
+	}
+	return k;
+}

@@ -1,0 +1,34 @@
+import std/core;
+
+variant Foo {
+	var a: int;
+
+	case A;
+	case B: bool;
+	case C: byte;
+
+	operator ==(this: Foo, other: Foo) -> bool = default;
+}
+
+func main() {
+	var a = Foo::A(1);
+	var b = Foo::B(false, 2);
+	var c = Foo::C('A'b, 3);
+	var d = Foo::A(2);
+	var e = Foo::A(1);
+	var f = Foo::B(false, 2);
+	var g = Foo::B(true, 2);
+	var h = Foo::B(false, 3);
+
+	assert(a == a);
+	assert(a != b);
+	assert(a != c);
+	assert(a != d);
+	assert(a == e);
+
+	assert(b == b);
+	assert(b != c);
+	assert(b == f);
+	assert(b != g);
+	assert(b != h);
+}

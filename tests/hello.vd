@@ -1,0 +1,9 @@
+//> output "Hello world!"
+
+import std/core;
+import std/string;
+import std/io;
+
+func main() {
+	println("Hello world!");
+}

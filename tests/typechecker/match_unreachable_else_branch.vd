@@ -1,0 +1,11 @@
+//> error "else branch not reachable"
+
+import std/core;
+
+func main() {
+	match true {
+		case true -> {}
+		case false -> {}
+		else -> {}
+	}
+}

@@ -1,0 +1,8 @@
+//> error "no matching module or directory found"
+
+import std/core;
+import a/b/c;
+
+func main() -> int {
+	return 0;
+}

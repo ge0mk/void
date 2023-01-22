@@ -1,0 +1,7 @@
+//> error "no matching function found"
+
+import std/core;
+
+func main() -> int {
+	return foo();
+}

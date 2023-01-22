@@ -1,0 +1,14 @@
+import std/core;
+
+variant Foo {
+	case A;
+	case B: i64;
+	case C: u64;
+}
+
+func main() -> int {
+	match Foo::A {
+		case A -> return 0;
+		else -> return 1;
+	}
+}

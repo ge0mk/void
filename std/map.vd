@@ -1,0 +1,268 @@
+import std/core;
+import std/libc/stdlib;
+
+template <Tkey: type, Tvalue: type>
+struct MapEntry {
+	var key: Tkey;
+	var value: Tvalue;
+
+	func constructor(this: &&MapEntry!<Tkey, Tvalue>, other: MapEntry!<Tkey, Tvalue>) {
+		this.key = other.key;
+		this.value = other.value;
+	}
+
+	func constructor(this: &&MapEntry!<Tkey, Tvalue>, key: Tkey, value: Tvalue) {
+		this.key = key;
+		this.value = value;
+	}
+
+	func destructor(this: &&MapEntry!<Tkey, Tvalue>) {}
+}
+
+template <Tkey: type, Tvalue: type>
+struct MapIterator {
+	var keys: cptr!<Tkey>;
+	var values: cptr!<Tvalue>;
+	var end: cptr!<Tkey>;
+
+	func constructor(this: &&MapIterator!<Tkey, Tvalue>, keys: cptr!<Tkey>, values: cptr!<Tvalue>, end: cptr!<Tkey>) -> void {
+		this.keys = keys;
+		this.values = values;
+		this.end = end;
+	}
+
+	func destructor(this: &&MapIterator!<Tkey, Tvalue>) -> void {}
+
+	func next(this: &&MapIterator!<Tkey, Tvalue>) -> Optional!<MapEntry!<Tkey, Tvalue>> {
+		if this.keys >= this.end {
+			return None;
+		}
+
+		const key = this.keys[0];
+		const value = this.values[0];
+		this.keys = this.keys + 1;
+		this.values = this.values + 1;
+		return Some(MapEntry!<Tkey, Tvalue>(key, value));
+	}
+}
+
+template <Tkey: type, Tvalue: type>
+struct Map {
+	var keys: vptr!<Tkey>;
+	var values: vptr!<Tvalue>;
+	var size: uint;
+	var capacity: uint;
+
+	func constructor(this: &&Map!<Tkey, Tvalue>) -> void {
+		this.keys = vptr::null() as vptr!<Tkey>;
+		this.values = vptr::null() as vptr!<Tvalue>;
+		this.size = 0u;
+		this.capacity = 0u;
+	}
+
+	func constructor(this: &&Map!<Tkey, Tvalue>, other: Map!<Tkey, Tvalue>) -> void {
+		this.keys = vptr::null() as vptr!<Tkey>;
+		this.values = vptr::null() as vptr!<Tvalue>;
+		this.size = 0u;
+		this.capacity = 0u;
+
+		must this.grow(other.size());
+		for index in 0u..other.size() {
+			this.keys[index].constructor(other.keys[index]);
+			this.values[index].constructor(other.values[index]);
+		}
+		this.size = other.size();
+	}
+
+	func destructor(this: &&Map!<Tkey, Tvalue>) -> void {
+		this.clear();
+
+		if this.keys != vptr::null() {
+			libc::stdlib::free(this.keys as vptr);
+			libc::stdlib::free(this.values as vptr);
+		}
+	}
+
+	func size(this: Map!<Tkey, Tvalue>) -> uint {
+		return this.size;
+	}
+
+	func isEmpty(this: Map!<Tkey, Tvalue>) -> bool {
+		return this.size == 0u;
+	}
+
+	func keys(this: Map!<Tkey, Tvalue>) -> Range!<Tkey> {
+		return Range!<Tkey>(this.keys as cptr!<Tkey>, this.size);
+	}
+
+	func values(this: Map!<Tkey, Tvalue>) -> Range!<Tvalue> {
+		return Range!<Tvalue>(this.values as cptr!<Tvalue>, this.size);
+	}
+
+	func iterator(this: Map!<Tkey, Tvalue>) -> MapIterator!<Tkey, Tvalue> {
+		return MapIterator!<Tkey, Tvalue>(this.keys as cptr!<Tkey>, this.values as cptr!<Tvalue>, this.keys as cptr!<Tkey> + this.size());
+	}
+
+	operator ==(this: Map!<Tkey, Tvalue>, other: Map!<Tkey, Tvalue>) -> bool {
+		if this.size() != other.size() {
+			return false;
+		}
+
+		for i in 0u..this.size() {
+			if this.keys[i] != other.keys[i] {
+				return false;
+			}
+
+			if this.values[i] != other.values[i] {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	func getInsertPos(this: Map!<Tkey, Tvalue>, key: Tkey) -> uint {
+		var min = 0u;
+		var max = this.size;
+		var index = this.size / 2u;
+
+		while min < max {
+			const order = key <=> this.keys[index];
+			if order < 0 {
+				max = index;
+			} else if order > 0 {
+				min = index + 1u;
+			} else {
+				break;
+			}
+			index = (min + max) / 2u;
+		}
+
+		return index;
+	}
+
+	func contains(this: Map!<Tkey, Tvalue>, key: Tkey) -> bool {
+		if this.size == 0 {
+			return false;
+		} else {
+			return this.keys[this.getInsertPos(key)] == key;
+		}
+	}
+
+	func set(this: &&Map!<Tkey, Tvalue>, key: Tkey, value: Tvalue) -> Result!<void> {
+		const index = this.getInsertPos(key);
+		if index < this.size {
+			if this.keys[index] == key {
+				this.values[index] = value;
+				return Ok;
+			}
+		}
+
+		try this.grow();
+
+		memmove!<Tkey>(this.keys + index + 1, this.keys as cptr!<Tkey> + index, this.size - index);
+		memmove!<Tvalue>(this.values + index + 1, this.values as cptr!<Tvalue> + index, this.size - index);
+
+		this.keys[index].constructor(key);
+		this.values[index].constructor(value);
+		this.size += 1u;
+
+		return Ok;
+	}
+
+	func get(this: Map!<Tkey, Tvalue>, key: Tkey) -> Optional!<Tvalue> {
+		const index = this.getInsertPos(key);
+		if index < this.size {
+			if this.keys[index] == key {
+				return Some(this.values[index]);
+			}
+		}
+
+		return None;
+	}
+
+	func remove(this: &&Map!<Tkey, Tvalue>, key: Tkey) -> void {
+		const index = this.getInsertPos(key);
+		if index >= this.size {
+			return;
+		}
+
+		if this.keys[index] != key {
+			return;
+		}
+
+		this.keys[index].destructor();
+		this.values[index].destructor();
+		this.size -= 1u;
+
+		memmove!<Tkey>(this.keys + index, this.keys as cptr!<Tkey> + index + 1, this.size - index);
+		memmove!<Tvalue>(this.values + index, this.values as cptr!<Tvalue> + index + 1, this.size - index);
+	}
+
+	operator [](this: &&Map!<Tkey, Tvalue>, key: Tkey) -> Result!<&&Tvalue> {
+		const index = this.getInsertPos(key);
+		if index < this.size {
+			if this.keys[index] == key {
+				return Ok(&&this.values[index]);
+			}
+		}
+
+		try this.grow();
+
+		memmove!<Tkey>(this.keys + index + 1, this.keys as cptr!<Tkey> + index, this.size - index);
+		memmove!<Tvalue>(this.values + index + 1, this.values as cptr!<Tvalue> + index, this.size - index);
+
+		this.keys[index].constructor(key);
+		this.values[index].constructor();
+		this.size += 1u;
+
+		return Ok(&&this.values[index]);
+	}
+
+	func clear(this: &&Map!<Tkey, Tvalue>) -> void {
+		for index in 0u..this.size {
+			this.keys[index].destructor();
+			this.values[index].destructor();
+		}
+
+		this.size = 0u;
+	}
+
+	// ensure that memory for at least one more element is available
+	func grow(this: &&Map!<Tkey, Tvalue>) -> Result!<void> {
+		if this.size < this.capacity {
+			return Ok;
+		}
+
+		return this.grow(this.size * 3u / 2u + 1u);
+	}
+
+	// ensure that memory for at least 'new_capacity' elements is available
+	func grow(this: &&Map!<Tkey, Tvalue>, new_capacity: uint) -> Result!<void> {
+		if new_capacity < this.capacity {
+			return Ok;
+		}
+
+		const old_capacity = this.capacity;
+
+		if this.keys == vptr::null() {
+			this.keys = libc::stdlib::malloc(new_capacity * sizeOf!<Tkey>()) as vptr!<Tkey>;
+			this.values = libc::stdlib::malloc(new_capacity * sizeOf!<Tvalue>()) as vptr!<Tvalue>;
+		} else {
+			this.keys = libc::stdlib::realloc(this.keys as vptr, new_capacity * sizeOf!<Tkey>()) as vptr!<Tkey>;
+			this.values = libc::stdlib::realloc(this.values as vptr, new_capacity * sizeOf!<Tvalue>()) as vptr!<Tvalue>;
+		}
+
+		if this.keys == vptr::null() || this.values == vptr::null() {
+			throw Error::ENOMEM;
+		}
+
+		this.capacity = new_capacity;
+		if new_capacity > old_capacity {
+			memset!<Tkey>(this.keys + old_capacity, '\0'b, new_capacity - old_capacity);
+			memset!<Tvalue>(this.values + old_capacity, '\0'b, new_capacity - old_capacity);
+		}
+
+		return Ok;
+	}
+}

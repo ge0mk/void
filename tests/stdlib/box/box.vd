@@ -1,0 +1,10 @@
+//> test-ec "10"
+
+import std/core;
+import std/box;
+
+func main() -> int {
+	var x = Box!<int>();
+	x.operator unwrap() = 10;
+	return x.operator unwrap();
+}

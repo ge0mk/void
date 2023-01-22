@@ -1,0 +1,14 @@
+import std/core;
+
+func main() {
+	var a = [1, 2, 3, 4, 5];
+
+	assert(a.contains(4));
+
+	const b = a.find(3);
+	assert(b is Some);
+	assert(b.value() == 2u);
+
+	const c = a.find(10);
+	assert(c is None);
+}

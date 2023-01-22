@@ -1,0 +1,8 @@
+//> test-ec "5"
+
+import std/core;
+
+func main() -> int {
+	const a = Result!<int>::Ok(5);
+	return a.value();
+}

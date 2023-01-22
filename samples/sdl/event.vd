@@ -1,0 +1,90 @@
+import std/core;
+
+import sdl/scancode;
+import sdl/keycode;
+
+struct KeyboardEvent {
+	var timestamp: u32;
+	var window_id: u32;
+	var state: u8;
+	var repeat: u8;
+	var padding: u16;
+	var scancode: ScanCode;
+	var keycode: KeyCode;
+	var mod: Keymod;
+
+	func constructor(this: &&KeyboardEvent) {
+		this.scancode = ScanCode::UNKNOWN;
+		this.keycode = KeyCode::UNKNOWN;
+		this.mod = Keymod::NONE;
+	}
+
+	func constructor(this: &&KeyboardEvent, other: KeyboardEvent) -> void = default;
+	func destructor(this: &&KeyboardEvent) -> void = default;
+}
+
+variant Event: i32 {
+	case None                     = 0;
+	case Quit                     = 0x100;
+	case AppTerminating;
+	case AppLowMemory;
+	case AppWillEnterBackground;
+	case AppDidEnterBackground;
+	case AppWillEnterForeground;
+	case AppDidEnterForeground;
+	case LocaleChanged;
+	case DisplayEvent             = 0x150;
+	case WindowEvent              = 0x200;
+	case SysWMEvent;
+	case KeyDown: KeyboardEvent   = 0x300;
+	case KeyUp: KeyboardEvent;
+	case TextEditing;
+	case TextInput;
+	case KeyMapChanged;
+	case TextEditingExt;
+	case MouseMotion              = 0x400;
+	case MouseButtonDown;
+	case MouseButtonUp;
+	case MouseWheel;
+	case JoyAxisMotion            = 0x600;
+	case JoyBallMotion;
+	case JoyHatMotion;
+	case JoyButtonDown;
+	case JoyButtonUp;
+	case JoyDeviceAdded;
+	case JoyDeviceRemoved;
+	case JoyBatteryUpdated;
+	case ControllerAxisMotion     = 0x650;
+	case ControllerButtonDown;
+	case ControllerButtonUp;
+	case ControllerDeviceAdded;
+	case ControllerDeviceRemoved;
+	case ControllerDeviceRemapped;
+	case ControllerTouchpadDown;
+	case ControllerTouchpadMotion;
+	case ControllerTouchpadUp;
+	case ControllerSensorUpdate;
+	case FingerDown               = 0x700;
+	case FingerUp;
+	case FingerMotion;
+	case DollarGesture            = 0x800;
+	case DollarRecord;
+	case MultiGesture;
+	case ClipboardUpdate          = 0x900;
+	case DropFile                 = 0x1000;
+	case DropText;
+	case DropBegin;
+	case DropComplete;
+	case AudioDeviceAdded         = 0x1100;
+	case AudioDeviceRemoved;
+	case SensorUpdate             = 0x1200;
+	case RenderTargetsReset       = 0x2000;
+	case RenderDeviceReset;
+	case PollSentinel             = 0x7F00;
+	case UserEvent                = 0x8000;
+	case LastEvent                = 0xFFFF;
+	case Padding: Array!<byte, 56>;
+}
+
+[extern_name: "SDL_PollEvent"]
+extern func pollEvent(event: &&Event) -> bool;

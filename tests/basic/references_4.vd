@@ -1,0 +1,20 @@
+//> test-ec "5"
+
+import std/core;
+
+struct Foo {
+	var x: &&int;
+
+	func constructor(this: &&Foo, ref: &&int) -> void {
+		this.x = &&ref;
+	}
+
+	func destructor(this: &&Foo) -> void {}
+}
+
+func main() -> int {
+	var a = 0;
+	var b = Foo(&&a);
+	b.x = 5;
+	return a;
+}

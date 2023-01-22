@@ -1,0 +1,11 @@
+//> test-ec "0"
+
+import std/core;
+
+func main() -> int {
+	comptime if true {
+		return 0;
+	} else {
+		some(obvious(garbage_code().that_should_not_typecheck()));
+	}
+}

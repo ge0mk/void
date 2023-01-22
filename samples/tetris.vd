@@ -1,0 +1,286 @@
+import std/core;
+import std/string;
+
+import sdl;
+
+struct Application {
+	var window: vptr!<Window>;
+	var renderer: vptr!<Renderer>;
+
+	var tetrominos: [[bool, 16], 28];
+	var colors: [[int, 4], 8];
+	var field: [[int, 10], 20];
+
+	var quit: bool;
+	var rng: uint;
+	var id: uint;
+	var rotation: uint;
+	var offset_x: int;
+	var offset_y: int;
+	var drop_timer: u32;
+
+	func constructor(this: &&Application) {
+		this.window = sdl::createWindow("Tetris", 0, 0, 500, 1000, WindowFlags::None);
+		this.renderer = this.window.createRenderer(0i32, RendererFlags::PresentVSync);
+
+		this.tetrominos = [
+			// L
+			[0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0],
+			[0, 0, 0, 0, 0, 1, 1, 1, 0, 1, 0, 0, 0, 0, 0, 0],
+			[0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0],
+			[0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 1, 0, 0, 0, 0, 0],
+			// J
+			[0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0],
+			[0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0],
+			[0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0],
+			[0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0],
+			// I
+			[0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0],
+			[0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+			[0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0],
+			[0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+			// O
+			[0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0],
+			[0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0],
+			[0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0],
+			[0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0],
+			// T
+			[0, 0, 0, 0, 1, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0],
+			[0, 1, 0, 0, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0],
+			[0, 1, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+			[0, 1, 0, 0, 0, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0],
+			// S
+			[0, 0, 0, 0, 0, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0],
+			[0, 1, 0, 0, 0, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0],
+			[0, 0, 0, 0, 0, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0],
+			[0, 1, 0, 0, 0, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0],
+			// Z
+			[0, 0, 0, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0],
+			[0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0],
+			[0, 0, 0, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0],
+			[0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0]
+		];
+
+		this.colors = [
+			[0x10, 0x1e, 0x29, 0xff],
+			[0x1a, 0xbc, 0x9c, 0xff],
+			[0x2e, 0xcc, 0x71, 0xff],
+			[0x34, 0x98, 0xdb, 0xff],
+			[0x9b, 0x59, 0xb6, 0xff],
+			[0xf1, 0xc4, 0x0f, 0xff],
+			[0xe6, 0x7e, 0x22, 0xff],
+			[0xe7, 0x4c, 0x3c, 0xff],
+		];
+
+		this.rng = 12345u;
+		this.id = 0u;
+		this.rotation = 0u;
+		this.offset_x = 3;
+		this.offset_y = 0;
+
+		this.createRandomTetromino();
+	}
+
+	func destructor(this: &&Application) {
+		this.renderer.destroy();
+		this.window.destroy();
+	}
+
+	func createRandomTetromino(this: &&Application) {
+		this.rng = ((((this.rng >> 9) & 1) ^ ((this.rng >> 1) & 1)) << 15) | (this.rng >> 1);
+
+		this.id = this.rng % 7;
+		this.rotation = 0;
+		this.offset_x = 3;
+		this.offset_y = 0;
+	}
+
+	func run() {
+		var app = Application();
+		while !app.quit {
+			app.update();
+			app.render();
+		}
+	}
+
+	func update(this: &&Application) {
+		var event = Event::None;
+		while pollEvent(&&event) {
+			match event {
+				case Quit -> this.quit = true;
+				case KeyDown: e -> match e.scancode {
+					case Q -> this.rotate(-1);
+					case E -> this.rotate( 1);
+					case A -> this.move(-1);
+					case D -> this.move( 1);
+					case S -> discard this.drop();
+					else -> {}
+				}
+				else -> {}
+			}
+		}
+
+		if this.drop_timer + 1000 <= getTicks() {
+			if !this.drop() {
+				this.solidify();
+				this.createRandomTetromino();
+			}
+		}
+	}
+
+	func move(this: &&Application, dir: int) {
+		var old_offset = this.offset_x;
+		this.offset_x += dir;
+
+		if this.checkCollision() {
+			this.offset_x = old_offset;
+		}
+	}
+
+	func rotate(this: &&Application, dir: int) {
+		var old_rotation = this.rotation;
+		this.rotation = (this.rotation + dir as uint) % 4;
+
+		if this.checkCollision() {
+			this.rotation = old_rotation;
+		}
+	}
+
+	func drop(this: &&Application) -> bool {
+		var old_offset = this.offset_y;
+		this.offset_y += 1;
+
+		if this.checkCollision() {
+			this.offset_y = old_offset;
+			return false;
+		}
+
+		this.drop_timer = getTicks();
+		return true;
+	}
+
+	func solidify(this: &&Application) {
+		for x in 0u..4 {
+			for y in 0u..4 {
+				if must (must this.tetrominos[this.id * 4 + this.rotation])[y * 4 + x] != 0 {
+					must (must this.field[y + this.offset_y as uint])[x + this.offset_x as uint] = this.id as int + 1;
+				}
+			}
+		}
+
+		for y in 0u..20 {
+			var is_complete = true;
+			for tile in must this.field[y] {
+				if tile == 0 {
+					is_complete = false;
+				}
+			}
+
+			if is_complete {
+				for i in 0u..y {
+					must this.field[y - i] = must this.field[y - i - 1];
+				}
+				must this.field[0u] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+			}
+		}
+	}
+
+	func checkCollision(this: &&Application) -> bool {
+		for x in 0u..4 {
+			for y in 0u..4 {
+				if must (must this.tetrominos[this.id * 4 + this.rotation])[y * 4 + x] != 0 {
+					const abs_x = x as int + this.offset_x;
+					const abs_y = y as int + this.offset_y;
+
+					if abs_x < 0 || abs_x >= 10 || abs_y < 0 || abs_y >= 20 {
+						return true;
+					}
+
+					if must (must this.field[abs_y as uint])[abs_x as uint] != 0 {
+						return true;
+					}
+				}
+			}
+		}
+
+		return false;
+	}
+
+	func render(this: &&Application) {
+		this.renderer.setDrawColor(0u8, 0u8, 0u8, 0u8);
+		this.renderer.clear();
+
+		this.renderGrid();
+		this.renderCurrent();
+
+		this.renderer.present();
+	}
+
+	func renderGrid(this: &Application) {
+		for y in 0u..20 {
+			for x in 0u..10 {
+				this.renderer.setDrawColor(0x34u8, 0x49u8, 0x5eu8, 0xffu8);
+				this.renderer.drawRect(Rect(
+					(x * 50) as i32,
+					(y * 50) as i32,
+					50i32, 50i32,
+				));
+
+				this.renderer.setDrawColor(0x10u8, 0x1eu8, 0x29u8, 0xffu8);
+				this.renderer.fillRect(Rect(
+					(x * 50 + 1) as i32,
+					(y * 50 + 1) as i32,
+					48i32, 48i32,
+				));
+
+				const id = must (must this.field[y])[x];
+				const color = must this.colors[id as uint];
+				this.renderer.setDrawColor(
+					(must color[0u] * 4 / 5) as u8,
+					(must color[1u] * 4 / 5) as u8,
+					(must color[2u] * 4 / 5) as u8,
+					(must color[3u] * 4 / 5) as u8,
+				);
+
+				this.renderer.fillRect(Rect(
+					(x * 50 + 5) as i32,
+					(y * 50 + 5) as i32,
+					40i32, 40i32,
+				));
+			}
+		}
+	}
+
+	func renderCurrent(this: &Application) {
+		const color = must this.colors[this.id + 1];
+		this.renderer.setDrawColor(
+			(must color[0u]) as u8,
+			(must color[1u]) as u8,
+			(must color[2u]) as u8,
+			(must color[3u]) as u8,
+		);
+
+		for x in 0u..4 {
+			for y in 0u..4 {
+				if must (must this.tetrominos[this.id * 4 + this.rotation])[y * 4 + x] != 0 {
+					this.renderer.fillRect(Rect(
+						((x + this.offset_x as uint) * 50 + 5) as i32,
+						((y + this.offset_y as uint) * 50 + 5) as i32,
+						40i32, 40i32,
+					));
+				}
+			}
+		}
+	}
+}
+
+func main() -> int {
+	if sdl::init(SDL::Video) != 0 {
+		return 1;
+	}
+
+	Application::run();
+
+	sdl::quit();
+	return 0;
+}

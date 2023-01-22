@@ -1,0 +1,7 @@
+//> error "return value has wrong type"
+
+import std/core;
+
+func main() {
+	return false;
+}

@@ -1,0 +1,5 @@
+import std/core;
+
+extern func malloc(size: uint) -> vptr;
+extern func realloc(data: vptr, size: uint) -> vptr;
+extern func free(data: vptr) -> void;

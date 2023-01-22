@@ -1,0 +1,29 @@
+//> output "const-ref"
+
+import std/core;
+import std/string;
+import std/io;
+
+struct Foo {
+	var x: int;
+
+	func constructor(this: &&Foo) {}
+	func destructor(this: &&Foo) {}
+
+	func foo(this: &&Foo) {
+		println("var-ref");
+	}
+
+	func foo(this: &Foo) {
+		println("const-ref");
+	}
+
+	func foo(this: Foo) {
+		println("base");
+	}
+}
+
+func main() {
+	const x: Foo;
+	x.foo();
+}

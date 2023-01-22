@@ -1,0 +1,16 @@
+import std/core;
+import std/list;
+
+func main() {
+	var a = List!<int>();
+
+	must a.append(1);
+	must a.append(2);
+	must a.append(3);
+
+	assert(a.find(2) is Some);
+	assert(a.contains(2));
+	assert(a.find(2).value() == 1u);
+	assert(a.find(10) is None);
+	assert(!a.contains(10));
+}

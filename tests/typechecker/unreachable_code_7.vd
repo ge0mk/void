@@ -1,0 +1,11 @@
+//> error "unreachable code"
+
+import std/core;
+
+func main() -> int {
+	do {
+		return 0;
+	} while false;
+
+	return 1;
+}

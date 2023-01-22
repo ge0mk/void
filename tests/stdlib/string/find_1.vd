@@ -1,0 +1,16 @@
+import std/core;
+import std/string;
+
+func main() {
+	const a = "hello world";
+	const r = a.find('o'b);
+	assert(r is Some);
+	assert(r.value() == 4u);
+
+	const r2 = a.find(5u, 'o'b);
+	assert(r2 is Some);
+	assert(r2.value() == 7u);
+
+	const r3 = a.find(8u, 'o'b);
+	assert(r3 is None);
+}

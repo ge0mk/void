@@ -1,0 +1,13 @@
+import std/core;
+import std/string;
+import std/path;
+
+func main() {
+	var a = Path(".");
+	assert(a.exists());
+	assert(a.isDirectory());
+
+	var b = Path("./garbage");
+	assert(!b.exists());
+	assert(!b.isDirectory());
+}

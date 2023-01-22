@@ -1,0 +1,7 @@
+//> test-crash
+
+import std/core;
+
+func main() {
+	assert(false);
+}

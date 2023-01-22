@@ -1,0 +1,18 @@
+import std/core;
+import std/string;
+import std/file;
+import std/io;
+
+func main(args: Range!<String>) -> int {
+	var path = args[1u] else {
+		println("usage: touch <path>");
+		return 1;
+	}
+
+	var file = File::create(path, mode::read, FilePermissions::uread | uwrite | gread | oread) else {
+		println("couldn't create file");
+		return 1;
+	}
+
+	return 0;
+}

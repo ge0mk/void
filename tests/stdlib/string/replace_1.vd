@@ -1,0 +1,8 @@
+import std/core;
+import std/string;
+
+func main() {
+	var a = "Hello 123!";
+	must a.replace(6u..9u, "World");
+	assert(a == "Hello World!");
+}

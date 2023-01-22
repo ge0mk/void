@@ -1,0 +1,10 @@
+import std/core;
+import std/string;
+
+func main() {
+	assert("hello world".startsWith("hello"));
+	assert(!"hello world".startsWith("world"));
+
+	assert("hello world".endsWith("world"));
+	assert(!"hello world".endsWith("hello"));
+}

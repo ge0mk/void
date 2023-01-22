@@ -1,0 +1,10 @@
+//> output "hello"
+//> test-crash
+
+import std/core;
+import std/io;
+import std/string;
+
+func main() -> void {
+	assert(false, "hello");
+}

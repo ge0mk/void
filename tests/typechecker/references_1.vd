@@ -1,0 +1,9 @@
+//> error "cannot store const reference in non-const variable"
+
+import std/core;
+
+func main() -> int {
+	var a = 0;
+	var b = &a;
+	return 0;
+}

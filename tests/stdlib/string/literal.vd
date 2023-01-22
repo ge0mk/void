@@ -1,0 +1,7 @@
+import std/core;
+import std/string;
+
+func main() {
+	const a = "hello world";
+	assert(a.size() == 11u);
+}

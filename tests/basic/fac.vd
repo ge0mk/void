@@ -1,0 +1,15 @@
+//> test-ec "120"
+
+import std/core;
+
+func fac(x: int) -> int {
+	if x <= 1 {
+		return x;
+	} else {
+		return x * fac(x - 1);
+	}
+}
+
+func main() -> int {
+	return fac(5);
+}

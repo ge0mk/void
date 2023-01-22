@@ -1,0 +1,9 @@
+//> error "no matching function found"
+
+import std/core;
+
+func foo(x: byte) -> void {}
+
+func main() -> int {
+	return foo(1);
+}

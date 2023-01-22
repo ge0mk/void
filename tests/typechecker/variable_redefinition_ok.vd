@@ -1,0 +1,16 @@
+//> output "5"
+
+import std/core;
+import std/format;
+import std/io;
+
+func main() -> int {
+	const foo = 1;
+
+	{
+		const foo = 5;
+		println(format(foo));
+	}
+
+	return 0;
+}

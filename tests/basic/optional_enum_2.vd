@@ -1,0 +1,14 @@
+import std/core;
+
+enum Foo {
+	case A;
+	case B;
+}
+
+struct Bar {
+	func bar() -> Optional!<Foo> {
+		return Optional!<Foo>::None;
+	}
+}
+
+func main() {}

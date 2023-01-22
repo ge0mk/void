@@ -1,0 +1,10 @@
+import std/core;
+import std/string;
+
+func main() {
+	var a = "abcdef";
+	assert(a.size() == 6u);
+	const r = a.remove(2u);
+	assert(r is Ok);
+	assert(a == "abdef");
+}

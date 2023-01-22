@@ -1,0 +1,17 @@
+//> output "hello"
+//> output "world"
+//> output "123"
+//> output "456"
+
+import std/core;
+import std/io;
+import std/string;
+
+func main() -> int {
+    println("hello");
+    io::println("world");
+    std::io::println("123");
+    "456".println();
+
+    return 0;
+}

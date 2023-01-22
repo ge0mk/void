@@ -1,0 +1,10 @@
+//> test-ec "3"
+
+import std/core;
+
+func main() -> int {
+	var a = [1, 2, 3, 4, 5];
+	const b = a[2u];
+	assert(b is Ok);
+	return b.value();
+}

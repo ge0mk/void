@@ -1,0 +1,15 @@
+import std/core;
+import std/string;
+
+func main() {
+	const a = "hello world";
+	const r = a.find("wor");
+	assert(r is Some);
+	assert(r.value() == 6u);
+
+	const r2 = a.find(7u, "wor");
+	assert(r2 is None);
+
+	const r3 = a.find("abc");
+	assert(r3 is None);
+}

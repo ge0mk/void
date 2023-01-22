@@ -1,0 +1,16 @@
+//> test-ec "5"
+
+import std/core;
+
+func foo(x: &&int) -> Result!<&&int, Error> {
+	return Result!<&&int, Error>::Ok(&&x);
+}
+
+func main() -> int {
+	var a = 0;
+	var b = foo(&&a);
+	assert(b is Ok);
+	b.value() = 5;
+
+	return a;
+}

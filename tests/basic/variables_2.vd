@@ -1,0 +1,9 @@
+//> test-ec "5"
+
+import std/core;
+
+func main() -> int {
+	var a = 1;
+	a = 5;
+	return a;
+}

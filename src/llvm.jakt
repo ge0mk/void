@@ -1,0 +1,809 @@
+import extern c "llvm-c/Types.h" {
+	extern struct LLVMMemoryBufferRef {}
+	extern struct LLVMContextRef {}
+	extern struct LLVMModuleRef {}
+	extern struct LLVMTypeRef {}
+	extern struct LLVMValueRef {}
+	extern struct LLVMBasicBlockRef {}
+	extern struct LLVMMetadataRef {}
+	extern struct LLVMBuilderRef {}
+	extern struct LLVMDIBuilderRef {}
+}
+
+import extern c "llvm-c/Core.h" {
+	extern struct LLVMModuleFlagBehavior {}
+	extern struct LLVMOpcode {}
+	extern struct LLVMIntPredicate {}
+	extern struct LLVMRealPredicate {}
+	extern struct LLVMLinkage {}
+	extern struct LLVMAtomicRMWBinOp {}
+	extern struct LLVMAtomicOrdering {}
+
+	extern fn LLVMDisposeMessage(anon message: raw c_char)
+
+	extern fn LLVMContextCreate() -> LLVMContextRef
+	extern fn LLVMGetGlobalContext() -> LLVMContextRef
+	extern fn LLVMContextDispose(anon context: LLVMContextRef)
+
+	extern fn LLVMGetTypeByName2(anon context: LLVMContextRef, anon name: raw c_char) -> LLVMTypeRef
+
+	extern fn LLVMModuleCreateWithNameInContext(anon name: raw c_char, anon context: LLVMContextRef) -> LLVMModuleRef
+	extern fn LLVMDisposeModule(anon module: LLVMModuleRef)
+	extern fn LLVMSetTarget(anon module: LLVMModuleRef, anon target: raw c_char)
+	extern fn LLVMAddModuleFlag(anon module: LLVMModuleRef, anon behavior: LLVMModuleFlagBehavior, anon key: raw c_char, anon key_len: usize, anon value: LLVMMetadataRef)
+	extern fn LLVMPrintModuleToFile(anon module: LLVMModuleRef, anon filename: raw c_char, anon errorMessage: raw raw c_char) -> bool
+	extern fn LLVMPrintModuleToString(anon module: LLVMModuleRef) -> raw c_char
+	extern fn LLVMGetModuleContext(anon module: LLVMModuleRef) -> LLVMContextRef
+	extern fn LLVMAddFunction(anon module: LLVMModuleRef, anon name: raw c_char, anon type: LLVMTypeRef) -> LLVMValueRef
+	extern fn LLVMGetNamedFunction(anon module: LLVMModuleRef, anon name: raw c_char) -> LLVMValueRef
+
+	extern fn LLVMIntTypeInContext(anon context: LLVMContextRef, anon num_bits: u32) -> LLVMTypeRef
+	extern fn LLVMGetIntTypeWidth(anon int_type: LLVMTypeRef) -> u32
+	extern fn LLVMHalfTypeInContext(anon context: LLVMContextRef) -> LLVMTypeRef
+	extern fn LLVMFloatTypeInContext(anon context: LLVMContextRef) -> LLVMTypeRef
+	extern fn LLVMDoubleTypeInContext(anon context: LLVMContextRef) -> LLVMTypeRef
+	extern fn LLVMX86FP80TypeInContext(anon context: LLVMContextRef) -> LLVMTypeRef
+	extern fn LLVMFP128TypeInContext(anon context: LLVMContextRef) -> LLVMTypeRef
+
+	extern fn LLVMFunctionType(anon return_type: LLVMTypeRef, anon param_types: raw LLVMTypeRef, anon paramCount: u32, anon isVarArg: bool) -> LLVMTypeRef
+	extern fn LLVMCountParamTypes(anon func: LLVMTypeRef) -> u32
+	extern fn LLVMGetParamTypes(anon func: LLVMTypeRef, anon buffer: raw LLVMTypeRef)
+
+	extern fn LLVMStructCreateNamed(anon context: LLVMContextRef, anon name: raw c_char) -> LLVMTypeRef
+	extern fn LLVMStructSetBody(anon structTy: LLVMTypeRef, anon elements: raw LLVMTypeRef, anon elementCount: u32, anon packed: bool) -> LLVMTypeRef
+
+	extern fn LLVMArrayType(anon element_type: LLVMTypeRef, anon elementCount: u32) -> LLVMTypeRef
+	extern fn LLVMPointerTypeInContext(anon context: LLVMContextRef, anon addressSpace: u32) -> LLVMTypeRef
+	extern fn LLVMVectorType(anon element_type: LLVMTypeRef, anon elementCount: u32) -> LLVMTypeRef
+	extern fn LLVMScalableVectorType(anon element_type: LLVMTypeRef, anon elementCount: u32) -> LLVMTypeRef
+	extern fn LLVMVoidTypeInContext(anon context: LLVMContextRef) -> LLVMTypeRef
+
+	extern fn LLVMTypeOf(anon value: LLVMValueRef) -> LLVMTypeRef
+	extern fn LLVMIsConstant(anon value: LLVMValueRef) -> bool
+	extern fn LLVMIsUndef(anon value: LLVMValueRef) -> bool
+	extern fn LLVMIsPoison(anon value: LLVMValueRef) -> bool
+
+	extern fn LLVMConstNull(anon type: LLVMTypeRef) -> LLVMValueRef
+	extern fn LLVMConstAllOnes(anon type: LLVMTypeRef) -> LLVMValueRef
+	extern fn LLVMGetUndef(anon type: LLVMTypeRef) -> LLVMValueRef
+	extern fn LLVMGetPoison(anon type: LLVMTypeRef) -> LLVMValueRef
+	extern fn LLVMConstInt(anon type: LLVMTypeRef, anon value: i64, anon signExtend: bool) -> LLVMValueRef
+	extern fn LLVMConstReal(anon type: LLVMTypeRef, anon value: f64) -> LLVMValueRef
+	extern fn LLVMConstStringInContext(anon context: LLVMContextRef, anon str: raw c_char, anon length: u64, anon DontNullTerminate: bool) -> LLVMValueRef
+
+	extern fn LLVMSetLinkage(anon global: LLVMValueRef, anon linkage: LLVMLinkage)
+
+	extern fn LLVMAddGlobal(anon module: LLVMModuleRef, anon type: LLVMTypeRef, anon name: raw c_char) -> LLVMValueRef
+	extern fn LLVMAddGlobalInAddressSpace(anon module: LLVMModuleRef, anon type: LLVMTypeRef, anon name: raw c_char, anon addressSpace: u32) -> LLVMValueRef
+	extern fn LLVMGetNamedGlobal(anon module: LLVMModuleRef, anon name: raw c_char) -> LLVMValueRef
+	extern fn LLVMSetInitializer(anon var: LLVMValueRef, anon value: LLVMValueRef)
+	extern fn LLVMSetGlobalConstant(anon var: LLVMValueRef, anon IsConstant: bool)
+
+	extern fn LLVMLookupIntrinsicID(anon name: raw c_char, anon name_len: usize) -> u32
+	extern fn LLVMGetIntrinsicID(anon func: LLVMValueRef) -> u32
+	extern fn LLVMGetIntrinsicDeclaration(anon module: LLVMModuleRef, anon id: u32, anon param_types: raw LLVMTypeRef, anon param_count: usize) -> LLVMValueRef
+	extern fn LLVMIntrinsicGetType(anon context: LLVMContextRef, anon id: u32, anon param_types: raw LLVMTypeRef, anon param_count: usize) -> LLVMTypeRef
+
+	extern fn LLVMGetAlignment(anon value: LLVMValueRef) -> u32
+	extern fn LLVMSetAlignment(anon value: LLVMValueRef, anon bytes: u32)
+
+	extern fn LLVMCountParams(anon func: LLVMValueRef) -> u32
+	extern fn LLVMGetParams(anon func: LLVMValueRef, anon buffer: raw LLVMValueRef)
+	extern fn LLVMGetParam(anon func: LLVMValueRef, anon index: u32) -> LLVMValueRef
+
+	extern fn LLVMMetadataAsValue(anon context: LLVMContextRef, anon md: LLVMMetadataRef) -> LLVMValueRef
+	extern fn LLVMValueAsMetadata(anon value: LLVMValueRef) -> LLVMMetadataRef
+
+	extern fn LLVMBasicBlockAsValue(anon block: LLVMBasicBlockRef) -> LLVMValueRef
+	extern fn LLVMValueIsBasicBlock(anon value: LLVMValueRef) -> bool
+	extern fn LLVMValueAsBasicBlock(anon value: LLVMValueRef) -> LLVMBasicBlockRef
+	extern fn LLVMGetBasicBlockTerminator(anon block: LLVMBasicBlockRef) -> LLVMValueRef
+	extern fn LLVMCreateBasicBlockInContext(anon context: LLVMContextRef, anon name: raw c_char) -> LLVMBasicBlockRef
+	extern fn LLVMAppendBasicBlockInContext(anon context: LLVMContextRef, anon func: LLVMValueRef, anon name: raw c_char) -> LLVMBasicBlockRef
+	extern fn LLVMDeleteBasicBlock(anon block: LLVMBasicBlockRef)
+
+	extern fn LLVMGetLastInstruction(anon block: LLVMBasicBlockRef) -> LLVMValueRef
+	extern fn LLVMGetInstructionOpcode(anon inst: LLVMValueRef) -> LLVMOpcode
+	extern fn LLVMIsATerminatorInst(anon inst: LLVMValueRef) -> LLVMValueRef
+
+	extern fn LLVMAddIncoming(anon PhiNode: LLVMValueRef, anon IncomingValues: raw LLVMValueRef, anon IncomingBlocks: raw LLVMBasicBlockRef, anon count: u32)
+
+	extern fn LLVMCreateBuilderInContext(anon context: LLVMContextRef) -> LLVMBuilderRef
+	extern fn LLVMPositionBuilderAtEnd(anon builder: LLVMBuilderRef, anon block: LLVMBasicBlockRef)
+	extern fn LLVMGetInsertBlock(anon builder: LLVMBuilderRef) -> LLVMBasicBlockRef
+	extern fn LLVMDisposeBuilder(anon builder: LLVMBuilderRef)
+	extern fn LLVMSetCurrentDebugLocation2(anon builder: LLVMBuilderRef, anon loc: LLVMMetadataRef)
+
+	extern fn LLVMBuildRetVoid(anon builder: LLVMBuilderRef)
+	extern fn LLVMBuildRet(anon builder: LLVMBuilderRef, anon value: LLVMValueRef)
+	extern fn LLVMBuildBr(anon builder: LLVMBuilderRef, anon dest: LLVMBasicBlockRef)
+	extern fn LLVMBuildCondBr(anon builder: LLVMBuilderRef, anon condition: LLVMValueRef, anon then_block: LLVMBasicBlockRef, anon else_block: LLVMBasicBlockRef)
+	extern fn LLVMBuildSwitch(anon builder: LLVMBuilderRef, anon value: LLVMValueRef, anon else_block: LLVMBasicBlockRef, anon num_cases: u32) -> LLVMValueRef
+	extern fn LLVMBuildUnreachable(anon builder: LLVMBuilderRef)
+
+	extern fn LLVMAddCase(anon switch_instr: LLVMValueRef, anon value: LLVMValueRef, anon dest: LLVMBasicBlockRef)
+
+	extern fn LLVMBuildAdd(anon builder: LLVMBuilderRef, anon lhs: LLVMValueRef, anon rhs: LLVMValueRef, anon name: raw c_char) -> LLVMValueRef
+	extern fn LLVMBuildFAdd(anon builder: LLVMBuilderRef, anon lhs: LLVMValueRef, anon rhs: LLVMValueRef, anon name: raw c_char) -> LLVMValueRef
+	extern fn LLVMBuildSub(anon builder: LLVMBuilderRef, anon lhs: LLVMValueRef, anon rhs: LLVMValueRef, anon name: raw c_char) -> LLVMValueRef
+	extern fn LLVMBuildFSub(anon builder: LLVMBuilderRef, anon lhs: LLVMValueRef, anon rhs: LLVMValueRef, anon name: raw c_char) -> LLVMValueRef
+	extern fn LLVMBuildMul(anon builder: LLVMBuilderRef, anon lhs: LLVMValueRef, anon rhs: LLVMValueRef, anon name: raw c_char) -> LLVMValueRef
+	extern fn LLVMBuildFMul(anon builder: LLVMBuilderRef, anon lhs: LLVMValueRef, anon rhs: LLVMValueRef, anon name: raw c_char) -> LLVMValueRef
+	extern fn LLVMBuildUDiv(anon builder: LLVMBuilderRef, anon lhs: LLVMValueRef, anon rhs: LLVMValueRef, anon name: raw c_char) -> LLVMValueRef
+	extern fn LLVMBuildSDiv(anon builder: LLVMBuilderRef, anon lhs: LLVMValueRef, anon rhs: LLVMValueRef, anon name: raw c_char) -> LLVMValueRef
+	extern fn LLVMBuildFDiv(anon builder: LLVMBuilderRef, anon lhs: LLVMValueRef, anon rhs: LLVMValueRef, anon name: raw c_char) -> LLVMValueRef
+	extern fn LLVMBuildURem(anon builder: LLVMBuilderRef, anon lhs: LLVMValueRef, anon rhs: LLVMValueRef, anon name: raw c_char) -> LLVMValueRef
+	extern fn LLVMBuildSRem(anon builder: LLVMBuilderRef, anon lhs: LLVMValueRef, anon rhs: LLVMValueRef, anon name: raw c_char) -> LLVMValueRef
+	extern fn LLVMBuildFRem(anon builder: LLVMBuilderRef, anon lhs: LLVMValueRef, anon rhs: LLVMValueRef, anon name: raw c_char) -> LLVMValueRef
+
+	extern fn LLVMBuildShl(anon builder: LLVMBuilderRef, anon lhs: LLVMValueRef, anon rhs: LLVMValueRef, anon name: raw c_char) -> LLVMValueRef
+	extern fn LLVMBuildLShr(anon builder: LLVMBuilderRef, anon lhs: LLVMValueRef, anon rhs: LLVMValueRef, anon name: raw c_char) -> LLVMValueRef
+	extern fn LLVMBuildAShr(anon builder: LLVMBuilderRef, anon lhs: LLVMValueRef, anon rhs: LLVMValueRef, anon name: raw c_char) -> LLVMValueRef
+
+	extern fn LLVMBuildAnd(anon builder: LLVMBuilderRef, anon lhs: LLVMValueRef, anon rhs: LLVMValueRef, anon name: raw c_char) -> LLVMValueRef
+	extern fn LLVMBuildOr(anon builder: LLVMBuilderRef, anon lhs: LLVMValueRef, anon rhs: LLVMValueRef, anon name: raw c_char) -> LLVMValueRef
+	extern fn LLVMBuildXor(anon builder: LLVMBuilderRef, anon lhs: LLVMValueRef, anon rhs: LLVMValueRef, anon name: raw c_char) -> LLVMValueRef
+	extern fn LLVMBuildNeg(anon builder: LLVMBuilderRef, anon value: LLVMValueRef, anon name: raw c_char) -> LLVMValueRef
+	extern fn LLVMBuildFNeg(anon builder: LLVMBuilderRef, anon value: LLVMValueRef, anon name: raw c_char) -> LLVMValueRef
+	extern fn LLVMBuildNot(anon builder: LLVMBuilderRef, anon value: LLVMValueRef, anon name: raw c_char) -> LLVMValueRef
+
+	extern fn LLVMBuildMalloc(anon builder: LLVMBuilderRef, anon type: LLVMTypeRef, anon name: raw c_char) -> LLVMValueRef
+	extern fn LLVMBuildArrayMalloc(anon builder: LLVMBuilderRef, anon type: LLVMTypeRef, anon size: LLVMValueRef, anon name: raw c_char) -> LLVMValueRef
+
+	extern fn LLVMBuildMemSet(anon builder: LLVMBuilderRef, anon ptr: LLVMValueRef, anon val: LLVMValueRef, anon size: LLVMValueRef, anon align: u32) -> LLVMValueRef
+	extern fn LLVMBuildMemCpy(anon builder: LLVMBuilderRef, anon dst: LLVMValueRef, anon dstAlign: u32, anon src: LLVMValueRef, anon srcAlign: u32, anon size: LLVMValueRef) -> LLVMValueRef
+	extern fn LLVMBuildMemMove(anon builder: LLVMBuilderRef, anon dst: LLVMValueRef, anon dstAlign: u32, anon src: LLVMValueRef, anon srcAlign: u32, anon size: LLVMValueRef) -> LLVMValueRef
+
+	extern fn LLVMBuildAlloca(anon builder: LLVMBuilderRef, anon type: LLVMTypeRef, anon name: raw c_char) -> LLVMValueRef
+	extern fn LLVMBuildArrayAlloca(anon builder: LLVMBuilderRef, anon type: LLVMTypeRef, anon size: LLVMValueRef, anon name: raw c_char) -> LLVMValueRef
+
+	extern fn LLVMBuildFree(anon builder: LLVMBuilderRef, anon ptr: LLVMValueRef) -> LLVMValueRef
+
+	extern fn LLVMBuildLoad2(anon builder: LLVMBuilderRef, anon type: LLVMTypeRef, anon address: LLVMValueRef, anon name: raw c_char) -> LLVMValueRef
+	extern fn LLVMBuildStore(anon builder: LLVMBuilderRef, anon value: LLVMValueRef, anon address: LLVMValueRef) -> LLVMValueRef
+
+	extern fn LLVMBuildGEP2(anon builder: LLVMBuilderRef, anon type: LLVMTypeRef, anon ptr: LLVMValueRef, anon indices: raw LLVMValueRef, anon numIndices: u32, anon name: raw c_char) -> LLVMValueRef
+	extern fn LLVMBuildInBoundsGEP2(anon builder: LLVMBuilderRef, anon type: LLVMTypeRef, anon ptr: LLVMValueRef, anon indices: raw LLVMValueRef, anon numIndices: u32, anon name: raw c_char) -> LLVMValueRef
+	extern fn LLVMBuildStructGEP2(anon builder: LLVMBuilderRef, anon type: LLVMTypeRef, anon ptr: LLVMValueRef, anon index: u32, anon name: raw c_char) -> LLVMValueRef
+
+	extern fn LLVMBuildGlobalString(anon builder: LLVMBuilderRef, anon str: raw c_char, anon name: raw c_char) -> LLVMValueRef
+	extern fn LLVMBuildGlobalStringPtr(anon builder: LLVMBuilderRef, anon str: raw c_char, anon name: raw c_char) -> LLVMValueRef
+
+	extern fn LLVMBuildTrunc(anon builder: LLVMBuilderRef, anon value: LLVMValueRef, anon destType: LLVMTypeRef, anon name: raw c_char) -> LLVMValueRef
+	extern fn LLVMBuildZExt(anon builder: LLVMBuilderRef, anon value: LLVMValueRef, anon destType: LLVMTypeRef, anon name: raw c_char) -> LLVMValueRef
+	extern fn LLVMBuildSExt(anon builder: LLVMBuilderRef, anon value: LLVMValueRef, anon destType: LLVMTypeRef, anon name: raw c_char) -> LLVMValueRef
+	extern fn LLVMBuildFPToUI(anon builder: LLVMBuilderRef, anon value: LLVMValueRef, anon destType: LLVMTypeRef, anon name: raw c_char) -> LLVMValueRef
+	extern fn LLVMBuildFPToSI(anon builder: LLVMBuilderRef, anon value: LLVMValueRef, anon destType: LLVMTypeRef, anon name: raw c_char) -> LLVMValueRef
+	extern fn LLVMBuildUIToFP(anon builder: LLVMBuilderRef, anon value: LLVMValueRef, anon destType: LLVMTypeRef, anon name: raw c_char) -> LLVMValueRef
+	extern fn LLVMBuildSIToFP(anon builder: LLVMBuilderRef, anon value: LLVMValueRef, anon destType: LLVMTypeRef, anon name: raw c_char) -> LLVMValueRef
+	extern fn LLVMBuildFPTrunc(anon builder: LLVMBuilderRef, anon value: LLVMValueRef, anon destType: LLVMTypeRef, anon name: raw c_char) -> LLVMValueRef
+	extern fn LLVMBuildFPExt(anon builder: LLVMBuilderRef, anon value: LLVMValueRef, anon destType: LLVMTypeRef, anon name: raw c_char) -> LLVMValueRef
+	extern fn LLVMBuildBitCast(anon builder: LLVMBuilderRef, anon val: LLVMValueRef, anon dst: LLVMTypeRef, anon name: raw c_char) -> LLVMValueRef
+	extern fn LLVMBuildPointerCast(anon builder: LLVMBuilderRef, anon val: LLVMValueRef, anon dst: LLVMTypeRef, anon name: raw c_char) -> LLVMValueRef
+
+	extern fn LLVMBuildICmp(anon builder: LLVMBuilderRef, anon op: LLVMIntPredicate, anon lhs: LLVMValueRef, anon rhs: LLVMValueRef, anon name: raw c_char) -> LLVMValueRef
+	extern fn LLVMBuildFCmp(anon builder: LLVMBuilderRef, anon op: LLVMRealPredicate, anon lhs: LLVMValueRef, anon rhs: LLVMValueRef, anon name: raw c_char) -> LLVMValueRef
+
+	extern fn LLVMBuildPhi(anon builder: LLVMBuilderRef, anon type: LLVMTypeRef, anon name: raw c_char) -> LLVMValueRef
+
+	extern fn LLVMBuildCall2(anon builder: LLVMBuilderRef, anon type: LLVMTypeRef, anon func: LLVMValueRef, anon args: raw LLVMValueRef, anon numArgs: u64, anon name: raw c_char) -> LLVMValueRef
+
+	extern fn LLVMBuildExtractValue(anon builder: LLVMBuilderRef, anon aggVal: LLVMValueRef, anon index: u32, anon name: raw c_char) -> LLVMValueRef
+	extern fn LLVMBuildInsertValue(anon builder: LLVMBuilderRef, anon aggVal: LLVMValueRef, anon val: LLVMValueRef, anon index: u32, anon name: raw c_char) -> LLVMValueRef
+	extern fn LLVMBuildPtrDiff2(anon builder: LLVMBuilderRef, anon element_type: LLVMTypeRef, anon lhs: LLVMValueRef, anon rhs: LLVMValueRef, anon name: raw c_char) -> LLVMValueRef
+	extern fn LLVMBuildAtomicRMW(anon builder: LLVMBuilderRef, anon op: LLVMAtomicRMWBinOp, anon ptr: LLVMValueRef, anon value: LLVMValueRef, anon ordering: LLVMAtomicOrdering, anon singleThread: bool) -> LLVMValueRef
+
+	extern fn LLVMCreateMemoryBufferWithContentsOfFile(anon path: raw c_char, anon out_mem_buf: raw LLVMMemoryBufferRef, anon out_message: raw raw c_char) -> bool
+	extern fn LLVMDisposeMemoryBuffer(anon mem_buf: LLVMMemoryBufferRef)
+}
+
+import extern c "llvm-c/Target.h" {
+	extern struct LLVMTargetDataRef {}
+
+	extern fn LLVMIntPtrTypeInContext(anon context: LLVMContextRef, anon target_data: LLVMTargetDataRef) -> LLVMTypeRef
+
+	extern fn LLVMGetModuleDataLayout(anon module: LLVMModuleRef) -> LLVMTargetDataRef
+	extern fn LLVMSizeOfTypeInBits(anon target_data: LLVMTargetDataRef, anon type: LLVMTypeRef) -> u64
+	extern fn LLVMStoreSizeOfType(anon target_data: LLVMTargetDataRef, anon type: LLVMTypeRef) -> u64
+	extern fn LLVMABISizeOfType(anon target_data: LLVMTargetDataRef, anon type: LLVMTypeRef) -> u64
+
+	extern fn LLVMPreferredAlignmentOfType(anon target_data: LLVMTargetDataRef, anon type: LLVMTypeRef) -> u32
+}
+
+import extern c "llvm-c/IRReader.h" {
+	extern fn LLVMParseIRInContext(anon context: LLVMContextRef, anon mem_buf: LLVMMemoryBufferRef, anon out_module: raw LLVMModuleRef, anon out_message: raw raw c_char) -> bool
+}
+
+import extern c "llvm-c/BitWriter.h" {
+	extern fn LLVMWriteBitcodeToFile(anon module: LLVMModuleRef, anon path: raw c_char) -> i32
+}
+
+import extern c "llvm-c/Analysis.h" {
+	extern struct LLVMVerifierFailureAction {}
+
+	extern fn LLVMVerifyModule(anon module: LLVMModuleRef, anon action: LLVMVerifierFailureAction, anon result: raw raw c_char) -> bool
+}
+
+import extern c "llvm-c/Linker.h" {
+	extern fn LLVMLinkModules2(anon dst: LLVMModuleRef, anon src: LLVMModuleRef) -> bool
+}
+
+import extern c "llvm-c/DebugInfo.h" {
+	extern struct LLVMDWARFSourceLanguage {}
+	extern struct LLVMDWARFEmissionKind {}
+	extern struct LLVMDIFlags {}
+
+	extern fn LLVMCreateDIBuilder(anon module: LLVMModuleRef) -> LLVMDIBuilderRef
+	extern fn LLVMDisposeDIBuilder(anon builder: LLVMDIBuilderRef)
+	extern fn LLVMDIBuilderFinalize(anon builder: LLVMDIBuilderRef)
+
+	extern fn LLVMDIBuilderCreateCompileUnit(
+		anon builder: LLVMDIBuilderRef
+		anon lang: LLVMDWARFSourceLanguage
+		anon file: LLVMMetadataRef
+		anon producer: raw c_char, anon producer_len: usize
+		anon is_optimized: bool
+		anon flags: raw c_char, anon flags_len: usize
+		anon runtime_ver: u32
+		anon split_name: raw c_char, anon split_name_len: usize
+		anon kind: LLVMDWARFEmissionKind
+		anon dwo_id: u32
+		anon split_debug_inlining: bool
+		anon debug_info_for_profiling: bool
+		anon sys_root: raw c_char, anon sys_root_len: usize
+		anon sdk: raw c_char, anon sdk_len: usize
+	) -> LLVMMetadataRef
+
+	extern fn LLVMDIBuilderCreateFile(
+		anon builder: LLVMDIBuilderRef
+		anon filename: raw c_char, anon filename_len: usize
+		anon directory: raw c_char, anon directory_len: usize
+	) -> LLVMMetadataRef
+
+	extern fn LLVMDIBuilderCreateModule(
+		anon builder: LLVMDIBuilderRef
+		anon parent_scope: LLVMMetadataRef
+		anon name: raw c_char, anon name_len: usize
+		anon config_macros: raw c_char, anon config_macros_len: usize
+		anon include_path: raw c_char, anon include_path_len: usize
+		anon api_notes_file: raw c_char, anon api_notes_file_len: usize
+	) -> LLVMMetadataRef
+
+	extern fn LLVMDIBuilderCreateNameSpace(
+		anon builder: LLVMDIBuilderRef
+		anon parent_scope: LLVMMetadataRef
+		anon name: raw c_char, anon name_len: usize
+		anon export_symbols: bool
+	) -> LLVMMetadataRef
+
+	extern fn LLVMDIBuilderCreateFunction(
+		anon builder: LLVMDIBuilderRef
+		anon scope: LLVMMetadataRef
+		anon name: raw c_char, anon name_len: usize
+		anon linkage_name: raw c_char, anon linkage_name_len: usize
+		anon file: LLVMMetadataRef, anon line_no: u32
+		anon type: LLVMMetadataRef
+		anon is_local_to_unit: bool
+		anon is_definition: bool
+		anon scope_line: u32
+		anon flags: LLVMDIFlags
+		anon is_optimized: bool
+	) -> LLVMMetadataRef
+
+	extern fn LLVMDIBuilderCreateLexicalBlock(
+		anon builder: LLVMDIBuilderRef
+		anon scope: LLVMMetadataRef
+		anon file: LLVMMetadataRef
+		anon line: u32, anon column: u32
+	) -> LLVMMetadataRef
+
+	extern fn LLVMDIBuilderCreateImportedModuleFromModule(
+		anon builder: LLVMDIBuilderRef
+		anon scope: LLVMMetadataRef
+		anon module: LLVMMetadataRef
+		anon file: LLVMMetadataRef
+		anon line: u32
+		anon elements: raw LLVMMetadataRef, anon num_elements: u32
+	) -> LLVMMetadataRef
+
+	extern fn LLVMSetSubprogram(anon func: LLVMValueRef, anon sp: LLVMMetadataRef)
+
+	extern fn LLVMDIBuilderCreateBasicType(
+		anon builder: LLVMDIBuilderRef
+		anon name: raw c_char, anon name_len: usize
+		anon size_in_bits: u64
+		anon encoding: u32
+		anon flags: LLVMDIFlags
+	) -> LLVMMetadataRef
+
+	extern fn LLVMDIBuilderCreateUnspecifiedType(
+		anon builder: LLVMDIBuilderRef
+		anon name: raw c_char, anon name_len: usize
+	) -> LLVMMetadataRef
+
+	extern fn LLVMDIBuilderCreatePointerType(
+		anon builder: LLVMDIBuilderRef
+		anon pointee_type: LLVMMetadataRef
+		anon size_in_bits: u64
+		anin align_in_bits: u32
+		anon address_space: u32
+		anon name: raw c_char, anon name_len: usize
+	) -> LLVMMetadataRef
+
+	extern fn LLVMDIBuilderCreateStructType(
+		anon builder: LLVMDIBuilderRef
+		anon scope: LLVMMetadataRef
+		anon name: raw c_char, anon name_len: usize
+		anon file: LLVMMetadataRef
+		anon line_number: u32
+		anon size_in_bits: u64
+		anin align_in_bits: u32
+		anon flags: LLVMDIFlags
+		anon derived_from: LLVMMetadataRef
+		anon elements: raw LLVMMetadataRef
+		anon num_elements: u32
+		anon run_time_lang: u32
+		anon vtable_holder: LLVMMetadataRef
+		anon unique_id: raw c_char, anon unique_id_len: usize
+	) -> LLVMMetadataRef
+
+	extern fn LLVMDIBuilderCreateSubroutineType(
+		anon builder: LLVMDIBuilderRef
+		anon file: LLVMMetadataRef
+		anon parameter_types: raw LLVMMetadataRef
+		anon num_parameter_types: u32
+		anon flags: LLVMDIFlags
+	) -> LLVMMetadataRef
+}
+
+enum _LLVMModuleFlagBehavior {
+	LLVMModuleFlagBehaviorError
+	LLVMModuleFlagBehaviorWarning
+	LLVMModuleFlagBehaviorRequire
+	LLVMModuleFlagBehaviorOverride
+	LLVMModuleFlagBehaviorAppend
+	LLVMModuleFlagBehaviorAppendUnique
+
+	// LLVM uses some behavior flags, which isn't represented in the c api yet
+	LLVMModuleFlagBehaviorMax
+	LLVMModuleFlagBehaviorMin
+
+	fn v(this) -> LLVMModuleFlagBehavior {
+		match this {
+			LLVMModuleFlagBehaviorError => { unsafe { cpp { "return LLVMModuleFlagBehavior::LLVMModuleFlagBehaviorError;" } } }
+			LLVMModuleFlagBehaviorWarning => { unsafe { cpp { "return LLVMModuleFlagBehavior::LLVMModuleFlagBehaviorWarning;" } } }
+			LLVMModuleFlagBehaviorRequire => { unsafe { cpp { "return LLVMModuleFlagBehavior::LLVMModuleFlagBehaviorRequire;" } } }
+			LLVMModuleFlagBehaviorOverride => { unsafe { cpp { "return LLVMModuleFlagBehavior::LLVMModuleFlagBehaviorOverride;" } } }
+			LLVMModuleFlagBehaviorAppend => { unsafe { cpp { "return LLVMModuleFlagBehavior::LLVMModuleFlagBehaviorAppend;" } } }
+			LLVMModuleFlagBehaviorAppendUnique => { unsafe { cpp { "return LLVMModuleFlagBehavior::LLVMModuleFlagBehaviorAppendUnique;" } } }
+			// the c binding of this enum starts counting at 0, the c++ version at 1
+			// -> llvm adds 1 tho this enum when converting to c++
+			// min / max are 7 / 8 in c++ -> 6 / 7 in c
+			LLVMModuleFlagBehaviorMax => { unsafe { cpp { "return static_cast<LLVMModuleFlagBehavior>(6);" } } }
+			LLVMModuleFlagBehaviorMin => { unsafe { cpp { "return static_cast<LLVMModuleFlagBehavior>(7);" } } }
+		}
+
+		abort()
+	}
+}
+
+enum _LLVMIntPredicate {
+	LLVMIntEQ
+	LLVMIntNE
+	LLVMIntUGT
+	LLVMIntUGE
+	LLVMIntULT
+	LLVMIntULE
+	LLVMIntSGT
+	LLVMIntSGE
+	LLVMIntSLT
+	LLVMIntSLE
+
+	fn v(this) -> LLVMIntPredicate {
+		match this {
+			LLVMIntEQ  => { unsafe { cpp { "return LLVMIntPredicate::LLVMIntEQ ;" } } }
+			LLVMIntNE  => { unsafe { cpp { "return LLVMIntPredicate::LLVMIntNE ;" } } }
+			LLVMIntUGT => { unsafe { cpp { "return LLVMIntPredicate::LLVMIntUGT;" } } }
+			LLVMIntUGE => { unsafe { cpp { "return LLVMIntPredicate::LLVMIntUGE;" } } }
+			LLVMIntULT => { unsafe { cpp { "return LLVMIntPredicate::LLVMIntULT;" } } }
+			LLVMIntULE => { unsafe { cpp { "return LLVMIntPredicate::LLVMIntULE;" } } }
+			LLVMIntSGT => { unsafe { cpp { "return LLVMIntPredicate::LLVMIntSGT;" } } }
+			LLVMIntSGE => { unsafe { cpp { "return LLVMIntPredicate::LLVMIntSGE;" } } }
+			LLVMIntSLT => { unsafe { cpp { "return LLVMIntPredicate::LLVMIntSLT;" } } }
+			LLVMIntSLE => { unsafe { cpp { "return LLVMIntPredicate::LLVMIntSLE;" } } }
+		}
+		abort()
+	}
+}
+
+enum _LLVMRealPredicate {
+	LLVMRealPredicateFalse
+	LLVMRealOEQ
+	LLVMRealOGT
+	LLVMRealOGE
+	LLVMRealOLT
+	LLVMRealOLE
+	LLVMRealONE
+	LLVMRealORD
+	LLVMRealUNO
+	LLVMRealUEQ
+	LLVMRealUGT
+	LLVMRealUGE
+	LLVMRealULT
+	LLVMRealULE
+	LLVMRealUNE
+	LLVMRealPredicateTrue
+
+	fn v(this) -> LLVMRealPredicate {
+		match this {
+			LLVMRealPredicateFalse => { unsafe { cpp { "return LLVMRealPredicate::LLVMRealPredicateFalse;" } } }
+			LLVMRealOEQ => { unsafe { cpp { "return LLVMRealPredicate::LLVMRealOEQ;" } } }
+			LLVMRealOGT => { unsafe { cpp { "return LLVMRealPredicate::LLVMRealOGT;" } } }
+			LLVMRealOGE => { unsafe { cpp { "return LLVMRealPredicate::LLVMRealOGE;" } } }
+			LLVMRealOLT => { unsafe { cpp { "return LLVMRealPredicate::LLVMRealOLT;" } } }
+			LLVMRealOLE => { unsafe { cpp { "return LLVMRealPredicate::LLVMRealOLE;" } } }
+			LLVMRealONE => { unsafe { cpp { "return LLVMRealPredicate::LLVMRealONE;" } } }
+			LLVMRealORD => { unsafe { cpp { "return LLVMRealPredicate::LLVMRealORD;" } } }
+			LLVMRealUNO => { unsafe { cpp { "return LLVMRealPredicate::LLVMRealUNO;" } } }
+			LLVMRealUEQ => { unsafe { cpp { "return LLVMRealPredicate::LLVMRealUEQ;" } } }
+			LLVMRealUGT => { unsafe { cpp { "return LLVMRealPredicate::LLVMRealUGT;" } } }
+			LLVMRealUGE => { unsafe { cpp { "return LLVMRealPredicate::LLVMRealUGE;" } } }
+			LLVMRealULT => { unsafe { cpp { "return LLVMRealPredicate::LLVMRealULT;" } } }
+			LLVMRealULE => { unsafe { cpp { "return LLVMRealPredicate::LLVMRealULE;" } } }
+			LLVMRealUNE => { unsafe { cpp { "return LLVMRealPredicate::LLVMRealUNE;" } } }
+			LLVMRealPredicateTrue => { unsafe { cpp { "return LLVMRealPredicate::LLVMRealPredicateTrue;" } } }
+		}
+		abort()
+	}
+}
+
+enum _LLVMVerifierFailureAction {
+	LLVMAbortProcessAction
+	LLVMPrintMessageAction
+	LLVMReturnStatusAction
+
+	fn v(this) -> LLVMVerifierFailureAction {
+		match this {
+			LLVMAbortProcessAction => { unsafe { cpp { "return LLVMVerifierFailureAction::LLVMAbortProcessAction;" } } }
+			LLVMPrintMessageAction => { unsafe { cpp { "return LLVMVerifierFailureAction::LLVMPrintMessageAction;" } } }
+			LLVMReturnStatusAction => { unsafe { cpp { "return LLVMVerifierFailureAction::LLVMReturnStatusAction;" } } }
+		}
+		abort()
+	}
+}
+
+enum _LLVMLinkage {
+	LLVMExternalLinkage
+	LLVMAvailableExternallyLinkage
+	LLVMLinkOnceAnyLinkage
+	LLVMLinkOnceODRLinkage
+	LLVMLinkOnceODRAutoHideLinkage
+	LLVMWeakAnyLinkage
+	LLVMWeakODRLinkage
+	LLVMAppendingLinkage
+	LLVMInternalLinkage
+	LLVMPrivateLinkage
+	LLVMDLLImportLinkage
+	LLVMDLLExportLinkage
+	LLVMExternalWeakLinkage
+	LLVMGhostLinkage
+	LLVMCommonLinkage
+	LLVMLinkerPrivateLinkage
+	LLVMLinkerPrivateWeakLinkage
+
+	fn v(this) -> LLVMLinkage {
+		match this {
+			LLVMExternalLinkage				=> { unsafe { cpp { "return LLVMLinkage::LLVMExternalLinkage;" } } }
+			LLVMAvailableExternallyLinkage	=> { unsafe { cpp { "return LLVMLinkage::LLVMAvailableExternallyLinkage;" } } }
+			LLVMLinkOnceAnyLinkage			=> { unsafe { cpp { "return LLVMLinkage::LLVMLinkOnceAnyLinkage;" } } }
+			LLVMLinkOnceODRLinkage			=> { unsafe { cpp { "return LLVMLinkage::LLVMLinkOnceODRLinkage;" } } }
+			LLVMLinkOnceODRAutoHideLinkage	=> { unsafe { cpp { "return LLVMLinkage::LLVMLinkOnceODRAutoHideLinkage;" } } }
+			LLVMWeakAnyLinkage				=> { unsafe { cpp { "return LLVMLinkage::LLVMWeakAnyLinkage;" } } }
+			LLVMWeakODRLinkage				=> { unsafe { cpp { "return LLVMLinkage::LLVMWeakODRLinkage;" } } }
+			LLVMAppendingLinkage			=> { unsafe { cpp { "return LLVMLinkage::LLVMAppendingLinkage;" } } }
+			LLVMInternalLinkage				=> { unsafe { cpp { "return LLVMLinkage::LLVMInternalLinkage;" } } }
+			LLVMPrivateLinkage				=> { unsafe { cpp { "return LLVMLinkage::LLVMPrivateLinkage;" } } }
+			LLVMDLLImportLinkage			=> { unsafe { cpp { "return LLVMLinkage::LLVMDLLImportLinkage;" } } }
+			LLVMDLLExportLinkage			=> { unsafe { cpp { "return LLVMLinkage::LLVMDLLExportLinkage;" } } }
+			LLVMExternalWeakLinkage			=> { unsafe { cpp { "return LLVMLinkage::LLVMExternalWeakLinkage;" } } }
+			LLVMGhostLinkage				=> { unsafe { cpp { "return LLVMLinkage::LLVMGhostLinkage;" } } }
+			LLVMCommonLinkage				=> { unsafe { cpp { "return LLVMLinkage::LLVMCommonLinkage;" } } }
+			LLVMLinkerPrivateLinkage		=> { unsafe { cpp { "return LLVMLinkage::LLVMLinkerPrivateLinkage;" } } }
+			LLVMLinkerPrivateWeakLinkage	=> { unsafe { cpp { "return LLVMLinkage::LLVMLinkerPrivateWeakLinkage;" } } }
+		}
+		abort()
+	}
+}
+
+enum _LLVMAtomicOrdering {
+	LLVMAtomicOrderingNotAtomic
+	LLVMAtomicOrderingUnordered
+	LLVMAtomicOrderingMonotonic
+	LLVMAtomicOrderingAcquire
+	LLVMAtomicOrderingRelease
+	LLVMAtomicOrderingAcquireRelease
+	LLVMAtomicOrderingSequentiallyConsistent
+
+	fn v(this) -> LLVMAtomicOrdering {
+		match this {
+			LLVMAtomicOrderingNotAtomic => { unsafe { cpp { "return LLVMAtomicOrdering::LLVMAtomicOrderingNotAtomic;" } } }
+			LLVMAtomicOrderingUnordered => { unsafe { cpp { "return LLVMAtomicOrdering::LLVMAtomicOrderingUnordered;" } } }
+			LLVMAtomicOrderingMonotonic => { unsafe { cpp { "return LLVMAtomicOrdering::LLVMAtomicOrderingMonotonic;" } } }
+			LLVMAtomicOrderingAcquire => { unsafe { cpp { "return LLVMAtomicOrdering::LLVMAtomicOrderingAcquire;" } } }
+			LLVMAtomicOrderingRelease => { unsafe { cpp { "return LLVMAtomicOrdering::LLVMAtomicOrderingRelease;" } } }
+			LLVMAtomicOrderingAcquireRelease => { unsafe { cpp { "return LLVMAtomicOrdering::LLVMAtomicOrderingAcquireRelease;" } } }
+			LLVMAtomicOrderingSequentiallyConsistent => { unsafe { cpp { "return LLVMAtomicOrdering::LLVMAtomicOrderingSequentiallyConsistent;" } } }
+		}
+		abort()
+	}
+}
+
+enum _LLVMAtomicRMWBinOp {
+	LLVMAtomicRMWBinOpXchg
+	LLVMAtomicRMWBinOpAdd
+	LLVMAtomicRMWBinOpSub
+	LLVMAtomicRMWBinOpAnd
+	LLVMAtomicRMWBinOpNand
+	LLVMAtomicRMWBinOpOr
+	LLVMAtomicRMWBinOpXor
+	LLVMAtomicRMWBinOpMax
+	LLVMAtomicRMWBinOpMin
+	LLVMAtomicRMWBinOpUMax
+	LLVMAtomicRMWBinOpUMin
+	LLVMAtomicRMWBinOpFAdd
+	LLVMAtomicRMWBinOpFSub
+
+	fn v(this) -> LLVMAtomicRMWBinOp {
+		match this {
+			LLVMAtomicRMWBinOpXchg => { unsafe { cpp { "return LLVMAtomicRMWBinOp::LLVMAtomicRMWBinOpXchg;" } } }
+			LLVMAtomicRMWBinOpAdd => { unsafe { cpp { "return LLVMAtomicRMWBinOp::LLVMAtomicRMWBinOpAdd;" } } }
+			LLVMAtomicRMWBinOpSub => { unsafe { cpp { "return LLVMAtomicRMWBinOp::LLVMAtomicRMWBinOpSub;" } } }
+			LLVMAtomicRMWBinOpAnd => { unsafe { cpp { "return LLVMAtomicRMWBinOp::LLVMAtomicRMWBinOpAnd;" } } }
+			LLVMAtomicRMWBinOpNand => { unsafe { cpp { "return LLVMAtomicRMWBinOp::LLVMAtomicRMWBinOpNand;" } } }
+			LLVMAtomicRMWBinOpOr => { unsafe { cpp { "return LLVMAtomicRMWBinOp::LLVMAtomicRMWBinOpOr;" } } }
+			LLVMAtomicRMWBinOpXor => { unsafe { cpp { "return LLVMAtomicRMWBinOp::LLVMAtomicRMWBinOpXor;" } } }
+			LLVMAtomicRMWBinOpMax => { unsafe { cpp { "return LLVMAtomicRMWBinOp::LLVMAtomicRMWBinOpMax;" } } }
+			LLVMAtomicRMWBinOpMin => { unsafe { cpp { "return LLVMAtomicRMWBinOp::LLVMAtomicRMWBinOpMin;" } } }
+			LLVMAtomicRMWBinOpUMax => { unsafe { cpp { "return LLVMAtomicRMWBinOp::LLVMAtomicRMWBinOpUMax;" } } }
+			LLVMAtomicRMWBinOpUMin => { unsafe { cpp { "return LLVMAtomicRMWBinOp::LLVMAtomicRMWBinOpUMin;" } } }
+			LLVMAtomicRMWBinOpFAdd => { unsafe { cpp { "return LLVMAtomicRMWBinOp::LLVMAtomicRMWBinOpFAdd;" } } }
+			LLVMAtomicRMWBinOpFSub => { unsafe { cpp { "return LLVMAtomicRMWBinOp::LLVMAtomicRMWBinOpFSub;" } } }
+		}
+		abort()
+	}
+}
+
+enum _LLVMDWARFSourceLanguage {
+	LLVMDWARFSourceLanguageC89
+	LLVMDWARFSourceLanguageC
+	LLVMDWARFSourceLanguageAda83
+	LLVMDWARFSourceLanguageC_plus_plus
+	LLVMDWARFSourceLanguageCobol74
+	LLVMDWARFSourceLanguageCobol85
+	LLVMDWARFSourceLanguageFortran77
+	LLVMDWARFSourceLanguageFortran90
+	LLVMDWARFSourceLanguagePascal83
+	LLVMDWARFSourceLanguageModula2
+	LLVMDWARFSourceLanguageJava
+	LLVMDWARFSourceLanguageC99
+	LLVMDWARFSourceLanguageAda95
+	LLVMDWARFSourceLanguageFortran95
+	LLVMDWARFSourceLanguagePLI
+	LLVMDWARFSourceLanguageObjC
+	LLVMDWARFSourceLanguageObjC_plus_plus
+	LLVMDWARFSourceLanguageUPC
+	LLVMDWARFSourceLanguageD
+	LLVMDWARFSourceLanguagePython
+	LLVMDWARFSourceLanguageOpenCL
+	LLVMDWARFSourceLanguageGo
+	LLVMDWARFSourceLanguageModula3
+	LLVMDWARFSourceLanguageHaskell
+	LLVMDWARFSourceLanguageC_plus_plus_03
+	LLVMDWARFSourceLanguageC_plus_plus_11
+	LLVMDWARFSourceLanguageOCaml
+	LLVMDWARFSourceLanguageRust
+	LLVMDWARFSourceLanguageC11
+	LLVMDWARFSourceLanguageSwift
+	LLVMDWARFSourceLanguageJulia
+	LLVMDWARFSourceLanguageDylan
+	LLVMDWARFSourceLanguageC_plus_plus_14
+	LLVMDWARFSourceLanguageFortran03
+	LLVMDWARFSourceLanguageFortran08
+	LLVMDWARFSourceLanguageRenderScript
+	LLVMDWARFSourceLanguageBLISS
+	LLVMDWARFSourceLanguageMips_Assembler
+	LLVMDWARFSourceLanguageGOOGLE_RenderScript
+	LLVMDWARFSourceLanguageBORLAND_Delphi
+
+	fn v(this) -> LLVMDWARFSourceLanguage {
+		match this {
+			LLVMDWARFSourceLanguageC89 => { unsafe { cpp { "return LLVMDWARFSourceLanguage::LLVMDWARFSourceLanguageC89;" } } }
+			LLVMDWARFSourceLanguageC => { unsafe { cpp { "return LLVMDWARFSourceLanguage::LLVMDWARFSourceLanguageC;" } } }
+			LLVMDWARFSourceLanguageAda83 => { unsafe { cpp { "return LLVMDWARFSourceLanguage::LLVMDWARFSourceLanguageAda83;" } } }
+			LLVMDWARFSourceLanguageC_plus_plus => { unsafe { cpp { "return LLVMDWARFSourceLanguage::LLVMDWARFSourceLanguageC_plus_plus;" } } }
+			LLVMDWARFSourceLanguageCobol74 => { unsafe { cpp { "return LLVMDWARFSourceLanguage::LLVMDWARFSourceLanguageCobol74;" } } }
+			LLVMDWARFSourceLanguageCobol85 => { unsafe { cpp { "return LLVMDWARFSourceLanguage::LLVMDWARFSourceLanguageCobol85;" } } }
+			LLVMDWARFSourceLanguageFortran77 => { unsafe { cpp { "return LLVMDWARFSourceLanguage::LLVMDWARFSourceLanguageFortran77;" } } }
+			LLVMDWARFSourceLanguageFortran90 => { unsafe { cpp { "return LLVMDWARFSourceLanguage::LLVMDWARFSourceLanguageFortran90;" } } }
+			LLVMDWARFSourceLanguagePascal83 => { unsafe { cpp { "return LLVMDWARFSourceLanguage::LLVMDWARFSourceLanguagePascal83;" } } }
+			LLVMDWARFSourceLanguageModula2 => { unsafe { cpp { "return LLVMDWARFSourceLanguage::LLVMDWARFSourceLanguageModula2;" } } }
+			LLVMDWARFSourceLanguageJava => { unsafe { cpp { "return LLVMDWARFSourceLanguage::LLVMDWARFSourceLanguageJava;" } } }
+			LLVMDWARFSourceLanguageC99 => { unsafe { cpp { "return LLVMDWARFSourceLanguage::LLVMDWARFSourceLanguageC99;" } } }
+			LLVMDWARFSourceLanguageAda95 => { unsafe { cpp { "return LLVMDWARFSourceLanguage::LLVMDWARFSourceLanguageAda95;" } } }
+			LLVMDWARFSourceLanguageFortran95 => { unsafe { cpp { "return LLVMDWARFSourceLanguage::LLVMDWARFSourceLanguageFortran95;" } } }
+			LLVMDWARFSourceLanguagePLI => { unsafe { cpp { "return LLVMDWARFSourceLanguage::LLVMDWARFSourceLanguagePLI;" } } }
+			LLVMDWARFSourceLanguageObjC => { unsafe { cpp { "return LLVMDWARFSourceLanguage::LLVMDWARFSourceLanguageObjC;" } } }
+			LLVMDWARFSourceLanguageObjC_plus_plus => { unsafe { cpp { "return LLVMDWARFSourceLanguage::LLVMDWARFSourceLanguageObjC_plus_plus;" } } }
+			LLVMDWARFSourceLanguageUPC => { unsafe { cpp { "return LLVMDWARFSourceLanguage::LLVMDWARFSourceLanguageUPC;" } } }
+			LLVMDWARFSourceLanguageD => { unsafe { cpp { "return LLVMDWARFSourceLanguage::LLVMDWARFSourceLanguageD;" } } }
+			LLVMDWARFSourceLanguagePython => { unsafe { cpp { "return LLVMDWARFSourceLanguage::LLVMDWARFSourceLanguagePython;" } } }
+			LLVMDWARFSourceLanguageOpenCL => { unsafe { cpp { "return LLVMDWARFSourceLanguage::LLVMDWARFSourceLanguageOpenCL;" } } }
+			LLVMDWARFSourceLanguageGo => { unsafe { cpp { "return LLVMDWARFSourceLanguage::LLVMDWARFSourceLanguageGo;" } } }
+			LLVMDWARFSourceLanguageModula3 => { unsafe { cpp { "return LLVMDWARFSourceLanguage::LLVMDWARFSourceLanguageModula3;" } } }
+			LLVMDWARFSourceLanguageHaskell => { unsafe { cpp { "return LLVMDWARFSourceLanguage::LLVMDWARFSourceLanguageHaskell;" } } }
+			LLVMDWARFSourceLanguageC_plus_plus_03 => { unsafe { cpp { "return LLVMDWARFSourceLanguage::LLVMDWARFSourceLanguageC_plus_plus_03;" } } }
+			LLVMDWARFSourceLanguageC_plus_plus_11 => { unsafe { cpp { "return LLVMDWARFSourceLanguage::LLVMDWARFSourceLanguageC_plus_plus_11;" } } }
+			LLVMDWARFSourceLanguageOCaml => { unsafe { cpp { "return LLVMDWARFSourceLanguage::LLVMDWARFSourceLanguageOCaml;" } } }
+			LLVMDWARFSourceLanguageRust => { unsafe { cpp { "return LLVMDWARFSourceLanguage::LLVMDWARFSourceLanguageRust;" } } }
+			LLVMDWARFSourceLanguageC11 => { unsafe { cpp { "return LLVMDWARFSourceLanguage::LLVMDWARFSourceLanguageC11;" } } }
+			LLVMDWARFSourceLanguageSwift => { unsafe { cpp { "return LLVMDWARFSourceLanguage::LLVMDWARFSourceLanguageSwift;" } } }
+			LLVMDWARFSourceLanguageJulia => { unsafe { cpp { "return LLVMDWARFSourceLanguage::LLVMDWARFSourceLanguageJulia;" } } }
+			LLVMDWARFSourceLanguageDylan => { unsafe { cpp { "return LLVMDWARFSourceLanguage::LLVMDWARFSourceLanguageDylan;" } } }
+			LLVMDWARFSourceLanguageC_plus_plus_14 => { unsafe { cpp { "return LLVMDWARFSourceLanguage::LLVMDWARFSourceLanguageC_plus_plus_14;" } } }
+			LLVMDWARFSourceLanguageFortran03 => { unsafe { cpp { "return LLVMDWARFSourceLanguage::LLVMDWARFSourceLanguageFortran03;" } } }
+			LLVMDWARFSourceLanguageFortran08 => { unsafe { cpp { "return LLVMDWARFSourceLanguage::LLVMDWARFSourceLanguageFortran08;" } } }
+			LLVMDWARFSourceLanguageRenderScript => { unsafe { cpp { "return LLVMDWARFSourceLanguage::LLVMDWARFSourceLanguageRenderScript;" } } }
+			LLVMDWARFSourceLanguageBLISS => { unsafe { cpp { "return LLVMDWARFSourceLanguage::LLVMDWARFSourceLanguageBLISS;" } } }
+			LLVMDWARFSourceLanguageMips_Assembler => { unsafe { cpp { "return LLVMDWARFSourceLanguage::LLVMDWARFSourceLanguageMips_Assembler;" } } }
+			LLVMDWARFSourceLanguageGOOGLE_RenderScript => { unsafe { cpp { "return LLVMDWARFSourceLanguage::LLVMDWARFSourceLanguageGOOGLE_RenderScript;" } } }
+			LLVMDWARFSourceLanguageBORLAND_Delphi => { unsafe { cpp { "return LLVMDWARFSourceLanguage::LLVMDWARFSourceLanguageBORLAND_Delphi;" } } }
+		}
+		abort()
+	}
+}
+
+enum _LLVMDWARFEmissionKind {
+	LLVMDWARFEmissionNone
+	LLVMDWARFEmissionFull
+	LLVMDWARFEmissionLineTablesOnly
+
+	fn v(this) -> LLVMDWARFEmissionKind {
+		match this {
+			LLVMDWARFEmissionNone => { unsafe { cpp { "return LLVMDWARFEmissionKind::LLVMDWARFEmissionNone;" } } }
+			LLVMDWARFEmissionFull => { unsafe { cpp { "return LLVMDWARFEmissionKind::LLVMDWARFEmissionFull;" } } }
+			LLVMDWARFEmissionLineTablesOnly => { unsafe { cpp { "return LLVMDWARFEmissionKind::LLVMDWARFEmissionLineTablesOnly;" } } }
+		}
+		abort()
+	}
+}
+
+enum _LLVMDIFlags {
+	LLVMDIFlagZero
+	LLVMDIFlagPrivate
+	LLVMDIFlagProtected
+	LLVMDIFlagPublic
+	LLVMDIFlagFwdDecl
+	LLVMDIFlagAppleBlock
+	LLVMDIFlagReservedBit4
+	LLVMDIFlagVirtual
+	LLVMDIFlagArtificial
+	LLVMDIFlagExplicit
+	LLVMDIFlagPrototyped
+	LLVMDIFlagObjcClassComplete
+	LLVMDIFlagObjectPointer
+	LLVMDIFlagVector
+	LLVMDIFlagStaticMember
+	LLVMDIFlagLValueReference
+	LLVMDIFlagRValueReference
+	LLVMDIFlagReserved
+	LLVMDIFlagSingleInheritance
+	LLVMDIFlagMultipleInheritance
+	LLVMDIFlagVirtualInheritance
+	LLVMDIFlagIntroducedVirtual
+	LLVMDIFlagBitField
+	LLVMDIFlagNoReturn
+	LLVMDIFlagTypePassByValue
+	LLVMDIFlagTypePassByReference
+	LLVMDIFlagEnumClass
+	LLVMDIFlagFixedEnum
+	LLVMDIFlagThunk
+	LLVMDIFlagNonTrivial
+	LLVMDIFlagBigEndian
+	LLVMDIFlagLittleEndian
+	LLVMDIFlagIndirectVirtualBase
+	LLVMDIFlagAccessibility
+	LLVMDIFlagPtrToMemberRep
+
+	fn v(this) -> LLVMDIFlags {
+		match this {
+			LLVMDIFlagZero => { unsafe { cpp { "return LLVMDIFlags::LLVMDIFlagZero;" } } }
+			LLVMDIFlagPrivate => { unsafe { cpp { "return LLVMDIFlags::LLVMDIFlagPrivate;" } } }
+			LLVMDIFlagProtected => { unsafe { cpp { "return LLVMDIFlags::LLVMDIFlagProtected;" } } }
+			LLVMDIFlagPublic => { unsafe { cpp { "return LLVMDIFlags::LLVMDIFlagPublic;" } } }
+			LLVMDIFlagFwdDecl => { unsafe { cpp { "return LLVMDIFlags::LLVMDIFlagFwdDecl;" } } }
+			LLVMDIFlagAppleBlock => { unsafe { cpp { "return LLVMDIFlags::LLVMDIFlagAppleBlock;" } } }
+			LLVMDIFlagReservedBit4 => { unsafe { cpp { "return LLVMDIFlags::LLVMDIFlagReservedBit4;" } } }
+			LLVMDIFlagVirtual => { unsafe { cpp { "return LLVMDIFlags::LLVMDIFlagVirtual;" } } }
+			LLVMDIFlagArtificial => { unsafe { cpp { "return LLVMDIFlags::LLVMDIFlagArtificial;" } } }
+			LLVMDIFlagExplicit => { unsafe { cpp { "return LLVMDIFlags::LLVMDIFlagExplicit;" } } }
+			LLVMDIFlagPrototyped => { unsafe { cpp { "return LLVMDIFlags::LLVMDIFlagPrototyped;" } } }
+			LLVMDIFlagObjcClassComplete => { unsafe { cpp { "return LLVMDIFlags::LLVMDIFlagObjcClassComplete;" } } }
+			LLVMDIFlagObjectPointer => { unsafe { cpp { "return LLVMDIFlags::LLVMDIFlagObjectPointer;" } } }
+			LLVMDIFlagVector => { unsafe { cpp { "return LLVMDIFlags::LLVMDIFlagVector;" } } }
+			LLVMDIFlagStaticMember => { unsafe { cpp { "return LLVMDIFlags::LLVMDIFlagStaticMember;" } } }
+			LLVMDIFlagLValueReference => { unsafe { cpp { "return LLVMDIFlags::LLVMDIFlagLValueReference;" } } }
+			LLVMDIFlagRValueReference => { unsafe { cpp { "return LLVMDIFlags::LLVMDIFlagRValueReference;" } } }
+			LLVMDIFlagReserved => { unsafe { cpp { "return LLVMDIFlags::LLVMDIFlagReserved;" } } }
+			LLVMDIFlagSingleInheritance => { unsafe { cpp { "return LLVMDIFlags::LLVMDIFlagSingleInheritance;" } } }
+			LLVMDIFlagMultipleInheritance => { unsafe { cpp { "return LLVMDIFlags::LLVMDIFlagMultipleInheritance;" } } }
+			LLVMDIFlagVirtualInheritance => { unsafe { cpp { "return LLVMDIFlags::LLVMDIFlagVirtualInheritance;" } } }
+			LLVMDIFlagIntroducedVirtual => { unsafe { cpp { "return LLVMDIFlags::LLVMDIFlagIntroducedVirtual;" } } }
+			LLVMDIFlagBitField => { unsafe { cpp { "return LLVMDIFlags::LLVMDIFlagBitField;" } } }
+			LLVMDIFlagNoReturn => { unsafe { cpp { "return LLVMDIFlags::LLVMDIFlagNoReturn;" } } }
+			LLVMDIFlagTypePassByValue => { unsafe { cpp { "return LLVMDIFlags::LLVMDIFlagTypePassByValue;" } } }
+			LLVMDIFlagTypePassByReference => { unsafe { cpp { "return LLVMDIFlags::LLVMDIFlagTypePassByReference;" } } }
+			LLVMDIFlagEnumClass => { unsafe { cpp { "return LLVMDIFlags::LLVMDIFlagEnumClass;" } } }
+			LLVMDIFlagFixedEnum => { unsafe { cpp { "return LLVMDIFlags::LLVMDIFlagFixedEnum;" } } }
+			LLVMDIFlagThunk => { unsafe { cpp { "return LLVMDIFlags::LLVMDIFlagThunk;" } } }
+			LLVMDIFlagNonTrivial => { unsafe { cpp { "return LLVMDIFlags::LLVMDIFlagNonTrivial;" } } }
+			LLVMDIFlagBigEndian => { unsafe { cpp { "return LLVMDIFlags::LLVMDIFlagBigEndian;" } } }
+			LLVMDIFlagLittleEndian => { unsafe { cpp { "return LLVMDIFlags::LLVMDIFlagLittleEndian;" } } }
+			LLVMDIFlagIndirectVirtualBase => { unsafe { cpp { "return LLVMDIFlags::LLVMDIFlagIndirectVirtualBase;" } } }
+			LLVMDIFlagAccessibility => { unsafe { cpp { "return LLVMDIFlags::LLVMDIFlagAccessibility;" } } }
+			LLVMDIFlagPtrToMemberRep => { unsafe { cpp { "return LLVMDIFlags::LLVMDIFlagPtrToMemberRep;" } } }
+		}
+
+		abort();
+	}
+}
+
+struct LLVMHelper {
+	fn LLVMHasBasicBlockTerminator(anon block: LLVMBasicBlockRef) -> bool {
+		unsafe {
+			cpp {
+				"return LLVMGetBasicBlockTerminator(block) != nullptr;"
+			}
+		}
+
+		return false
+	}
+
+	fn LLVMNullMemoryBuffer() -> LLVMMemoryBufferRef {
+		unsafe {
+			cpp {
+				"return nullptr;"
+			}
+		}
+		abort();
+	}
+
+	fn LLVMNullModule() -> LLVMModuleRef {
+		unsafe {
+			cpp {
+				"return nullptr;"
+			}
+		}
+		abort();
+	}
+
+	fn LLVMNullValue() -> LLVMValueRef {
+		unsafe {
+			cpp {
+				"return nullptr;"
+			}
+		}
+		abort();
+	}
+
+	fn LLVMHasNamedFunction(anon module: LLVMModuleRef, anon name: String) -> bool {
+		return LLVMGetNamedFunction(module, name.c_string()) != LLVMNullValue();
+	}
+
+	fn LLVMHasNamedGlobal(anon module: LLVMModuleRef, anon name: String) -> bool {
+		return LLVMGetNamedGlobal(module, name.c_string()) != LLVMNullValue();
+	}
+
+	fn LLVMAddModuleFlag2(anon module: LLVMModuleRef, anon behavior: _LLVMModuleFlagBehavior, anon key: String, anon value: LLVMMetadataRef) {
+		LLVMAddModuleFlag(module, behavior.v(), key.c_string(), key.length(), value)
+	}
+}

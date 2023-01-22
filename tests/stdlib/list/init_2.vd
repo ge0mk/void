@@ -1,0 +1,8 @@
+import std/core;
+import std/list;
+
+func main() {
+	var a = List!<int>(10u, 0);
+	assert(a.size() == 10u);
+	assert((must a[0u]) == 0);
+}

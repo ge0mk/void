@@ -1,0 +1,2098 @@
+import utility { FileInfo, Span, CompilerOptions, printError, mergeSpans, panic }
+import lexer
+import ast
+
+struct Parser {
+	options: CompilerOptions
+	file: FileInfo
+	tokens: [Token]
+	index: usize
+
+	fn parse(options: CompilerOptions, file: FileInfo, tokens: [Token], name: String) throws -> ParsedModule {
+		mut parser = Parser(options, file, tokens, index: 0)
+		return parser.parseModule(name)
+	}
+
+	fn current(this) -> Token {
+		return .tokens[.index]
+	}
+
+	fn error(this, anon message: String, anon span: Span) throws {
+		printError(message, span, .file)
+	}
+
+	fn parseModule(mut this, name: String) throws -> ParsedModule {
+		mut imports: [ParsedImport] = []
+		mut pragmas: [String] = []
+		mut types: [ParsedTypeDecl] = []
+		mut functions: [ParsedFunctionDecl] = []
+
+		while .index < .tokens.size() {
+			let annotations = match .current() {
+				LSquare => .parseAnnotations()
+				else => []
+			}
+
+			let template_parameters = match .current() {
+				KeywordTemplate => .parseTemplateParameterDecl()
+				else => []
+			}
+
+			match .current() {
+				KeywordImport => {
+					imports.push(.parseImport())
+				}
+				KeywordPragma => {
+					.index++
+					guard .current() is Identifier(name) else {
+						.error("expected identifier", .current().span)
+						continue
+					}
+					.index++
+
+					pragmas.push(name)
+
+					guard .current() is Semicolon else {
+						.error("expected ;", .current().span)
+						continue
+					}
+					.index++
+				}
+				KeywordExtern | KeywordFunc | KeywordOperator => {
+					functions.push(.parseFunctionDecl(template_parameters, annotations))
+				}
+				KeywordStruct => {
+					types.push(.parseStructDecl(template_parameters, annotations))
+				}
+				KeywordEnum => {
+					types.push(.parseEnumDecl(annotations))
+				}
+				KeywordVariant => {
+					types.push(.parseVariantDecl(template_parameters, annotations))
+				}
+				KeywordType => {
+					types.push(.parseTypeAlias(template_parameters, annotations))
+				}
+				KeywordExtend => {
+					types.push(.parseTypeExtension(template_parameters, annotations))
+				}
+				else => {
+					.error("expected decl", .current().span)
+					break
+				}
+			}
+		}
+
+		return ParsedModule(
+			name, imports, pragmas,
+			types, functions,
+			file: .file
+		)
+	}
+
+	fn parseImport(mut this) throws -> ParsedImport {
+		let start = .tokens[.index].span
+		.index++
+
+		mut import_name = ""
+
+		guard .current() is Identifier(name) else {
+			.error("expected module name in import statement", .current().span)
+			return ParsedImport(name: "", span: mergeSpans(start, end: .current().span))
+		}
+
+		import_name = name
+		.index++
+
+		while not .current() is Semicolon {
+			guard .current() is Div else {
+				.error("expected '/' or ';'", .current().span)
+				return ParsedImport(name: "", span: mergeSpans(start, end: .current().span))
+			}
+			.index++
+
+			guard .current() is Identifier(name) else {
+				.error("expected identifier", .current().span)
+				return ParsedImport(name: "", span: mergeSpans(start, end: .current().span))
+			}
+			.index++
+
+			import_name = import_name + "/" + name
+		}
+		let end = .tokens[.index].span
+		.index++
+
+		return ParsedImport(
+			name: import_name
+			span: mergeSpans(start, end)
+		)
+	}
+
+	fn parseAnnotations(mut this) throws -> [ParsedAnnotation] {
+		guard .current() is LSquare else {
+			.error("expected [", .current().span)
+			return []
+		}
+		.index++
+
+		mut annotations: [ParsedAnnotation] = []
+
+		while not .current() is RSquare {
+			let start = .current().span
+			guard .current() is Identifier(name) else {
+				.error("expected identifier", .current().span)
+				return []
+			}
+			.index++
+
+			if .current() is Colon {
+				.index++
+				match .current() {
+					IntLiteral(value) => {
+						annotations.push(ParsedAnnotation::Int(span: mergeSpans(start, end: start), name, value))
+					}
+					StringLiteral(value) => {
+						annotations.push(ParsedAnnotation::String(span: mergeSpans(start, end: start), name, value))
+					}
+					else => {
+						.error("unexpected token, expected int or string literal", .current().span)
+						return []
+					}
+				}
+				.index++
+			} else {
+				annotations.push(ParsedAnnotation::Flag(span: mergeSpans(start, end: start), name))
+			}
+
+			if not .current() is RSquare {
+				guard .current() is Comma else {
+					.error("expected , or ]", .current().span)
+					return []
+				}
+				.index++
+			}
+		}
+		.index++
+
+		return annotations
+	}
+
+	fn parseType(mut this) throws -> ParsedType {
+		return match .current() {
+			LParen => .parseTupleType()
+			LSquare => .parseArrayType()
+			LCurly => .parseDictType()
+			And => {
+				let start = .current().span
+				.index++
+				let baseType = .parseType()
+				yield ParsedType::ConstRefType(span: mergeSpans(start, end: baseType.span()), baseType)
+			}
+			LogicalAnd => {
+				let start = .current().span
+				.index++
+				let baseType = .parseType()
+				yield ParsedType::VarRefType(span: mergeSpans(start, end: baseType.span()), baseType)
+			}
+			QuestionMark => {
+				let start = .current().span
+				.index++
+				let value_type = .parseType()
+				yield ParsedType::OptionalType(span: mergeSpans(start, end: value_type.span()), value_type)
+			}
+			Identifier(name) => {
+				let start = .current().span
+				.index++
+
+				mut final_name = name
+				mut namespaces: [String] = []
+
+				while .current() is Namespace {
+					.index++
+					guard .current() is Identifier(name) else {
+						.error("expected identifier in namespace specification", .current().span)
+						return ParsedType::Empty
+					}
+					namespaces.push(final_name)
+					final_name = name
+					.index++
+				}
+
+				mut template_parameters: [ParsedTemplateParameter] = []
+				if .current() is LogicalNot {
+					let (end, parameters) = .parseTemplateParameters()
+					template_parameters = parameters
+				}
+
+				yield ParsedType::Name(span: mergeSpans(start, end: .tokens[.index - 1].span), namespaces, name, template_parameters)
+			}
+			KeywordType => {
+				.index++
+				yield ParsedType::Name(span: .tokens[.index - 1].span, namespaces: [], name: "type", template_parameters: [])
+			}
+			else => ParsedType::Empty
+		}
+	}
+
+	fn parseTupleType(mut this) throws -> ParsedType {
+		let start = .current().span
+		.index++
+
+		mut elements: [ParsedTupleElement] = []
+
+		while not .current() is RParen {
+			if (.tokens[.index] is Identifier) and (.tokens[.index + 1] is Colon) {
+				guard .current() is Identifier(name) else {
+					.error("invalid tuple type, missing opening parenthesis", .current().span)
+					return ParsedType::Empty
+				}
+				.index += 2
+
+				elements.push(ParsedTupleElement(name, type: .parseType()))
+			} else {
+				elements.push(ParsedTupleElement(name: format("{}", elements.size()), type: .parseType()))
+			}
+
+			if not .current() is RParen {
+				guard .current() is Comma else {
+					.error("expected , or )", .current().span)
+					return ParsedType::Empty
+				}
+				.index++
+			}
+		}
+		let end = .current().span
+		.index++
+
+		return ParsedType::TupleType(span: mergeSpans(start, end), elements)
+	}
+
+	fn parseArrayType(mut this) throws -> ParsedType {
+		let start = .current().span
+		.index++
+
+		let element_type = .parseType()
+
+		if .current() is Comma {
+			.index++
+
+			let size = .parseExpr(allow_assignments: false)
+
+			guard .current() is RSquare else {
+				.error("invalid array type, missing closing bracket", .current().span)
+				return ParsedType::Empty
+			}
+			let end = .current().span
+			.index++
+
+			return ParsedType::ArrayType(span: mergeSpans(start, end), element_type, size)
+		} else {
+			guard .current() is RSquare else {
+				.error("invalid array type, missing closing bracket", .current().span)
+				return ParsedType::Empty
+			}
+			let end = .current().span
+			.index++
+
+			return ParsedType::ListType(span: mergeSpans(start, end), element_type)
+		}
+	}
+
+	fn parseDictType(mut this) throws -> ParsedType {
+		let start = .current().span
+		.index++
+
+		let key_type = .parseType()
+
+		guard .current() is Colon else {
+			.error("invalid dictionary type, expected :", .current().span)
+			return ParsedType::Empty
+		}
+		.index++
+
+		let value_type = .parseType()
+
+		guard .current() is RCurly else {
+			.error("invalid dictionary type, missing closing bracket", .current().span)
+			return ParsedType::Empty
+		}
+		let end = .current().span
+		.index++
+
+		return ParsedType::DictType(span: mergeSpans(start, end), key_type, value_type)
+	}
+
+	fn parseTemplateParameters(mut this) throws -> (Span, [ParsedTemplateParameter]) {
+		mut parameters: [ParsedTemplateParameter] = []
+		guard .tokens[.index] is LogicalNot and .tokens[.index + 1] is LessThan else {
+			.error("expected <", .current().span)
+			return (.current().span, parameters)
+		}
+		let start = .current().span
+		.index += 2
+
+		while not .current() is GreaterThan {
+			match .current() {
+				IntLiteral(span, value, postfix) => {
+					.index++
+					parameters.push(ParsedTemplateParameter::IntLiteral(span, value))
+				}
+				else => {
+					let type = .parseType()
+					parameters.push(ParsedTemplateParameter::Type(span: type.span(), type))
+				}
+			}
+
+			if not .current() is GreaterThan {
+				guard .current() is Comma else {
+					.error("expected , or >", .current().span)
+					return (.current().span, parameters)
+				}
+				.index++
+			}
+		}
+		let end = .current().span
+		.index++
+
+		return (mergeSpans(start, end), parameters)
+	}
+
+	fn parseTemplateParameterDecl(mut this) throws -> [ParsedTemplateParameterDecl] {
+		mut template_parameters: [ParsedTemplateParameterDecl] = []
+
+		guard .current() is KeywordTemplate else {
+			.error("expected keyword template", .current().span)
+			return template_parameters
+		}
+		.index++
+
+		guard .current() is LessThan else {
+			.error("expected token <", .current().span)
+			return template_parameters
+		}
+		.index++
+
+		while not .current() is GreaterThan {
+			let start = .current().span
+
+			guard .current() is Identifier(name) else {
+				.error("expected identifier", .current().span)
+				return template_parameters
+			}
+			.index++
+
+			guard .current() is Colon else {
+				.error("expected token :", .current().span)
+				return template_parameters
+			}
+			.index++
+
+			let type = .parseType()
+
+			let value: ParsedTemplateParameter? = match .current() {
+				Assign => {
+					.index++
+					yield match .current() {
+						IntLiteral(span, value, postfix) => {
+							.index++
+							yield ParsedTemplateParameter::IntLiteral(span, value)
+						}
+						else => {
+							let type = .parseType()
+							yield ParsedTemplateParameter::Type(span: type.span(), type)
+						}
+					}
+				}
+				else => None
+			}
+
+			let end = .tokens[.index - 1].span
+			template_parameters.push(ParsedTemplateParameterDecl(span: mergeSpans(start, end), name, type, value))
+
+			if not .current() is GreaterThan {
+				guard .current() is Comma else {
+					.error("expected token , or >", .current().span)
+					return template_parameters
+				}
+				.index++
+			}
+		}
+		.index++
+
+		return template_parameters
+	}
+
+	fn parseFunctionDecl(mut this, template_parameters: [ParsedTemplateParameterDecl], annotations: [ParsedAnnotation]) throws -> ParsedFunctionDecl {
+		let start = .current().span
+		let is_extern = match .current() {
+			KeywordExtern => {
+				.index++
+				yield true
+			}
+			else => false
+		}
+
+		let name = match .current() {
+			KeywordFunc => {
+				.index++
+				guard .current() is Identifier(name) else {
+					.error("expected identifier", .current().span)
+					return ParsedFunctionDecl(span: mergeSpans(start, end: .current().span), name: "", is_extern, parameters: [], return_type: None, body: None, template_parameters, annotations)
+				}
+				.index++
+				yield name
+			}
+			KeywordOperator => .parseOperatorName()
+			else => {
+				.error("expected keyword func or operator", .current().span)
+				return ParsedFunctionDecl(span: mergeSpans(start, end: .current().span), name: "", is_extern, parameters: [], return_type: None, body: None, template_parameters, annotations)
+			}
+		}
+		let parameters = .parseFunctionParameters()
+
+		mut return_type: ParsedType? = None
+		if .current() is Arrow {
+			.index++
+			return_type = .parseType()
+		}
+
+		let body: ParsedStmt? = match .current() {
+			Semicolon => {
+				.index++
+				yield None
+			}
+			Assign => {
+				.index++
+				yield match .current() {
+					KeywordDefault => {
+						let span = .current().span
+						.index++
+
+						guard .current() is Semicolon else {
+							.error("expected ;", .current().span)
+							return ParsedFunctionDecl(span: mergeSpans(start, end: .current().span), name: "", is_extern, parameters: [], return_type, body: None, template_parameters, annotations)
+						}
+						.index++
+
+						yield ParsedStmt::DefaultFunctionBody(span)
+					}
+					else => {
+						let start = .current().span
+
+						let expr = .parseExpr(allow_assignments: true)
+						guard .current() is Semicolon else {
+							.error("expected ;", .current().span)
+							return ParsedFunctionDecl(span: mergeSpans(start, end: .current().span), name: "", is_extern, parameters: [], return_type, body: None, template_parameters, annotations)
+						}
+						let end = .current().span
+						.index++
+
+						yield ParsedStmt::Expr(span: mergeSpans(start, end), expr)
+					}
+				}
+			}
+			else => .parseCompoundStmt()
+		}
+
+		return ParsedFunctionDecl(span: mergeSpans(start, end: .tokens[.index - 1].span), name, is_extern, parameters, return_type, body, template_parameters, annotations)
+	}
+
+	fn parseOperatorName(mut this) throws -> String {
+		guard .current() is KeywordOperator else {
+			.error("invalid operator name", .current().span)
+			return ""
+		}
+		.index++
+
+		return match .current() {
+			LSquare => {
+				guard .tokens[.index + 1] is RSquare else {
+					.error("expected closing bracket", .current().span)
+					return ""
+				}
+				.index += 2
+				yield "operator []"
+			}
+			GreaterThan => {
+				.index += 1
+				mut tmp = ""
+				if .current() is GreaterThan {
+					.index += 1
+					tmp = "operator >>"
+				} else if .current() is GreaterEqual {
+					.index += 2
+					tmp = "operator >>="
+				} else {
+					tmp = "operator >"
+				}
+				yield tmp
+			}
+			LessThan => {
+				.index += 1
+				mut tmp = ""
+				if .current() is LessThan {
+					.index += 1
+					tmp = "operator <<"
+				} else if .current() is LessEqual {
+					.index += 2
+					tmp = "operator <<="
+				} else {
+					tmp = "operator <"
+				}
+				yield tmp
+			}
+			Assign
+			| Add
+			| Sub
+			| Mul
+			| Div
+			| Mod
+			| And
+			| Or
+			| Xor
+			| Not
+			| LogicalAnd
+			| LogicalOr
+			| LogicalNot
+			| Increment
+			| Decrement
+			| Equal
+			| NotEqual
+			| GreaterEqual
+			| LessEqual
+			| Spaceship
+			| Coalescing
+			| Range
+			| AddAssign
+			| SubAssign
+			| MulAssign
+			| DivAssign
+			| ModAssign
+			| AndAssign
+			| OrAssign
+			| XorAssign
+			| CoalescingAssign
+			| KeywordIs
+			| KeywordAs
+			| KeywordUnwrap => {
+				let name = "operator " + .current().toString()
+				.index++
+				yield name
+			}
+			else => {
+				.error("invalid operator name", .current().span)
+				yield ""
+			}
+		}
+	}
+
+	fn parseFunctionParameters(mut this) throws -> [ParsedFunctionParameterDecl] {
+		.index++
+
+		mut parameters: [ParsedFunctionParameterDecl] = []
+
+		while not .current() is RParen {
+			parameters.push(.parseFunctionParameterDecl())
+
+			if not .current() is RParen {
+				guard .current() is Comma else {
+					.error("expected ',' or ')'", .current().span)
+					return parameters
+				}
+				.index++
+			}
+		}
+		.index++
+
+		return parameters
+	}
+
+	fn parseFunctionParameterDecl(mut this) throws -> ParsedFunctionParameterDecl {
+		let start = .current().span
+		guard .current() is Identifier(name) else {
+			.error("expected identifier", .current().span)
+			return ParsedFunctionParameterDecl(
+				span: mergeSpans(start, end: .current().span),
+				name: "", type: ParsedType::Empty, init: None
+			)
+		}
+		.index++
+
+		guard .current() is Colon else {
+			.error("expected :", .current().span)
+			return ParsedFunctionParameterDecl(
+				span: mergeSpans(start, end: .current().span),
+				name, type: ParsedType::Empty, init: None
+			)
+		}
+		.index++
+
+		let type = .parseType()
+		mut init: ParsedExpr? = None
+
+		if .current() is Assign {
+			.index++
+			init = .parseExpr(allow_assignments: false)
+		}
+
+		let end = .tokens[.index - 1].span
+
+		return ParsedFunctionParameterDecl(
+			span: mergeSpans(start, end),
+			name, type, init
+		)
+	}
+
+	fn parseStructDecl(mut this, template_parameters: [ParsedTemplateParameterDecl], annotations: [ParsedAnnotation]) throws -> ParsedTypeDecl {
+		let start = .current().span
+
+		mut member_variables: [ParsedVarDecl] = []
+		mut member_functions: [ParsedFunctionDecl] = []
+
+		guard .current() is KeywordStruct else {
+			.error("expected keyword struct", .current().span)
+			return ParsedTypeDecl::Struct(span: mergeSpans(start, end: .current().span), name: "", member_variables, member_functions, template_parameters, annotations)
+		}
+		.index++
+
+		guard .current() is Identifier(name) else {
+			.error("expected identifier as struct name", .current().span)
+			return ParsedTypeDecl::Struct(span: mergeSpans(start, end: .current().span), name: "", member_variables, member_functions, template_parameters, annotations)
+		}
+		.index++
+
+		guard .current() is LCurly else {
+			.error("expected '{'", .current().span)
+			return ParsedTypeDecl::Struct(span: mergeSpans(start, end: .current().span), name, member_variables, member_functions, template_parameters, annotations)
+		}
+		.index++
+
+		while not .current() is RCurly {
+			if .current() is KeywordVar {
+				member_variables.push(.parseMemberVarDecl())
+			} else {
+				let annotations = match .current() {
+					LSquare => .parseAnnotations()
+					else => []
+				}
+
+				let template_parameters = match .current() {
+					KeywordTemplate => .parseTemplateParameterDecl()
+					else => []
+				}
+
+				match .current() {
+					KeywordExtern | KeywordFunc | KeywordOperator => {
+						member_functions.push(.parseFunctionDecl(template_parameters, annotations))
+					}
+					else => {
+						.error("expected struct member (fn or var decl)", .current().span)
+						return ParsedTypeDecl::Struct(span: mergeSpans(start, end: .current().span), name, member_variables, member_functions, template_parameters, annotations)
+					}
+				}
+			}
+		}
+		let end = .current().span
+		.index++
+
+		return ParsedTypeDecl::Struct(span: mergeSpans(start, end), name, member_variables, member_functions, template_parameters, annotations)
+	}
+
+	fn parseEnumDecl(mut this, annotations: [ParsedAnnotation]) throws -> ParsedTypeDecl {
+		let start = .current().span
+		.index++
+
+		mut cases: [ParsedEnumCaseDecl] = []
+		mut member_functions: [ParsedFunctionDecl] = []
+
+		guard .current() is Identifier(name) else {
+			.error("expected name in enum decl", .current().span)
+			return ParsedTypeDecl::Enum(
+				span: mergeSpans(start, end: .current().span),
+				name: "",
+				member_variables: [],
+				member_functions,
+				template_parameters: [],
+				annotations,
+				id_type: None,
+				cases,
+			)
+		}
+		.index++
+
+		let id_type: ParsedType? = match .current() {
+			Colon => {
+				.index++
+				yield .parseType()
+			}
+			else => None
+		}
+
+		guard .current() is LCurly else {
+			.error("expected '{'", .current().span)
+			return ParsedTypeDecl::Enum(
+				span: mergeSpans(start, end: .current().span),
+				name,
+				member_variables: [],
+				member_functions,
+				template_parameters: [],
+				annotations,
+				id_type,
+				cases
+			)
+		}
+		.index++
+
+		while not .current() is RCurly {
+			if .current() is KeywordCase {
+				cases.push(.parseEnumCaseDecl())
+			} else {
+				let annotations = match .current() {
+					LSquare => .parseAnnotations()
+					else => []
+				}
+
+				let template_parameters = match .current() {
+					KeywordTemplate => .parseTemplateParameterDecl()
+					else => []
+				}
+
+				match .current() {
+					KeywordExtern | KeywordFunc | KeywordOperator => {
+						member_functions.push(.parseFunctionDecl(template_parameters, annotations))
+					}
+					else => {
+						.error("expected enum member decl or }", .current().span)
+						return ParsedTypeDecl::Enum(
+							span: mergeSpans(start, end: .current().span),
+							name,
+							member_variables: [],
+							member_functions,
+							template_parameters: [],
+							annotations,
+							id_type,
+							cases
+						)
+					}
+				}
+			}
+		}
+		let end = .current().span
+		.index++
+
+		return ParsedTypeDecl::Enum(
+			span: mergeSpans(start, end),
+			name,
+			member_variables: [],
+			member_functions,
+			template_parameters: [],
+			annotations,
+			id_type,
+			cases
+		)
+	}
+
+	fn parseEnumCaseDecl(mut this) throws -> ParsedEnumCaseDecl {
+		let start = .current().span
+		guard .current() is KeywordCase else {
+			.error("expected keyword case", .current().span)
+			return ParsedEnumCaseDecl(
+				span: mergeSpans(start, end: .current().span),
+				name: "", id: None
+			)
+		}
+		.index++
+
+		guard .current() is Identifier(name) else {
+			.error("expected name in enum variant", .current().span)
+			return ParsedEnumCaseDecl(
+				span: mergeSpans(start, end: .current().span),
+				name: "", id: None
+			)
+		}
+		.index++
+
+		mut id: i64? = None
+
+		if .current() is Assign {
+			.index++
+
+			guard .current() is IntLiteral(value) else {
+				.error("expected int literal as value", .current().span)
+				return ParsedEnumCaseDecl(
+					span: mergeSpans(start, end: .current().span),
+					name, id: None
+				)
+			}
+			.index++
+
+			id = value
+		}
+
+		guard .current() is Semicolon else {
+			.error("expected ; after enum case declaration", .current().span)
+			return ParsedEnumCaseDecl(
+				span: mergeSpans(start, end: .current().span),
+				name, id: None
+			)
+		}
+		.index++
+
+		let end = .tokens[.index - 1].span
+
+		return ParsedEnumCaseDecl(
+			span: mergeSpans(start, end),
+			name, id
+		)
+	}
+
+	fn parseVariantDecl(mut this, template_parameters: [ParsedTemplateParameterDecl], annotations: [ParsedAnnotation]) throws -> ParsedTypeDecl {
+		let start = .current().span
+		.index++
+
+		mut cases: [ParsedVariantCaseDecl] = []
+		mut member_variables: [ParsedVarDecl] = []
+		mut member_functions: [ParsedFunctionDecl] = []
+
+		guard .current() is Identifier(name) else {
+			.error("expected name in variant decl", .current().span)
+			return ParsedTypeDecl::Variant(
+				span: mergeSpans(start, end: .current().span),
+				name: "",
+				member_variables,
+				member_functions,
+				template_parameters,
+				annotations,
+				id_type: None,
+				cases
+			)
+		}
+		.index++
+
+		let id_type: ParsedType? = match .current() {
+			Colon => {
+				.index++
+				yield .parseType()
+			}
+			else => None
+		}
+
+		guard .current() is LCurly else {
+			.error("expected '{'", .current().span)
+			return ParsedTypeDecl::Variant(
+				span: mergeSpans(start, end: .current().span),
+				name,
+				member_variables,
+				member_functions,
+				template_parameters,
+				annotations,
+				id_type,
+				cases
+			)
+		}
+		.index++
+
+		while not .current() is RCurly {
+			if .current() is KeywordVar {
+				member_variables.push(.parseMemberVarDecl())
+			} else if .current() is KeywordCase {
+				cases.push(.parseVariantCaseDecl())
+			} else {
+				let annotations = match .current() {
+					LSquare => .parseAnnotations()
+					else => []
+				}
+
+				let template_parameters = match .current() {
+					KeywordTemplate => .parseTemplateParameterDecl()
+					else => []
+				}
+
+				match .current() {
+					KeywordExtern | KeywordFunc | KeywordOperator => {
+						member_functions.push(.parseFunctionDecl(template_parameters, annotations))
+					}
+					else => {
+						.error("expected variant member decl or }", .current().span)
+						return ParsedTypeDecl::Variant(
+							span: mergeSpans(start, end: .current().span),
+							name,
+							member_variables,
+							member_functions,
+							template_parameters,
+							annotations,
+							id_type,
+							cases
+						)
+					}
+				}
+			}
+		}
+		let end = .current().span
+		.index++
+
+		return ParsedTypeDecl::Variant(
+			span: mergeSpans(start, end),
+			name,
+			member_variables,
+			member_functions,
+			template_parameters,
+				annotations,
+			id_type,
+			cases
+		)
+	}
+
+	fn parseVariantCaseDecl(mut this) throws -> ParsedVariantCaseDecl {
+		let start = .current().span
+		guard .current() is KeywordCase else {
+			.error("expected keyword case", .current().span)
+			return ParsedVariantCaseDecl(
+				span: mergeSpans(start, end: .current().span),
+				name: "", type: None, id: None
+			)
+		}
+		.index++
+
+		guard .current() is Identifier(name) else {
+			.error("expected name in variant case", .current().span)
+			return ParsedVariantCaseDecl(
+				span: mergeSpans(start, end: .current().span),
+				name: "", type: None, id: None
+			)
+		}
+		.index++
+
+		mut type: ParsedType? = None
+		mut id: i64? = None
+
+		if .current() is Colon {
+			.index++
+			type = .parseType()
+		}
+
+		if .current() is Assign {
+			.index++
+
+			guard .current() is IntLiteral(value) else {
+				.error("expected int literal as value", .current().span)
+				return ParsedVariantCaseDecl(
+					span: mergeSpans(start, end: .current().span),
+					name, type, id: None
+				)
+			}
+			.index++
+
+			id = value
+		}
+
+		guard .current() is Semicolon else {
+			.error("expected ; after variant case declaration", .current().span)
+			return ParsedVariantCaseDecl(
+				span: mergeSpans(start, end: .current().span),
+				name, type, id: None
+			)
+		}
+		.index++
+
+		let end = .tokens[.index - 1].span
+
+		return ParsedVariantCaseDecl(
+			span: mergeSpans(start, end),
+			name, type, id
+		)
+	}
+
+	fn parseTypeAlias(mut this, template_parameters: [ParsedTemplateParameterDecl], annotations: [ParsedAnnotation]) throws -> ParsedTypeDecl {
+		let start = .current().span
+		.index++
+
+		guard .current() is Identifier(name) else {
+			.error("expected name in type alias", .current().span)
+			return ParsedTypeDecl::Alias(
+				span: mergeSpans(start, end: .current().span),
+				name: "",
+				member_variables: [],
+				member_functions: [],
+				template_parameters,
+				annotations,
+				target: ParsedType::Empty
+			)
+		}
+		.index++
+
+		guard .current() is Assign else {
+			.error("expected token '=' in type alias", .current().span)
+			return ParsedTypeDecl::Alias(
+				span: mergeSpans(start, end: .current().span),
+				name,
+				member_variables: [],
+				member_functions: [],
+				template_parameters,
+				annotations,
+				target: ParsedType::Empty
+			)
+		}
+		.index++
+
+		let target = .parseType()
+
+		guard .current() is Semicolon else {
+			.error("expected token ';' after type alias", .current().span)
+			return ParsedTypeDecl::Alias(
+				span: mergeSpans(start, end: .current().span),
+				name,
+				member_variables: [],
+				member_functions: [],
+				template_parameters,
+				annotations,
+				target
+			)
+		}
+		let end = .current().span
+		.index++
+
+		return ParsedTypeDecl::Alias(
+			span: mergeSpans(start, end),
+			name,
+			member_variables: [],
+			member_functions: [],
+			template_parameters,
+			annotations,
+			target
+		)
+	}
+
+	fn parseTypeExtension(mut this, template_parameters: [ParsedTemplateParameterDecl], annotations: [ParsedAnnotation]) throws -> ParsedTypeDecl {
+		let start = .current().span
+		.index++
+
+		mut member_functions: [ParsedFunctionDecl] = []
+
+		guard .current() is Identifier(name) else {
+			.error("expected identifier as struct name", .current().span)
+			return ParsedTypeDecl::Extension(span: mergeSpans(start, end: .current().span), name: "", member_variables: [], member_functions, template_parameters, annotations)
+		}
+		.index++
+
+		guard .current() is LCurly else {
+			.error("expected '{'", .current().span)
+			return ParsedTypeDecl::Extension(span: mergeSpans(start, end: .current().span), name, member_variables: [], member_functions, template_parameters, annotations)
+		}
+		.index++
+
+		while not .current() is RCurly {
+			let annotations = match .current() {
+				LSquare => .parseAnnotations()
+				else => []
+			}
+
+			let template_parameters = match .current() {
+				KeywordTemplate => .parseTemplateParameterDecl()
+				else => []
+			}
+
+			match .current() {
+				KeywordExtern | KeywordFunc | KeywordOperator => {
+					member_functions.push(.parseFunctionDecl(template_parameters, annotations))
+				}
+				else => {
+					.error("expected struct member (fn or var decl)", .current().span)
+					return ParsedTypeDecl::Extension(span: mergeSpans(start, end: .current().span), name, member_variables: [], member_functions, template_parameters, annotations)
+				}
+			}
+		}
+		let end = .current().span
+		.index++
+
+		return ParsedTypeDecl::Extension(span: mergeSpans(start, end), name, member_variables: [], member_functions, template_parameters, annotations)
+	}
+
+	fn parseMemberVarDecl(mut this) throws -> ParsedVarDecl {
+		let start = .current().span
+
+		let is_const = match .current() {
+			KeywordVar => false
+			KeywordConst => true
+			else => {
+				.error("expected keyword 'var' or 'const'", .current().span);
+				return ParsedVarDecl(span: mergeSpans(start, end: .current().span), is_const: false, name: "", type: None, init: None)
+			}
+		}
+		.index++
+
+		guard .current() is Identifier(name) else {
+			.error("expected name for var decl", .current().span)
+			return ParsedVarDecl(span: mergeSpans(start, end: .current().span), is_const: false, name: "", type: None, init: None)
+		}
+		.index++
+
+		guard .current() is Colon else {
+			.error("expected :", .current().span)
+			return ParsedVarDecl(span: mergeSpans(start, end: .current().span), is_const: false, name: "", type: None, init: None)
+		}
+		.index++
+
+		mut type = .parseType()
+
+		mut init: ParsedExpr? = None
+		if .current() is Assign {
+			.index++
+			init = .parseExpr(allow_assignments: false)
+		}
+
+		guard .current() is Semicolon else {
+			.error("expected ; at end of var decl", .current().span)
+			return ParsedVarDecl(span: mergeSpans(start, end: .current().span), is_const: false, name: "", type: None, init: None)
+		}
+		let end = .current().span
+		.index++
+
+		return ParsedVarDecl(span: mergeSpans(start, end), is_const, name, type, init)
+	}
+
+	fn parseStmt(mut this) throws -> ParsedStmt {
+		let is_comptime = match .current() {
+			KeywordComptime => {
+				.index++
+				yield true
+			}
+			else => false
+		}
+
+		return match .current() {
+			LCurly => .parseCompoundStmt()
+			KeywordVar | KeywordConst => .parseVarDeclStmt()
+			KeywordIf => .parseIfStmt(is_comptime)
+			KeywordFor => .parseForStmt()
+			KeywordWhile => .parseWhileStmt()
+			KeywordDo => .parseDoWhileStmt()
+			KeywordMatch => .parseMatchStmt()
+			KeywordContinue => .parseContinueStmt()
+			KeywordBreak => .parseBreakStmt()
+			KeywordReturn => .parseReturnStmt()
+			KeywordDiscard => .parseDiscardStmt()
+			KeywordThrow => .parseThrowStmt()
+			else => {
+				let start = .current().span
+
+				let expr = .parseExpr(allow_assignments: true)
+				guard .current() is Semicolon else {
+					.error("expected ;", .current().span)
+					return ParsedStmt::Garbage(span: .current().span)
+				}
+				let end = .current().span
+				.index++
+
+				yield ParsedStmt::Expr(span: mergeSpans(start, end), expr)
+			}
+		}
+	}
+
+	fn parseCompoundStmt(mut this) throws -> ParsedStmt {
+		let start = .current().span
+		guard .current() is LCurly else {
+			.error("expected {", .current().span)
+			return ParsedStmt::Garbage(span: .current().span)
+		}
+		.index++
+
+		mut children: [ParsedStmt] = []
+
+		while not .current() is RCurly {
+			children.push(.parseStmt())
+		}
+
+		let end = .current().span
+		.index++
+
+		return ParsedStmt::Compound(span: mergeSpans(start, end), children)
+	}
+
+	fn parseVarDeclStmt(mut this) throws -> ParsedStmt {
+		let start = .current().span
+
+		let is_if_var_stmt = match .current() {
+			KeywordIf => {
+				.index++
+				yield true
+			}
+			else => false
+		}
+
+		let is_const = match .current() {
+			KeywordVar => false
+			KeywordConst => true
+			else => {
+				.error("expected keyword 'var' or 'const'", .current().span);
+				return ParsedStmt::Garbage(span: mergeSpans(start, end: .current().span))
+			}
+		}
+		.index++
+
+		guard .current() is Identifier(name) else {
+			.error("expected name for var decl", .current().span)
+			return ParsedStmt::Garbage(span: mergeSpans(start, end: .current().span))
+		}
+		.index++
+
+		mut type: ParsedType? = None
+		mut init: ParsedExpr? = None
+
+		if .current() is Colon {
+			.index++
+			type = .parseType()
+		}
+
+		if .current() is Assign {
+			.index++
+			init = .parseExpr(allow_assignments: false)
+		}
+		let var = ParsedVarDecl(span: mergeSpans(start, end: .current().span), is_const, name, type, init)
+
+		let (is_var_else_stmt, error_capture_name) = match .current() {
+			KeywordElse => {
+				.index++
+				mut error_capture_name: String? = None
+				if .current() is Colon {
+					.index++
+					guard .current() is Identifier(name) else {
+						.error("expected identifier", .current().span)
+						return ParsedStmt::Garbage(span: mergeSpans(start, end: .current().span))
+					}
+					.index++
+					error_capture_name = name
+				}
+				yield (true, error_capture_name)
+			}
+			else => (false, None)
+		}
+
+		guard not (is_if_var_stmt and is_var_else_stmt) else {
+			.error("var-if statements and else-var statements are mutually exclusive", .tokens[.index - 1].span)
+			return ParsedStmt::Garbage(span: mergeSpans(start, end: .current().span))
+		}
+
+		if not is_if_var_stmt and not is_var_else_stmt {
+			guard .current() is Semicolon else {
+				.error("expected ; at end of var decl", .current().span)
+				return ParsedStmt::Garbage(span: mergeSpans(start, end: .current().span))
+			}
+			.index++
+
+			let span = mergeSpans(start, end: .tokens[.index - 1].span)
+			return ParsedStmt::VarDecl(span: var.span, var)
+		} else {
+			let body = .parseCompoundStmt()
+			let span = mergeSpans(start, end: .tokens[.index - 1].span)
+
+			if is_if_var_stmt {
+				return ParsedStmt::IfVar(span, var, body)
+			} else {
+				return ParsedStmt::VarElse(span, var, error_capture_name, body)
+			}
+		}
+	}
+
+	fn parseIfStmt(mut this, is_comptime: bool) throws -> ParsedStmt {
+		if .tokens[.index + 1] is KeywordVar {
+			return .parseVarDeclStmt()
+		}
+
+		let start = .current().span
+		.index++
+
+		let condition = .parseExpr(allow_assignments: false)
+		let body = .parseCompoundStmt()
+		mut else_branch: ParsedStmt? = None
+
+		if .current() is KeywordElse {
+			.index++
+			if .current() is KeywordIf {
+				else_branch = .parseIfStmt(is_comptime)
+			} else {
+				else_branch = .parseCompoundStmt()
+			}
+		}
+
+		let end = .tokens[.index - 1].span
+
+		return ParsedStmt::If(span: mergeSpans(start, end), is_comptime, condition, body, else_branch)
+	}
+
+	fn parseForStmt(mut this) throws -> ParsedStmt {
+		let start = .current().span
+		.index++
+
+		mut capture_const = true;
+		mut capture_reference = false;
+		if .current() is And {
+			capture_reference = true;
+			.index++
+		} else if .current() is LogicalAnd {
+			capture_const = false;
+			capture_reference = true
+			.index++
+		}
+
+		guard .current() is Identifier(name: capture_name) else {
+			.error("expected identifier", .current().span)
+			return ParsedStmt::Garbage(span: .current().span)
+		}
+		.index++
+
+		guard .current() is KeywordIn else {
+			.error("expected keyword 'in'", .current().span)
+			return ParsedStmt::Garbage(span: .current().span)
+		}
+		.index++
+
+		let range = .parseExpr(allow_assignments: false)
+		let body = .parseCompoundStmt()
+
+		let end = .tokens[.index - 1].span
+		return ParsedStmt::For(span: mergeSpans(start, end), capture_const, capture_reference, capture_name, range, body)
+	}
+
+	fn parseWhileStmt(mut this) throws -> ParsedStmt {
+		guard .current() is KeywordWhile else {
+			.error("expected keyword 'while'", .current().span)
+			return ParsedStmt::Garbage(span: .current().span)
+		}
+
+		let start = .current().span
+		.index++
+
+		let condition = .parseExpr(allow_assignments: false)
+		let continue_expr: ParsedExpr? = match .current() {
+			Semicolon => {
+				.index++
+				yield .parseExpr(allow_assignments: true)
+			}
+			else => None
+		}
+		let body = .parseCompoundStmt()
+
+		let end = .tokens[.index - 1].span
+		return ParsedStmt::While(span: mergeSpans(start, end), condition, body, continue_expr)
+	}
+
+	fn parseDoWhileStmt(mut this) throws -> ParsedStmt {
+		guard .current() is KeywordDo else {
+			.error("expected keyword 'do'", .current().span)
+			return ParsedStmt::Garbage(span: .current().span)
+		}
+
+		let start = .current().span
+		.index++
+
+		let body = .parseCompoundStmt()
+
+		guard .current() is KeywordWhile else {
+			.error("expected keyword 'while'", .current().span)
+			return ParsedStmt::Garbage(span: .current().span)
+		}
+		.index++
+
+		let condition = .parseExpr(allow_assignments: false)
+
+		guard .current() is Semicolon else {
+			.error("expected ;", .current().span)
+			return ParsedStmt::DoWhile(span: mergeSpans(start, end: .current().span), body, condition)
+		}
+		.index++
+
+		let end = .tokens[.index - 1].span
+		return ParsedStmt::DoWhile(span: mergeSpans(start, end), body, condition)
+	}
+
+	fn parseMatchStmt(mut this) throws -> ParsedStmt {
+		let start = .current().span
+		.index++
+
+		let value = .parseExpr(allow_assignments: false)
+		mut cases: [ParsedCaseStmt] = []
+		mut else_branch: ParsedStmt? = None
+
+		guard .current() is LCurly else {
+			.error("expected {", .current().span)
+			return ParsedStmt::Garbage(span: .current().span)
+		}
+		.index++
+
+		while not .current() is RCurly {
+			if (.current() is KeywordElse) and (not else_branch.has_value()) {
+				.index++
+
+				guard .current() is Arrow else {
+					.error("expected ->", .current().span)
+					return ParsedStmt::Garbage(span: .current().span)
+				}
+				.index++
+
+				else_branch = .parseStmt()
+				break
+			}
+
+			guard .current() is KeywordCase else {
+				.error("expected case statement", .current().span)
+				return ParsedStmt::Garbage(span: .current().span)
+			}
+			cases.push(.parseMatchCase())
+		}
+
+		guard .current() is RCurly else {
+			.error("expected }", .current().span)
+			return ParsedStmt::Garbage(span: .current().span)
+		}
+		let end = .current().span
+		.index++
+
+		return ParsedStmt::Match(span: mergeSpans(start, end), value, cases, else_branch)
+	}
+
+	fn parseMatchCase(mut this) throws -> ParsedCaseStmt {
+		let start = .current().span
+
+		guard .current() is KeywordCase else {
+			.error("expected keyword case", .current().span)
+			return ParsedCaseStmt(span: mergeSpans(start, end: .current().span), patterns: [], capture_name: None, capture_const: false, capture_reference: false, body: ParsedStmt::Garbage(span: .current().span))
+		}
+		.index++
+
+		mut patterns: [ParsedExpr] = [.parsePrimitiveExpr()]
+		while .current() is Or {
+			.index++
+			patterns.push(.parsePrimitiveExpr())
+		}
+
+		mut capture_name: String? = None
+		mut capture_const = false
+		mut capture_reference = false
+
+		if .current() is Colon {
+			.index++
+
+			match .current() {
+				LogicalAnd => {
+					.index++
+					capture_const = false
+					capture_reference = true
+				}
+				And => {
+					.index++
+					capture_const = true
+					capture_reference = true
+				}
+				else => {
+					capture_const = true
+					capture_reference = false
+				}
+			}
+
+			guard .current() is Identifier(name) else {
+				.error("expected identifier", .current().span)
+				return ParsedCaseStmt(span: mergeSpans(start, end: .current().span), patterns, capture_name: None, capture_const, capture_reference, body: ParsedStmt::Garbage(span: .current().span))
+			}
+			capture_name = name
+			.index++
+		}
+
+		guard .current() is Arrow else {
+			.error("expected ->", .current().span)
+			return ParsedCaseStmt(span: mergeSpans(start, end: .current().span), patterns, capture_name, capture_const, capture_reference, body: ParsedStmt::Garbage(span: .current().span))
+		}
+		.index++
+
+		let body = .parseStmt()
+
+		let end = .tokens[.index - 1].span
+		return ParsedCaseStmt(span: mergeSpans(start, end), patterns, capture_name, capture_const, capture_reference, body)
+	}
+
+	fn parseContinueStmt(mut this) throws -> ParsedStmt {
+		let start = .current().span
+		.index++
+
+		guard .current() is Semicolon else {
+			.error("expected ;", .current().span)
+			return ParsedStmt::Continue(span: mergeSpans(start, end: .current().span))
+		}
+		let end = .current().span
+		.index++
+
+		return ParsedStmt::Continue(span: mergeSpans(start, end))
+	}
+
+	fn parseBreakStmt(mut this) throws -> ParsedStmt {
+		let start = .current().span
+		.index++
+
+		guard .current() is Semicolon else {
+			.error("expected ;", .current().span)
+			return ParsedStmt::Break(span: mergeSpans(start, end: .current().span))
+		}
+		let end = .current().span
+		.index++
+
+		return ParsedStmt::Break(span: mergeSpans(start, end))
+	}
+
+	fn parseReturnStmt(mut this) throws -> ParsedStmt {
+		let start = .current().span
+		.index++
+
+		mut value: ParsedExpr? = None
+
+		if not .current() is Semicolon {
+			value = .parseExpr(allow_assignments: false)
+		}
+
+		guard .current() is Semicolon else {
+			.error("expected ;", .current().span)
+			return ParsedStmt::Return(span: mergeSpans(start, end: .current().span), value)
+		}
+		let end = .current().span
+		.index++
+
+		return ParsedStmt::Return(span: mergeSpans(start, end), value)
+	}
+
+	fn parseDiscardStmt(mut this) throws -> ParsedStmt {
+		let start = .current().span
+		.index++
+
+		let value = .parseExpr(allow_assignments: false)
+
+		guard .current() is Semicolon else {
+			.error("expected ;", .current().span)
+			return ParsedStmt::Discard(span: mergeSpans(start, end: .current().span), value)
+		}
+		let end = .current().span
+		.index++
+
+		return ParsedStmt::Discard(span: mergeSpans(start, end), value)
+	}
+
+	fn parseThrowStmt(mut this) throws -> ParsedStmt {
+		let start = .current().span
+		.index++
+
+		let value = .parseExpr(allow_assignments: false)
+
+		guard .current() is Semicolon else {
+			.error("expected ;", .current().span)
+			return ParsedStmt::Throw(span: mergeSpans(start, end: .current().span), value)
+		}
+		let end = .current().span
+		.index++
+
+		return ParsedStmt::Throw(span: mergeSpans(start, end), value)
+	}
+
+	fn parseExpr(mut this, allow_assignments: bool) throws -> ParsedExpr {
+		mut expr_stack: [ParsedExpr] = []
+		mut last_precedence = 1000000
+
+		let lhs = .parseOperand()
+		expr_stack.push(lhs)
+
+		loop {
+			let parsed_operator = .parseOperator(allow_assignments);
+
+			if parsed_operator is Garbage {
+				break
+			}
+
+			let precedence = parsed_operator.precedence();
+
+			let rhs = .parseOperand()
+
+			while precedence <= last_precedence and expr_stack.size() > 1 {
+				let rhs = expr_stack.pop()!
+				let op = expr_stack.pop()!
+
+				last_precedence = op.precedence()
+
+				if last_precedence < precedence {
+					expr_stack.push(op)
+					expr_stack.push(rhs)
+					break
+				}
+
+				let lhs = expr_stack.pop()!
+
+				match op {
+					Operator(op, span) => {
+						let new_span = mergeSpans(start: lhs.span(), end: rhs.span())
+
+						expr_stack.push(ParsedExpr::BinaryOp(span: new_span, lhs, op, rhs))
+					}
+					else => {
+						panic("operator is not an operator")
+					}
+				}
+			}
+
+			expr_stack.push(parsed_operator)
+			expr_stack.push(rhs)
+
+			last_precedence = precedence
+		}
+
+		while expr_stack.size() > 1 {
+			let rhs = expr_stack.pop()!
+			let parsed_operator = expr_stack.pop()!
+			let lhs = expr_stack.pop()!
+
+			match parsed_operator {
+				Operator(op, span) => {
+					let new_span = mergeSpans(start: lhs.span(), end: rhs.span())
+					expr_stack.push(ParsedExpr::BinaryOp(span: new_span, lhs, op, rhs))
+				}
+				else => {
+					panic("operator is not an operator")
+				}
+			}
+		}
+
+		if .current() is KeywordIf {
+			let true_value = expr_stack[0]
+			.index++
+
+			let condition = .parseExpr(allow_assignments: false)
+			guard .current() is KeywordElse else {
+				.error("expected keyword else", .current().span)
+				return ParsedExpr::Garbage(.current().span)
+			}
+			.index++
+
+			let false_value = .parseExpr(allow_assignments: false)
+
+			return ParsedExpr::InlineIf(span: mergeSpans(start: true_value.span(), end: false_value.span()), true_value, condition, false_value)
+		} else {
+			return expr_stack[0]
+		}
+	}
+
+	fn parseOperand(mut this) throws -> ParsedExpr {
+		mut result = .parseOperandBase()
+		loop {
+			result = match .current() {
+				Increment => {
+					.index++
+					yield ParsedExpr::UnaryOp(
+						span: mergeSpans(start: result.span(), end: .tokens[.index - 1].span),
+						expr: result, op: ParsedUnaryOperator::Increment
+					)
+				}
+				Decrement => {
+					.index++
+					yield ParsedExpr::UnaryOp(
+						span: mergeSpans(start: result.span(), end: .tokens[.index - 1].span),
+						expr: result, op: ParsedUnaryOperator::Decrement
+					)
+				}
+				Dot => {
+					.index++
+					let span = .current().span
+					yield match .current() {
+						IntLiteral(value) => {
+							.index++
+							yield ParsedExpr::TupleIndex(span: mergeSpans(start: result.span(), end: span), tuple: result, index: value as! u64)
+						}
+						else => {
+							let name = .parseName()
+							yield ParsedExpr::MemberName(span: mergeSpans(start: result.span(), end: span), object: result, name)
+						}
+					}
+				}
+				LParen => .parseFunctionCall(func_name: result)
+				LSquare => {
+					.index++
+					mut arguments: [ParsedExpr] = []
+					while not .current() is RSquare {
+						arguments.push(.parseExpr(allow_assignments: false))
+
+						if not .current() is RSquare {
+							guard .current() is Comma else {
+								.error("expected , or ]", .current().span)
+								return ParsedExpr::Garbage(.current().span)
+							}
+							.index++
+						}
+					}
+					let end = .current().span
+					.index++
+
+					yield ParsedExpr::IndexOperator(span: mergeSpans(start: result.span(), end), object: result, arguments)
+				}
+				KeywordIs => {
+					.index++
+					let targetType = .parseType()
+					yield ParsedExpr::OperatorIs(span: mergeSpans(start: result.span(), end: targetType.span()), value: result, targetType)
+				}
+				KeywordAs => {
+					.index++
+					let targetType = .parseType()
+					yield ParsedExpr::OperatorAs(span: mergeSpans(start: result.span(), end: targetType.span()), value: result, targetType)
+				}
+				else => {
+					break
+				}
+			}
+		}
+
+		let name: ParsedName = match result {
+			Name(name) => name
+			MemberName(name) => name
+			else => {
+				return result
+			}
+		}
+
+		if name.name.starts_with("operator ") {
+			.error("expected call on operator", result.span())
+			return ParsedExpr::Garbage(result.span())
+		}
+
+		if not name.template_parameters.is_empty() {
+			.error("expected call on templated name", result.span())
+			return ParsedExpr::Garbage(result.span())
+		}
+
+		return result
+	}
+
+	fn parseName(mut this) throws -> ParsedName {
+		let start = .current().span
+		let name = match .current() {
+			KeywordOperator => .parseOperatorName()
+			Identifier(name) => {
+				.index++
+				yield name
+			}
+			else => {
+				.error("expected ientifier in namespace", .current().span)
+				return ParsedName(span: Span::empty(), name: "", template_parameters: [])
+			}
+		}
+
+		if .tokens[.index] is LogicalNot and .tokens[.index + 1] is LessThan {
+			let (end, template_parameters) = .parseTemplateParameters()
+			return ParsedName(span: mergeSpans(start, end), name, template_parameters)
+		} else {
+			return ParsedName(span: mergeSpans(start, end: .tokens[.index - 1].span), name, template_parameters: [])
+		}
+	}
+
+	fn parseOperandBase(mut this) throws -> ParsedExpr {
+		return match .current() {
+			LSquare => .parseArrayExpr()
+			LCurly => .parseDictExpr()
+			LParen => .parseTupleExpr()
+			Not
+			| LogicalNot
+			| Sub => {
+				let op = match .current() {
+					Not => ParsedUnaryOperator::BitwiseNot
+					LogicalNot => ParsedUnaryOperator::LogicalNot
+					Sub => ParsedUnaryOperator::Negate
+					else => {
+						panic("unreachable")
+					}
+				}
+				let start = .current().span
+				.index++
+				let expr = .parseOperand()
+
+				yield ParsedExpr::UnaryOp(span: mergeSpans(start, end: expr.span()), expr, op)
+			}
+			And => {
+				let start = .current().span
+				.index++
+				let expr = .parseOperand()
+				yield ParsedExpr::ConstRef(span: mergeSpans(start, end: expr.span()), expr)
+			}
+			LogicalAnd => {
+				let start = .current().span
+				.index++
+				let expr = .parseOperand()
+				yield ParsedExpr::VarRef(span: mergeSpans(start, end: expr.span()), expr)
+			}
+			KeywordMust => {
+				let start = .current().span
+				.index++
+				let expr = .parseOperand()
+				yield ParsedExpr::Must(span: mergeSpans(start, end: expr.span()), expr)
+			}
+			KeywordTry => {
+				let start = .current().span
+				.index++
+				let expr = .parseOperand()
+				yield ParsedExpr::Try(span: mergeSpans(start, end: expr.span()), expr)
+			}
+			KeywordOperator => {
+				let name = .parseName()
+				yield ParsedExpr::Name(span: name.span, namespaces: [], name)
+			}
+			Identifier(span, name) => {
+				mut current = .parseName()
+				mut namespaces: [ParsedName] = []
+
+				while .tokens[.index] is Namespace {
+					.index++
+					namespaces.push(current)
+
+					current = .parseName()
+				}
+
+				yield ParsedExpr::Name(span: mergeSpans(start: span, end: current.span), namespaces, name: current)
+			}
+			else => .parseLiteral()
+		}
+	}
+
+	fn parsePrimitiveExpr(mut this) throws -> ParsedExpr {
+		return match .current() {
+			Identifier(span, name) => {
+				mut current = .parseName()
+				mut namespaces: [ParsedName] = []
+
+				while .tokens[.index] is Namespace {
+					.index++
+					namespaces.push(current)
+
+					current = .parseName()
+				}
+
+				yield ParsedExpr::Name(span: mergeSpans(start: span, end: current.span), namespaces, name: current)
+			}
+			else => .parseLiteral()
+		}
+	}
+
+	fn parseLiteral(mut this) throws -> ParsedExpr {
+		let span = .current().span
+
+		let literal = match .current() {
+			KeywordTrue => ParsedExpr::BoolLiteral(span, value: true)
+			KeywordFalse => ParsedExpr::BoolLiteral(span, value: false)
+			IntLiteral(value, postfix) => ParsedExpr::IntLiteral(span, value, postfix)
+			FloatLiteral(value, postfix) => ParsedExpr::FloatLiteral(span, value, postfix)
+			CharLiteral(value, postfix) => ParsedExpr::CharLiteral(span, value, postfix)
+			StringLiteral(value, postfix) => ParsedExpr::StringLiteral(span, value, postfix)
+			else => {
+				.error("expected literal", .current().span)
+				yield ParsedExpr::Garbage(.current().span)
+			}
+		}
+		.index++
+		return literal
+	}
+
+	fn parseOperator(mut this, allow_assignments: bool) throws -> ParsedExpr {
+		let span = .current().span
+		let op = match .current() {
+			Add => ParsedBinaryOperator::Add
+			Sub => ParsedBinaryOperator::Sub
+			Mul => ParsedBinaryOperator::Mul
+			Div => ParsedBinaryOperator::Div
+			Mod => ParsedBinaryOperator::Mod
+			LogicalAnd => ParsedBinaryOperator::LogicalAnd
+			LogicalOr => ParsedBinaryOperator::LogicalOr
+			Equal => ParsedBinaryOperator::CompEQ
+			NotEqual => ParsedBinaryOperator::CompNE
+			LessThan => match .tokens[.index + 1] {
+				LessThan => match .tokens[.index + 2] {
+					Assign => {
+						.index += 2
+						yield ParsedBinaryOperator::BitwiseLShiftAssign
+					}
+					else => {
+						.index += 1
+						yield ParsedBinaryOperator::BitwiseLShift
+					}
+				}
+				else => ParsedBinaryOperator::CompLT
+			}
+			LessEqual => ParsedBinaryOperator::CompLE
+			GreaterThan => match .tokens[.index + 1] {
+				GreaterThan => match .tokens[.index + 2] {
+					Assign => {
+						.index += 2
+						yield ParsedBinaryOperator::BitwiseRShiftAssign
+					}
+					else => {
+						.index += 1
+						yield ParsedBinaryOperator::BitwiseRShift
+					}
+				}
+				else => ParsedBinaryOperator::CompGT
+			}
+			GreaterEqual => ParsedBinaryOperator::CompGE
+			And => ParsedBinaryOperator::BitwiseAnd
+			Or => ParsedBinaryOperator::BitwiseOr
+			Xor => ParsedBinaryOperator::BitwiseXor
+			Coalescing => ParsedBinaryOperator::Coalescing
+			Range => ParsedBinaryOperator::Range
+			Assign => ParsedBinaryOperator::Assign
+			AndAssign => ParsedBinaryOperator::BitwiseAndAssign
+			OrAssign => ParsedBinaryOperator::BitwiseOrAssign
+			XorAssign => ParsedBinaryOperator::BitwiseXorAssign
+			AddAssign => ParsedBinaryOperator::AddAssign
+			SubAssign => ParsedBinaryOperator::SubAssign
+			MulAssign => ParsedBinaryOperator::MulAssign
+			DivAssign => ParsedBinaryOperator::DivAssign
+			ModAssign => ParsedBinaryOperator::ModAssign
+			CoalescingAssign => ParsedBinaryOperator::CoalescingAssign
+			Spaceship => ParsedBinaryOperator::Spaceship
+			else => {
+				return ParsedExpr::Garbage(span)
+			}
+		}
+
+		.index++
+
+		if not allow_assignments and op.is_assignment() {
+			.error("Assignment is not allowed in this position", span)
+			return ParsedExpr::Operator(span, op)
+		}
+
+		return ParsedExpr::Operator(span, op)
+	}
+
+	fn parseFunctionCall(mut this, func_name: ParsedExpr) throws -> ParsedExpr {
+		guard .current() is LParen else {
+			.error("expected (", .current().span)
+			return ParsedExpr::Garbage(mergeSpans(start: func_name.span(), end: .current().span))
+		}
+
+		.index++
+
+		mut arguments: [ParsedExpr] = []
+
+		while not .current() is RParen {
+			arguments.push(.parseExpr(allow_assignments: false))
+
+			if not .current() is RParen {
+				guard .current() is Comma else {
+					.error("expected , or )", .current().span)
+					return ParsedExpr::Garbage(mergeSpans(start: func_name.span(), end: .current().span))
+				}
+				.index++
+			}
+		}
+		let end = .current().span
+		.index++
+
+		if func_name is Name(span, namespaces, name) {
+			return ParsedExpr::Call(span: mergeSpans(start: span, end), namespaces, name: name.name, template_parameters: name.template_parameters, arguments)
+		} else if func_name is MemberName(span, object, name) {
+			return ParsedExpr::MemberCall(span: mergeSpans(start: span, end), object, name: name.name, template_parameters: name.template_parameters, arguments)
+		} else {
+			.error("call on un-named function / object", mergeSpans(start: func_name.span(), end: .current().span))
+			return ParsedExpr::Garbage(mergeSpans(start: func_name.span(), end: .current().span))
+		}
+	}
+
+	fn parseArrayExpr(mut this) throws -> ParsedExpr {
+		let start = .current().span
+		.index++
+
+		mut elements: [ParsedExpr] = []
+		while not .current() is RSquare {
+			elements.push(.parseExpr(allow_assignments: false))
+
+			if not .current() is RSquare {
+				guard .current() is Comma else {
+					.error("expected , or ]", .current().span)
+					return ParsedExpr::Array(span: mergeSpans(start, end: .current().span), elements)
+				}
+				.index++
+			}
+		}
+		let end = .current().span
+		.index++
+
+		return ParsedExpr::Array(span: mergeSpans(start, end), elements)
+	}
+
+	fn parseDictExpr(mut this) throws -> ParsedExpr {
+		let start = .current().span
+		.index++
+
+		mut elements: [(ParsedExpr, ParsedExpr)] = []
+		while not .current() is RCurly {
+			let key = .parseExpr(allow_assignments: false)
+
+			guard .current() is Colon else {
+				.error("expected :", .current().span)
+				return ParsedExpr::Dict(span: mergeSpans(start, end: .current().span), elements)
+			}
+			.index++
+
+			let value = .parseExpr(allow_assignments: false)
+
+			elements.push((key, value))
+
+			if not .current() is RCurly {
+				guard .current() is Comma else {
+					.error("expected , or }", .current().span)
+					return ParsedExpr::Dict(span: mergeSpans(start, end: .current().span), elements)
+				}
+				.index++
+			}
+		}
+		let end = .current().span
+		.index++
+
+		return ParsedExpr::Dict(span: mergeSpans(start, end), elements)
+	}
+
+	fn parseTupleExpr(mut this) throws -> ParsedExpr {
+		let start = .current().span
+		.index++
+
+		mut is_named_tuple = false
+
+		mut elements: [(String?, ParsedExpr)] = []
+		while not .current() is RParen {
+			mut field_name: String? = None
+			if (.tokens[.index] is Identifier(name)) and (.tokens[.index + 1] is Colon) {
+				is_named_tuple = true
+				.index += 2
+				field_name = name
+
+				guard .current() is Colon else {
+					.error("expected :", .current().span)
+					return ParsedExpr::Tuple(span: mergeSpans(start, end: .current().span), elements)
+				}
+				.index++
+			} else if is_named_tuple {
+				.error("either all tuple elements or none must be named", .current().span)
+				return ParsedExpr::Tuple(span: mergeSpans(start, end: .current().span), elements)
+			}
+
+			let value = .parseExpr(allow_assignments: false)
+
+			elements.push((field_name, value))
+
+			if not .current() is RParen {
+				guard .current() is Comma else {
+					.error("expected , or )", .current().span)
+					return ParsedExpr::Tuple(span: mergeSpans(start, end: .current().span), elements)
+				}
+				.index++
+			}
+		}
+		let end = .current().span
+		.index++
+
+		if elements.size() == 1 and not elements[0].0.has_value() {
+			return ParsedExpr::Paren(span: mergeSpans(start, end), child: elements[0].1)
+		} else {
+			return ParsedExpr::Tuple(span: mergeSpans(start, end), elements)
+		}
+	}
+}

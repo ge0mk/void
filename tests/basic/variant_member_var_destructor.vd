@@ -1,0 +1,37 @@
+//> output "+0"
+//> output "+1"
+//> output "-0"
+//> output "-1"
+
+import std/core;
+import std/string;
+import std/format;
+import std/io;
+
+struct Foo {
+	var id: int;
+
+	func constructor(this: &&Foo) {
+		this.id = 0;
+		println("+" + format(this.id));
+	}
+
+	func constructor(this: &&Foo, other: Foo) {
+		this.id = other.id + 1;
+		println("+" + format(this.id));
+	}
+
+	func destructor(this: &&Foo) {
+		println("-" + format(this.id));
+	}
+}
+
+variant Bar {
+	var x: Foo;
+
+	case A;
+}
+
+func main() {
+	var x = Bar::A(Foo());
+}

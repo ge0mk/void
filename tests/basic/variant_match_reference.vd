@@ -1,0 +1,22 @@
+//> test-ec "5"
+
+import std/core;
+
+variant Foo {
+	case A;
+	case B: int;
+}
+
+func main() -> int {
+	var a = Foo::B(0);
+
+	match a {
+		case B: &&x -> { x = 5; }
+		else -> {}
+	}
+
+	match a {
+		case B: x -> return x;
+		else -> return 0;
+	}
+}

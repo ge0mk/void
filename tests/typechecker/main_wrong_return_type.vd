@@ -1,0 +1,7 @@
+//> error "return type of main must be int or void"
+
+import std/core;
+
+func main() -> bool {
+	return false;
+}

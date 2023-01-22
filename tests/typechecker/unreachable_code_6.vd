@@ -1,0 +1,17 @@
+//> test-ec "0"
+
+import std/core;
+
+variant Foo {
+	case A;
+	case B;
+}
+
+func main() -> int {
+	match Foo::A {
+		case A -> return 0;
+		else -> {}
+	}
+
+	return 1;
+}

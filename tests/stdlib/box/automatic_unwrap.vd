@@ -1,0 +1,8 @@
+import std/core;
+import std/box;
+
+func main() {
+	var a: Box!<int> = 0;
+	a += 5;
+	assert(a == 5);
+}

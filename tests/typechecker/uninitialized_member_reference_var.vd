@@ -1,0 +1,16 @@
+//> error "uninitialized member reference variable"
+
+import std/core;
+
+struct Foo {
+	var x: &&int;
+
+	func constructor(this: &&Foo) -> void {}
+
+	func destructor(this: &&Foo) -> void {}
+}
+
+func main() -> int {
+	var a = Foo();
+	return 0;
+}

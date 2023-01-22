@@ -1,0 +1,7 @@
+//> test-ec "9"
+
+import std/core;
+
+func main() -> int {
+	return 1 + 2 * 4;
+}

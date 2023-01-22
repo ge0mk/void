@@ -1,0 +1,22 @@
+//> test-ec "2"
+
+import std/core;
+
+variant Foo {
+	case A: int;
+	case B: bool;
+}
+
+func main() -> int {
+	var a = Foo::A(5) as A else {
+		return 1;
+	}
+
+	assert(a == 5);
+
+	var b = Foo::B(true) as A else {
+		return 2;
+	}
+
+	return 0;
+}

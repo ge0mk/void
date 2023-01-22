@@ -1,0 +1,3 @@
+import std/core;
+
+extern func getcwd(buffer: vptr!<byte>, buffer_size: uint) -> vptr!<byte>;

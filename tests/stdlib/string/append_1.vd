@@ -1,0 +1,19 @@
+//> output "hello world"
+
+import std/core;
+import std/string;
+import std/io;
+
+func main() {
+	var a = "hello";
+	assert(a.size() == 5u);
+
+	must a.append(' 'b);
+	assert(a.size() == 6u);
+
+	must a.append("world");
+	assert(a.size() == 11u);
+
+	assert(a == "hello world");
+	println(a);
+}

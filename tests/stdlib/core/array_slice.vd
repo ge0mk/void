@@ -1,0 +1,8 @@
+import std/core;
+
+func main() {
+	var a = [1, 2, 3, 4, 5];
+	var b = must a[1u..3u];
+	assert(b.size() == 2u);
+	assert((must b[0u]) == 2);
+}

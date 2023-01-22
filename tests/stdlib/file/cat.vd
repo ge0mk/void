@@ -1,0 +1,27 @@
+//> test-arg "tests/stdlib/file/test.txt"
+//> output "Hello World"
+
+import std/core;
+import std/string;
+import std/file;
+import std/io;
+
+func main(args: Range!<String>) -> int {
+	const path = args[1u] else {
+		eprintln("usage: cat <path>");
+		return 1;
+	}
+
+	var file = open(path, OpenMode::read) else {
+		eprintln("couldn't open file " + path);
+		return 1;
+	}
+	var stdout = stdout();
+
+	while !file.eof() {
+		const buffer = must file.readString(100u);
+		discard stdout.writeString(buffer);
+	}
+
+	return 0;
+}

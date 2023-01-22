@@ -1,0 +1,755 @@
+%YAML 1.2
+---
+# https://www.sublimetext.com/docs/syntax.html
+# https://www.sublimetext.com/docs/scope_naming.html
+# https://raw.githubusercontent.com/kkos/oniguruma/master/doc/RE
+file_extensions: [vd, void]
+
+scope: source.void
+contexts:
+  main:
+    - include: comments
+
+    - match: \bpragma\b
+      scope: keyword.control.pragma
+      push: pragma
+
+    - match: \bimport\b
+      scope: keyword.control.import
+      push: import
+
+    - match: \bcomptime\b
+      scope: keyword.control
+
+    - match: '\['
+      push: annotation
+
+    - match: \btemplate\b
+      scope: keyword.declaration
+      push: template_decl
+
+    - match: \bstruct\b
+      scope: keyword.declaration.type
+      push: struct_decl
+
+    - match: \benum\b
+      scope: keyword.declaration.type
+      push: enum_decl
+
+    - match: \bvariant\b
+      scope: keyword.declaration.type
+      push: variant_decl
+
+    - match: \btype\b
+      scope: keyword.declaration.type
+      push: type_alias
+
+    - match: \bextend\b
+      scope: keyword.declaration.namespace
+      push: type_extension
+
+    - match: \b(extern\W+)?(func|operator)\b
+      scope: keyword.declaration.function
+      push: func_decl
+
+  pragma:
+    - match: \w+
+      scope: entity.name
+
+    - match: ;
+      pop: true
+
+  annotation:
+    - include: dec_int
+
+    - match: \w+
+      scope: entity.name
+
+    - match: \"
+      push: string
+
+    - match: '\]'
+      pop: true
+
+  type_without_dict:
+    - include: comments
+    - include: number
+
+    - match: (\w+)!<
+      captures:
+        1: storage.type
+      push: template_type
+
+    - match: \(
+      push: tuple_type
+
+    - match: \[
+      push: array_type
+
+    - match: \w+
+      scope: storage.type
+
+  type:
+    - include: comments
+    - include: number
+
+    - match: (\w+)!<
+      captures:
+        1: storage.type
+      push: template_type
+
+    - match: \(
+      push: tuple_type
+
+    - match: \[
+      push: array_type
+
+    - match: '\{'
+      push: dict_type
+
+    - match: \w+
+      scope: storage.type
+
+  tuple_type:
+    - include: type
+
+    - match: \)
+      pop: true
+
+  array_type:
+    - include: type
+
+    - match: \]
+      pop: true
+
+  dict_type:
+    - include: type
+
+    - match: \}
+      pop: true
+
+  template_type:
+    - include: type
+
+    - match: '>'
+      pop: true
+
+  import:
+    - include: comments
+
+    - match: \w+
+      scope: entity.name.namespace
+
+    - match: ;
+      pop: true
+
+  type_extension:
+    - include: comments
+
+    - match: \w+
+      scope: entity.name.class
+
+    - match: '{'
+      scope: punctuation.section.block.begin
+      set: type_extension_body
+
+  type_extension_body:
+    - include: comments
+
+    - match: \btemplate\b
+      scope: keyword.declaration
+      push: template_decl
+
+    - match: '\['
+      push: annotation
+
+    - match: \b(extern\W+)?(func|operator)\b
+      scope: keyword.declaration.function
+      push: func_decl
+
+    - match: '}'
+      scope: punctuation.section.block.end
+      pop: true
+
+  struct_decl:
+    - include: comments
+
+    - match: \w+
+      scope: entity.name.class
+
+    - match: '{'
+      scope: punctuation.section.block.begin
+      set: struct_decl_body
+
+  struct_decl_body:
+    - include: comments
+
+    - match: \bvar\b
+      scope: storage.modifier keyword.declaration.var
+      push: var_decl
+
+    - match: \btemplate\b
+      scope: keyword.declaration
+      push: template_decl
+
+    - match: '\['
+      push: annotation
+
+    - match: \b(extern\W+)?(func|operator)\b
+      scope: keyword.declaration.function
+      push: func_decl
+
+    - match: '}'
+      scope: punctuation.section.block.end
+      pop: true
+
+  enum_decl:
+    - include: comments
+
+    - match: \w+
+      scope: entity.name.enum
+
+    - match: '{'
+      scope: punctuation.section.block.begin
+      set: enum_decl_body
+
+  enum_decl_body:
+    - include: comments
+
+    - match: \btemplate\b
+      scope: keyword.declaration
+      push: template_decl
+
+    - match: '\['
+      push: annotation
+
+    - match: \b(extern\W+)?(func|operator)\b
+      scope: keyword.declaration.function
+      push: func_decl
+
+    - match: \bcase\b
+      scope: keyword.declaration
+      push: enum_case_decl
+
+    - match: '}'
+      scope: punctuation.section.block.end
+      pop: true
+
+  enum_case_decl:
+    - include: comments
+
+    - match: \w+
+      scope: entity.name.constant
+
+    - match: '='
+      set: enum_case_index
+
+    - match: ';'
+      pop: true
+
+  enum_case_index:
+    - include: comments
+    - include: number
+
+    - match: ';'
+      pop: true
+
+  variant_decl:
+    - include: comments
+
+    - match: \w+
+      scope: entity.name.variant
+
+    - match: '{'
+      scope: punctuation.section.block.begin
+      set: variant_decl_body
+
+  variant_decl_body:
+    - include: comments
+
+    - match: \bvar\b
+      scope: storage.modifier keyword.declaration.var
+      push: var_decl
+
+    - match: \btemplate\b
+      scope: keyword.declaration
+      push: template_decl
+
+    - match: '\['
+      push: annotation
+
+    - match: \b(extern\W+)?(func|operator)\b
+      scope: keyword.declaration.function
+      push: func_decl
+
+    - match: \bcase\b
+      scope: keyword.declaration
+      push: variant_case_decl
+
+    - match: '}'
+      scope: punctuation.section.block.end
+      pop: true
+
+  variant_case_decl:
+    - include: comments
+
+    - match: \w+
+      scope: entity.name.constant
+
+    - match: ':'
+      set: variant_case_type
+
+    - match: '='
+      set: variant_case_index
+
+    - match: ';'
+      pop: true
+
+  variant_case_type:
+    - include: comments
+    - include: type
+
+    - match: '='
+      set: variant_case_index
+
+    - match: ';'
+      pop: true
+
+  variant_case_index:
+    - include: comments
+    - include: number
+
+    - match: ';'
+      pop: true
+
+  func_decl:
+    - include: comments
+
+    - match: \bconstructor\b
+      scope: entity.name.function.constructor
+
+    - match: \bdestructor\b
+      scope: entity.name.function.destructor
+
+    - match: \w+
+      scope: entity.name.function
+
+    - match: \(
+      set: func_decl_parameter
+
+  func_decl_parameter:
+    - include: comments
+
+    - match: \)
+      set: func_decl_parameters_end
+
+    - match: \w+
+      scope: variable.parameter
+
+    - match: ':'
+      set: func_decl_parameter_type
+
+  func_decl_parameter_type:
+    - include: type
+
+    - match: '='
+      set: func_decl_parameter_init
+
+    - match: ','
+      set: func_decl_parameter
+
+    - match: \)
+      set: func_decl_parameters_end
+
+  func_decl_parameter_init:
+    - include: expr
+
+    - match: ','
+      set: func_decl_parameter
+
+    - match: \)
+      set: func_decl_parameters_end
+
+  func_decl_parameters_end:
+    - include: comments
+
+    - match: '='
+      set: func_decl_inline_body
+
+    - match: ->
+      set: func_decl_return_type
+
+    - match: '{'
+      scope: punctuation.section.block.begin
+      set: compound_stmt
+
+  func_decl_return_type:
+    - include: type_without_dict
+
+    - match: '='
+      set: func_decl_inline_body
+
+    - match: ;
+      pop: true
+
+    - match: '{'
+      scope: punctuation.section.block.begin
+      set: compound_stmt
+
+  func_decl_inline_body:
+    - include: expr
+
+    - match: default
+      scope: keyword.control
+
+    - match: ;
+      pop: true
+
+  template_decl:
+    - include: comments
+
+    - match: \w+
+      scope: variable.parameter.constant
+
+    - match: ':'
+      set: template_decl_type
+
+    - match: '='
+      set: template_decl_init
+
+  template_decl_type:
+    - include: comments
+
+    - match: \w+
+      scope: storage.type
+
+    - match: '='
+      set: template_decl_init
+
+    - match: ','
+      set: template_decl
+
+    - match: '>'
+      pop: true
+
+  template_decl_init:
+    - include: type
+
+    - match: \b[+-]?\d+(\.\d+)?(e[+-]?\d+)?
+      scope: constant.numeric
+
+    - match: ','
+      set: template_decl
+
+    - match: '>'
+      pop: true
+
+  type_alias:
+    - include: comments
+
+    - match: \w+
+      scope: storage.type
+
+    - match: '='
+      set: type_alias_value
+
+  type_alias_value:
+    - include: type
+
+    - match: ;
+      pop: true
+
+  var_decl:
+    - include: comments
+
+    - match: \w+
+      scope: variable.other.readwrite
+
+    - match: ':'
+      set: var_decl_type
+
+    - match: '='
+      set: var_decl_init
+
+    - match: ;
+      pop: true
+
+  const_decl:
+    - include: comments
+
+    - match: \w+
+      scope: variable.other.constant
+
+    - match: ':'
+      set: var_decl_type
+
+    - match: '='
+      set: var_decl_init
+
+  else_body:
+    - match: '{'
+      set: compound_stmt
+
+  var_decl_type:
+    - include: type
+
+    - match: '='
+      set: var_decl_init
+
+    - match: ;
+      pop: true
+
+  var_decl_init:
+    - include: expr
+
+    - match: ;
+      pop: true
+
+    - match: \bif\b
+      scope: keyword.control
+      set: var_decl_init_2
+
+    - match: \belse\b
+      scope: keyword.control
+      set: else_body
+
+  var_decl_init_2:
+    - include: expr
+
+    - match: ;
+      pop: true
+
+  compound_stmt:
+    - include: stmt
+
+    - match: '}'
+      scope: punctuation.section.block.end
+      pop: true
+
+  stmt:
+    - include: comments
+
+    - match: \b(if|else|while|do|for|in|continue|break|return|discard|throw)\b
+      scope: keyword.control
+
+    - include: expr
+
+    - match: \bcomptime\b
+      scope: keyword.control
+
+    - match: \bvar\b
+      scope: storage.modifier keyword.declaration.var
+      push: var_decl
+
+    - match: \bconst\b
+      scope: storage.modifier keyword.declaration.const
+      push: const_decl
+
+    - match: \bmatch\b
+      scope: keyword.control
+      push: match_stmt
+
+    - match: '{'
+      scope: punctuation.section.block.begin
+      push: compound_stmt
+
+  match_stmt:
+    - include: expr
+
+    - match: '{'
+      scope: punctuation.section.block.begin
+      set: case_stmt
+
+  case_stmt:
+    - include: comments
+
+    - match: '}'
+      pop: true
+
+    - match: else
+      scope: keyword.control
+      set: case_stmt_else
+
+    - match: case
+      scope: keyword.control
+      set: case_stmt_pattern
+
+  case_stmt_pattern:
+    - include: comments
+    - include: expr
+
+    - match: '\w+(::\w+)*'
+      scope: entity.name.constant
+
+    - match: ':'
+      set: case_stmt_capture
+
+    - match: ->
+      set: case_stmt_body
+
+  case_stmt_capture:
+    - match: \w+
+      scope: variable.other.constant
+
+    - match: ->
+      set: case_stmt_body
+
+  case_stmt_else:
+    - match: ->
+      set: case_stmt_body
+
+  case_stmt_body:
+    - include: stmt
+
+    - match: case
+      scope: keyword.control
+      set: case_stmt_pattern
+
+    - match: '}'
+      pop: true
+
+  expr:
+    - include: comments
+    - include: number
+
+    - match: \"
+      push: string
+
+    - match: \'
+      push: char
+
+    - match: \b(true|false|none)\b
+      scope: constant.language
+
+    - match: \bthis\b
+      scope: variable.parameter
+
+    - match: \b(operator|try|must)\b
+      scope: keyword.control
+
+    - match: \b(as|is)\b
+      scope: keyword.control
+      push: cast_expr_target_type
+
+    - match: \b(\w+)\(
+      captures:
+        1: variable.function
+
+    - match: \b(\w+)!<
+      captures:
+        1: variable.function
+      push: template_type
+
+    - match: \bif\b
+      scope: keyword.control
+      push: inline_if
+
+  inline_if:
+    - include: expr
+
+    - match: \belse\b
+      scope: keyword.control
+      pop: true
+
+  cast_expr_target_type:
+    - match: (\w+)!<
+      captures:
+        1: storage.type
+      set: template_type
+
+    - match: \(
+      set: tuple_type
+
+    - match: \[
+      set: array_type
+
+    - match: \{
+      set: dict_type
+
+    - match: \w+
+      scope: storage.type
+      pop: true
+
+  comments:
+    - match: /\*
+      scope: comment.block
+      push: multiline_comment
+
+    - match: //
+      scope: comment.line
+      push: singleline_comment
+
+  singleline_comment:
+    - match: \n
+      scope: comment.line
+      pop: true
+
+    - match: .
+      scope: comment.block
+
+  multiline_comment:
+    - match: \*/
+      scope: comment.block
+      pop: true
+
+    - match: .
+      scope: comment.block
+
+  bin_int:
+    - match: \b0?b[01]+([ui][0-9]*)?
+      captures:
+        1: storage.type
+      scope: constant.numeric
+
+  oct_int:
+    - match: \b0?o[0-7]+([ui][0-9]*)?
+      captures:
+        1: storage.type
+      scope: constant.numeric
+
+  hex_int:
+    - match: \b0?x[0-9A-Fa-f]+([ui][0-9]*)?
+      captures:
+        1: storage.type
+      scope: constant.numeric
+
+  dec_int:
+    - match: \b[0-9]+([ui][0-9]*)?
+      captures:
+        1: storage.type
+      scope: constant.numeric
+
+  float:
+    - match: \b\d+\.\d+(e[+-]?\d+)?(f[0-9]+)?
+      captures:
+        2: storage.type
+      scope: constant.numeric
+
+  number:
+    - include: float
+    - include: bin_int
+    - include: oct_int
+    - include: hex_int
+    - include: dec_int
+
+  string:
+    - meta_scope: string.quoted.double
+
+    - match: \\.
+      scope: constant.character.escape
+
+    - match: \"([a-z0-9]*)
+      captures:
+        1: storage.type
+      pop: true
+
+  char:
+    - meta_scope: string.quoted.single
+
+    - match: \\.
+      scope: constant.character.escape
+
+    - match: \'([a-z0-9]*)
+      captures:
+        1: storage.type
+      pop: true

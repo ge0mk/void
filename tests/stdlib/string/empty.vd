@@ -1,0 +1,8 @@
+import std/core;
+import std/string;
+
+func main() {
+	var a: String;
+	assert(a.size() == 0u);
+	assert(a.isEmpty());
+}

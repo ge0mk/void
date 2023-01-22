@@ -1,0 +1,9 @@
+//> error "function redeclared with equal parameter types"
+
+import std/core;
+
+func foo() {}
+
+func foo() {}
+
+func main() {}

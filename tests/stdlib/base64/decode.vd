@@ -1,0 +1,11 @@
+import std/core;
+import std/string;
+import std/base64;
+
+func main() {
+	assert(must decode("bGlnaHQgd29yay4=") == "light work.");
+	assert(must decode("bGlnaHQgd29yaw==") == "light work");
+	assert(must decode("bGlnaHQgd29y") == "light wor");
+	assert(must decode("bGlnaHQgd28=") == "light wo");
+	assert(must decode("bGlnaHQgdw==") == "light w");
+}

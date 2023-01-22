@@ -1,0 +1,7 @@
+//> test-ec "3"
+
+import std/core;
+
+func main() -> int {
+	return 0 if 1 > 2 else 3;
+}

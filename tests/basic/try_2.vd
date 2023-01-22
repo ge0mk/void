@@ -1,0 +1,20 @@
+import std/core;
+
+func foo(err: bool) -> Result!<int, Error> {
+	if err {
+		throw Error::EINVAL;
+	} else {
+		return Result!<int, Error>::Ok(5);
+	}
+}
+
+func bar() -> Result!<void, Error> {
+	var v = try foo(false);
+	assert(v == 5);
+	return Result!<void, Error>::Ok;
+}
+
+func main() {
+	const r = bar();
+	assert(r is Ok);
+}

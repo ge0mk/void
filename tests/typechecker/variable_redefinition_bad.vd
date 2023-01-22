@@ -1,0 +1,12 @@
+//> error "redefinition of variable 'foo'"
+
+import std/core;
+import std/io;
+
+func main() -> int {
+	const foo = 1;
+	const foo = 5;
+	println(foo);
+
+	return 0;
+}

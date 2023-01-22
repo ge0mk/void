@@ -1,0 +1,5 @@
+//> error "non-void function doesn't return a value in all paths"
+
+import std/core;
+
+func main() -> int {}

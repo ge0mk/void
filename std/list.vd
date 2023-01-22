@@ -1,0 +1,361 @@
+import std/core;
+import std/libc/stdlib;
+
+template <T: type>
+struct List {
+	var data: vptr!<T>;
+	var size: uint;
+	var capacity: uint;
+
+	func constructor(this: &&List!<T>) -> void {
+		this.data = vptr::null() as vptr!<T>;
+		this.size = 0u;
+		this.capacity = 0u;
+	}
+
+	func constructor(this: &&List!<T>, other: List!<T>) -> void {
+		this.data = vptr::null() as vptr!<T>;
+		this.size = 0u;
+		this.capacity = 0u;
+
+		must this.grow(other.size());
+
+		for index in 0u..other.size() {
+			this.data[index].constructor(must other[index]);
+		}
+		this.size = other.size();
+	}
+
+	func constructor(this: &&List!<T>, range: Range!<T>) -> void {
+		this.data = vptr::null() as vptr!<T>;
+		this.size = 0u;
+		this.capacity = 0u;
+
+		must this.grow(range.size());
+
+		for element in range {
+			this.data[this.size].constructor(element);
+			this.size += 1u;
+		}
+		this.size = range.size();
+	}
+
+	func constructor(this: &&List!<T>, range: VRange!<T>) -> void {
+		this.data = vptr::null() as vptr!<T>;
+		this.size = 0u;
+		this.capacity = 0u;
+
+		must this.grow(range.size());
+
+		for element in range {
+			this.data[this.size].constructor(element);
+			this.size += 1u;
+		}
+		this.size = range.size();
+	}
+
+	func constructor(this: &&List!<T>, size: uint, value: T) -> void {
+		this.data = vptr::null() as vptr!<T>;
+		this.size = 0;
+		this.capacity = 0;
+
+		must this.grow(size);
+
+		for index in 0u..size {
+			this.data[index].constructor(value);
+		}
+		this.size = size;
+	}
+
+	operator =(this: &&List!<T>, other: List!<T>) -> void {
+		this.clear();
+		must this.grow(other.size());
+
+		for index in 0u..other.size() {
+			this.data[index].constructor(must other[index]);
+		}
+		this.size = other.size();
+	}
+
+	func destructor(this: &&List!<T>) -> void {
+		this.clear();
+
+		if this.data != vptr::null() {
+			libc::stdlib::free(this.data as vptr);
+		}
+	}
+
+	func size(this: List!<T>) -> uint {
+		return this.size;
+	}
+
+	func isEmpty(this: List!<T>) -> bool {
+		return this.size == 0u;
+	}
+
+	func data(this: List!<T>) -> cptr!<T> {
+		return this.data as cptr!<T>;
+	}
+
+	operator [](this: &List!<T>, index: uint) -> Result!<&T> {
+		if index >= this.size() {
+			throw Error::ERANGE;
+		}
+
+		return Ok(&this.data[index]);
+	}
+
+	operator [](this: &&List!<T>, index: uint) -> Result!<&&T> {
+		if index >= this.size() {
+			throw Error::ERANGE;
+		}
+
+		return Ok(&&this.data[index]);
+	}
+
+	operator [](this: &List!<T>, range: NumericRange!<uint>) -> Result!<Range!<T>> {
+		if range.end >= this.size() {
+			throw Error::ERANGE;
+		}
+
+		if range.start > range.end || range.step != 1u {
+			throw Error::EINVAL;
+		}
+
+		return Ok(Range!<T>(this.data as cptr!<T> + range.start, range.end - range.start));
+	}
+
+	operator [](this: &&List!<T>, range: NumericRange!<uint>) -> Result!<VRange!<T>> {
+		if range.end >= this.size() {
+			throw Error::ERANGE;
+		}
+
+		if range.start > range.end || range.step != 1u {
+			throw Error::EINVAL;
+		}
+
+		return Ok(VRange!<T>(this.data + range.start, range.end - range.start));
+	}
+
+	func first(this: List!<T>) -> Optional!<T> {
+		if this.isEmpty() {
+			return None;
+		}
+
+		return Some(this.data[0u]);
+	}
+
+	func last(this: List!<T>) -> Optional!<T> {
+		if this.isEmpty() {
+			return None;
+		}
+
+		return Some(this.data[this.size - 1u]);
+	}
+
+	func range(this: &List!<T>) -> Range!<T> {
+		return Range!<T>(this.data as cptr!<T>, this.size);
+	}
+
+	func range(this: &&List!<T>) -> VRange!<T> {
+		return VRange!<T>(this.data, this.size);
+	}
+
+	func iterator(this: &List!<T>) -> RangeIterator!<T> {
+		return RangeIterator!<T>(this.data as cptr!<T>, this.data as cptr!<T> + this.size);
+	}
+
+	func iterator(this: &&List!<T>) -> VRangeIterator!<T> {
+		return VRangeIterator!<T>(this.data, this.data + this.size);
+	}
+
+	func find(this: List!<T>, value: T) -> Optional!<uint> {
+		for index in 0u..this.size() {
+			if this.data[index] == value {
+				return Some(index);
+			}
+		}
+
+		return None;
+	}
+
+	func contains(this: List!<T>, value: T) -> bool {
+		return this.find(value) is Some;
+	}
+
+	func append(this: &&List!<T>, value: T) -> Result!<void> {
+		try this.grow();
+
+		this.data[this.size].constructor(value);
+		this.size += 1u;
+
+		return Ok;
+	}
+
+	func append(this: &&List!<T>, values: Range!<T>) -> Result!<void> {
+		try this.grow(this.size() + values.size());
+
+		var index = 0u;
+		for element in values {
+			this.data[this.size + index].constructor(element);
+			index += 1u;
+		}
+		this.size += values.size();
+
+		return Ok;
+	}
+
+	func append(this: &&List!<T>, values: List!<T>) -> Result!<void> {
+		return this.append(values.range());
+	}
+
+	func insert(this: &&List!<T>, index: uint, value: T) -> Result!<void> {
+		if index > this.size() {
+			throw Error::ERANGE;
+		}
+
+		try this.grow();
+		memmove!<T>(this.data + index + 1, this.data as cptr!<T> + index, this.size - index);
+
+		this.data[index].constructor(value);
+		this.size += 1u;
+
+		return Ok;
+	}
+
+	func insert(this: &&List!<T>, index: uint, values: Range!<T>) -> Result!<void> {
+		if index > this.size() {
+			throw Error::ERANGE;
+		}
+
+		try this.grow(this.size() + values.size());
+		memmove!<T>(this.data + index + values.size(), this.data as cptr!<T> + index, this.size - index);
+
+		var offset = index;
+		for element in values {
+			this.data[offset].constructor(element);
+			offset += 1u;
+		}
+		this.size += values.size();
+
+		return Ok;
+	}
+
+	func insert(this: &&List!<T>, index: uint, values: List!<T>) -> Result!<void> {
+		return this.insert(index, values.range());
+	}
+
+	func remove(this: &&List!<T>, index: uint) -> Result!<void> {
+		if index >= this.size() {
+			throw Error::ERANGE;
+		}
+
+		this.data[index].destructor();
+		this.size -= 1u;
+		memmove!<T>(this.data + index, this.data as cptr!<T> + index + 1, this.size - index);
+		return Ok;
+	}
+
+	func remove(this: &&List!<T>, range: NumericRange!<uint>) -> Result!<void> {
+		if range.end >= this.size() {
+			throw Error::ERANGE;
+		}
+
+		if range.start > range.end || range.step != 1u {
+			throw Error::EINVAL;
+		}
+
+		for index in range {
+			this.data[index].destructor();
+		}
+
+		this.size -= range.end - range.start;
+		memmove!<T>(this.data + range.start, this.data as cptr!<T> + range.end, this.size - range.start);
+
+		return Ok;
+	}
+
+	func removeLast(this: &&List!<T>) -> Result!<void> {
+		if this.size == 0 {
+			throw Error::ERANGE;
+		}
+
+		return this.remove(this.size - 1);
+	}
+
+	func clear(this: &&List!<T>) -> void {
+		for index in 0u..this.size() {
+			this.data[index].destructor();
+		}
+		this.size = 0u;
+	}
+
+	operator ==(this: List!<T>, other: List!<T>) -> bool {
+		if this.size() != other.size() {
+			return false;
+		}
+
+		for i in 0u..this.size() {
+			if this.data[i] != other.data[i] {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	operator +(this: List!<T>, value: T) -> List!<T> {
+		var tmp = this;
+		must tmp.append(value);
+		return tmp;
+	}
+
+	operator +(this: List!<T>, other: List!<T>) -> List!<T> {
+		var tmp = this;
+		must tmp.append(other);
+		return tmp;
+	}
+
+	operator +=(this: &&List!<T>, value: T) -> void {
+		must this.append(value);
+	}
+
+	operator +=(this: &&List!<T>, other: List!<T>) -> void {
+		must this.append(other);
+	}
+
+	// ensure that memory for at least one more element is available
+	func grow(this: &&List!<T>) -> Result!<void> {
+		if this.size < this.capacity {
+			return Ok;
+		}
+
+		return this.grow(this.size * 3u / 2u + 1u);
+	}
+
+	// ensure that memory for at least 'new_capacity' elements is available
+	func grow(this: &&List!<T>, new_capacity: uint) -> Result!<void> {
+		if new_capacity < this.capacity {
+			return Ok;
+		}
+
+		const old_capacity = this.capacity;
+
+		if this.data == vptr::null() {
+			this.data = libc::stdlib::malloc(new_capacity * sizeOf!<T>()) as vptr!<T>;
+		} else {
+			this.data = libc::stdlib::realloc(this.data as vptr, new_capacity * sizeOf!<T>()) as vptr!<T>;
+		}
+
+		if this.data == vptr::null() {
+			throw Error::ENOMEM;
+		}
+
+		this.capacity = new_capacity;
+		if new_capacity > old_capacity {
+			memset!<T>(this.data + old_capacity, '\0'b, new_capacity - old_capacity);
+		}
+
+		return Ok;
+	}
+}

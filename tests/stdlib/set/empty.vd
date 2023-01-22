@@ -1,0 +1,8 @@
+import std/core;
+import std/set;
+
+func main() {
+	var a = Set!<int>();
+	assert(a.size() == 0);
+	assert(a.isEmpty());
+}

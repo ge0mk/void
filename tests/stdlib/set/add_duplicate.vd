@@ -1,0 +1,9 @@
+import std/core;
+import std/set;
+
+func main() {
+	var a = Set!<int>();
+	must a.add(0);
+	must a.add(0);
+	assert(a.size() == 1u);
+}

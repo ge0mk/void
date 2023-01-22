@@ -1,0 +1,20 @@
+//> output "+Foo"
+//> output "-Foo"
+
+import std/core;
+import std/string;
+import std/io;
+
+struct Foo {
+	func constructor(this: &&Foo) {
+		println("+Foo");
+	}
+
+	func destructor(this: &&Foo) {
+		println("-Foo");
+	}
+}
+
+func main() {
+	var x: Foo;
+}

@@ -1,0 +1,21 @@
+//> output "hello"
+//> output "world"
+
+import std/core;
+import std/io;
+import std/string;
+
+struct Foo {
+	func constructor(this: &&Foo) -> void {
+		println("hello");
+	}
+
+	func destructor(this: &&Foo) -> void {
+		println("world");
+	}
+}
+
+func main() -> int {
+	const a = Foo();
+	return 0;
+}

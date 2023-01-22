@@ -1,0 +1,7 @@
+//> test-ec "42"
+
+import std/core;
+
+func main() -> int {
+	exit(42);
+}

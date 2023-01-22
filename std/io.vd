@@ -1,0 +1,53 @@
+import std/core;
+import std/libc/stdio;
+import std/string;
+
+func fprint(f: vptr!<FILE>, msg: String) -> void {
+	const bytes = msg.bytes();
+	discard libc::stdio::fwrite(bytes.data() as cptr, 1u, bytes.size(), f);
+}
+
+func fprint(f: vptr!<FILE>, val: byte) -> void {
+	discard libc::stdio::fputc(val as i32, f);
+}
+
+func fprintln(f: vptr!<FILE>, msg: String) -> void {
+	fprint(f, msg);
+	fprint(f, '\n'b);
+}
+
+func print(msg: String) -> void {
+	fprint(libc::stdio::stdout(), msg);
+}
+
+func println(msg: String) -> void {
+	fprintln(libc::stdio::stdout(), msg);
+}
+
+func print(val: byte) -> void {
+	fprint(libc::stdio::stdout(), val);
+}
+
+func eprint(msg: String) -> void {
+	fprint(libc::stdio::stderr(), msg);
+}
+
+func eprintln(msg: String) -> void {
+	fprintln(libc::stdio::stderr(), msg);
+}
+
+func eprint(val: byte) -> void {
+	fprint(libc::stdio::stderr(), val);
+}
+
+func assert(cond: bool, msg: String) -> void {
+	if !cond {
+		eprintln(msg);
+		abort();
+	}
+}
+
+func panic(msg: String) -> never {
+	eprintln(msg);
+	abort();
+}

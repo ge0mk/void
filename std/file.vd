@@ -1,0 +1,315 @@
+import std/core;
+import std/list;
+import std/string;
+import std/libc/errno;
+import std/libc/fcntl;
+import std/libc/stdlib;
+import std/libc/stdio;
+
+enum OpenMode {
+	case read   = 1;
+	case write  = 2;
+	case trunc  = 4;
+	case append = 8;
+
+	operator |(this: OpenMode, other: OpenMode) -> OpenMode = default;
+	operator &(this: OpenMode, other: OpenMode) -> OpenMode = default;
+
+	func toStringForFOpen(this: OpenMode) -> Result!<String> {
+		var str: String;
+
+		if this & (OpenMode::read | OpenMode::write) == OpenMode::read {
+			str += 'r'b;
+		} else if this & (OpenMode::read | OpenMode::write) == OpenMode::write {
+			if this & OpenMode::append == OpenMode::append {
+				str += 'a'b;
+			} else {
+				str += 'w'b;
+			}
+		} else if this & (OpenMode::read | OpenMode::write) == (OpenMode::read | OpenMode::write) {
+			if this & OpenMode::trunc == OpenMode::trunc {
+				str += "w+";
+			} else if this & OpenMode::append == OpenMode::append {
+				str += "a+";
+			} else {
+				str += "r+";
+			}
+		} else {
+			throw Error::EINVAL;
+		}
+
+		return Ok(str + '\0'b);
+	}
+
+	func toUnixMode(this: OpenMode, create: bool) -> Result!<i32> {
+		const O_RDONLY   = 0i32;
+		const O_WRONLY   = 1i32;
+		const O_RDWR     = 2i32;
+		const O_ACCMODE  = 3i32;
+		const O_CREAT    = 64i32;
+		const O_EXCL     = 128i32;
+		const O_NOCTTY   = 256i32;
+		const O_TRUNC    = 512i32;
+		const O_APPEND   = 1024i32;
+		const O_NONBLOCK = 2048i32;
+
+		var flags = 0i32;
+		if this & (OpenMode::read | OpenMode::write) == OpenMode::read {
+			flags = O_RDONLY;
+		} else if this & (OpenMode::read | OpenMode::write) == OpenMode::write {
+			flags = O_WRONLY;
+		} else if this & (OpenMode::read | OpenMode::write) == (OpenMode::read | OpenMode::write) {
+			flags = O_RDWR;
+		} else {
+			throw Error::EINVAL;
+		}
+
+		if this & OpenMode::trunc == OpenMode::trunc {
+			flags |= O_TRUNC;
+		}
+
+		if this & OpenMode::append == OpenMode::append {
+			flags |= O_APPEND;
+		}
+
+		if create {
+			flags |= O_CREAT;
+		}
+
+		return Ok(flags);
+	}
+}
+
+enum FilePermissions {
+	case uread  = 0o0400;
+	case uwrite = 0o0200;
+	case uexec  = 0o0100;
+
+	case gread  = 0o0040;
+	case gwrite = 0o0020;
+	case gexec  = 0o0010;
+
+	case oread  = 0o0004;
+	case owrite = 0o0002;
+	case oexec  = 0o0001;
+
+	case setuid = 0o4000;
+	case setgid = 0o2000;
+	case sticky = 0o1000;
+
+	operator |(this: FilePermissions, other: FilePermissions) -> FilePermissions = default;
+	operator &(this: FilePermissions, other: FilePermissions) -> FilePermissions = default;
+}
+
+struct File {
+	var c_file: vptr!<FILE>;
+	var ref_count: vptr!<uint>;
+
+	func constructor(this: &&File, c_file: vptr!<FILE>, ref_count: vptr!<uint>) -> void {
+		this.c_file = c_file;
+		this.ref_count = ref_count;
+		if this.ref_count != vptr::null() {
+			this.ref_count.value()++;
+		}
+	}
+
+	func constructor(this: &&File, other: File) -> void {
+		this.c_file = other.c_file;
+		this.ref_count = other.ref_count;
+		if this.ref_count != vptr::null() {
+			this.ref_count.value()++;
+		}
+	}
+
+	operator =(this: &&File, other: File) -> void {
+		this.destructor();
+		this.constructor(other);
+	}
+
+	func destructor(this: &&File) -> void {
+		if this.ref_count == vptr::null() {
+			return;
+		}
+
+		this.ref_count.value()--;
+		if this.ref_count.value() == 0u {
+			libc::stdio::fclose(this.c_file);
+			libc::stdlib::free(this.ref_count as vptr);
+		}
+	}
+
+	func open(path: String, mode: OpenMode) -> Result!<File> {
+		const cpath = path + '\0'b;
+		const flags = try mode.toUnixMode(false);
+		const fd = fcntl::open(cpath.data(), flags, 0 as u32);
+		if fd == -1 as i32 {
+			throw errno();
+		}
+
+		const cmode = try mode.toStringForFOpen();
+		const c_file = fdopen(fd, cmode.data());
+		if c_file == vptr::null() {
+			throw errno();
+		}
+
+		const ref_count = malloc(sizeOf!<uint>()) as vptr!<uint>;
+		if ref_count == vptr::null() {
+			throw errno();
+		}
+		ref_count.value().constructor(0u);
+
+		return Ok(File(c_file, ref_count));
+	}
+
+	func create(path: String, mode: OpenMode, permissions: FilePermissions) -> Result!<File> {
+		const cpath = path + '\0'b;
+		const flags = try mode.toUnixMode(true);
+		const fd = fcntl::open(cpath.data(), flags, permissions as u32);
+		if fd == -1 as i32 {
+			throw errno();
+		}
+
+		const c_mode = try mode.toStringForFOpen();
+		const c_file = fdopen(fd, c_mode.data());
+		if c_file == vptr::null() {
+			throw errno();
+		}
+
+		const ref_count = malloc(sizeOf!<uint>()) as vptr!<uint>;
+		if ref_count == vptr::null() {
+			throw errno();
+		}
+		ref_count.value().constructor(0u);
+
+		return Ok(File(c_file, ref_count));
+	}
+
+	func readByte(this: &&File) -> Result!<byte> {
+		const r = fgetc(this.c_file);
+		const err = ferror(this.c_file);
+		if err != Error::OK {
+			throw err;
+		} else if r < 0 { // unexpected end of file
+			throw Error::EOF;
+		}
+
+		return Ok(r as byte);
+	}
+
+	func readString(this: &&File, size: uint) -> Result!<String> {
+		var result = String(size, '\0'b);
+
+		const r = fread(result.data as vptr, 1u, size, this.c_file);
+		const err = ferror(this.c_file);
+		if err != Error::OK {
+			throw err;
+		}
+
+		result.size = r;
+		return Ok(result);
+	}
+
+	template<T: type>
+	func readOne(this: &&File) -> Result!<T> {
+		var result: T;
+
+		const r = fread(vptr!<T>::addressOf(&&result) as vptr, sizeOf!<T>(), 1u, this.c_file);
+		const err = ferror(this.c_file);
+		if err != Error::OK {
+			throw err;
+		} else if r != 1 { // unexpected end of file
+			throw Error::EOF;
+		}
+
+		return Ok(result);
+	}
+
+	template<T: type>
+	func readSome(this: &&File, count: uint) -> Result!<List!<T>> {
+		var buffer = libc::stdlib::malloc(count * sizeOf!<T>()) as vptr!<T>;
+
+		const r = fread(buffer as vptr, sizeOf!<T>(), count, this.c_file);
+		const err = ferror(this.c_file);
+		if err != Error::OK {
+			libc::stdlib::free(buffer as vptr);
+			throw err;
+		}
+
+		const result = List!<T>(Range!<T>(buffer as cptr!<T>, r));
+		libc::stdlib::free(buffer as vptr);
+		return Ok(result);
+	}
+
+	// read entire file into String in 4KiB steps
+	func readAll(this: &&File) -> Result!<String> {
+		var result = "";
+		while !this.eof() {
+			try result.append(try this.readString(4096u));
+		}
+		return Ok(result);
+	}
+
+	template<T: type>
+	func readAll(this: &&File) -> Result!<List!<T>> {
+		var result = List!<T>();
+		while !this.eof() {
+			try result.append(try this.readSome!<T>(1024u));
+		}
+		return Ok(result);
+	}
+
+	func writeByte(this: &&File, value: byte) -> Result!<void> {
+		const r = fputc(value as i32, this.c_file);
+		if r < 0 {
+			throw ferror(this.c_file);
+		}
+
+		return Ok;
+	}
+
+	func writeString(this: &&File, str: String) -> Result!<void> {
+		const r = fwrite(str.data() as cptr, 1u, str.size(), this.c_file);
+		if r != str.size() {
+			throw ferror(this.c_file);
+		}
+
+		return Ok;
+	}
+
+	template<T: type>
+	func writeOne(this: &&File, value: T) -> Result!<void> {
+		const tmp = value;
+		const r = fwrite(cptr!<T>::addressOf(&tmp) as cptr, sizeOf!<T>(), 1, this.c_file);
+		if r != 1 {
+			throw ferror(this.c_file);
+		}
+
+		return Ok;
+	}
+
+	template<T: type>
+	func writeList(this: &&File, values: List!<T>) -> Result!<void> {
+		const r = fwrite(values.data() as cptr, sizeOf!<T>(), values.size(), this.c_file);
+		if r != values.size() {
+			throw ferror(this.c_file);
+		}
+
+		return Ok;
+	}
+
+	func eof(this: File) -> bool {
+		return libc::stdio::feof(this.c_file);
+	}
+
+	func stdin() -> File {
+		return File(libc::stdio::stdin(), vptr::null() as vptr!<uint>);
+	}
+
+	func stdout() -> File {
+		return File(libc::stdio::stdout(), vptr::null() as vptr!<uint>);
+	}
+
+	func stderr() -> File {
+		return File(libc::stdio::stderr(), vptr::null() as vptr!<uint>);
+	}
+}

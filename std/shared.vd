@@ -1,0 +1,56 @@
+import std/core;
+import std/libc/stdlib;
+
+template <T: type>
+struct refc {
+	var refs: uint;
+	var value: T;
+
+	func constructor(this: &&refc!<T>, value: T) {
+		this.refs = 0;
+		this.value = value;
+	}
+
+	func destructor(this: &&refc!<T>) {}
+}
+
+template <T: type>
+struct Shared {
+	var data: vptr!<refc!<T>>;
+
+	func constructor(this: &&Shared!<T>, data: vptr!<refc!<T>>) {
+		this.data = data;
+		this.data.value().refs++;
+	}
+
+	func constructor(this: &&Shared!<T>, other: Shared!<T>) {
+		this.data = other.data;
+		this.data.value().refs++;
+	}
+
+	func destructor(this: &&Shared!<T>) {
+		this.data.value().refs--;
+		if this.data.value().refs == 0 {
+			this.data.value().destructor();
+			libc::stdlib::free(this.data as vptr);
+		}
+	}
+
+	func new(value: T) -> Shared!<T> {
+		var data = libc::stdlib::malloc(sizeOf!<refc!<T>>()) as vptr!<refc!<T>>;
+		data.value().constructor(value);
+		return Shared!<T>(data);
+	}
+
+	operator unwrap(this: Shared!<T>) -> T {
+		return this.data.value().value;
+	}
+
+	operator unwrap(this: &Shared!<T>) -> &T {
+		return &this.data.value().value;
+	}
+
+	operator unwrap(this: &&Shared!<T>) -> &&T {
+		return &&this.data.value().value;
+	}
+}

@@ -1,0 +1,13 @@
+import std/core;
+
+enum Foo {
+	case A;
+	case B;
+	case C;
+
+	operator |(this: Foo, other: Foo) -> Foo = default;
+}
+
+func main() {
+	var x = Foo::A | Foo::C;
+}

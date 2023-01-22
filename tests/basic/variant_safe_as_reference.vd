@@ -1,0 +1,18 @@
+import std/core;
+
+variant Foo {
+	case A: int;
+	case B: bool;
+}
+
+func main() {
+	var a = Foo::A(5);
+	if var b = &&a as A {
+		b = 42;
+	}
+
+	match a {
+		case A: x -> assert(x == 42);
+		else -> assert(false);
+	}
+}

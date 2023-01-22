@@ -1,0 +1,11 @@
+//> error "function redeclared with equal template parameters"
+
+import std/core;
+
+template <T: type>
+func foo() {}
+
+template <T: type>
+func foo() {}
+
+func main() {}

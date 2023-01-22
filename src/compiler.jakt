@@ -1,0 +1,239 @@
+import utility { Span, loadFile, CompilerOptions, SymbolType }
+import lexer
+import ast
+import parser
+import program
+import typechecker
+import codegenerator
+
+import jakt::libc::io { system }
+import jakt::platform { platform_module }
+import platform_module("jakt::platform::fs") { current_directory }
+import jakt::platform::utility
+import jakt::file_iterator
+
+struct Compiler {
+	options: CompilerOptions
+	program: Program
+
+	fn compile(options: CompilerOptions, path: String, output_filename: String?, link_libraries: [String]) throws -> c_int {
+		mut program = Compiler::checkProgram(options, path)
+
+		if program.hasErrors() {
+			return 1
+		}
+
+		let llvm_ir_file = codegen(options, program)
+
+		if program.hasErrors() {
+			return 1
+		}
+
+		mut clang_args = [
+			"clang", llvm_ir_file, "-o",
+			match output_filename.has_value() {
+				true => output_filename!
+				else => options.build_dir + "/" + program.root_module!.name.replace(replace: "/", with: "_")
+			},
+			"-lc", "-lm"
+		]
+
+		if options.optimize {
+			clang_args.push("-O3")
+		}
+
+		if options.strip_symbol_names {
+			clang_args.push("-s")
+		}
+
+		if options.generate_debug_symbols {
+			clang_args.push("-g")
+		}
+
+		if options.link_static {
+			clang_args.push("-static")
+		}
+
+		for lib in link_libraries {
+			clang_args.push("-l" + lib)
+		}
+
+		mut result = system(join(clang_args, separator: " ").c_string())
+
+		unsafe {
+			cpp {
+				"result = WEXITSTATUS(result);"
+			}
+		}
+
+		return result;
+	}
+
+	fn parse(this, file: FileInfo, import_path: String) throws -> ParsedModule {
+		let tokens = Lexer::lex(options: .options, file, source: file.source)
+		if .options.dbg_lexer {
+			println("--- lexer ---")
+			for token in tokens {
+				println("{}", token.dump())
+			}
+		}
+
+		let parsed_module = Parser::parse(options: .options, file, tokens, name: import_path)
+		if .options.dbg_parser {
+			println("--- parser ---")
+			print("{}", parsed_module.dump(indent: ""))
+		}
+
+		return parsed_module
+	}
+
+	fn checkImport(mut this, mut current_module: Module, search_path: String, import_name: String) throws -> [u64] {
+		let import_path = Path::from_string(search_path).join(import_name)
+		mut imported_modules: [u64] = []
+
+		if File::exists(import_path.to_string() + ".vd") {
+			imported_modules.push(
+				.importModule(current_module, import_path: import_path.to_string()).id
+			)
+		} else {
+			let file_iterator = RecursiveFileIterator::make(directory: import_path, extension: "vd")
+			for file in file_iterator {
+				let import_path = file.replace_extension(new_extension: "")
+				guard File::exists(import_path.to_string() + ".vd") else {
+					continue
+				}
+
+				imported_modules.push(.importModule(
+					current_module,
+					import_path: import_path.to_string(),
+				).id)
+			}
+		}
+
+		return imported_modules
+	}
+
+	fn importModule(mut this, mut current_module: Module, import_path: String) throws -> Module {
+		for module in .program.modules {
+			if module.name == import_path {
+				return module
+			}
+		}
+
+		if import_path.contains("std/libc") and not .options.additional_llvm_ir_files.contains("libc.ll") {
+			.options.additional_llvm_ir_files.push("libc.ll")
+		}
+
+		return .checkModule(path: import_path + ".vd", import_path)
+	}
+
+	fn checkModule(mut this, path: String, import_path: String) throws -> Module {
+		let file = loadFile(path)
+		let parsed_module = .parse(file, import_path)
+		mut module = .program.createModule(
+			parsed_module
+		)
+
+		for imp in parsed_module.imports {
+			mut imported_modules: [u64] = []
+
+			for search_path in .options.import_search_paths {
+				imported_modules = .checkImport(
+					current_module: module,
+					search_path,
+					import_name: imp.name
+				)
+
+				if not imported_modules.is_empty() {
+					break
+				}
+			}
+
+			if imported_modules.is_empty() {
+				module.error("no matching module or directory found '" + imp.name + "'", imp.span)
+			}
+
+			for imported_module in imported_modules {
+				module.imports.add(imported_module)
+			}
+		}
+
+		return module
+	}
+
+	fn checkProgram(options: CompilerOptions, path: String) throws -> Program {
+		mut compiler = Compiler(options, program: Program(
+			modules: [],
+			types: [],
+			functions: [],
+		))
+
+		guard File::exists(path) else {
+			eprintln("file {} not found", path)
+			return compiler.program
+		}
+
+		compiler.program.root_module = compiler.checkModule(path, import_path: Path::from_string(path).basename(strip_extension: true))
+		Typechecker::checkProgram(options, program: compiler.program)
+
+		if not compiler.program.main.has_value() {
+			compiler.program.root_module!.error("no main function found", Span::empty())
+		}
+
+		return compiler.program
+	}
+}
+
+fn main(args: [String]) -> c_int {
+	let compiler_path = Path::from_string(args[0])
+	let compiler_binary_dir = compiler_path.parent()
+	let compiler_install_dir = compiler_binary_dir.parent().to_string()
+
+	let root_module_path = Path::from_string(args[1])
+	let root_module_dir = root_module_path.parent().to_string()
+
+	let cwd = current_directory()
+
+	let options = CompilerOptions(
+		dbg_lexer: args.contains("-dl")
+		dbg_parser: args.contains("-dp")
+		dbg_typechecker: args.contains("-dt")
+		dbg_codegen: args.contains("-dc")
+
+		codegen_only_reachable: args.contains("-r")
+		codegen_bitcode: args.contains("-bc")
+
+		optimize: args.contains("-O")
+		link_static: args.contains("-static")
+		generate_debug_symbols: args.contains("-d")
+		strip_symbol_names: args.contains("-s")
+
+		build_dir: "build"
+		additional_llvm_ir_files: []
+
+		symbol_type: match args.contains("-s") {
+			true => SymbolType::Id
+			else => SymbolType::Signature
+		}
+
+		import_search_paths: [
+			compiler_install_dir,
+			root_module_dir,
+			cwd
+		]
+	)
+
+	mut output_filename: String? = None
+	mut link_libraries: [String] = []
+	for i in 1..(args.size() - 1) {
+		if args[i] == "-o" {
+			output_filename = args[i + 1]
+			i += 1
+		} else if args[i] == "-l" {
+			link_libraries.push(args[i + 1])
+			i += 1
+		}
+	}
+
+	return Compiler::compile(options, path: root_module_path.to_string(), output_filename, link_libraries) as! c_int
+}

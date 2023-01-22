@@ -1,0 +1,19 @@
+import std/core;
+import std/list;
+
+func main() {
+	var a: List!<int>;
+	assert(a.size() == 0u);
+
+	must a.append(1);
+	must a.append(2);
+	must a.append(3);
+
+	assert(a.size() == 3u);
+	assert((must a[0u]) == 1);
+	assert((must a[1u]) == 2);
+	assert((must a[2u]) == 3);
+
+	a.clear();
+	assert(a.size() == 0u);
+}

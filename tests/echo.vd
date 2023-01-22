@@ -1,0 +1,15 @@
+//> test-arg "hello"
+//> test-arg "world"
+//> output "hello world"
+
+import std/core;
+import std/string;
+import std/io;
+
+func main(args: Range!<String>) {
+    for arg in args {
+        print(arg);
+        print(' 'b);
+    }
+    println("");
+}

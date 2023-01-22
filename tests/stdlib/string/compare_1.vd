@@ -1,0 +1,10 @@
+import std/core;
+import std/string;
+
+func main() {
+	assert("aaaa" < "bb");
+	assert("bbbb" > "aa");
+	assert("aaa" == "aaa");
+	assert("aaa" != "aa");
+	assert("aa" != "aaa");
+}

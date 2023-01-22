@@ -1,0 +1,9 @@
+//> test-ec "5"
+
+import std/core;
+import std/box;
+
+func main() -> int {
+	var a: Box!<int> = 5;
+	return a;
+}

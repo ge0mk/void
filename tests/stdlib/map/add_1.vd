@@ -1,0 +1,13 @@
+import std/core;
+import std/map;
+
+func main() {
+	var a: Map!<uint, int>;
+	assert(a.isEmpty());
+	must a.set(0u, 10);
+	assert(!a.isEmpty());
+	assert(a.size() == 1u);
+	assert(a.contains(0u));
+	assert(a.get(0u) is Some);
+	assert(a.get(0u).value() == 10);
+}

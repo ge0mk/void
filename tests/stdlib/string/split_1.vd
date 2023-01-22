@@ -1,0 +1,11 @@
+import std/core;
+import std/string;
+
+func main() {
+	const a = "hello world 123";
+	const b = must a.split(' 'b);
+	assert(b.size() == 3u);
+	assert((must b[0u]) == "hello");
+	assert((must b[1u]) == "world");
+	assert((must b[2u]) == "123");
+}

@@ -1,0 +1,7 @@
+//> error "break stmt must be inside a loop"
+
+import std/core;
+
+func main() {
+	break;
+}
