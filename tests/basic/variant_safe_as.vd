@@ -1,5 +1,3 @@
-//> test-ec "2"
-
 import std/core;
 
 variant Foo {
@@ -7,16 +5,11 @@ variant Foo {
 	case B: bool;
 }
 
-func main() -> int {
-	var a = Foo::A(5) as A else {
-		return 1;
-	}
+func main() {
+	const a = Foo::A(5) as A;
+	assert(a is Some);
+	assert(a.value() == 5);
 
-	assert(a == 5);
-
-	var b = Foo::B(true) as A else {
-		return 2;
-	}
-
-	return 0;
+	const b = Foo::B(true) as A;
+	assert(b is None);
 }

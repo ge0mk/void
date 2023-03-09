@@ -1,0 +1,517 @@
+import std/core;
+import std/list;
+import std/io;
+import std/shared;
+import std/string;
+
+import program;
+
+func createCoreDecls(module: &&Module) -> void {
+	module.program.any_concept = module.program.addConcept(Concept::Any("type"));
+
+	module.program.void_type = module.createType("void", TypeBody::Void);
+	module.program.never_type = module.createType("never", TypeBody::Void);
+
+	module.createIntTypes();
+	module.createPtrTypes();
+
+	module.createCoreReflectionFunctions();
+
+	module.createFloatTypeTemplate();
+
+	const empty_parameter_types = List!<TypeRef>();
+	const any_concept = module.program.any_concept;
+
+	var int_cast_func = module.createFunction("intCast", empty_parameter_types, TypeRef::unknown(), InlineBuiltinFunction::IntCast(TypeRef::unknown(), TypeRef::unknown()));
+	var int_cast_func_decl = int_cast_func.lock().value();
+	int_cast_func_decl.template_parameters.append(TemplateParameterDecl("Source", any_concept, false));
+	int_cast_func_decl.template_parameters.append(TemplateParameterDecl("Target", any_concept, false));
+
+	var float_cast_func = module.createFunction("floatCast", empty_parameter_types, TypeRef::unknown(), InlineBuiltinFunction::FloatCast(TypeRef::unknown(), TypeRef::unknown()));
+	var float_cast_func_decl = float_cast_func.lock().value();
+	float_cast_func_decl.template_parameters.append(TemplateParameterDecl("Source", any_concept, false));
+	float_cast_func_decl.template_parameters.append(TemplateParameterDecl("Target", any_concept, false));
+
+	var int_to_float = module.createFunction("intToFloat", empty_parameter_types, TypeRef::unknown(), InlineBuiltinFunction::IntToFloat(TypeRef::unknown(), TypeRef::unknown()));
+	var int_to_float_decl = int_to_float.lock().value();
+	int_to_float_decl.template_parameters.append(TemplateParameterDecl("Source", any_concept, false));
+	int_to_float_decl.template_parameters.append(TemplateParameterDecl("Target", any_concept, false));
+
+	var float_to_int = module.createFunction("floatToInt", empty_parameter_types, TypeRef::unknown(), InlineBuiltinFunction::FloatToInt(TypeRef::unknown(), TypeRef::unknown()));
+	var float_to_int_decl = float_to_int.lock().value();
+	float_to_int_decl.template_parameters.append(TemplateParameterDecl("Source", any_concept, false));
+	float_to_int_decl.template_parameters.append(TemplateParameterDecl("Target", any_concept, false));
+}
+
+func createIntTypes(module: &&Module) -> void {
+	module.createBoolType();
+
+	// requires bool type for comparision operators
+	module.createPtrSizedIntType(true);
+	module.createPtrSizedIntType(false);
+
+	// requires uint-literal concept created by ptr-sized uint type
+	module.createIntTypeTemplate(true);
+	module.createIntTypeTemplate(false);
+
+	// requires ptr-sized signed int type for <=> operator
+	module.createByteType();
+}
+
+func createNumericCastInstance(module: &&Module, name: String, source: TypeRef, target: TypeRef) -> FunctionRef {
+	var function = module.createFunction(name);
+	var decl = function.lock().value();
+
+	decl.template_parameters.append(TemplateParameterDecl("Source", module.program.any_concept, false, TemplateParameter::Type(source)));
+	decl.template_parameters.append(TemplateParameterDecl("Target", module.program.any_concept, false, TemplateParameter::Type(target)));
+
+	decl.parameter_types.append(source);
+	decl.return_type = target;
+
+	if name == "intCast" {
+		decl.body = FunctionBody::InlineBuiltin(InlineBuiltinFunction::IntCast(target, source));
+	} else if name == "floatCast" {
+		decl.body = FunctionBody::InlineBuiltin(InlineBuiltinFunction::FloatCast(target, source));
+	} else if name == "intToFloat" {
+		decl.body = FunctionBody::InlineBuiltin(InlineBuiltinFunction::IntToFloat(target, source));
+	} else if name == "floatToInt" {
+		decl.body = FunctionBody::InlineBuiltin(InlineBuiltinFunction::FloatToInt(target, source));
+	} else {
+		panic("invalid numeric cast name: " + name);
+	}
+
+	return function;
+}
+
+func createBitDefaultConstructor(decl: &&TypeDecl, type: TypeRef) -> void {
+	var parameter_types: List!<TypeRef>;
+	parameter_types.append(type.varRef());
+	decl.default_constructor = decl.createMemberFunction("constructor", parameter_types, decl.getProgramRef().void_type, InlineBuiltinFunction::BitStoreNull(type));
+}
+
+func createBitCopyConstructor(decl: &&TypeDecl, type: TypeRef) -> void {
+	var parameter_types: List!<TypeRef>;
+	parameter_types.append(type.varRef());
+	parameter_types.append(type.base());
+	decl.copy_constructor = decl.createMemberFunction("constructor", parameter_types, decl.getProgramRef().void_type, InlineBuiltinFunction::BitStoreValue(type));
+}
+
+func createBitDestructor(decl: &&TypeDecl, type: TypeRef) -> void {
+	var parameter_types: List!<TypeRef>;
+	parameter_types.append(type.varRef());
+	decl.destructor = decl.createMemberFunction("destructor", parameter_types, decl.getProgramRef().void_type, InlineBuiltinFunction::NoOp(type));
+}
+
+func createUnaryOperator(decl: &&TypeDecl, type: TypeRef, op: String, body: InlineBuiltinFunction) -> void {
+	decl.createUnaryOperator(op, type.base(), type.base(), body);
+}
+
+func createMutatingUnaryOperator(decl: &&TypeDecl, type: TypeRef, op: String, body: InlineBuiltinFunction) -> void {
+	decl.createUnaryOperator(op, type.varRef(), decl.getProgramRef().void_type, body);
+}
+
+func createUnaryOperator(decl: &&TypeDecl, op: String, this_type: TypeRef, return_type: TypeRef, body: InlineBuiltinFunction) -> void {
+	var parameter_types: List!<TypeRef>;
+	parameter_types.append(this_type);
+	discard decl.createMemberFunction("operator " + op, parameter_types, return_type, body);
+}
+
+func createBinaryOperator(decl: &&TypeDecl, type: TypeRef, op: String, body: InlineBuiltinFunction) -> void {
+	decl.createBinaryOperator(op, type.base(), type.base(), type.base(), body);
+}
+
+func createMutatingBinaryOperator(decl: &&TypeDecl, type: TypeRef, op: String, body: InlineBuiltinFunction) -> void {
+	decl.createBinaryOperator(op, type.varRef(), type.base(), decl.getProgramRef().void_type, body);
+}
+
+func createComparisonOperator(decl: &&TypeDecl, type: TypeRef, op: String, body: InlineBuiltinFunction) -> void {
+	decl.createBinaryOperator(op, type.base(), type.base(), decl.getProgramRef().bool_type, body);
+}
+
+func createBinaryOperator(decl: &&TypeDecl, op: String, this_type: TypeRef, other_type: TypeRef, return_type: TypeRef, body: InlineBuiltinFunction) -> void {
+	var parameter_types: List!<TypeRef>;
+	parameter_types.append(this_type);
+	parameter_types.append(other_type);
+	const function = decl.createMemberFunction("operator " + op, parameter_types, return_type, body);
+
+	if op == "=" {
+		decl.op_assign = function;
+	} else if op == "==" {
+		decl.op_equal = function;
+	} else if op == "<=>" {
+		decl.op_compare = function;
+	}
+}
+
+func createBasicFunctions(decl: &&TypeDecl, type: TypeRef) -> void {
+	decl.createBitDefaultConstructor(type);
+	decl.createBitCopyConstructor(type);
+	decl.createBitDestructor(type);
+
+	decl.createMutatingBinaryOperator(type, "=", InlineBuiltinFunction::BitStoreValue(type));
+}
+
+func createEqualityOperators(decl: &&TypeDecl, type: TypeRef) -> void {
+	decl.createComparisonOperator(type, "==", InlineBuiltinFunction::BitOpEQ(type));
+	decl.createComparisonOperator(type, "!=", InlineBuiltinFunction::BitOpNE(type));
+}
+
+func createComparisonOperators(decl: &&TypeDecl, type: TypeRef, is_signed: bool) -> void {
+	decl.createEqualityOperators(type);
+
+	if is_signed {
+		decl.createComparisonOperator(type, "<", InlineBuiltinFunction::SIntOpLT(type));
+		decl.createComparisonOperator(type, "<=", InlineBuiltinFunction::SIntOpLE(type));
+		decl.createComparisonOperator(type, ">", InlineBuiltinFunction::SIntOpGT(type));
+		decl.createComparisonOperator(type, ">=", InlineBuiltinFunction::SIntOpGE(type));
+		decl.createBinaryOperator("<=>", type.base(), type.base(), decl.getProgramRef().int_type, InlineBuiltinFunction::SIntOpCmp(type));
+	} else {
+		decl.createComparisonOperator(type, "<", InlineBuiltinFunction::UIntOpLT(type));
+		decl.createComparisonOperator(type, "<=", InlineBuiltinFunction::UIntOpLE(type));
+		decl.createComparisonOperator(type, ">", InlineBuiltinFunction::UIntOpGT(type));
+		decl.createComparisonOperator(type, ">=", InlineBuiltinFunction::UIntOpGE(type));
+		decl.createBinaryOperator("<=>", type.base(), type.base(), decl.getProgramRef().int_type, InlineBuiltinFunction::UIntOpCmp(type));
+	}
+
+}
+
+func createBitwiseOperators(decl: &&TypeDecl, type: TypeRef, arithmetic_right_shift: bool) -> void {
+	decl.createBinaryOperator(type, "&", InlineBuiltinFunction::BitOpAnd(type));
+	decl.createBinaryOperator(type, "|", InlineBuiltinFunction::BitOpOr(type));
+	decl.createBinaryOperator(type, "^", InlineBuiltinFunction::BitOpXOr(type));
+
+	decl.createUnaryOperator(type, "~", InlineBuiltinFunction::BitOpNot(type));
+
+	decl.createBinaryOperator(type, "<<", InlineBuiltinFunction::BitOpShl(type));
+	if arithmetic_right_shift {
+		decl.createBinaryOperator(type, ">>", InlineBuiltinFunction::BitOpAShr(type));
+	} else {
+		decl.createBinaryOperator(type, ">>", InlineBuiltinFunction::BitOpLShr(type));
+	}
+
+	decl.createMutatingBinaryOperator(type, "&=", InlineBuiltinFunction::BitOpAndAssign(type));
+	decl.createMutatingBinaryOperator(type, "|=", InlineBuiltinFunction::BitOpOrAssign(type));
+	decl.createMutatingBinaryOperator(type, "^=", InlineBuiltinFunction::BitOpXOrAssign(type));
+
+	decl.createMutatingBinaryOperator(type, "<<=", InlineBuiltinFunction::BitOpShlAssign(type));
+	if arithmetic_right_shift {
+		decl.createMutatingBinaryOperator(type, ">>=", InlineBuiltinFunction::BitOpAShrAssign(type));
+	} else {
+		decl.createMutatingBinaryOperator(type, ">>=", InlineBuiltinFunction::BitOpLShrAssign(type));
+	}
+}
+
+func createArithmeticOperators(decl: &&TypeDecl, type: TypeRef, is_signed: bool) -> void {
+	decl.createBinaryOperator(type, "+", InlineBuiltinFunction::IntOpAdd(type));
+	decl.createBinaryOperator(type, "-", InlineBuiltinFunction::IntOpSub(type));
+	decl.createBinaryOperator(type, "*", InlineBuiltinFunction::IntOpMul(type));
+
+	if is_signed {
+		decl.createBinaryOperator(type, "/", InlineBuiltinFunction::SIntOpDiv(type));
+		decl.createBinaryOperator(type, "%", InlineBuiltinFunction::SIntOpMod(type));
+	} else {
+		decl.createBinaryOperator(type, "/", InlineBuiltinFunction::UIntOpDiv(type));
+		decl.createBinaryOperator(type, "%", InlineBuiltinFunction::UIntOpMod(type));
+	}
+
+	if is_signed {
+		decl.createUnaryOperator(type, "-", InlineBuiltinFunction::IntOpNeg(type));
+	}
+
+	decl.createMutatingUnaryOperator(type, "++", InlineBuiltinFunction::IntOpInc(type));
+	decl.createMutatingUnaryOperator(type, "--", InlineBuiltinFunction::IntOpDec(type));
+
+	decl.createMutatingBinaryOperator(type, "+=", InlineBuiltinFunction::IntOpAddAssign(type));
+	decl.createMutatingBinaryOperator(type, "-=", InlineBuiltinFunction::IntOpSubAssign(type));
+	decl.createMutatingBinaryOperator(type, "*=", InlineBuiltinFunction::IntOpMulAssign(type));
+
+	if is_signed {
+		decl.createMutatingBinaryOperator(type, "/=", InlineBuiltinFunction::SIntOpDivAssign(type));
+		decl.createMutatingBinaryOperator(type, "%=", InlineBuiltinFunction::SIntOpModAssign(type));
+	} else {
+		decl.createMutatingBinaryOperator(type, "/=", InlineBuiltinFunction::UIntOpDivAssign(type));
+		decl.createMutatingBinaryOperator(type, "%=", InlineBuiltinFunction::UIntOpModAssign(type));
+	}
+}
+
+func createBoolType(module: &&Module) -> void {
+	var type = module.createType("bool", TypeBody::Bool);
+	var decl = type.lock().value();
+
+	module.program.bool_type = type;
+
+	decl.createBasicFunctions(type);
+	decl.createEqualityOperators(type);
+
+	decl.createBinaryOperator(type, "&&", InlineBuiltinFunction::BitOpAnd(type));
+	decl.createBinaryOperator(type, "||", InlineBuiltinFunction::BitOpOr(type));
+	decl.createBinaryOperator(type, "^", InlineBuiltinFunction::BitOpXOr(type));
+
+	decl.createUnaryOperator(type, "!", InlineBuiltinFunction::BitOpNot(type));
+
+	decl.createMutatingBinaryOperator(type, "&=", InlineBuiltinFunction::BitOpAndAssign(type));
+	decl.createMutatingBinaryOperator(type, "|=", InlineBuiltinFunction::BitOpOrAssign(type));
+	decl.createMutatingBinaryOperator(type, "^=", InlineBuiltinFunction::BitOpXOrAssign(type));
+}
+
+func createPtrSizedIntType(module: &&Module, is_signed: bool) -> void {
+	var type = module.createType("int" if is_signed else "uint", TypeBody::Int(0u) if is_signed else TypeBody::UInt(0u));
+	var decl = type.lock().value();
+
+	if is_signed {
+		module.program.int_type = type;
+		module.program.int_concept = module.program.addConcept(Concept::IntLiteral(type, "int"));
+	} else {
+		module.program.uint_type = type;
+		module.program.uint_concept = module.program.addConcept(Concept::IntLiteral(type, "uint"));
+	}
+
+	decl.createBasicFunctions(type);
+
+	if is_signed {
+		decl.createComparisonOperators(type, is_signed);
+	} else {
+		decl.createComparisonOperators(type, is_signed);
+	}
+
+	decl.createArithmeticOperators(type, is_signed);
+	decl.createBitwiseOperators(type, is_signed);
+}
+
+func createIntTypeTemplate(module: &&Module, is_signed: bool) -> void {
+	const type = module.createType("int" if is_signed else "uint", TypeBody::Int(0u) if is_signed else TypeBody::UInt(0u));
+	var decl = type.lock().value();
+	const uint_literal_concept = module.program.getConcept("uint").value();
+	decl.template_parameters.append(TemplateParameterDecl("Size", uint_literal_concept, false));
+}
+
+func createIntTypeInstance(module: &&Module, is_signed: bool, size: int) -> TypeRef {
+	const type = module.createType("int" if is_signed else "uint", TypeBody::Int(size as uint) if is_signed else TypeBody::UInt(size as uint));
+	var decl = type.lock().value();
+
+	const uint_literal_concept = module.program.getConcept("uint").value();
+	decl.template_parameters.append(TemplateParameterDecl("Size", uint_literal_concept, false, TemplateParameter::Integer(size)));
+
+	decl.createBasicFunctions(type);
+
+	if is_signed {
+		decl.createComparisonOperators(type, is_signed);
+	} else {
+		decl.createComparisonOperators(type, is_signed);
+	}
+
+	decl.createArithmeticOperators(type, is_signed);
+	decl.createBitwiseOperators(type, is_signed);
+
+	return type;
+}
+
+func createByteType(module: &&Module) -> void {
+	const type = module.createType("byte", TypeBody::Byte);
+	var decl = type.lock().value();
+
+	module.program.byte_type = type;
+
+	decl.createBasicFunctions(type);
+	decl.createComparisonOperators(type, false);
+	decl.createBitwiseOperators(type, false);
+}
+
+func createPtrTypes(module: &&Module) -> void {
+	module.createOpaquePtrType(true);
+	module.createOpaquePtrType(false);
+
+	module.createPtrTypeTemplate(true);
+	module.createPtrTypeTemplate(false);
+
+	const empty_parameter_types = List!<TypeRef>();
+	const any_concept = module.program.any_concept;
+
+	var ptr_cast_func = module.createFunction("ptrCast", empty_parameter_types, TypeRef::unknown(), InlineBuiltinFunction::PointerCast(TypeRef::unknown()));
+	var ptr_cast_func_decl = ptr_cast_func.lock().value();
+	ptr_cast_func_decl.template_parameters.append(TemplateParameterDecl("Target", any_concept, false));	// replace concept with one that only accepts pointer types
+	ptr_cast_func_decl.template_parameters.append(TemplateParameterDecl("Source", any_concept, false));	// replace concept with one that only accepts pointer types
+}
+
+func createPtrCastInstance(module: &&Module, source: TypeRef, target: TypeRef) -> FunctionRef {
+	const ptr_cast_func = module.createFunction("ptrCast");
+	var ptr_cast_func_decl = ptr_cast_func.lock().value();
+	ptr_cast_func_decl.template_parameters.append(TemplateParameterDecl("Source", module.program.any_concept, false, TemplateParameter::Type(source)));
+	ptr_cast_func_decl.template_parameters.append(TemplateParameterDecl("Target", module.program.any_concept, false, TemplateParameter::Type(target)));
+
+	ptr_cast_func_decl.parameter_types.append(source);
+	ptr_cast_func_decl.return_type = target;
+
+	ptr_cast_func_decl.body = FunctionBody::InlineBuiltin(InlineBuiltinFunction::PointerCast(target));
+
+	return ptr_cast_func;
+}
+
+func createOpaquePtrType(module: &&Module, is_const: bool) -> void {
+	const type = module.createType("cptr" if is_const else "vptr", TypeBody::Pointer(PointerType(is_const)));
+	var decl = type.lock().value();
+
+	if is_const {
+		module.program.cptr_type = type;
+	} else {
+		module.program.vptr_type = type;
+	}
+
+	decl.createBasicFunctions(type);
+	decl.createComparisonOperators(type, false);
+
+	const empty_parameter_types = List!<TypeRef>();
+	discard decl.createMemberFunction("null", empty_parameter_types, type, InlineBuiltinFunction::PointerGetNull(type));
+}
+
+func createPtrTypeTemplate(module: &&Module, is_const: bool) -> void {
+	var type = module.createType("cptr" if is_const else "vptr", TypeBody::Pointer(PointerType(is_const)));
+	var decl = type.lock().value();
+	decl.template_parameters.append(TemplateParameterDecl("Base", module.program.any_concept, false));
+}
+
+func createPtrTypeInstance(module: &&Module, is_const: bool, base_type: TypeRef) -> TypeRef {
+	const type = module.createType("cptr" if is_const else "vptr", TypeBody::Pointer(PointerType(base_type, is_const)));
+	var decl = type.lock().value();
+
+	decl.template_parameters.append(TemplateParameterDecl("Base", module.program.any_concept, false, TemplateParameter::Type(base_type)));
+
+	decl.createBasicFunctions(type);
+	decl.createComparisonOperators(type, false);
+
+	const empty_parameter_types = List!<TypeRef>();
+	discard decl.createMemberFunction("null", empty_parameter_types, type, InlineBuiltinFunction::PointerGetNull(type));
+
+	var pointer_to_ref_parameter_types: List!<TypeRef>;
+	pointer_to_ref_parameter_types.append(type);
+	discard decl.createMemberFunction("value", pointer_to_ref_parameter_types, base_type.constRef() if is_const else base_type.varRef(), InlineBuiltinFunction::PointerToRef(type));
+
+	var ref_to_pointer_parameter_types: List!<TypeRef>;
+	ref_to_pointer_parameter_types.append(base_type.constRef() if is_const else base_type.varRef());
+	discard decl.createMemberFunction("addressOf", ref_to_pointer_parameter_types, type, InlineBuiltinFunction::RefToPointer(type));
+
+	discard decl.createBinaryOperator("-", type, type, module.program.int_type, InlineBuiltinFunction::PointerDiff(type));
+
+	discard decl.createBinaryOperator("+", type, module.program.int_type, type, InlineBuiltinFunction::PointerOffset(type));
+	discard decl.createBinaryOperator("+", type, module.program.uint_type, type, InlineBuiltinFunction::PointerOffset(type));
+
+	discard decl.createBinaryOperator("[]", type, module.program.int_type, base_type.constRef() if is_const else base_type.varRef(), InlineBuiltinFunction::PointerOpIndex(type));
+	discard decl.createBinaryOperator("[]", type, module.program.uint_type, base_type.constRef() if is_const else base_type.varRef(), InlineBuiltinFunction::PointerOpIndex(type));
+
+	discard decl.createBinaryOperator("==", type, module.program.cptr_type, module.program.bool_type, InlineBuiltinFunction::BitOpEQ(type));
+	discard decl.createBinaryOperator("==", type, module.program.vptr_type, module.program.bool_type, InlineBuiltinFunction::BitOpEQ(type));
+
+	discard decl.createBinaryOperator("!=", type, module.program.cptr_type, module.program.bool_type, InlineBuiltinFunction::BitOpNE(type));
+	discard decl.createBinaryOperator("!=", type, module.program.vptr_type, module.program.bool_type, InlineBuiltinFunction::BitOpNE(type));
+
+	discard decl.createBinaryOperator("<=>", type, module.program.cptr_type, module.program.int_type, InlineBuiltinFunction::UIntOpCmp(type));
+	discard decl.createBinaryOperator("<=>", type, module.program.vptr_type, module.program.int_type, InlineBuiltinFunction::UIntOpCmp(type));
+
+	return type;
+}
+
+func createCoreReflectionFunctions(module: &&Module) -> void {
+	const empty_parameter_types = List!<TypeRef>();
+
+	const size_of_func = module.createFunction("sizeOf", empty_parameter_types, TypeRef::unknown(), InlineBuiltinFunction::SizeOf(TypeRef::unknown()));
+	var size_of_decl = size_of_func.lock().value();
+	size_of_decl.template_parameters.append(TemplateParameterDecl("Type", module.program.any_concept, false));
+
+	const alignment_of_func = module.createFunction("alignmentOf", empty_parameter_types, TypeRef::unknown(), InlineBuiltinFunction::AlignmentOf(TypeRef::unknown()));
+	var alignment_of_decl = alignment_of_func.lock().value();
+	alignment_of_decl.template_parameters.append(TemplateParameterDecl("Type", module.program.any_concept, false));
+
+	const ref_kind_of_func = module.createFunction("referenceKindOf", empty_parameter_types, TypeRef::unknown(), InlineBuiltinFunction::ReferenceKindOf(TypeRef::unknown()));
+	var ref_kind_of_decl = ref_kind_of_func.lock().value();
+	ref_kind_of_decl.template_parameters.append(TemplateParameterDecl("Type", module.program.any_concept, false));
+}
+
+func createFloatTypeTemplate(module: &&Module) -> void {
+	const type = module.createType("float", TypeBody::Float(0u));
+	var decl = type.lock().value();
+	const uint_literal_concept = module.program.getConcept("uint").value();
+	decl.template_parameters.append(TemplateParameterDecl("Size", uint_literal_concept, false));
+}
+
+func createFloatTypeInstance(module: &&Module, size: int) -> TypeRef {
+	const type = module.createType("float", TypeBody::Float(size as uint));
+	var decl = type.lock().value();
+
+	const uint_literal_concept = module.program.getConcept("uint").value();
+	decl.template_parameters.append(TemplateParameterDecl("Size", uint_literal_concept, false, TemplateParameter::Integer(size)));
+
+	decl.createBasicFunctions(type);
+
+	decl.createComparisonOperator(type, "==", InlineBuiltinFunction::FloatOpEQ(type));
+	decl.createComparisonOperator(type, "!=", InlineBuiltinFunction::FloatOpNE(type));
+	decl.createComparisonOperator(type, "<", InlineBuiltinFunction::FloatOpLT(type));
+	decl.createComparisonOperator(type, "<=", InlineBuiltinFunction::FloatOpLE(type));
+	decl.createComparisonOperator(type, ">", InlineBuiltinFunction::FloatOpGT(type));
+	decl.createComparisonOperator(type, ">=", InlineBuiltinFunction::FloatOpGE(type));
+	decl.createBinaryOperator("<=>", type.base(), type.base(), decl.getProgramRef().int_type, InlineBuiltinFunction::FloatOpCmp(type));
+
+	decl.createBinaryOperator(type, "+", InlineBuiltinFunction::FloatOpAdd(type));
+	decl.createBinaryOperator(type, "-", InlineBuiltinFunction::FloatOpSub(type));
+	decl.createBinaryOperator(type, "*", InlineBuiltinFunction::FloatOpMul(type));
+
+	decl.createBinaryOperator(type, "/", InlineBuiltinFunction::FloatOpDiv(type));
+	decl.createBinaryOperator(type, "%", InlineBuiltinFunction::FloatOpMod(type));
+
+	decl.createUnaryOperator(type, "-", InlineBuiltinFunction::FloatOpNeg(type));
+
+	decl.createMutatingBinaryOperator(type, "+=", InlineBuiltinFunction::FloatOpAddAssign(type));
+	decl.createMutatingBinaryOperator(type, "-=", InlineBuiltinFunction::FloatOpSubAssign(type));
+	decl.createMutatingBinaryOperator(type, "*=", InlineBuiltinFunction::FloatOpMulAssign(type));
+
+	decl.createMutatingBinaryOperator(type, "/=", InlineBuiltinFunction::FloatOpDivAssign(type));
+	decl.createMutatingBinaryOperator(type, "%=", InlineBuiltinFunction::FloatOpModAssign(type));
+
+	return type;
+}
+
+func createArrayTypeDecl(module: &&Module) -> void {
+	var type = module.createType("Array", TypeBody::Array(ArrayType(TypeRef::unknown(), 0u)));
+	var decl = type.lock().value();
+
+	decl.template_parameters.append(TemplateParameterDecl("T", module.program.any_concept, false));
+	decl.template_parameters.append(TemplateParameterDecl("Size", module.program.uint_concept, false));
+}
+
+func createArrayTypeInstance(module: &&Module, element_type: TypeRef, size: uint, element_cptr_type: TypeRef, element_vptr_type: TypeRef) -> TypeRef {
+	var type = module.createType("Array", TypeBody::Array(ArrayType(element_type, size)));
+	var decl = type.lock().value();
+
+	decl.addContainedType(element_type);
+
+	decl.template_parameters.append(TemplateParameterDecl("T", module.program.any_concept, false, TemplateParameter::Type(element_type)));
+	decl.template_parameters.append(TemplateParameterDecl("Size", module.program.uint_concept, false, TemplateParameter::Integer(size as int)));
+
+	// create member functions
+	var parameter_types1: List!<TypeRef>;
+	parameter_types1.append(type.varRef());
+
+	var parameter_types2: List!<TypeRef>;
+	parameter_types2.append(type.varRef());
+	parameter_types2.append(type.base());
+
+	var parameter_types3: List!<TypeRef>;
+	parameter_types3.append(type.base());
+	parameter_types3.append(type.base());
+
+	var parameter_types4: List!<TypeRef>;
+	parameter_types4.append(type.constRef());
+
+	var parameter_types5: List!<TypeRef>;
+	parameter_types5.append(type.varRef());
+
+	decl.default_constructor = decl.createMemberFunction("constructor", parameter_types1, decl.getProgramRef().void_type, BuiltinFunction::ArrayDefaultConstructor(type));
+	decl.copy_constructor = decl.createMemberFunction("constructor", parameter_types2, decl.getProgramRef().void_type, BuiltinFunction::ArrayCopyConstructor(type));
+	decl.destructor = decl.createMemberFunction("destructor", parameter_types1, decl.getProgramRef().void_type, BuiltinFunction::ArrayDestructor(type));
+	decl.op_assign = decl.createMemberFunction("operator =", parameter_types2, decl.getProgramRef().void_type, BuiltinFunction::ArrayOpAssign(type));
+	decl.op_equal = decl.createMemberFunction("operator ==", parameter_types3, decl.getProgramRef().bool_type, BuiltinFunction::ArrayOpEqual(type));
+	discard decl.createMemberFunction("data", parameter_types4, element_cptr_type, InlineBuiltinFunction::ArrayGetDataPointer(type));
+	discard decl.createMemberFunction("data", parameter_types5, element_vptr_type, InlineBuiltinFunction::ArrayGetDataPointer(type));
+	discard decl.createMemberFunction("size", parameter_types4, decl.getProgramRef().uint_type, InlineBuiltinFunction::ArrayGetSize(type));
+
+	return type;
+}

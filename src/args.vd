@@ -1,0 +1,97 @@
+import std/core;
+import std/range;
+import std/string;
+import std/list;
+import std/io;
+
+struct ArgsParser {
+	var args: List!<String>;
+
+	func constructor(this: &&ArgsParser, args: Range!<String>, description: String) -> void {
+		this.args := args;
+		this.args.remove(0u);
+	}
+
+	func constructor(this: &&ArgsParser, other: ArgsParser) -> void = default;
+	func destructor(this: &&ArgsParser) -> void = default;
+
+	// --foo / --foo=[on|off]
+	func flag(this: &&ArgsParser, name: String, short: String, description: String) -> Optional!<bool> {
+		for i in 0u..this.args.size() {
+			const arg = this.args[i];
+
+			if arg == "--" + name || arg == "-" + short {
+				this.args.remove(i);
+				return Some(true);
+			} else if arg.startsWith("--" + name + "=") {
+				const val = arg.substring((name.size() + 3)..arg.size());
+				if val == "on" || val == "true" || val == "yes" {
+					this.args.remove(i);
+					return Some(true);
+				} else if val == "off" || val == "false" || val == "no" {
+					this.args.remove(i);
+					return Some(false);
+				}
+			}
+		}
+
+		return None;
+	}
+
+	// --foo=bar / --foo bar, returns 'bar'
+	func value(this: &&ArgsParser, name: String, short: String, description: String) -> Optional!<String> {
+		for i in 0u..this.args.size() {
+			const arg = this.args[i];
+
+			if (arg == "--" + name || arg == "-" + short) && i < this.args.size() - 1 {
+				const val = this.args[i + 1];
+				this.args.remove(i..(i+2));
+				return Some(val);
+			} else if arg.startsWith("--" + name + "=") {
+				const val = arg.substring((name.size() + 3)..arg.size());
+				this.args.remove(i);
+				return Some(val);
+			}
+		}
+
+		return None;
+	}
+
+	// --foo=[a|b|c] / --foo [a|b|c], returns index in possible values
+	func choice(this: &&ArgsParser, name: String, short: String, description: String, values: Range!<String>) -> Optional!<uint> {
+		for i in 0u..this.args.size() {
+			const arg = this.args[i];
+
+			if (arg == "--" + name || arg == "-" + short) && i < this.args.size() - 1 {
+				const val = this.args[i + 1];
+				this.args.remove(i..(i+2));
+				return values.find(val);
+			} else if arg.startsWith("--" + name + "=") {
+				const val = arg.substring((name.size() + 3)..arg.size());
+				this.args.remove(i);
+				return values.find(val);
+			}
+		}
+
+		return None;
+	}
+
+	// returns first arg that doesn't start with '-'
+	func anonymous(this: &&ArgsParser, name: String, description: String) -> Optional!<String> {
+		for i in 0u..this.args.size() {
+			const arg = this.args[i];
+
+			if !arg.startsWith("-") {
+				this.args.remove(i);
+				return Some(arg);
+			}
+		}
+
+		return None;
+	}
+
+	// print errors / help messages, returns whether all args were used
+	func finalize(this: &&ArgsParser) -> bool {
+		return false;
+	}
+}

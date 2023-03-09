@@ -1,0 +1,3703 @@
+import std/core;
+import std/box;
+import std/file;
+import std/format;
+import std/io;
+import std/list;
+import std/map;
+import std/set;
+import std/shared;
+import std/string;
+
+import builtins;
+import error;
+import interpreter;
+import lexer;
+import options;
+import parser;
+import program;
+import span;
+import syntax_tree;
+
+enum CallKind {
+	case Static;
+	case MemberCall;
+	case Operator;
+}
+
+struct FunctionLookupResult {
+	var functions: List!<FunctionRef>;
+	var errors: List!<CompilationError>;
+
+	func constructor(this: &&FunctionLookupResult) -> void = default;
+	func constructor(this: &&FunctionLookupResult, other: FunctionLookupResult) -> void = default;
+	func destructor(this: &&FunctionLookupResult) -> void = default;
+
+	operator =(this: &&FunctionLookupResult, other: FunctionLookupResult) -> void = default;
+
+	func isEmpty(this: &FunctionLookupResult) -> bool {
+		return this.functions.isEmpty();
+	}
+
+	operator +=(this: &&FunctionLookupResult, other: FunctionLookupResult) -> void {
+		this.functions += other.functions;
+	}
+
+	func getFunctionWithHighestRefKind(this: &FunctionLookupResult) -> FunctionRef {
+		var result = FunctionRef::unknown();
+		if !this.functions.isEmpty() {
+			result = this.functions[0u];
+		}
+
+		var max_ref_kind = ReferenceKind::None;
+
+		for function in this.functions {
+			const decl = function.lock().value();
+			if decl.parameter_types.size() < 1 {
+				continue;
+			}
+
+			if decl.parameter_types[0u].kind >= max_ref_kind {
+				result = function;
+				max_ref_kind = decl.parameter_types[0u].kind;
+			}
+		}
+
+		return result;
+	}
+}
+
+enum ScopeKind {
+	case Function;
+	case Compound;
+	case Loop;
+	case Match;
+	case Expr;
+}
+
+struct Scope {
+	var kind: ScopeKind;
+	var variables: List!<WeakPtr!<VarDecl>>;
+	var variables_by_name: Map!<String, WeakPtr!<VarDecl>>;
+
+	func constructor(this: &&Scope, kind: ScopeKind) -> void {
+		this.kind := kind;
+	}
+
+	func constructor(this: &&Scope, other: Scope) -> void = default;
+	func destructor(this: &&Scope) -> void = default;
+
+	operator =(this: &&Scope, other: Scope) -> void = default;
+
+	operator ==(this: Scope, other: Scope) -> bool = default;
+}
+
+struct TCContext {
+	var program: &&Program;
+	var module: &&Module;
+	var interpreter: &&Interpreter;
+	var contexts: &&List!<SharedPtr!<TCContext>>;
+
+	var unchecked_types: List!<TypeRef>;
+	var unchecked_functions: List!<FunctionRef>;
+	var unchecked_function_bodies: List!<FunctionRef>;
+
+	var state: int;
+
+	var current_type: TypeRef;
+	var current_function: FunctionRef;
+
+	// context for checking function bodies
+	var scope_stack: List!<Scope>;
+	var current_return_type: TypeRef;
+	var active_member_variables: Set!<uint>; // used to track (de-)initialized member variables in con/de-structors
+	var return_variable: WeakPtr!<VarDecl>;
+
+	var match_value: Expr;
+	var match_type: TypeRef;
+	var yield_type: TypeRef;
+	var yield_var: WeakPtr!<VarDecl>;
+
+	func constructor(this: &&TCContext, program: &&Program, module: &&Module, interpreter: &&Interpreter, contexts: &&List!<SharedPtr!<TCContext>>) -> void {
+		this.program := &&program;
+		this.module := &&module;
+		this.interpreter := &&interpreter;
+		this.contexts := &&contexts;
+
+		this.state := 0;
+		this.match_value := Expr::Empty(Span(0u16), TypeRef::unknown());
+	}
+
+	func constructor(this: &&TCContext, other: TCContext) -> void = default;
+
+	func destructor(this: &&TCContext) -> void = default;
+
+	func clearLocalState(this: &&TCContext) -> void {
+		this.unchecked_types.clear();
+		this.unchecked_functions.clear();
+		this.unchecked_function_bodies.clear();
+
+		this.state = 0;
+
+		this.current_type = TypeRef::unknown();
+		this.current_function = FunctionRef::unknown();
+
+		this.scope_stack.clear();
+		this.current_return_type = TypeRef::unknown();
+		this.active_member_variables.clear();
+		this.return_variable = WeakPtr!<VarDecl>();
+
+		this.match_value = Expr::Empty(Span(0u16), TypeRef::unknown());
+		this.match_type = TypeRef::unknown();
+		this.yield_type = TypeRef::unknown();
+		this.yield_var = WeakPtr!<VarDecl>();
+	}
+
+	func typecheck(program: &&Program, root_module: &&Module) -> void {
+		var interpreter: Interpreter = (&&program);
+		var contexts: List!<SharedPtr!<TCContext>>;
+
+		contexts.append(SharedPtr!<TCContext>::new(TCContext(&&program, &&root_module, &&interpreter, &&contexts)));
+		contexts[0u].check();
+	}
+
+	func check(this: &&TCContext) -> void {
+		for stmt in this.module.syntax_tree.children {
+			discard this.checkStmt(stmt);
+		}
+
+		this.state = 0;
+		this.runLoop(5);
+	}
+
+	func getContextForModule(this: &&TCContext, id: uint) -> SharedPtr!<TCContext> {
+		return this.contexts[id];
+	}
+
+	func addUncheckedEntitiesFrom(this: &&TCContext, other: &TCContext) -> void {
+		this.unchecked_types.append(other.unchecked_types);
+		if !this.unchecked_types.isEmpty() {
+			this.state = min(1, this.state);
+		}
+
+		this.unchecked_functions.append(other.unchecked_functions);
+		if !this.unchecked_functions.isEmpty() {
+			this.state = min(2, this.state);
+		}
+
+		this.unchecked_function_bodies.append(other.unchecked_function_bodies);
+		if !this.unchecked_function_bodies.isEmpty() {
+			this.state = min(3, this.state);
+		}
+	}
+
+	func error(this: &TCContext, msg: String, span: Span) -> void {
+		this.program.printError(CompilationError(msg, ErrorType::Error, ErrorStage::Typechecker, span));
+	}
+
+	func info(this: &TCContext, msg: String, span: Span) -> void {
+		this.program.printError(CompilationError(msg, ErrorType::Info, ErrorStage::Typechecker, span));
+	}
+
+	func hint(this: &TCContext, msg: String, span: Span) -> void {
+		this.program.printError(CompilationError(msg, ErrorType::Hint, ErrorStage::Typechecker, span));
+	}
+
+	func todo(this: &TCContext, message: String, span: Span) -> void {
+		this.program.printError(CompilationError(message, ErrorType::Todo, ErrorStage::Typechecker, span));
+	}
+
+	func pushScope(this: &&TCContext, kind: ScopeKind) -> void {
+		this.scope_stack.append(Scope(kind));
+	}
+
+	func popScope(this: &&TCContext) -> void {
+		this.scope_stack.removeLast();
+	}
+
+	func addVariableToCurrentScope(this: &&TCContext, variable: WeakPtr!<VarDecl>) -> void {
+		this.scope_stack[this.scope_stack.size() - 1].variables.append(variable);
+
+		const name = variable.lock().value().name;
+		if name != ""{
+			this.scope_stack[this.scope_stack.size() - 1].variables_by_name[name] = variable;
+		}
+	}
+
+	func isCurrentScopeInsideLoop(this: &TCContext) -> bool {
+		for i in 0u..this.scope_stack.size() {
+			if this.scope_stack[this.scope_stack.size() - i - 1].kind == Loop {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	func isCurrentScopeInsideMatch(this: &TCContext) -> bool {
+		for i in 0u..this.scope_stack.size() {
+			if this.scope_stack[this.scope_stack.size() - i - 1].kind == Match {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	func getVariableByName(this: &&TCContext, name: String) -> Optional!<WeakPtr!<VarDecl>> {
+		for i in 0u..this.scope_stack.size() {
+			const tmp = this.scope_stack[this.scope_stack.size() - i - 1].variables_by_name.get(name);
+			if tmp is Some {
+				return tmp;
+			}
+		}
+
+		return None;
+	}
+
+	func getVariableByName(this: &&TCContext, name: ParsedName) -> Optional!<WeakPtr!<VarDecl>> {
+		if !name.namespaces.isEmpty() || !name.template_parameters.isEmpty() {
+			return None;
+		}
+
+		return this.getVariableByName(name.name);
+	}
+
+	func collectCleanupCalls(this: &&TCContext, until: ScopeKind) -> List!<Stmt> {
+		var result: List!<Stmt>;
+
+		for i in 0u..this.scope_stack.size() {
+			const variables = this.scope_stack[this.scope_stack.size() - i - 1].variables;
+
+			for k in 0u..variables.size() {
+				const variable = variables[variables.size() - k - 1];
+				result.append(Stmt::LifeTimeEnd(variable, Span(0u16)));
+			}
+
+			if this.scope_stack[this.scope_stack.size() - i - 1].kind == until {
+				break;
+			}
+		}
+
+		return result;
+	}
+
+	func collectCleanupCallsForCurrentScope(this: &&TCContext) -> List!<Stmt> {
+		var result: List!<Stmt>;
+
+		const variables = this.scope_stack[this.scope_stack.size() - 1].variables;
+		for i in 0u..variables.size() {
+			const variable = variables[variables.size() - i - 1];
+			const decl = variable.lock().value();
+			if decl.type.kind == ReferenceKind::None {
+				result.append(Stmt::LifeTimeEnd(variable, Span(0u16)));
+			}
+		}
+
+		return result;
+	}
+
+	func runLoop(this: &&TCContext, max_state: int) -> void {
+		while this.state <= max_state {
+			for id in this.module.imports {
+				var other_context = this.getContextForModule(id);
+				if other_context.state <= this.state {
+					other_context.runLoop(this.state);
+				}
+			}
+
+			const prev_state = this.state;
+
+			match this.state {
+				case 1 -> {
+					var current = this.unchecked_types.last();
+					while current.hasValue() && this.state == 1 {
+						this.unchecked_types.removeLast();
+						this.checkTypeBody(current.value());
+						current = this.unchecked_types.last();
+					}
+				}
+				case 2 -> {
+					var current = this.unchecked_functions.last();
+					while current.hasValue() && this.state == 2 {
+						this.unchecked_functions.removeLast();
+						this.checkFunctionSignature(current.value());
+						current = this.unchecked_functions.last();
+					}
+				}
+				case 3 -> {
+					var current = this.unchecked_function_bodies.last();
+					while current.hasValue() && this.state == 3 {
+						this.unchecked_function_bodies.removeLast();
+						this.checkFunctionBody(current.value());
+						current = this.unchecked_function_bodies.last();
+					}
+				}
+				else -> {}
+			}
+
+			if this.state == prev_state {
+				this.state++;
+			}
+		}
+	}
+
+	func loadModule(this: &&Program, path: String, name: String) -> Result!<uint> {
+		var file = try File::open(path, OpenMode::read);
+		const source = try file.readAll();
+
+		const id = this.modules.size();
+		var module = SharedPtr!<Module>::new(Module(id, name, &&this, path, source));
+		this.modules.append(module);
+
+		// collect line spans
+		var line = 0u;
+		var line_start = 0u;
+
+		var index = 0u;
+		while index < source.size() {
+			if source.at(index) ?? '\0'b == '\n'b {
+				const span = Span(line_start, index, line as u32, 0u16, id as u16);
+				module.line_spans.append(span);
+
+				line++;
+				line_start = index + 1;
+			}
+			index++;
+		}
+
+		const span = Span(line_start, index, line as u32, 0u16, id as u16);
+		module.line_spans.append(span);
+
+		// lex
+		const tokens = lex(source, id as u16);
+		if this.options.dump_tokens {
+			print(tokens.dump());
+		}
+
+		// parse
+		try parse(tokens, &&module.syntax_tree, &&this);
+		if this.options.dump_ast {
+			print(module.syntax_tree.dump());
+		}
+
+		return Ok(id);
+	}
+
+	func checkImport(this: &&TCContext, name: String) -> void {
+		for path_and_name in this.program.options.getImportPaths(name) {
+			const path = path_and_name.path;
+			const module_name = path_and_name.name;
+
+			var already_loaded = false;
+			for module in this.program.modules {
+				if module.path == path {
+					already_loaded = true;
+					this.module.imports.append(module.id);
+				}
+			}
+
+			if already_loaded {
+				continue;
+			}
+
+			var id = this.program.loadModule(path, module_name) else: error {
+				eprintln("couldn't load module " + path + ": " + String::fromErrorCode(error));
+				continue;
+			}
+
+			this.module.imports.append(id);
+
+			var other = this.program.modules[id];
+			this.contexts.append(SharedPtr!<TCContext>::new(TCContext(&&this.program, &&other.operator unwrap(), &&this.interpreter, &&this.contexts)));
+			this.contexts[id].check();
+		}
+	}
+
+	func checkTypeDecl(this: &&TCContext, parsed_decl: ParsedTypeDecl) -> void {
+		discard this.checkTypeDecl(parsed_decl, this.checkTemplateParameterDecl(parsed_decl.template_parameters));
+	}
+
+	func checkTypeDecl(this: &&TCContext, parsed_decl: ParsedTypeDecl, template_parameters: List!<TemplateParameterDecl>) -> TypeRef {
+		if parsed_decl.kind == Extension {
+			var decl = this.module.getTypeDecl(parsed_decl.name, template_parameters) else {
+				this.error("unknown type for type extension", parsed_decl.span);
+				return TypeRef::unknown();
+			}
+
+			decl.extensions.append(parsed_decl.children);
+
+			const type = decl.getRef();
+			if !this.unchecked_types.contains(type) {
+				this.unchecked_types.append(type);
+			}
+
+			return type;
+		} else {
+			const type = this.module.createType(parsed_decl.name, TypeBody::Unchecked(parsed_decl));
+			this.unchecked_types.append(type);
+
+			var decl = type.lock().value();
+			decl.template_parameters = template_parameters;
+			decl.span = parsed_decl.span;
+			decl.name_span = parsed_decl.name_span;
+
+			return type;
+		}
+	}
+
+	func checkFunctionDecl(this: &&TCContext, parsed_decl: ParsedFunctionDecl) -> void {
+		discard this.checkFunctionDecl(parsed_decl, this.checkTemplateParameterDecl(parsed_decl.template_parameters));
+	}
+
+	func checkFunctionDecl(this: &&TCContext, parsed_decl: ParsedFunctionDecl, template_parameters: List!<TemplateParameterDecl>) -> FunctionRef {
+		var function: FunctionRef;
+		if this.current_type.isUnknown() {
+			function = this.module.createFunction(parsed_decl.signature.name);
+		} else {
+			var decl = this.current_type.lock().value();
+			function = decl.createMemberFunction(parsed_decl.signature.name);
+		}
+
+		this.unchecked_functions.append(function);
+
+		var decl = function.lock().value();
+		decl.template_parameters = template_parameters;
+		decl.body = FunctionBody::Unchecked(parsed_decl);
+		decl.span = parsed_decl.span;
+		decl.signature_span = parsed_decl.signature.span;
+
+		if this.module.id == 0 && decl.name == "main" {
+			if !this.program.main_function.isUnknown() {
+				const prev_decl = this.program.main_function.lock().value();
+				this.error("re-declaration of main function", decl.signature_span);
+				this.hint("main was already declared here:", prev_decl.signature_span);
+			} else {
+				this.program.main_function = function;
+			}
+		}
+
+		for annotation in parsed_decl.annotations {
+			if annotation.name == "extern_name" {
+				match annotation {
+					case String: value -> decl.extern_name = value;
+					else -> this.error("invalid annotation", annotation.span);
+				}
+			} else {
+				this.error("invalid annotation name '" + annotation.name + "'", annotation.span);
+			}
+		}
+
+		return function;
+	}
+
+	func checkTypeBody(this: &&TCContext, type: TypeRef) -> void {
+		var decl = type.lock().value();
+
+		if decl.isIncompleteTemplate() {
+			return;
+		}
+
+		// type was already checked or is builtin, but was added to unchecked type by a type extension
+		if !(decl.body is Unchecked) {
+			this.current_type = type;
+			for stmt in decl.extensions {
+				discard this.checkStmt(stmt);
+			}
+			decl.extensions.clear();
+			this.current_type = TypeRef::unknown();
+			return;
+		}
+
+		const parsed_type_decl = (decl.body as Unchecked).value();
+		match parsed_type_decl.kind {
+			case Struct -> decl.body = TypeBody::Struct;
+			case Enum -> decl.body = TypeBody::Enum;
+			case Variant -> decl.body = TypeBody::Variant;
+			case Extension -> {}
+			case Garbage -> decl.body = Empty;
+		}
+
+		if decl.body is Enum || decl.body is Variant {
+			if parsed_type_decl.base_type.hasValue() {
+				match this.checkTypeUsage(parsed_type_decl.base_type.value()) {
+					case Ok: type -> decl.id_type = type;
+					case Error: errors -> this.program.printErrors(errors);
+				}
+			} else {
+				decl.id_type = this.program.int_type;
+			}
+
+			decl.addContainedType(decl.id_type);
+		}
+
+		this.current_type = type;
+
+		for stmt in parsed_type_decl.children {
+			discard this.checkStmt(stmt);
+		}
+
+		for stmt in decl.extensions {
+			discard this.checkStmt(stmt);
+		}
+		decl.extensions.clear();
+
+		for case_decl in decl.variant_cases {
+			decl.createVariantCaseConstructor(case_decl.id, case_decl.type);
+		}
+
+		decl.createDefaultFunctions();
+
+		this.current_type = TypeRef::unknown();
+	}
+
+	func checkMemberVarDecl(this: &&TCContext, parsed_decl: ParsedVarDecl) -> void {
+		var type_decl = this.current_type.lock().value();
+
+		var member_var_type = TypeRef::unknown();
+		if parsed_decl.type.hasValue() {
+			match this.checkTypeUsage(parsed_decl.type.value()) {
+				case Ok: type -> member_var_type = type;
+				case Error: errors -> this.program.printErrors(errors);
+			}
+		} else {
+			this.error("member variables must always be declared with a type", parsed_decl.span);
+		}
+
+		type_decl.addContainedType(member_var_type);
+
+		var initializer = Expr::Empty(parsed_decl.span, TypeRef::unknown());
+		if parsed_decl.initializer.hasValue() {
+			initializer = this.checkExpr(parsed_decl.initializer.value(), member_var_type);
+		}
+
+		if !(initializer is Empty) && !member_var_type.isUnknown() {
+			if initializer.type != member_var_type {
+				this.error("member var initializer has incorrect type: expected " + member_var_type.signature() + " but got " + initializer.type.signature(), initializer.span);
+			}
+		}
+
+		type_decl.member_variables.append(MemberVarDecl(
+			parsed_decl.span,
+			type_decl.member_variables.size(),
+			parsed_decl.name,
+			member_var_type,
+			initializer
+		));
+	}
+
+	func checkCaseDecl(this: &&TCContext, parsed_decl: ParsedCaseDecl) -> void {
+		var type_decl = this.current_type.lock().value();
+		if !(type_decl.body is Enum) && !(type_decl.body is Variant) {
+			this.error("case declarations are only allowed inside enum or variant types", parsed_decl.span);
+			return;
+		}
+
+		if parsed_decl.payload.hasValue() && type_decl.body is Enum {
+			this.error("only variant cases are allowed to have a payload attached", parsed_decl.span);
+		}
+
+		const name = parsed_decl.name;
+		var id = type_decl.getNextCaseId();
+		if parsed_decl.id.hasValue() {
+			const id_expr = this.checkExpr(parsed_decl.id.value(), type_decl.id_type);
+			match this.interpreter.interpret(id_expr) {
+				case Ok: value -> id = value.toInt();
+				else -> this.error("couldn't interpret id for case decl", id_expr.span);
+			}
+		}
+
+		var payload_type = TypeRef::unknown();
+		if parsed_decl.payload.hasValue() {
+			match this.checkTypeUsage(parsed_decl.payload.value()) {
+				case Ok: type -> payload_type = type;
+				case Error: errors -> this.program.printErrors(errors);
+			}
+		}
+
+		if type_decl.body is Enum {
+			type_decl.createEnumCase(parsed_decl.span, id, name);
+		} else {
+			type_decl.createVariantCase(parsed_decl.span, id, name, payload_type);
+			type_decl.addContainedType(payload_type);
+
+			type_decl.createVariantOpUnsafeAs(this.current_type.constRef(), id);
+			type_decl.createVariantOpUnsafeAs(this.current_type.varRef(), id);
+
+			var operator_is_parameter_types: List!<TypeRef>;
+			operator_is_parameter_types.append(this.current_type.base());
+
+			var operator_is = type_decl.createMemberFunction(
+				"operator is",
+				operator_is_parameter_types,
+				this.program.bool_type,
+				FunctionBody::InlineBuiltin(InlineBuiltinFunction::VariantOpIs(id, this.current_type))
+			).lock().value();
+
+			operator_is.template_parameters.append(
+				TemplateParameterDecl("Id", this.program.int_concept, false, TemplateParameter::Integer(id))
+			);
+		}
+	}
+
+	func checkFunctionSignature(this: &&TCContext, function: FunctionRef) -> void {
+		var decl = function.lock().value();
+
+		if decl.isIncompleteTemplate() {
+			return;
+		}
+
+		const signature = decl.getParsedSignature().value();
+
+		this.current_type = decl.parent_type;
+		this.current_function = function;
+
+		decl.return_type = this.program.void_type;
+		if const parsed_return_type = signature.return_type {
+			match this.checkTypeUsage(parsed_return_type) {
+				case Ok: return_type -> decl.return_type = return_type;
+				case Error: errors -> {
+					this.program.printErrors(errors);
+					decl.return_type = TypeRef::unknown();
+				}
+			}
+		}
+
+		for param in signature.parameters {
+			var parameter_type = TypeRef::unknown();
+			match this.checkTypeUsage(param.type) {
+				case Ok: type -> parameter_type = type;
+				case Error: errors -> this.program.printErrors(errors);
+			}
+
+			decl.parameter_types.append(parameter_type);
+			decl.createParameter(param.span, param.name, parameter_type);
+		}
+
+		if var parent_type = this.current_type.lock() {
+			if decl.parameter_types.size() == 1 {
+				if decl.parameter_types[0u] == decl.parent_type.varRef() {
+					if decl.name == "constructor" {
+						parent_type.default_constructor = function;
+					} else if decl.name == "destructor" {
+						parent_type.destructor = function;
+					}
+				}
+
+				if decl.name == "operator unwrap" {
+					if parent_type.unwrapped_type.isUnknown() {
+						parent_type.unwrapped_type = decl.return_type.base();
+					} else if parent_type.unwrapped_type != decl.return_type.base() {
+						this.error("operator unwrap redeclared with different return type", decl.signature_span);
+					}
+				}
+			} else if decl.parameter_types.size() == 2 {
+				if decl.parameter_types[0u] == decl.parent_type.varRef() && decl.parameter_types[1u] == decl.parent_type.base() {
+					if decl.name == "constructor" {
+						parent_type.copy_constructor = function;
+					} else if decl.name == "operator =" {
+						parent_type.op_assign = function;
+					}
+				} else if decl.parameter_types[0u] == decl.parent_type.base() && decl.parameter_types[1u] == decl.parent_type.base() {
+					if decl.name == "operator ==" {
+						parent_type.op_equal = function;
+					} else if decl.name == "operator <=>" {
+						parent_type.op_compare = function;
+					}
+				}
+			}
+		}
+
+		if function == this.program.main_function {
+			if decl.return_type != this.program.int_type && decl.return_type != this.program.void_type {
+				this.error("invalid return type for main, expected " + this.program.int_type.signature() + " or " + this.program.void_type.signature(), decl.signature_span);
+			}
+		}
+
+		this.current_function = FunctionRef::unknown();
+		this.current_type = TypeRef::unknown();
+
+		this.unchecked_function_bodies.append(function);
+	}
+
+	func checkFunctionBody(this: &&TCContext, function: FunctionRef) -> void {
+		var decl = function.lock().value();
+
+		if !decl.parent_type.isUnknown() {
+			this.current_type = decl.parent_type;
+		} else {
+			this.current_type = TypeRef::unknown();
+		}
+
+		this.current_function = function;
+		this.current_return_type = decl.return_type;
+
+		match decl.body {
+			case Unchecked: parsed_function -> match parsed_function.body {
+				case Garbage -> {} // do nothing
+				case Extern -> {
+					decl.variables.clear();	// clear parameters
+					decl.body = FunctionBody::Extern;
+					if decl.extern_name == "" {
+						decl.extern_name = decl.name;
+					}
+				}
+				case Default -> {
+					decl.variables.clear();	// clear parameters
+					decl.body = decl.getDefaultFunctionBody();
+				}
+				case Compound: compound_stmt -> this.checkFunctionBody(&&decl.operator unwrap(), compound_stmt);
+			}
+			else -> this.error("function body is already checked", decl.span);
+		}
+
+		this.current_return_type = TypeRef::unknown();
+		this.current_function = FunctionRef::unknown();
+		this.current_type = TypeRef::unknown();
+	}
+
+	func checkTemplateParameterDecl(this: &&TCContext, unchecked_parameters: List!<ParsedTemplateParameterDecl>) -> List!<TemplateParameterDecl> {
+		var result: List!<TemplateParameterDecl>;
+
+		for parameter in unchecked_parameters {
+			const name = parameter.name;
+			const concept = this.program.getConcept(parameter.concept) else {
+				this.error("concept '" + parameter.concept + "' not found", parameter.span);
+				continue;
+			}
+
+			var checked_parameter = TemplateParameterDecl(name, concept, false);
+
+			if const value = parameter.value {
+				checked_parameter.value = Some(this.checkTemplateParameter(value));
+			}
+
+			result.append(checked_parameter);
+		}
+
+		return result;
+	}
+
+	func getTemplateParameter(this: &TCContext, name: String) -> Optional!<TemplateParameter> {
+		if const decl = this.current_type.lock() {
+			for template_parameter_decl in decl.template_parameters {
+				if template_parameter_decl.name == name && template_parameter_decl.value is Some {
+					return template_parameter_decl.value;
+				}
+			}
+		}
+
+		if const decl = this.current_function.lock() {
+			for template_parameter_decl in decl.template_parameters {
+				if template_parameter_decl.name == name && template_parameter_decl.value is Some {
+					return template_parameter_decl.value;
+				}
+			}
+		}
+
+		return None;
+	}
+
+	func checkTemplateParameter(this: &&TCContext, parameter: ParsedExpr) -> TemplateParameter {
+		match parameter {
+			case Name: name_expr -> {
+				if name_expr.namespaces.isEmpty() && name_expr.template_parameters.isEmpty() {
+					if const template_parameter = this.getTemplateParameter(name_expr.name) {
+						return template_parameter;
+					}
+				}
+			}
+			else -> {}
+		}
+
+		if const parsed_type = parameter.toType() {
+			match this.checkTypeUsage(parsed_type)  {
+				case Ok: type -> return TemplateParameter::Type(type);
+				case Error: e -> {
+					this.program.printErrors(e);
+					return TemplateParameter::Garbage;
+				}
+			}
+		}
+
+		if const number = parameter as Number {
+			return TemplateParameter::Integer(number.value.toInt());
+		}
+
+		this.todo("interpret expressions in template parameters", parameter.span);
+		return TemplateParameter::Garbage;
+	}
+
+	func checkTemplateParameterList(this: &&TCContext, parameters: List!<ParsedExpr>) -> List!<TemplateParameter> {
+		var result: List!<TemplateParameter>;
+
+		for parameter in parameters {
+			result.append(this.checkTemplateParameter(parameter));
+		}
+
+		return result;
+	}
+
+	func getType(this: &&TCContext, namespaces: List!<String>, name: String, template_parameters: List!<TemplateParameter>, error_span: Span) -> Result!<TypeRef, List!<CompilationError>> {
+		if namespaces.isEmpty() && template_parameters.isEmpty() {
+			if const bits = getNumericTypeBits(name) {
+				var int_template_parameters: List!<TemplateParameter>;
+				int_template_parameters.append(TemplateParameter::Integer(bits as int));
+
+				var type_name = "";
+				match name[0u] {
+					case 'i'b -> type_name = "int";
+					case 'u'b -> type_name = "uint";
+					case 'f'b -> type_name = "float";
+					else -> panic("invalid numeric type");
+				}
+
+				return this.getType(List!<String>(), type_name, int_template_parameters, error_span);
+			}
+		}
+
+		var errors: List!<CompilationError>;
+
+		var types_with_matching_name = this.module.getTypeByName(namespaces, name);
+		var types_from_template_parameters: List!<TypeRef>;
+		if namespaces.isEmpty() {
+			if const current_type = this.current_type.lock() {
+				types_from_template_parameters.append(getTypeFromTemplateParameters(current_type.template_parameters, name));
+			}
+
+			if const current_function = this.current_function.lock() {
+				types_from_template_parameters.append(getTypeFromTemplateParameters(current_function.template_parameters, name));
+			}
+		}
+
+		if types_with_matching_name.isEmpty() && types_from_template_parameters.isEmpty() {
+			errors.append(CompilationError("no type with matching name found", ErrorType::Error, ErrorStage::Typechecker, error_span));
+			throw errors;
+		}
+
+		var most_matching_template_parameters = 0;
+		var types_with_matching_template_parameters: List!<TypeRef>;
+		for type in types_with_matching_name {
+			const decl = type.lock().value();
+			const matching_template_parameters = this.getMatchingTemplateParameterCount(
+				decl.template_parameters, template_parameters
+			);
+
+			if matching_template_parameters > most_matching_template_parameters {
+				types_with_matching_template_parameters.clear();
+				most_matching_template_parameters = matching_template_parameters;
+			}
+
+			if matching_template_parameters == most_matching_template_parameters {
+				types_with_matching_template_parameters.append(type);
+			}
+		}
+
+		if template_parameters.isEmpty() {
+			types_with_matching_template_parameters.append(types_from_template_parameters);
+		}
+
+		if types_with_matching_template_parameters.isEmpty() {
+			errors.append(CompilationError("no matching type found", ErrorType::Error, ErrorStage::Typechecker, error_span));
+			errors.append(CompilationError("candidates are: ", ErrorType::Info, ErrorStage::Typechecker, Span(0u16)));
+			for i in 0u..types_with_matching_name.size() {
+				if i == 3 && types_with_matching_name.size() > 4 {
+					errors.append(CompilationError("        and " + format(types_with_matching_name.size() - 3) + " more", ErrorType::Info, ErrorStage::Typechecker, Span(0u16)));
+					break;
+				} else {
+					errors.append(CompilationError("        " + types_with_matching_name[i].signature(), ErrorType::Info, ErrorStage::Typechecker, Span(0u16)));
+				}
+			}
+			throw errors;
+		} else if types_with_matching_template_parameters.size() > 1 {
+			errors.append(CompilationError("more than one matching type found", ErrorType::Error, ErrorStage::Typechecker, error_span));
+			errors.append(CompilationError("candidates are: ", ErrorType::Info, ErrorStage::Typechecker, Span(0u16)));
+			for i in 0u..types_with_matching_template_parameters.size() {
+				if i == 3 {
+					errors.append(CompilationError("and " + format(types_with_matching_template_parameters.size() - 3) + " more", ErrorType::Info, ErrorStage::Typechecker, Span(0u16)));
+					break;
+				} else {
+					errors.append(CompilationError(types_with_matching_template_parameters[i].signature(), ErrorType::Info, ErrorStage::Typechecker, Span(0u16)));
+				}
+			}
+			throw errors;
+		}
+
+		var type = types_with_matching_template_parameters[0u];
+		if type.isIncompleteTemplate() {
+			return Ok(this.createTemplateTypeInstance(type, template_parameters, error_span));
+		} else {
+			return Ok(type);
+		}
+	}
+
+	func getTypeFromTemplateParameters(template_parameters: List!<TemplateParameterDecl>, name: String) -> List!<TypeRef> {
+		var candidates: List!<TypeRef>;
+
+		for parameter in template_parameters {
+			if parameter.name != name || parameter.value is None {
+				continue;
+			}
+
+			const value = parameter.value.value();
+			if const type = value as Type {
+				candidates.append(type);
+			}
+		}
+
+		return candidates;
+	}
+
+	func createTemplateTypeInstance(this: &&TCContext, type: TypeRef, template_parameters: List!<TemplateParameter>, error_span: Span) -> TypeRef {
+		const decl = type.lock().value();
+
+		var parent_module = decl.module.lock().value();
+
+		match decl.body {
+			case Int | UInt | Float -> {
+				if template_parameters.size() != 1 {
+					panic("invalid template parameter count for numeric type template");
+				}
+
+				const bits = (template_parameters[0u] as Integer).value();
+				if bits <= 0 {
+					this.error("only numeric types with size >= 1 are allowed", error_span);
+				}
+
+				var instance = TypeRef::unknown();
+				match decl.body {
+					case Int -> instance = parent_module.createIntTypeInstance(true, bits);
+					case UInt -> instance = parent_module.createIntTypeInstance(false, bits);
+					case Float -> instance = parent_module.createFloatTypeInstance(bits);
+					else -> panic("unreachable");
+				}
+
+				var instance_decl = instance.lock().value();
+				instance_decl.extensions = decl.extensions;
+
+				var tc_context = this.getContextForModule(parent_module.id);
+				tc_context.checkTypeBody(instance);
+				tc_context.state = min(tc_context.state, 1);
+				tc_context.runLoop(this.state);
+
+				return instance;
+			}
+			case Pointer: pointer_type -> {
+				if template_parameters.size() != 1 {
+					panic("invalid template parameter count for pointer template");
+				}
+
+				const base_type = (template_parameters[0u] as Type).value();
+				if base_type == this.program.void_type || base_type == this.program.never_type {
+					this.error("invalid pointer template parameter: pointee type must not be void", error_span);
+					return TypeRef::unknown();
+				}
+
+				const instance = parent_module.createPtrTypeInstance(pointer_type.is_const, base_type);
+
+				var instance_decl = instance.lock().value();
+				instance_decl.extensions = decl.extensions;
+
+				var tc_context = this.getContextForModule(parent_module.id);
+				tc_context.checkTypeBody(instance);
+				tc_context.state = min(tc_context.state, 1);
+				tc_context.runLoop(this.state);
+
+				return instance;
+			}
+			case Array -> {
+				if template_parameters.size() != 2 {
+					panic("invalid template parameter count for array template");
+				}
+
+				const element_type = (template_parameters[0u] as Type).value();
+				const size = (template_parameters[1u] as Integer).value();
+
+				if size < 0 {
+					this.error("only array types with size >= 0 are allowed", error_span);
+				}
+
+				var tc_context = this.getContextForModule(parent_module.id);
+
+				const element_cptr_type = tc_context.getType(List!<String>(), "cptr", List!<TemplateParameter>(1u, TemplateParameter::Type(element_type)), error_span) else: errors {
+					this.program.printErrors(errors);
+					return TypeRef::unknown();
+				}
+
+				const element_vptr_type = tc_context.getType(List!<String>(), "vptr", List!<TemplateParameter>(1u, TemplateParameter::Type(element_type)), error_span) else: errors {
+					this.program.printErrors(errors);
+					return TypeRef::unknown();
+				}
+
+				const instance = parent_module.createArrayTypeInstance(element_type, size as uint, element_cptr_type, element_vptr_type);
+
+				var instance_decl = instance.lock().value();
+				instance_decl.extensions = decl.extensions;
+
+				tc_context.checkTypeBody(instance);
+				tc_context.state = min(tc_context.state, 1);
+				tc_context.runLoop(this.state);
+
+				return instance;
+			}
+			case Unchecked: parsed_type -> {
+				var template_parameter_decls = decl.template_parameters;
+				for i in 0u..template_parameter_decls.size() {
+					template_parameter_decls[i].value = Some(template_parameters[i]);
+				}
+
+				var tc_context = this.getContextForModule(parent_module.id);
+				var temp_tc_context = tc_context.operator unwrap();
+
+				temp_tc_context.clearLocalState();
+				const instance = temp_tc_context.checkTypeDecl(parsed_type, template_parameter_decls);
+				temp_tc_context.runLoop(this.state);
+				tc_context.addUncheckedEntitiesFrom(&temp_tc_context);
+
+				return instance;
+			}
+			else -> {
+				this.error("cannot create template instance of this type", decl.span);
+				return TypeRef::unknown();
+			}
+		}
+	}
+
+	func getFunction(this: &&TCContext,
+		parent_type: TypeRef,
+		namespaces: List!<String>, name: String,
+		template_parameters: List!<TemplateParameter>,
+		parameter_types: List!<TypeRef>,
+		first_arg_max_ref_kind: ReferenceKind,
+		allow_unwrapping: bool,
+		error_span: Span
+	) -> FunctionLookupResult {
+		return this.selectFunction(
+			this.module.getFunctionsByName(namespaces, name, parent_type),
+			template_parameters,
+			parameter_types,
+			first_arg_max_ref_kind,
+			allow_unwrapping,
+			error_span
+		);
+	}
+
+	func getMemberFunction(this: &&TCContext,
+		parent_type: TypeRef,
+		name: String,
+		template_parameters: List!<TemplateParameter>,
+		parameter_types: List!<TypeRef>,
+		first_arg_max_ref_kind: ReferenceKind,
+		allow_unwrapping: bool,
+		error_span: Span
+	) -> FunctionLookupResult {
+		return this.selectFunction(
+			parent_type.getMemberFunctionsByName(name),
+			template_parameters,
+			parameter_types,
+			first_arg_max_ref_kind,
+			allow_unwrapping,
+			error_span
+		);
+	}
+
+	func selectFunction(this: &&TCContext,
+		functions_with_matching_name: List!<FunctionRef>,
+		template_parameters: List!<TemplateParameter>,
+		parameter_types: List!<TypeRef>,
+		first_arg_max_ref_kind: ReferenceKind,
+		allow_unwrapping: bool,
+		error_span: Span
+	) -> FunctionLookupResult {
+		var result: FunctionLookupResult;
+
+		if functions_with_matching_name.isEmpty() {
+			result.errors.append(CompilationError(
+				"no function with matching name found",
+				ErrorType::Error, ErrorStage::Typechecker, error_span
+			));
+			return result;
+		}
+
+		var most_matching_template_parameters = 0;
+		var functions_with_matching_template_parameters: List!<FunctionRef>;
+		for function in functions_with_matching_name {
+			const decl = function.lock().value();
+			const matching_template_parameters = this.getMatchingTemplateParameterCount(
+				decl.template_parameters, template_parameters
+			);
+
+			if matching_template_parameters > most_matching_template_parameters {
+				functions_with_matching_template_parameters.clear();
+				most_matching_template_parameters = matching_template_parameters;
+			}
+
+			if matching_template_parameters == most_matching_template_parameters {
+				functions_with_matching_template_parameters.append(function);
+			}
+		}
+
+		if functions_with_matching_template_parameters.isEmpty() {
+			result.errors.append(CompilationError(
+				"no function with matching template parameters found",
+				ErrorType::Error, ErrorStage::Typechecker, error_span
+			));
+			result.errors.append(CompilationError("candidates are: ", ErrorType::Info, ErrorStage::Typechecker, Span(0u16)));
+			for i in 0u..functions_with_matching_name.size() {
+				if i == 3 && functions_with_matching_name.size() > 4 {
+					result.errors.append(CompilationError("        and " + format(functions_with_matching_name.size() - 3) + " more", ErrorType::Info, ErrorStage::Typechecker, Span(0u16)));
+					break;
+				} else {
+					result.errors.append(CompilationError("        " + functions_with_matching_name[i].signature(), ErrorType::Info, ErrorStage::Typechecker, Span(0u16)));
+				}
+			}
+			return result;
+		}
+
+		var function_instances_with_matching_template_parameters: Set!<FunctionRef>;
+
+		for i in 0u..functions_with_matching_template_parameters.size() {
+			if functions_with_matching_template_parameters[i].isIncompleteTemplate() {
+				const instance = this.createTemplateFunctionInstance(
+					functions_with_matching_template_parameters[i],
+					template_parameters,
+					error_span
+				);
+
+				function_instances_with_matching_template_parameters.add(instance);
+			} else {
+				function_instances_with_matching_template_parameters.add(functions_with_matching_template_parameters[i]);
+			}
+		}
+
+		var most_matching_parameters = 0;
+		for function in function_instances_with_matching_template_parameters {
+			const matching_parameters = function.getMatchingParameterCount(parameter_types, first_arg_max_ref_kind, allow_unwrapping);
+
+			if matching_parameters > most_matching_parameters {
+				result.functions.clear();
+				most_matching_parameters = matching_parameters;
+			}
+
+			if matching_parameters == most_matching_parameters {
+				result.functions.append(function);
+			}
+		}
+
+		if result.isEmpty() {
+			result.errors.append(CompilationError(
+				"no function with matching parameters found",
+				ErrorType::Error, ErrorStage::Typechecker, error_span
+			));
+
+			result.errors.append(CompilationError(
+				"looking for " + parameter_types.format(),
+				ErrorType::Info, ErrorStage::Typechecker, Span(0u16)
+			));
+
+			var parameter_signatures: List!<String>;
+			for type in parameter_types {
+				parameter_signatures.append(type.signature());
+			}
+
+			result.errors.append(CompilationError("candidates are: ", ErrorType::Info, ErrorStage::Typechecker, Span(0u16)));
+			var i = 0u;
+			for function in function_instances_with_matching_template_parameters {
+				if i == 3 && function_instances_with_matching_template_parameters.size() > 4 {
+					result.errors.append(CompilationError(
+						"        and " + format(function_instances_with_matching_template_parameters.size() - 3) + " more",
+						ErrorType::Info, ErrorStage::Typechecker, Span(0u16)
+					));
+
+					break;
+				} else {
+					result.errors.append(CompilationError(
+						"        " + function.signature(),
+						ErrorType::Info, ErrorStage::Typechecker, Span(0u16)
+					));
+
+					i++;
+				}
+			}
+		}
+
+		return result;
+	}
+
+	func createTemplateFunctionInstance(this: &&TCContext, function: FunctionRef, template_parameters: List!<TemplateParameter>, error_span: Span) -> FunctionRef {
+		const decl = function.lock().value();
+
+		var parent_module = decl.module.lock().value();
+		var tc_context = this.getContextForModule(parent_module.id);
+
+		match decl.body {
+			case InlineBuiltin: builtin_function -> match builtin_function {
+				case PointerCast -> {
+					const source = (template_parameters[0u] as Type).value();
+					const target = (template_parameters[1u] as Type).value();
+
+					if source.isConstPtrType() && !target.isConstPtrType() {
+						this.error("invalid pointer cast, source type is const but target isn't", error_span);
+						return FunctionRef::unknown();
+					}
+
+					return parent_module.createPtrCastInstance(source, target);
+				}
+				case IntCast
+				| FloatCast
+				| IntToFloat
+				| FloatToInt -> {
+					const source = (template_parameters[0u] as Type).value();
+					const target = (template_parameters[1u] as Type).value();
+
+					var cast_name = "";
+					match builtin_function {
+						case IntCast -> cast_name = "intCast";
+						case FloatCast -> cast_name = "floatCast";
+						case IntToFloat -> cast_name = "intToFloat";
+						case FloatToInt -> cast_name = "floatToInt";
+						else -> panic("unreachable");
+					}
+
+					return parent_module.createNumericCastInstance(cast_name, source, target);
+				}
+				case SizeOf
+				| AlignmentOf
+				| ReferenceKindOf -> {
+					var name = "";
+					var parameter_types: List!<TypeRef>;
+					var return_type: TypeRef;
+					var body = builtin_function;
+
+					body.base_type = (template_parameters[0u] as Type).value();
+
+					match builtin_function {
+						case SizeOf -> name = "sizeOf";
+						case AlignmentOf -> name = "alignmentOf";
+						case ReferenceKindOf -> name = "referenceKindOf";
+						else -> panic(Error::EINVAL);
+					}
+
+					match builtin_function {
+						case SizeOf
+						| AlignmentOf -> return_type = this.program.uint_type;
+						case ReferenceKindOf -> match tc_context.getType(List!<String>(), "ReferenceKind", List!<TemplateParameter>(), error_span) {
+							case Ok: type -> return_type = type;
+							case Error: errors -> this.program.printErrors(errors);
+						}
+						else -> panic(Error::EINVAL);
+					}
+
+					if return_type.isUnknown() {
+						return FunctionRef::unknown();
+					}
+
+					const instance = parent_module.createFunction(name, parameter_types, return_type, FunctionBody::InlineBuiltin(body));
+					var decl = instance.lock().value();
+					decl.template_parameters.append(TemplateParameterDecl("Type", this.program.any_concept, false, template_parameters[0u]));
+
+					return instance;
+				}
+				else -> {
+					this.error("cannot create template instance of builtin function " + function.signature(), decl.span);
+					return FunctionRef::unknown();
+				}
+			}
+			case Unchecked: parsed_function -> {
+				var template_parameter_decls = decl.template_parameters;
+				for i in 0u..template_parameter_decls.size() {
+					template_parameter_decls[i].value = Some(template_parameters[i]);
+				}
+
+				var temp_tc_context = tc_context.operator unwrap();
+
+				temp_tc_context.clearLocalState();
+				const instance = temp_tc_context.checkFunctionDecl(parsed_function, template_parameter_decls);
+				temp_tc_context.runLoop(this.state);
+				tc_context.addUncheckedEntitiesFrom(&temp_tc_context);
+
+				return instance;
+			}
+			else -> {
+				this.error("cannot create template instance of this function", decl.span);
+				return FunctionRef::unknown();
+			}
+		}
+	}
+
+	func getMatchingTemplateParameterCount(this: &&TCContext, template_decls: List!<TemplateParameterDecl>, template_parameters: List!<TemplateParameter>) -> int {
+		if template_parameters.size() < template_decls.size() {
+			return -1;
+		}
+
+		if template_parameters.size() > template_decls.size() && !template_decls.isVariadic() {
+			return -1;
+		}
+
+		var count = 0;
+
+		for i in 0u..template_parameters.size() {
+			var k = min(i, template_decls.size() - 1);
+
+			if !this.doesConceptAcceptTemplateParameter(template_decls[k].concept, template_parameters[i]) {
+				return -1;
+			}
+
+			if const value = template_decls[k].value {
+				if value != template_parameters[i] {
+					return -1;
+				} else {
+					count += 1;
+				}
+			}
+		}
+
+		return count;
+	}
+
+	func getMatchingParameterCount(function: FunctionRef, parameter_types: List!<TypeRef>, first_arg_max_ref_kind: ReferenceKind, allow_unwrapping: bool) -> int {
+		const decl = function.lock().value();
+
+		if decl.parameter_types.size() != parameter_types.size() {
+			return -1;
+		}
+
+		var count = 0;
+		for i in 0u..parameter_types.size() {
+			const parameter_type_decl = parameter_types[i].lock().value();
+			if !(parameter_types[i].hasSameBaseTypeAs(decl.parameter_types[i]) || parameter_type_decl.unwrapped_type.hasSameBaseTypeAs(decl.parameter_types[i])) {
+				return -1;
+			}
+
+			if i == 0 {
+				if decl.parameter_types[i].kind > first_arg_max_ref_kind || decl.parameter_types[i].kind < parameter_types[i].kind {
+					return -1;
+				}
+			} else {
+				if parameter_types[i].kind != decl.parameter_types[i].kind {
+					return -1;
+				}
+			}
+
+			if parameter_types[i].hasSameBaseTypeAs(decl.parameter_types[i]) {
+				count++;
+			}
+		}
+
+		return count;
+	}
+
+	func getNumericTypeBits(name: String) -> Optional!<uint> {
+		if name[0u] != 'i'b && name[0u] != 'u'b && name[0u] != 'f'b {
+			return None;
+		}
+
+		const number_str = name.substring(1u..name.size());
+		const number = parseNumber(number_str, 0u);
+
+		if number.length < number_str.size() {
+			return None;
+		}
+
+		return Some(number.toInt() as uint);
+	}
+
+	func doesConceptAcceptTemplateParameter(this: &&TCContext, concept_ref: WeakPtr!<Concept>, parameter: TemplateParameter) -> bool {
+		const concept_decl = concept_ref.lock().value();
+		const concept = &concept_decl.operator unwrap();
+
+		if concept is IntLiteral && parameter is Integer {
+			return true;
+		} else if concept is IntLiteral || parameter is Integer {
+			return false;
+		}
+
+		if concept is Any && parameter is Type {
+			return true;
+		}
+
+		return false;
+	}
+
+	func checkTypeUsage(this: &&TCContext, parsed_type: ParsedType) -> Result!<TypeRef, List!<CompilationError>> {
+		match parsed_type {
+			case Name: name -> return this.getType(
+				name.namespaces,
+				name.name,
+				this.checkTemplateParameterList(name.template_parameters),
+				name.span
+			);
+			case ConstReference: base -> {
+				const checked_base = try this.checkTypeUsage(base);
+				if checked_base.kind != ReferenceKind::None {
+					throw List!<CompilationError>();
+				}
+				return Ok(checked_base.constRef());
+			}
+			case VarReference: base -> {
+				const checked_base = try this.checkTypeUsage(base);
+				if checked_base.kind != ReferenceKind::None {
+					throw List!<CompilationError>();
+				}
+				return Ok(checked_base.varRef());
+			}
+			case Optional: base -> {
+				this.todo("implement typechecking of optional types", parsed_type.span);
+				throw List!<CompilationError>();
+			}
+			case List: base -> {
+				this.todo("implement typechecking of list types", parsed_type.span);
+				throw List!<CompilationError>();
+			}
+			case Array: array_type -> {
+				this.todo("implement typechecking of array types", parsed_type.span);
+				throw List!<CompilationError>();
+			}
+			case Dict: dict_type -> {
+				this.todo("implement typechecking of dict types", parsed_type.span);
+				throw List!<CompilationError>();
+			}
+			case Garbage -> throw List!<CompilationError>();
+		}
+	}
+
+	func checkFunctionBody(this: &&TCContext, decl: &&FunctionDecl, parsed_body: ParsedCompoundStmt) -> void {
+		// reset local state
+		this.scope_stack.clear();
+		this.active_member_variables.clear();
+
+		this.match_value = Expr::Empty(Span(0u16), TypeRef::unknown());
+		this.match_type = TypeRef::unknown();
+		this.yield_type = TypeRef::unknown();
+		this.yield_var = WeakPtr!<VarDecl>();
+
+		this.pushScope(ScopeKind::Function);
+
+		var required_member_variables: Set!<uint>;
+		if const parent_type = decl.parent_type.lock() {
+			if decl.name != "constructor" {
+				for member_variable in parent_type.member_variables {
+					this.active_member_variables.add(member_variable.id);
+				}
+			} else {
+				for member_variable in parent_type.member_variables {
+					required_member_variables.add(member_variable.id);
+				}
+			}
+		}
+
+		var body = CompoundStmt(parsed_body.span);
+
+		for parameter in decl.parameters {
+			// create a local copy of all parameters passed by value
+			if parameter.type.kind == ReferenceKind::None {
+				var copy = decl.createVariable(decl.signature_span, parameter.name, parameter.type, true);
+				const parameter_expr = Expr::VarInvoke(WeakPtr!<VarDecl>(parameter), decl.signature_span, parameter.type);
+
+				if decl.isCopyConstructor() {
+					// the "other" parameter in copy a constructor can't be deep copied (would result in recursion),
+					// but it can safely be shallow copied because no other parameters can reference the same object
+					var var_decl = copy.lock().value();
+					var_decl.constructor_call = Expr::ShallowCopy(ShallowCopyExpr(
+						Expr::VarInvoke(copy, decl.signature_span, var_decl.type.varRef()),
+						parameter_expr,
+					), decl.signature_span, this.program.void_type);
+				} else {
+					this.createConstructorCall(copy, List!<Expr>(1u, parameter_expr));
+					this.createDestructorCall(copy);
+				}
+
+				this.addVariableToCurrentScope(copy);
+				body.children.append(Stmt::LifeTimeStart(copy, decl.signature_span));
+			} else {
+				this.addVariableToCurrentScope(WeakPtr!<VarDecl>(parameter));
+			}
+		}
+
+		if !this.current_return_type.isUnknown(){
+			if this.current_return_type != this.program.void_type && this.current_return_type != this.program.never_type {
+				this.return_variable = decl.createVariable(decl.signature_span, "#return_var", this.current_return_type, false);
+			}
+		}
+
+		this.checkStmtList(parsed_body.children, &&body.children.operator unwrap());
+
+		if this.active_member_variables != required_member_variables {
+			if body.isTerminator(this.program.never_type) {
+				if decl.name == "constructor" {
+					this.error("not all member variables initialized", decl.signature_span);
+				} else if decl.name == "destructor" {
+					this.error("not all member variables de-initialized", decl.signature_span);
+				}
+			} else {
+				const parent_type = decl.parent_type.lock().value();
+				var unhandled_member_variables: List!<uint>;
+				if decl.name == "constructor" {
+					for id in required_member_variables - this.active_member_variables {
+						if parent_type.member_variables[id].type.kind != ReferenceKind::None {
+							this.error("uninitialized reference member variable", decl.signature_span);
+						} else {
+							unhandled_member_variables.append(id);
+						}
+					}
+				} else if decl.name == "destructor" {
+					for id in this.active_member_variables {
+						if parent_type.member_variables[id].type.kind == ReferenceKind::None {
+							unhandled_member_variables.insert(0u, id);
+						}
+					}
+				}
+
+				const this_var_invoke_expr = Expr::VarInvoke(
+					WeakPtr!<VarDecl>(decl.variables[0u]),
+					decl.signature_span,
+					decl.variables[0u].type
+				);
+
+				for id in unhandled_member_variables {
+					const member_var_invoke_expr = Expr::MemberVarInvoke(
+						MemberVarInvokeExpr(this_var_invoke_expr, id),
+						decl.signature_span,
+						parent_type.member_variables[id].type.varRef()
+					);
+
+					const call = this.checkCall(
+						List!<String>(),
+						decl.name,
+						List!<TemplateParameter>(),
+						List!<Expr>(1u, member_var_invoke_expr),
+						false, CallKind::MemberCall,
+						decl.signature_span
+					);
+
+					body.children.append(Stmt::Expr(call, decl.signature_span));
+				}
+			}
+		}
+
+		if !body.isTerminator(this.program.never_type) {
+			body.children.append(this.collectCleanupCallsForCurrentScope());
+
+			if this.current_return_type == this.program.void_type {
+				body.children.append(Stmt::Return(Expr::Empty(Span(0u16), this.program.void_type), Span(0u16)));
+			} else {
+				this.error("non-void function doesn't return a value in all paths", decl.signature_span);
+			}
+		}
+
+		this.popScope();
+
+		decl.body = FunctionBody::Stmt(Stmt::Compound(body, body.span));
+	}
+
+	func checkStmt(this: &&TCContext, parsed_stmt: ParsedStmt) -> Stmt {
+		var result: List!<Stmt>;
+
+		match parsed_stmt {
+			case Pragma: value -> {
+				if this.current_type.isUnknown() && this.current_function.isUnknown() {
+					if value == "generate_std_core_builtins" {
+						this.module.createCoreDecls();
+					} else if value == "generate_std_array_builtins" {
+						this.module.createArrayTypeDecl();
+					} else {
+						this.error("invalid pragma", parsed_stmt.span);
+					}
+				} else {
+					this.error("invalid pragma", parsed_stmt.span);
+				}
+			}
+			case Import: name -> {
+				if !this.current_type.isUnknown() || !this.current_function.isUnknown() {
+					this.error("imports are only allowed at root scope", parsed_stmt.span);
+				} else {
+					this.checkImport(name);
+				}
+			}
+			case TypeDecl: decl -> {
+				if !this.current_type.isUnknown() || !this.current_function.isUnknown() {
+					this.error("types must be declared at root scope", parsed_stmt.span);
+				} else {
+					this.checkTypeDecl(decl);
+				}
+			}
+			case FunctionDecl: decl -> {
+				if !this.current_function.isUnknown() {
+					this.error("functions can't be declared inside other functions", parsed_stmt.span);
+				} else {
+					this.checkFunctionDecl(decl);
+				}
+			}
+			case CaseDecl: case_decl_stmt -> {
+				if this.current_type.isUnknown() {
+					this.error("ype-cases must be declared inside of a type decl", parsed_stmt.span);
+				} else if !this.current_function.isUnknown() {
+					this.error("type-cases cannot be declared inside of a function", parsed_stmt.span);
+				} else {
+					this.checkCaseDecl(case_decl_stmt);
+				}
+			}
+			case VarDecl: var_decl_stmt -> {
+				if !this.current_type.isUnknown() && this.current_function.isUnknown() {
+					this.checkMemberVarDecl(var_decl_stmt);
+				} else if !this.current_function.isUnknown() {
+					result.append(this.checkVarDeclStmt(var_decl_stmt));
+				} else {
+					this.todo("implement comptime variables", parsed_stmt.span);
+				}
+			}
+			case Compound: compound_stmt -> result.append(this.checkCompoundStmt(compound_stmt));
+			case If: if_stmt -> result.append(this.checkIfStmt(if_stmt, parsed_stmt.is_comptime, parsed_stmt.span));
+			case IfVar: if_var_stmt -> result.append(this.checkIfVarStmt(if_var_stmt, parsed_stmt.span));
+			case VarElse: var_else_stmt -> result.append(this.checkVarElseStmt(var_else_stmt, parsed_stmt.span));
+			case While: while_stmt -> result.append(this.checkWhileStmt(while_stmt, parsed_stmt.span));
+			case DoWhile: do_while_stmt -> result.append(this.checkDoWhileStmt(do_while_stmt, parsed_stmt.span));
+			case For: for_stmt -> result.append(this.checkForStmt(for_stmt, parsed_stmt.span));
+			case Case: case_stmt -> result.append(this.checkCaseStmt(case_stmt, parsed_stmt.span));
+			case ElseCase: body -> result.append(this.checkElseCaseStmt(body, parsed_stmt.span));
+			case Break -> result.append(this.checkBreakStmt(parsed_stmt.span));
+			case Continue -> result.append(this.checkContinueStmt(parsed_stmt.span));
+			case Throw: value -> result.append(this.checkThrowStmt(value, parsed_stmt.span));
+			case Return: value -> result.append(this.checkReturnStmt(value, parsed_stmt.span));
+			case Yield: value -> result.append(this.checkYieldStmt(value, parsed_stmt.span));
+			case Discard: value -> result.append(this.checkExprStmt(value, parsed_stmt.span, true));
+			case Expr: parsed_expr -> result.append(this.checkExprStmt(parsed_expr, parsed_stmt.span, false));
+			case Garbage -> result.append(Stmt::Empty(parsed_stmt.span));
+		}
+
+		if result.isEmpty() {
+			return Stmt::Empty(parsed_stmt.span);
+		} else if result.size() == 1 {
+			return result[0u];
+		} else {
+			var tmp = CompoundStmt(parsed_stmt.span);
+			tmp.children = result;
+			return Stmt::Compound(tmp, parsed_stmt.span);
+		}
+	}
+
+	func checkVarDeclStmt(this: &&TCContext, parsed_stmt: ParsedVarDecl) -> List!<Stmt> {
+		var type = TypeRef::unknown();
+		if parsed_stmt.type.hasValue() {
+			match this.checkTypeUsage(parsed_stmt.type.value()) {
+				case Ok: checked_type -> type = checked_type;
+				case Error: errors -> this.program.printErrors(errors);
+			}
+		}
+
+		var initializer: List!<Expr>;
+		this.pushScope(ScopeKind::Expr);
+		if parsed_stmt.initializer.hasValue() {
+			const parsed_initializer = parsed_stmt.initializer.value();
+			if parsed_initializer.isAnonymousTuple() && !type.isUnknown() {
+				for element in (parsed_initializer as Tuple).value() {
+					initializer.append(this.checkExpr(element.value, TypeRef::unknown()));
+				}
+			} else  {
+				initializer.append(this.checkExpr(parsed_initializer, type));
+				if type.isUnknown() {
+					type = initializer[0u].type;
+				}
+			}
+		}
+
+		const initializer_cleanup = this.collectCleanupCallsForCurrentScope();
+		this.popScope();
+
+		return this.checkVarDeclStmt(parsed_stmt.name, type, parsed_stmt.is_const, initializer, initializer_cleanup, parsed_stmt.span);
+	}
+
+	func checkVarDeclStmt(this: &&TCContext, name: String, type: TypeRef, is_const: bool, initializer: List!<Expr>, initializer_cleanup: List!<Stmt>, span: Span) -> List!<Stmt> {
+		if is_const && initializer.isEmpty() {
+			this.error("constants must be initialized", span);
+		}
+
+		if !is_const && type.kind == ReferenceKind::Const {
+			this.error("cannot store const reference in non-const variable", span);
+		}
+
+		var function = this.current_function.lock().value();
+		const variable = function.createVariable(span, name, type, is_const);
+
+		this.addVariableToCurrentScope(variable);
+
+		this.createConstructorCall(variable, initializer);
+		this.createDestructorCall(variable);
+
+		var result: List!<Stmt>;
+
+		result.append(Stmt::LifeTimeStart(variable, span));
+		result.append(initializer_cleanup);
+
+		return result;
+	}
+
+	func createConstructorCall(this: &&TCContext, variable: WeakPtr!<VarDecl>, initializer: List!<Expr>) -> void {
+		var decl = variable.lock().value();
+
+		if decl.type.kind == ReferenceKind::None {
+			var parameters: List!<Expr>;
+			parameters.append(Expr::VarInvoke(variable, decl.span, decl.type.varRef()));
+			parameters.append(initializer);
+
+			decl.constructor_call = this.checkCall(
+				ParsedName(decl.span, List!<String>(), "constructor", List!<ParsedExpr>()),
+				parameters, CallKind::MemberCall, decl.span
+			);
+		} else {
+			if initializer.size() != 1 {
+				this.error("reference variables must be initialized with a single value", decl.span);
+				return;
+			}
+
+			if initializer[0u].type != decl.type {
+				this.error("initializer has invalid type: expected " + decl.type.signature() + " but got " + initializer[0u].type.signature(), decl.span);
+				return;
+			}
+
+			const object = Expr::VarInvoke(variable, decl.span, decl.type);
+			decl.constructor_call = Expr::ShallowCopy(
+				ShallowCopyExpr(object, initializer[0u]),
+				decl.span, this.program.void_type
+			);
+		}
+	}
+
+	func createDestructorCall(this: &&TCContext, variable: WeakPtr!<VarDecl>) -> void {
+		var decl = variable.lock().value();
+
+		if decl.type.kind == ReferenceKind::None {
+			var parameters: List!<Expr>;
+			parameters.append(Expr::VarInvoke(variable, decl.span, decl.type.varRef()));
+
+			decl.destructor_call = this.checkCall(
+				ParsedName(decl.span, List!<String>(), "destructor", List!<ParsedExpr>()),
+				parameters, CallKind::MemberCall, decl.span
+			);
+		} else {
+			decl.destructor_call = Expr::Empty(decl.span, TypeRef::unknown());
+		}
+	}
+
+	func checkCompoundStmt(this: &&TCContext, parsed_stmt: ParsedCompoundStmt) -> Stmt {
+		var result = CompoundStmt(parsed_stmt.span);
+		this.pushScope(ScopeKind::Compound);
+
+		this.checkStmtList(parsed_stmt.children, &&result.children.operator unwrap());
+
+		if !result.isTerminator(this.program.never_type) {
+			result.children.append(this.collectCleanupCallsForCurrentScope());
+		}
+
+		this.popScope();
+
+		return Stmt::Compound(result, parsed_stmt.span);
+	}
+
+	func checkStmtList(this: &&TCContext, input: List!<ParsedStmt>, output: &&List!<Stmt>) -> void {
+		for stmt in input {
+			if const previous = output.last() {
+				if previous.isTerminator(this.program.never_type) {
+					this.error("unreachable code", stmt.span);
+				}
+			}
+
+			const checked_stmt = this.checkStmt(stmt);
+			match checked_stmt {
+				case Empty -> continue;
+				case Compound: compound_stmt -> output.append(compound_stmt.children);
+				else -> output.append(checked_stmt);
+			}
+		}
+	}
+
+	func checkIfStmt(this: &&TCContext, if_stmt: ParsedIfStmt, is_comptime: bool, span: Span) -> Stmt {
+		this.pushScope(ScopeKind::Expr);
+		const condition = this.checkExpr(if_stmt.condition, this.program.bool_type);
+		const condition_cleanup = this.collectCleanupCallsForCurrentScope();
+		this.popScope();
+
+		if condition.type != this.program.bool_type && !condition.type.isUnknown() {
+			this.error("invalid condition type: expected " + this.program.bool_type.signature() + " but got " + condition.type.signature(), condition.span);
+			return Stmt::Empty(span);
+		}
+
+		if is_comptime {
+			const condition_value = this.interpreter.interpret(condition) else {
+				return Stmt::Empty(span);
+			}
+
+			if condition_value is Undefined {
+				return Stmt::Empty(span);
+			}
+
+			if condition_value.toInt() != 0 {
+				return this.checkCompoundStmt(if_stmt.then_branch);
+			} else if if_stmt.else_branch.hasValue() {
+				return this.checkStmt(if_stmt.else_branch.value());
+			} else {
+				return Stmt::Empty(span);
+			}
+		} else {
+			const then_branch = this.checkCompoundStmt(if_stmt.then_branch);
+
+			var else_branch = Stmt::Empty(Span(0u16));
+			if const parsed_else_branch = if_stmt.else_branch {
+				else_branch = this.checkStmt(parsed_else_branch);
+			}
+
+			if condition.type.isUnknown() {
+				return Stmt::Empty(span);
+			}
+
+			return Stmt::If(IfStmt(condition, condition_cleanup, then_branch, else_branch), span);
+		}
+	}
+
+	func checkIfVarStmt(this: &&TCContext, parsed_stmt: ParsedIfVarStmt, span: Span) -> List!<Stmt> {
+		// if var x = y { ... }
+		// ->
+		// match y {
+		//    Ok | Some: #val -> { var x = #val; ... }
+		//    else -> {}
+		// }
+
+		const parsed_var_decl = parsed_stmt.var_decl;
+		var result: List!<Stmt>;
+
+		this.pushScope(ScopeKind::Expr);
+		const value = this.checkExpr(parsed_var_decl.initializer.value(), TypeRef::unknown());
+
+		if value.type.isUnknown() {
+			this.popScope();
+			return result;
+		}
+
+		const value_type_decl = value.type.lock().value();
+
+		var ok_case_name = "";
+		if value_type_decl.getVariantCase("Ok").hasValue() {
+			ok_case_name = "Ok";
+		} else if value_type_decl.getVariantCase("Some").hasValue() {
+			ok_case_name = "Some";
+		} else {
+			this.error("invalid value type for if var: expected Result or Optional", span);
+			this.popScope();
+			return result;
+		}
+
+		var body = parsed_stmt.body;
+		var capture_invoke_expr = ParsedExpr::Name(ParsedName(parsed_var_decl.span, List!<String>(), "#val", List!<ParsedExpr>()), parsed_var_decl.span);
+		if value.type.kind == ReferenceKind::Var {
+			capture_invoke_expr = ParsedExpr::Operator(ParsedOperatorExpr(Operator::VarRef, capture_invoke_expr), capture_invoke_expr.span);
+		} else if value.type.kind == ReferenceKind::Const {
+			capture_invoke_expr = ParsedExpr::Operator(ParsedOperatorExpr(Operator::ConstRef, capture_invoke_expr), capture_invoke_expr.span);
+		}
+
+		body.children.insert(0u, ParsedStmt::VarDecl(ParsedVarDecl(
+			parsed_var_decl.span,
+			parsed_var_decl.name,
+			parsed_var_decl.is_const,
+			Optional!<ParsedType>::None,
+			Optional!<ParsedExpr>::Some(capture_invoke_expr)
+		), parsed_stmt.var_decl.span, false));
+
+		var cases: List!<ParsedStmt>;
+
+		// Ok | Some: #val -> { var x = #val; ... }
+		cases.append(ParsedStmt::Case(ParsedCaseStmt(
+			List!<ParsedExpr>(1u, ParsedExpr::Name(ParsedName(value.span, List!<String>(), ok_case_name, List!<ParsedExpr>()), value.span)),
+			Optional!<String>::Some("#val"),
+			value.type.kind,
+			ParsedStmt::Compound(body, body.span, false)
+		), value.span, false));
+
+		// else -> {}
+		cases.append(ParsedStmt::ElseCase(Box!<ParsedStmt>(
+			ParsedStmt::Compound(ParsedCompoundStmt(value.span), value.span, false)
+		), value.span, false));
+
+		result.append(Stmt::Expr(this.checkMatchExpr(value, cases, TypeRef::unknown(), span), span));
+		result.append(this.collectCleanupCallsForCurrentScope());
+		this.popScope();
+
+		return result;
+	}
+
+	func checkVarElseStmt(this: &&TCContext, parsed_stmt: ParsedVarElseStmt, span: Span) -> List!<Stmt> {
+		// var bar = foo else: (&&)error { ... }
+		// ->
+		// var bar = match foo {
+		//     Ok | Some: val -> yield val;
+		//     Error | None: (&&)error -> { ... }
+		// }
+
+		const parsed_var_decl = parsed_stmt.var_decl;
+		const value = this.checkExpr(parsed_var_decl.initializer.value(), TypeRef::unknown());
+		if value.type.isUnknown() {
+			return List!<Stmt>();
+		}
+
+		const value_type_decl = value.type.lock().value();
+
+		var ok_case_name = "";
+		var error_case_name = "";
+		var capture = false;
+		if value_type_decl.getVariantCase("Ok").hasValue() {
+			ok_case_name = "Ok";
+			error_case_name = "Error";
+			
+			if parsed_stmt.capture_name.hasValue() {
+				capture = true;
+			}
+		} else if value_type_decl.getVariantCase("Some").hasValue() {
+			ok_case_name = "Some";
+			error_case_name = "None";
+
+			if parsed_stmt.capture_name.hasValue() {
+				this.error("can't capure error on this value type", span);
+			}
+		} else {
+			this.error("invalid value type for if var: expected Result or Optional", span);
+			return List!<Stmt>();
+		}
+
+		var cases: List!<ParsedStmt>;
+
+		var value_invoke_expr = ParsedExpr::Name(ParsedName(parsed_var_decl.span, List!<String>(), "#value", List!<ParsedExpr>()), parsed_var_decl.span);
+		match value.type.kind {
+			case Var -> value_invoke_expr = ParsedExpr::Operator(ParsedOperatorExpr(Operator::VarRef, value_invoke_expr), parsed_var_decl.span);
+			case Const -> value_invoke_expr = ParsedExpr::Operator(ParsedOperatorExpr(Operator::ConstRef, value_invoke_expr), parsed_var_decl.span);
+			else -> {}
+		}
+
+		// case Ok: val -> yield val
+		cases.append(ParsedStmt::Case(ParsedCaseStmt(
+			List!<ParsedExpr>(1u, ParsedExpr::Name(ParsedName(parsed_var_decl.span, List!<String>(), ok_case_name, List!<ParsedExpr>()), parsed_var_decl.span)),
+			Optional!<String>::Some("#value"),
+			value.type.kind,
+			ParsedStmt::Yield(Optional!<ParsedExpr>::Some(value_invoke_expr), parsed_var_decl.span, false)
+		), parsed_var_decl.span, false));
+
+		// case Error: (&&err) -> { ... }
+		cases.append(ParsedStmt::Case(ParsedCaseStmt(
+			List!<ParsedExpr>(1u, ParsedExpr::Name(ParsedName(parsed_var_decl.span, List!<String>(), error_case_name, List!<ParsedExpr>()), parsed_var_decl.span)),
+			parsed_stmt.capture_name,
+			parsed_stmt.capture_kind,
+			ParsedStmt::Compound(parsed_stmt.body, parsed_stmt.body.span, false)
+		), parsed_var_decl.span, false));
+
+		this.pushScope(ScopeKind::Expr);
+		const initializer = this.checkMatchExpr(value, cases, TypeRef::unknown(), span);
+		const initializer_cleanup = this.collectCleanupCallsForCurrentScope();
+		this.popScope();
+
+		return this.checkVarDeclStmt(
+			parsed_var_decl.name,
+			initializer.type,
+			parsed_var_decl.is_const,
+			List!<Expr>(1u, initializer),
+			initializer_cleanup,
+			parsed_var_decl.span
+		);
+	}
+
+	func checkWhileStmt(this: &&TCContext, parsed_stmt: ParsedWhileStmt, span: Span) -> Stmt {
+		this.pushScope(ScopeKind::Expr);
+		const condition = this.checkExpr(parsed_stmt.condition, this.program.bool_type);
+		const condition_cleanup = this.collectCleanupCallsForCurrentScope();
+		this.popScope();
+
+		if condition.type != this.program.bool_type && !condition.type.isUnknown() {
+			this.error("invalid condition type: expected " + this.program.bool_type.signature() + " but got " + condition.type.signature(), condition.span);
+			return Stmt::Empty(span);
+		}
+
+		this.pushScope(ScopeKind::Loop);
+		const body = this.checkCompoundStmt(parsed_stmt.body);
+		this.popScope();
+
+		return Stmt::While(WhileStmt(condition, condition_cleanup, body, WhileStmtKind::While), span);
+	}
+
+	func checkDoWhileStmt(this: &&TCContext, parsed_stmt: ParsedDoWhileStmt, span: Span) -> Stmt {
+		this.pushScope(ScopeKind::Loop);
+		const body = this.checkCompoundStmt(parsed_stmt.body);
+		this.popScope();
+
+		this.pushScope(ScopeKind::Expr);
+		const condition = this.checkExpr(parsed_stmt.condition, this.program.bool_type);
+		const condition_cleanup = this.collectCleanupCallsForCurrentScope();
+		this.popScope();
+
+		if condition.type != this.program.bool_type && !condition.type.isUnknown() {
+			this.error("invalid condition type: expected " + this.program.bool_type.signature() + " but got " + condition.type.signature(), condition.span);
+			return Stmt::Empty(span);
+		}
+
+		return Stmt::While(WhileStmt(condition, condition_cleanup, body, WhileStmtKind::DoWhile), span);
+	}
+
+	func checkForStmt(this: &&TCContext, parsed_stmt: ParsedForStmt, span: Span) -> Stmt {
+		var result = CompoundStmt(span);
+
+		this.pushScope(ScopeKind::Expr);
+		var get_iterator_args: List!<Expr>;
+		get_iterator_args.append(this.checkExpr(parsed_stmt.range, this.program.bool_type));
+		var get_iterator_call = this.checkCall(List!<String>(), "iterator", List!<TemplateParameter>(), get_iterator_args, false, CallKind::MemberCall, parsed_stmt.range.span);
+
+		if get_iterator_call is Empty {
+			return Stmt::Empty(span);
+		}
+
+		result.children.append(Stmt::Expr(get_iterator_call, get_iterator_call.span));
+
+		const iterator_var = (removeDereference(get_iterator_call) as Call).value().result_var;
+		const iterator_var_decl = iterator_var.lock().value();
+		const iterator_var_expr = Expr::Dereference(
+			Box!<Expr>(Expr::VarInvoke(iterator_var, parsed_stmt.range.span, iterator_var_decl.type.varRef())),
+			parsed_stmt.range.span, iterator_var_decl.type
+		);
+
+		this.pushScope(ScopeKind::Expr);
+		const condition = this.checkCall(List!<String>(), "hasNext", List!<TemplateParameter>(), List!<Expr>(1u, iterator_var_expr), false, CallKind::MemberCall, parsed_stmt.range.span);
+		const condition_cleanup = this.collectCleanupCallsForCurrentScope();
+		this.popScope();
+
+		if condition.type != this.program.bool_type && !condition.type.isUnknown() {
+			this.error("invalid condition type: expected " + this.program.bool_type.signature() + " but got " + condition.type.signature(), condition.span);
+			return Stmt::Empty(span);
+		}
+
+		var body = CompoundStmt(parsed_stmt.body.span);
+		this.pushScope(ScopeKind::Loop);
+
+		var initializer: List!<Expr>;
+		var next_value = this.checkCall(List!<String>(), "getNext", List!<TemplateParameter>(), List!<Expr>(1u, iterator_var_expr), false, CallKind::MemberCall, parsed_stmt.capture_span);
+
+		if next_value is Empty {
+			return Stmt::Empty(span);
+		}
+
+		if parsed_stmt.capture_kind != ReferenceKind::None {
+			next_value = removeDereference(next_value);
+			if next_value.type.kind == ReferenceKind::None {
+				this.error("can't take reference of constant", next_value.span);
+			} else if next_value.type.kind == ReferenceKind::Const && parsed_stmt.capture_kind == ReferenceKind::Var {
+				this.error("can't take var reference of const object", next_value.span);
+			}
+			next_value.type.kind = parsed_stmt.capture_kind;
+		}
+
+		initializer.append(next_value);
+		var function = this.current_function.lock().value();
+		const variable = function.createVariable(parsed_stmt.capture_span, parsed_stmt.capture_name, next_value.type, next_value.type.kind != ReferenceKind::Var);
+
+		this.addVariableToCurrentScope(variable);
+
+		this.createConstructorCall(variable, initializer);
+		this.createDestructorCall(variable);
+
+		body.children.append(Stmt::LifeTimeStart(variable, parsed_stmt.capture_span));
+
+		this.checkStmtList(parsed_stmt.body.children, &&body.children.operator unwrap());
+
+		if !body.isTerminator(this.program.never_type) {
+			body.children.append(this.collectCleanupCallsForCurrentScope());
+		}
+
+		this.popScope();
+
+		result.children.append(Stmt::While(WhileStmt(condition, condition_cleanup, Stmt::Compound(body, body.span), WhileStmtKind::While), span));
+		result.children.append(this.collectCleanupCallsForCurrentScope());
+		this.popScope();
+
+		return Stmt::Compound(result, result.span);
+	}
+
+	func checkCaseStmt(this: &&TCContext, parsed_stmt: ParsedCaseStmt, span: Span) -> Stmt {
+		if this.match_type.isUnknown() {
+			this.error("case statement outside of a match statement", span);
+			return Stmt::Empty(span);
+		}
+
+		const match_type_decl = this.match_type.lock().value();
+
+		var patterns: List!<Expr>;
+		for parsed_pattern in parsed_stmt.patterns {
+			if match_type_decl.body is Variant {
+				var case_name = "";
+				match parsed_pattern {
+					case Name: parsed_name -> {
+						if parsed_name.namespaces.isEmpty() && parsed_name.template_parameters.isEmpty() {
+							case_name = parsed_name.name;
+						} else {
+							this.error("invalid variant case as match patter", parsed_pattern.span);
+						}
+					}
+					else -> this.error("expected variant case name", parsed_pattern.span);
+				}
+
+				const pattern = match_type_decl.getVariantCase(case_name) else {
+					this.error("unknown variant case", parsed_pattern.span);
+					continue;
+				}
+
+				patterns.append(Expr::Integer(pattern.id, pattern.span, match_type_decl.id_type));
+			} else {
+				const checked_pattern = this.checkExpr(parsed_pattern, this.match_type);
+				if checked_pattern.type.isUnknown() {
+					continue;
+				}
+
+				if checked_pattern.type != this.match_type {
+					this.error("pattern has invalid type: expected '" + this.match_type.signature() + "' but got '" + checked_pattern.type.signature() + "'", parsed_pattern.span);
+					continue;
+				}
+
+				patterns.append(checked_pattern);
+			}
+		}
+
+		if patterns.isEmpty() {
+			return Stmt::Empty(span);
+		}
+
+		var body = Stmt::Empty(parsed_stmt.body.span);
+		if parsed_stmt.capture_name.hasValue() {
+			if patterns.size() != 1 {
+				this.error("capturing case statements must have exactly 1 pattern", span);
+				return Stmt::Empty(span);
+			}
+
+			if !(match_type_decl.body is Variant) {
+				this.error("capturing works only on variant types", span);
+				return Stmt::Empty(span);
+			}
+
+			const case_id = (patterns[0u] as Integer).value();
+			const case_decl = match_type_decl.getVariantCase(case_id).value();
+
+			var compound_stmt = CompoundStmt(span);
+			this.pushScope(ScopeKind::Compound);
+
+			var capture_init_template_parameters: List!<TemplateParameter>;
+			capture_init_template_parameters.append(TemplateParameter::Integer(case_id));
+
+			var capture_init_parameters: List!<Expr>;
+			capture_init_parameters.append(this.match_value);
+
+			var capture_init = this.checkCall(
+				List!<String>(), "operator unsafe as",
+				capture_init_template_parameters,
+				capture_init_parameters,
+				false, CallKind::MemberCall, span
+			);
+
+			var capture_type = capture_init.type;
+			capture_type.kind = parsed_stmt.capture_kind;
+			if parsed_stmt.capture_kind != ReferenceKind::None {
+				capture_init = capture_init.removeDereference();
+			}
+
+			var function = this.current_function.lock().value();
+			const variable = function.createVariable(span, parsed_stmt.capture_name.value(), capture_type, capture_type.kind != ReferenceKind::Var);
+
+			this.addVariableToCurrentScope(variable);
+
+			var initializer: List!<Expr>;
+			initializer.append(capture_init);
+			this.createConstructorCall(variable, initializer);
+			this.createDestructorCall(variable);
+
+			compound_stmt.children.append(Stmt::LifeTimeStart(variable, span));
+
+			const checked_body = this.checkStmt(parsed_stmt.body);
+			compound_stmt.children.append(checked_body);
+			if !checked_body.isTerminator(this.program.never_type) {
+				compound_stmt.children.append(this.collectCleanupCallsForCurrentScope());
+			}
+
+			this.popScope();
+			body = Stmt::Compound(compound_stmt, span);
+		} else {
+			body = this.checkStmt(parsed_stmt.body);
+		}
+
+		return Stmt::Case(CaseStmt(span, patterns, body), span);
+	}
+
+	func checkElseCaseStmt(this: &&TCContext, parsed_body: ParsedStmt, span: Span) -> Stmt {
+		const body = this.checkStmt(parsed_body);
+		if body is Empty {
+			return Stmt::Empty(span);
+		} else {
+			return Stmt::ElseCase(Box!<Stmt>(body), span);
+		}
+	}
+
+	func checkBreakStmt(this: &&TCContext, span: Span) -> List!<Stmt> {
+		if !this.isCurrentScopeInsideLoop() {
+			this.error("break statements must be inside of a loop", span);
+			return List!<Stmt>();
+		}
+
+		var result = this.collectCleanupCalls(ScopeKind::Loop);
+		result.append(Stmt::Break(span));
+		return result;
+	}
+
+	func checkContinueStmt(this: &&TCContext, span: Span) -> List!<Stmt> {
+		if !this.isCurrentScopeInsideLoop() {
+			this.error("continue statements must be inside of a loop", span);
+			return List!<Stmt>();
+		}
+
+		var result = this.collectCleanupCalls(ScopeKind::Loop);
+		result.append(Stmt::Continue(span));
+		return result;
+	}
+
+	func checkThrowStmt(this: &&TCContext, parsed_value: ParsedExpr, span: Span) -> List!<Stmt> {
+		const return_type_decl = this.current_return_type.lock().value();
+		const c = return_type_decl.getVariantCase("Error") else {
+			this.error("invalid return type for throw: expected std::core::Result or similar, but got " + this.current_return_type.signature(), span);
+			return List!<Stmt>();
+		}
+
+		this.pushScope(ScopeKind::Expr);
+		const value = this.checkTemporaryVariable(
+			this.current_return_type,
+			List!<TemplateParameter>(1u, TemplateParameter::Integer(c.id)),
+			List!<Expr>(1u, this.checkExpr(parsed_value, c.type)),
+			span
+		);
+		const value_cleanup = this.collectCleanupCallsForCurrentScope();
+		this.popScope();
+
+		return this.checkReturnStmt(value, value_cleanup, span);
+	}
+
+	func checkReturnStmt(this: &&TCContext, parsed_value: Optional!<ParsedExpr>, span: Span) -> List!<Stmt> {
+		var value = Expr::Empty(span, this.program.void_type);
+		var value_cleanup: List!<Stmt>;
+
+		if parsed_value.hasValue() {
+			this.pushScope(ScopeKind::Expr);
+			value = this.checkExpr(parsed_value.value(), this.current_return_type);
+
+			if const type_decl = value.type.lock() {
+				if value.type != this.current_return_type && type_decl.unwrapped_type == this.current_return_type.base() && value.type.kind == this.current_return_type.kind {
+					value = this.checkCall(
+						List!<String>(), "operator unwrap", List!<TemplateParameter>(),
+						List!<Expr>(1u, value), false, CallKind::MemberCall, span
+					);
+
+					if this.current_return_type.kind != ReferenceKind::None {
+						value = removeDereference(value);
+						value.type.kind = this.current_return_type.kind;
+					}
+				}
+			}
+
+			value_cleanup = this.collectCleanupCallsForCurrentScope();
+			this.popScope();
+		}
+
+		return this.checkReturnStmt(value, value_cleanup, span);
+	}
+
+	func checkReturnStmt(this: &&TCContext, checked_value: Expr, value_cleanup: List!<Stmt>, span: Span) -> List!<Stmt> {
+		var value = checked_value;
+		var result: List!<Stmt>;
+
+		if value.type.isUnknown() || this.current_return_type.isUnknown() {
+			result.append(Stmt::Return(Expr::Empty(value.span, this.current_return_type), span));
+			return result;
+		}
+
+		if value.type != this.current_return_type {
+			this.error("invalid return type: expected " + this.current_return_type.signature() + ", but got " + value.type.signature(), value.span);
+			result.append(Stmt::Return(Expr::Empty(value.span, TypeRef::unknown()), span));
+			return result;
+		}
+
+		var parameters: List!<Expr>;
+
+		if value.type != this.program.void_type && value.type != this.program.never_type {
+			parameters.append(Expr::VarInvoke(this.return_variable, span, this.current_return_type.varRef()));
+
+			parameters.append(value);
+
+			var return_variable_init = Expr::Empty(span, TypeRef::unknown());
+
+			if this.current_return_type.kind == ReferenceKind::None {
+				return_variable_init = this.checkCall(
+					List!<String>(), "constructor", List!<TemplateParameter>(),
+					parameters, false, CallKind::MemberCall, span
+				);
+			} else {
+				return_variable_init = Expr::ShallowCopy(
+					ShallowCopyExpr(parameters[0u], parameters[1u]),
+					span, this.program.void_type
+				);
+			}
+
+			result.append(Stmt::Expr(return_variable_init, span));
+
+			value = Expr::VarInvoke(this.return_variable, span, this.current_return_type.varRef());
+
+			if this.current_return_type.kind == ReferenceKind::None {
+				value = Expr::Dereference(Box!<Expr>(value), span, this.current_return_type);
+			} else {
+				value.type.kind = this.current_return_type.kind;
+			}
+
+			result.append(value_cleanup);
+			result.append(this.collectCleanupCalls(ScopeKind::Function));
+			result.append(Stmt::Return(value, span));
+		} else {
+			result.append(Stmt::Expr(value, value.span));
+			result.append(value_cleanup);
+			result.append(this.collectCleanupCalls(ScopeKind::Function));
+			result.append(Stmt::Return(Expr::Empty(span, this.program.void_type), span));
+		}
+
+		return result;
+	}
+
+	func checkYieldStmt(this: &&TCContext, parsed_value: Optional!<ParsedExpr>, span: Span) -> List!<Stmt> {
+		var result: List!<Stmt>;
+
+		if parsed_value.hasValue() {
+			this.pushScope(ScopeKind::Expr);
+			const checked_value = this.checkExpr(parsed_value.value(), this.yield_type);
+			const value_cleanup = this.collectCleanupCallsForCurrentScope();
+			this.popScope();
+
+			if checked_value.type.isUnknown() {
+				return result;
+			}
+
+			if this.yield_type.isUnknown() {
+				this.yield_type = checked_value.type;
+			} else if checked_value.type != this.yield_type {
+				this.error("invalid yield type: expected " + this.yield_type.signature() + " but got " + checked_value.type.signature(), span);
+				return result;
+			}
+
+			if !this.yield_var.isAlive() {
+				var func_decl = this.current_function.lock().value();
+				this.yield_var = func_decl.createVariable(Span(0u16), "#yield_var", checked_value.type, checked_value.type.kind != ReferenceKind::Var);
+				this.createDestructorCall(this.yield_var);
+			}
+
+			if this.yield_type.kind == ReferenceKind::None {
+				var constructor_args: List!<Expr>;
+				constructor_args.append(Expr::VarInvoke(this.yield_var, span, this.yield_type.varRef()));
+				constructor_args.append(checked_value);
+
+				const constructor_call = this.checkCall(List!<String>(), "constructor", List!<TemplateParameter>(), constructor_args, false, CallKind::MemberCall, span);
+				result.append(Stmt::Expr(constructor_call, span));
+			} else {
+				result.append(Stmt::Expr(Expr::ShallowCopy(
+					ShallowCopyExpr(Expr::VarInvoke(this.yield_var, span, this.yield_type.varRef()), checked_value),
+					span,
+					this.program.void_type
+				), span));
+			}
+
+			result.append(value_cleanup);
+		} else if this.yield_type.isUnknown() {
+			this.yield_type = this.program.void_type;
+		} else if this.yield_type != this.program.void_type {
+			this.error("invalid yield type: expected " + this.yield_type.signature() + " but got " + this.program.void_type.signature(), span);
+			return result;
+		}
+
+		result.append(this.collectCleanupCalls(ScopeKind::Match));
+		result.append(Stmt::Yield(span));
+		return result;
+	}
+
+	func checkExprStmt(this: &&TCContext, parsed_expr: ParsedExpr, span: Span, is_discard_stmt: bool) -> List!<Stmt> {
+		this.pushScope(ScopeKind::Expr);
+		const expr = this.checkExpr(parsed_expr, TypeRef::unknown());
+		const cleanup = this.collectCleanupCallsForCurrentScope();
+		this.popScope();
+
+		var result: List!<Stmt>;
+		if !expr.type.isUnknown() {
+			const expr_stmt = Stmt::Expr(expr, span);
+			result.append(expr_stmt);
+			if !expr_stmt.isTerminator(this.program.never_type) {
+				result.append(cleanup);
+			}
+		}
+
+		if !is_discard_stmt && !expr.type.isUnknown() {
+			if expr.type != this.program.void_type && expr.type != this.program.never_type {
+				this.error("unused value", parsed_expr.span);
+			}
+		}
+
+		return result;
+	}
+
+	func checkExpr(this: &&TCContext, parsed_expr: ParsedExpr, expected_type: TypeRef) -> Expr {
+		match parsed_expr {
+			case Char: char_literal -> return this.checkCharLiteralExpr(char_literal, parsed_expr.span, expected_type);
+			case String: string_literal -> return this.checkStringLiteralExpr(string_literal, parsed_expr.span, expected_type);
+			case Number: number_literal -> return this.checkNumberLiteralExpr(number_literal, parsed_expr.span, expected_type);
+			case Bool: value -> return this.checkBoolLiteralExpr(value, parsed_expr.span, expected_type);
+			case Name: parsed_name -> return this.checkNameExpr(parsed_name, parsed_expr.span, expected_type);
+			case MemberName: parsed_name -> return this.checkMemberNameExpr(parsed_name, parsed_expr.span, expected_type);
+			case Operator: parsed_operator -> return this.checkOperatorExpr(parsed_operator, parsed_expr.span, expected_type);
+			case Paren: child -> return this.checkExpr(child, expected_type);
+			case Array: elements -> return this.checkArrayExpr(elements, parsed_expr.span, expected_type);
+			case Tuple: elements -> return this.checkTupleExpr(elements, parsed_expr.span, expected_type);
+			case Dict: elements -> return this.checkDictExpr(elements, parsed_expr.span, expected_type);
+			case Match: match_expr -> return this.checkMatchExpr(match_expr, expected_type, parsed_expr.span);
+			case Garbage -> return Expr::Empty(parsed_expr.span, TypeRef::unknown());
+		}
+	}
+
+	func checkCharLiteralExpr(this: &&TCContext, char_literal: CharLiteral, span: Span, expected_type: TypeRef) -> Expr {
+		if char_literal.postfix == "b" {
+			return Expr::Integer(char_literal.value as int, span, this.program.byte_type);
+		} else if const bits = getNumericTypeBits(char_literal.postfix) {
+			var name = "";
+			match char_literal.postfix[0u] {
+				case 'i'b -> name = "int";
+				case 'u'b -> name = "uint";
+				else -> {
+					this.error("invalid char literal postfix", span);
+					return Expr::Empty(span, TypeRef::unknown());
+				}
+			}
+
+			var template_parameters: List!<TemplateParameter>;
+			template_parameters.append(TemplateParameter::Integer(bits as int));
+
+			if const type = this.getType(List!<String>(), name, template_parameters, span) {
+				return Expr::Integer(char_literal.value as int, span, type);
+			}
+		}
+
+		this.error("invalid char literal", span);
+		return Expr::Empty(span, TypeRef::unknown());
+	}
+
+	func checkStringLiteralExpr(this: &&TCContext, string_literal: StringLiteral, span: Span, expected_type: TypeRef) -> Expr {
+		const string_type = this.getType(List!<String>(), "String", List!<TemplateParameter>(), span) else: errors {
+			this.program.printErrors(errors);
+			return Expr::Empty(span, TypeRef::unknown());
+		}
+
+		if string_literal.postfix == "" {
+			return Expr::String(string_literal.value, span, string_type);
+		} else {
+			this.error("invalid string literal", span);
+			return Expr::Empty(span, TypeRef::unknown());
+		}
+	}
+
+	func checkNumberLiteralExpr(this: &&TCContext, number_literal: NumberLiteral, span: Span, expected_type: TypeRef) -> Expr {
+		if number_literal.postfix == "" {
+			if expected_type.isIntType() {
+				return Expr::Integer(number_literal.value.toInt(), span, expected_type);
+			} else if expected_type.isFloatType() {
+				return Expr::Float(number_literal.value.toFloat(), span, expected_type);
+			} else if number_literal.value.isInteger() && !number_literal.value.contains_decimal_point {
+				return Expr::Integer(number_literal.value.toInt(), span, this.program.int_type);
+			} else {
+				const type = this.getType(List!<String>(), "f64", List!<TemplateParameter>(), span) else: errors {
+					this.program.printErrors(errors);
+					return Expr::Empty(span, TypeRef::unknown());
+				}
+				return Expr::Float(number_literal.value.toFloat(), span, type);
+			}
+		} else if number_literal.postfix == "i" {
+			return Expr::Integer(number_literal.value.toInt(), span, this.program.int_type);
+		} else if number_literal.postfix == "u" {
+			return Expr::Integer(number_literal.value.toInt(), span, this.program.uint_type);
+		} else if number_literal.postfix == "b" {
+			return Expr::Integer(number_literal.value.toInt(), span, this.program.byte_type);
+		} else if number_literal.postfix == "f" {
+			const type = this.getType(List!<String>(), "f64", List!<TemplateParameter>(), span) else: errors {
+				this.program.printErrors(errors);
+				return Expr::Empty(span, TypeRef::unknown());
+			}
+			return Expr::Float(number_literal.value.toFloat(), span, type);
+		} else if const bits = getNumericTypeBits(number_literal.postfix) {
+			var name = "";
+			match number_literal.postfix[0u] {
+				case 'i'b -> name = "int";
+				case 'u'b -> name = "uint";
+				case 'f'b -> name = "float";
+				else -> {
+					this.error("invalid number literal postfix", span);
+					return Expr::Empty(span, TypeRef::unknown());
+				}
+			}
+
+			var template_parameters: List!<TemplateParameter>;
+			template_parameters.append(TemplateParameter::Integer(bits as int));
+
+			if const type = this.getType(List!<String>(), name, template_parameters, span) {
+				return Expr::Integer(number_literal.value.toInt(), span, type);
+			}
+		}
+
+		this.error("invalid number literal", span);
+		return Expr::Empty(span, TypeRef::unknown());
+	}
+
+	func checkBoolLiteralExpr(this: &&TCContext, value: bool, span: Span, expected_type: TypeRef) -> Expr {
+		if expected_type.isIntType() {
+			return Expr::Integer(value as int, span, expected_type);
+		} else {
+			return Expr::Integer(value as int, span, this.program.bool_type);
+		}
+	}
+
+	func checkVarInvokeExpr(this: &&TCContext, variable: WeakPtr!<VarDecl>, span: Span) -> Expr {
+		const decl = variable.lock().value();
+
+		var result = Expr::Empty(Span(0u16), TypeRef::unknown());
+
+		match decl.type.kind {
+			case Const | Var -> result = Expr::VarInvoke(variable, span, decl.type);
+			else -> match decl.is_const {
+				case true -> result = Expr::VarInvoke(variable, span, decl.type.constRef());
+				case false -> result = Expr::VarInvoke(variable, span, decl.type.varRef());
+			}
+		}
+
+		return Expr::Dereference(Box!<Expr>(result), span, decl.type.base());
+	}
+
+	func checkNameExpr(this: &&TCContext, name: ParsedName, span: Span, expected_type: TypeRef) -> Expr {
+		if !name.template_parameters.isEmpty() {
+			this.error("name expressions can't have template parameters", span);
+			return Expr::Empty(name.span, TypeRef::unknown());
+		}
+
+		if const template_parameter = this.getTemplateParameter(name.name) {
+			if const value = template_parameter as Integer {
+				if expected_type.isIntType() {
+					return Expr::Integer(value, span, expected_type);
+				} else if expected_type.isFloatType() {
+					return Expr::Float(value as f64, span, expected_type);
+				} else {
+					return Expr::Integer(value, span, this.program.int_type);
+				}
+			}
+		}
+
+		if const variable = this.getVariableByName(name) {
+			return this.checkVarInvokeExpr(variable, span);
+		}
+
+		var parent_type = expected_type;
+
+		if !name.namespaces.isEmpty() {
+			const parsed_type = ParsedType::Name(ParsedName(
+				span,
+				List!<String>(name.namespaces[0u..(name.namespaces.size() - 1)]),
+				name.namespaces.last().value(),
+				List!<ParsedExpr>()
+			), span);
+
+			match this.checkTypeUsage(parsed_type) {
+				case Ok: type -> parent_type = type;
+				case Error: errors -> {
+					this.program.printErrors(errors);
+					return Expr::Empty(name.span, TypeRef::unknown());
+				}
+			}
+		}
+
+		if parent_type.isUnknown() {
+			this.error("variable '" + name.name + "' not found", span);
+			return Expr::Empty(name.span, TypeRef::unknown());
+		}
+
+		const decl = parent_type.lock().value();
+		if const c = decl.getEnumCase(name.name) {
+			return Expr::Integer(c.id, span, parent_type);
+		}
+
+		if decl.getVariantCase(name.name).hasValue() {
+			return this.checkExplicitMemberCall(parent_type, name.name, List!<ParsedExpr>(), List!<ParsedExpr>(), span);
+		} else {
+			this.error("variable '" + name.name + "' not found", span);
+			return Expr::Empty(name.span, TypeRef::unknown());
+		}
+	}
+
+	func checkMemberNameExpr(this: &&TCContext, name: ParsedMemberName, span: Span, expected_type: TypeRef) -> Expr {
+		const parent_type = this.checkTypeUsage(ParsedType::Name(name.parent, name.parent.span)) else: errors {
+			this.program.printErrors(errors);
+			return Expr::Empty(span, TypeRef::unknown());
+		}
+
+		if parent_type.isVariant() {
+			return this.checkExplicitMemberCall(parent_type, name.name, name.template_parameters, List!<ParsedExpr>(), span);
+		} else {
+			this.error("invalid member name expr: parent type should be variant", span);
+			return Expr::Empty(span, TypeRef::unknown());
+		}
+	}
+
+	func checkOperatorExpr(this: &&TCContext, parsed_expr: ParsedOperatorExpr, span: Span, expected_type: TypeRef) -> Expr {
+		match parsed_expr.op {
+			case Initialize -> {
+				var lhs = removeDereference(this.checkExpr(parsed_expr.operands[0u], TypeRef::unknown()));
+				if lhs.type.isUnknown() {
+					return Expr::Empty(span, TypeRef::unknown());
+				}
+
+				const member_var_invoke_expr = lhs as MemberVarInvoke else {
+					this.error("invalid initialize expr: object must be a member var invoke expr", span);
+					return Expr::Empty(span, TypeRef::unknown());
+				}
+
+				const type_decl = member_var_invoke_expr.object.type.lock().value();
+
+				const member_variable = type_decl.member_variables[member_var_invoke_expr.id];
+				if member_variable.type.kind == ReferenceKind::None {
+					var arguments: List!<Expr>;
+					arguments.append(lhs);
+
+					match parsed_expr.operands[1u] {
+						case Tuple: elements -> {
+							for element in elements {
+								arguments.append(this.checkExpr(element.value, TypeRef::unknown()));
+							}
+						}
+						case Paren: child -> arguments.append(this.checkExpr(child, TypeRef::unknown()));
+						else -> arguments.append(this.checkExpr(parsed_expr.operands[1u], member_variable.type));
+					}
+
+					return this.checkCall(List!<String>(), "constructor", List!<TemplateParameter>(), arguments, false, CallKind::MemberCall, span);
+				} else {
+					if this.active_member_variables.contains(member_var_invoke_expr.id) {
+						this.error("double initialization of member variable", span);
+						return Expr::Empty(span, TypeRef::unknown());
+					}
+
+					this.active_member_variables.add(member_var_invoke_expr.id);
+
+					const rhs = this.checkExpr(parsed_expr.operands[1u], member_variable.type);
+					if rhs.type != member_variable.type {
+						this.error("initializer has invalid type: expected " + member_variable.type.signature() + " but got " + rhs.type.signature(), span);
+					}
+
+					return Expr::ShallowCopy(ShallowCopyExpr(lhs, rhs), span, this.program.void_type);
+				}
+			}
+			case Call -> {
+				var function = parsed_expr.operands[0u];
+				var arguments = List!<ParsedExpr>(parsed_expr.operands[1u..parsed_expr.operands.size()]);
+				match function {
+					case Name: name -> {
+						if const type = this.checkTypeUsage(ParsedType::Name(name, name.span)) {
+							return this.checkExplicitMemberCall(type, "", List!<ParsedExpr>(), arguments, span);
+						}
+
+						if name.namespaces.isEmpty() && name.template_parameters.isEmpty() && !expected_type.isUnknown() {
+							const expected_type_decl = expected_type.lock().value();
+							if const c = expected_type_decl.getVariantCase(name.name) {
+								var template_parameters: List!<TemplateParameter>;
+								template_parameters.append(TemplateParameter::Integer(c.id));
+								return this.checkTemporaryVariable(expected_type, template_parameters, arguments, span);
+							}
+						}
+
+						if !name.namespaces.isEmpty() && name.template_parameters.isEmpty() {
+							const type_prefix = ParsedType::Name(ParsedName(
+								name.span,
+								List!<String>(name.namespaces[0u..(name.namespaces.size() - 1)]),
+								name.namespaces.last().value(),
+								List!<ParsedExpr>(),
+							), name.span);
+
+							if const type = this.checkTypeUsage(type_prefix) {
+								return this.checkExplicitMemberCall(type, name.name, List!<ParsedExpr>(), arguments, span);
+							}
+						}
+
+						if this.getVariableByName(name) is None {
+							return this.checkCall(name, arguments, CallKind::Static, span);
+						}
+					}
+					case MemberName: member_name -> {
+						var parent_type = TypeRef::unknown();
+						match this.checkTypeUsage(ParsedType::Name(member_name.parent, member_name.parent.span)) {
+							case Ok: type -> parent_type = type;
+							case Error: errors -> {
+								this.program.printErrors(errors);
+								for arg in arguments {	// just to find possible errors in the arguments
+									discard this.checkExpr(arg, TypeRef::unknown());
+								}
+								return Expr::Empty(span, TypeRef::unknown());
+							}
+						}
+
+						return this.checkExplicitMemberCall(parent_type, member_name.name, member_name.template_parameters, arguments, span);
+					}
+					case Operator: operator_expr -> {
+						if operator_expr.op == MemberAccess {
+							arguments.insert(0u, operator_expr.operands[0u]);
+							match operator_expr.operands[1u] {
+								case Name: name -> {
+									// TODO: if name is member-variable return (object.var).operator()(args...)
+									return this.checkCall(name, arguments, CallKind::MemberCall, span);
+								}
+								else -> {}
+							}
+						}
+					}
+					else -> {}
+				}
+
+				return this.checkCall(ParsedName(
+					span,
+					List!<String>(),
+					"operator ()",
+					List!<ParsedExpr>()
+				), parsed_expr.operands, CallKind::MemberCall, span);
+			}
+			case Index -> return this.checkCall(ParsedName(
+				span,
+				List!<String>(),
+				"operator []",
+				List!<ParsedExpr>()
+			), parsed_expr.operands, CallKind::MemberCall, span);
+			case ConstRef -> {
+				var base = this.checkExpr(parsed_expr.operands[0u], TypeRef::unknown()).removeDereference();
+				if base.type.kind == ReferenceKind::None {
+					this.error("object can't be referenced", base.span);
+				}
+
+				base.type.kind = ReferenceKind::Const;
+				base.span = span;
+				return base;
+			}
+			case VarRef -> {
+				var base = this.checkExpr(parsed_expr.operands[0u], TypeRef::unknown()).removeDereference();
+				if base.type.kind == ReferenceKind::None {
+					this.error("object can't be referenced", base.span);
+				} else if base.type.kind == ReferenceKind::Const {
+					this.error("can't take var reference to const object", base.span);
+				}
+
+				base.type.kind = ReferenceKind::Var;
+				base.span = span;
+				return base;
+			}
+			case Is -> return this.checkOperatorIsExpr(parsed_expr.operands[0u], parsed_expr.operands[1u], span);
+			case As -> return this.checkOperatorAsExpr(parsed_expr.operands[0u], parsed_expr.operands[1u], span);
+			case Try | Must -> return this.checkValidateExpr(parsed_expr.operands[0u], parsed_expr.op, span);
+			case InlineIf -> return this.checkInlineIfExpr(parsed_expr.operands[0u], parsed_expr.operands[1u], parsed_expr.operands[2u], expected_type, span);
+			case MemberAccess -> {
+				var object = removeDereference(this.checkExpr(parsed_expr.operands[0u], TypeRef::unknown()));
+				if object.type.isUnknown() {
+					return Expr::Empty(span, TypeRef::unknown());
+				}
+
+				const member_name = parsed_expr.operands[1u] as Name else {
+					this.error("expected member name", span);
+					return Expr::Empty(span, TypeRef::unknown());
+				}
+
+				if !member_name.namespaces.isEmpty() || !member_name.template_parameters.isEmpty() {
+					this.error("invalid member name", span);
+					return Expr::Empty(span, TypeRef::unknown());
+				}
+
+				var type_decl = object.type.lock().value();
+				if type_decl.getMemberVariable(member_name.name) is None && !type_decl.unwrapped_type.isUnknown() {
+					const unwrapped_decl = type_decl.unwrapped_type.lock().value();
+					if unwrapped_decl.getMemberVariable(member_name.name) is Some {
+						object = removeDereference(this.checkCall(
+							List!<String>(), "operator unwrap", List!<TemplateParameter>(),
+							List!<Expr>(1u, object), false, CallKind::MemberCall, span
+						));
+
+						type_decl = unwrapped_decl;
+					}
+				}
+
+				const member_variable = type_decl.getMemberVariable(member_name.name) else {
+					this.error("no member variable with name '" + member_name.name + "' on type " + object.type.base().signature(), span);
+					return Expr::Empty(span, TypeRef::unknown());
+				}
+
+				var result_type = member_variable.type;
+				if result_type.kind == ReferenceKind::None {
+					result_type.kind = object.type.kind;
+				}
+
+				return addDereference(Expr::MemberVarInvoke(MemberVarInvokeExpr(object, member_variable.id), span, result_type));
+			}
+			else -> return this.checkCall(ParsedName(
+				span,
+				List!<String>(),
+				"operator " + parsed_expr.op.toString(),
+				List!<ParsedExpr>()
+			), parsed_expr.operands, CallKind::Operator, span);
+		}
+	}
+
+	func checkArrayExpr(this: &&TCContext, parsed_elements: List!<ParsedExpr>, span: Span, expected_type: TypeRef) -> Expr {
+		var expected_element_type = TypeRef::unknown();
+		if const type_decl = expected_type.lock() {
+			if const array_type = type_decl.body as Array {
+				expected_element_type = array_type.element_type;
+			}
+		}
+
+		var has_errors = false;
+		var elements: List!<Expr>;
+		for parsed_element in parsed_elements {
+			const checked_element = this.checkExpr(parsed_element, expected_element_type);
+			elements.append(checked_element);
+
+			if expected_element_type.isUnknown() {
+				expected_element_type = checked_element.type;
+			} else if expected_element_type != checked_element.type {
+				this.error("array element has invalid type: expected " + expected_element_type.signature() + ", but got " + checked_element.type.signature(), checked_element.span);
+				has_errors = true;
+				continue;
+			}
+		}
+
+		if has_errors {
+			return Expr::Empty(span, TypeRef::unknown());
+		}
+
+		var template_parameters: List!<TemplateParameter>;
+		template_parameters.append(TemplateParameter::Type(expected_element_type));
+		template_parameters.append(TemplateParameter::Integer(elements.size() as int));
+
+		var result_type = TypeRef::unknown();
+		match this.getType(List!<String>(), "Array", template_parameters, span) {
+			case Ok: type -> result_type = type;
+			case Error: errors -> {
+				this.program.printErrors(errors);
+				return Expr::Empty(span, TypeRef::unknown());
+			}
+		}
+
+		return this.checkTemporaryVariable(
+			result_type,
+			List!<TemplateParameter>(),
+			List!<Expr>(1u, Expr::Array(elements, span, result_type)),
+			span
+		);
+	}
+
+	func checkTupleExpr(this: &&TCContext, parsed_expr: List!<ParsedTupleElement>, span: Span, expected_type: TypeRef) -> Expr {
+		this.todo("implement typechecking of tuple expressions", span);
+		return Expr::Empty(span, TypeRef::unknown());
+	}
+
+	func checkDictExpr(this: &&TCContext, parsed_expr: List!<ParsedDictElement>, span: Span, expected_type: TypeRef) -> Expr {
+		this.todo("implement typechecking of dict expressions", span);
+		return Expr::Empty(span, TypeRef::unknown());
+	}
+
+	func checkMatchExpr(this: &&TCContext, parsed_expr: ParsedMatchExpr, expected_type: TypeRef, span: Span) -> Expr {
+		return this.checkMatchExpr(this.checkExpr(parsed_expr.value, TypeRef::unknown()), parsed_expr.body.children, expected_type, span);
+	}
+
+	func checkMatchExpr(this: &&TCContext, checked_value: Expr, parsed_body: List!<ParsedStmt>, expected_type: TypeRef, span: Span) -> Expr {
+		if checked_value.type.isUnknown() {
+			return Expr::Empty(span, TypeRef::unknown());
+		}
+
+		const prev_match_value = this.match_value;
+		const prev_match_type = this.match_type;
+		const prev_yield_type = this.yield_type;
+		const prev_yield_var = this.yield_var;
+
+		this.match_value = checked_value;
+
+		const value_type_decl = this.match_value.type.lock().value();
+		if !((value_type_decl.body is Variant) || this.match_value.type.isIntType()) {
+			this.error("value in match statement has invalid type: expected integral type or variant but got '" + this.match_value.type.signature() + "'", this.match_value.span);
+		}
+
+		var match_value_var = WeakPtr!<VarDecl>();
+		if value_type_decl.body is Variant {
+			this.match_value = removeDereference(this.match_value);
+
+			match this.match_value {
+				case Call: call_expr -> match_value_var = call_expr.result_var;
+				case Match: match_expr -> match_value_var = match_expr.yield_var;
+				else -> {}
+			}
+
+			if !match_value_var.isAlive() && !(this.match_value is VarInvoke) {
+				this.match_value = this.checkTemporaryVariable(this.match_value.type, List!<TemplateParameter>(), List!<Expr>(1u, this.match_value), this.match_value.span);
+				if this.match_value.type.isUnknown() {
+					return Expr::Empty(span, TypeRef::unknown());
+				}
+
+				this.match_value = removeDereference(this.match_value);
+				match this.match_value {
+					case Call: call_expr -> match_value_var = call_expr.result_var;
+					case ShallowCopy: shallow_copy_expr -> match shallow_copy_expr.destination.operator unwrap() {
+						case VarInvoke: variable -> match_value_var = variable;
+						else -> panic("invalid temporary variable");
+					}
+					else -> panic("invalid temporary variable");
+				}
+			}
+		}
+
+		var match_expr = MatchExpr(this.match_value);
+
+		if match_value_var.isAlive() {
+			this.match_value = removeDereference(this.checkVarInvokeExpr(match_value_var, this.match_value.span));
+		}
+
+		this.match_type = this.match_value.type;
+		this.yield_type = expected_type;
+		this.yield_var = WeakPtr!<VarDecl>();
+
+		this.pushScope(ScopeKind::Match);
+
+		for parsed_stmt in parsed_body {
+			const child = this.checkStmt(parsed_stmt);
+			match child {
+				case Case: case_stmt -> match_expr.cases.append(case_stmt);
+				case ElseCase: body -> {
+					if match_expr.else_case.hasValue() {
+						this.error("mutiple definitions of an else case in the same match expr", span);
+						this.info("else case first declared here:", match_expr.else_case.value().span);
+					} else {
+						match_expr.else_case = Some(body);
+					}
+				}
+				case Empty -> {}
+				else -> {
+					this.error("expected case statement", child.span);
+				}
+			}
+		}
+
+		this.popScope();
+
+		var result_type = this.program.void_type;
+		var does_yield = false;
+		if const result_var = this.yield_var.lock() {
+			this.addVariableToCurrentScope(this.yield_var);
+			result_type = result_var.type.constRef();
+			does_yield = true;
+		}
+
+		var all_cases_are_terminators = true;
+		for case_stmt in match_expr.cases {
+			all_cases_are_terminators &= case_stmt.body.isTerminator(this.program.never_type, false);
+		}
+
+		if match_expr.else_case.hasValue() {
+			const else_case_body = match_expr.else_case.value().operator unwrap();
+			all_cases_are_terminators &= else_case_body.isTerminator(this.program.never_type, false);
+		}
+
+		if all_cases_are_terminators && !does_yield {
+			result_type = this.program.never_type;
+		}
+
+		// TODO: make sure all cases are covered
+
+		match_expr.yield_var = this.yield_var;
+		const result = Expr::Match(match_expr, span, result_type);
+
+		this.match_value = prev_match_value;
+		this.match_type = prev_match_type;
+		this.yield_type = prev_yield_type;
+		this.yield_var = prev_yield_var;
+
+		if result_type.kind == ReferenceKind::None {
+			return result;
+		} else {
+			return Expr::Dereference(Box!<Expr>(result), result.span, result_type.base());
+		}
+	}
+
+	func checkOperatorIsExpr(this: &&TCContext, parsed_lhs: ParsedExpr, parsed_rhs: ParsedExpr, span: Span) -> Expr {
+		var lhs = this.checkExpr(parsed_lhs, TypeRef::unknown());
+		if lhs.type.isUnknown() {
+			return Expr::Empty(span, TypeRef::unknown());
+		}
+
+		const lhs_type_decl = lhs.type.lock().value();
+
+		if lhs_type_decl.body is Enum {
+			const rhs = this.checkExpr(parsed_rhs, lhs.type.base());
+			if rhs.type != lhs.type.base() {
+				this.error("invalid rhs for 'operator is'", span);
+				return Expr::Empty(span, TypeRef::unknown());
+			}
+
+			var arguments: List!<Expr>;
+			arguments.append(lhs);
+			arguments.append(rhs);
+
+			return this.checkCall(
+				List!<String>(), "operator ==", List!<TemplateParameter>(),
+				arguments, true, CallKind::MemberCall, span
+			);
+		} else if lhs_type_decl.body is Variant {
+			var arguments: List!<Expr>;
+			arguments.append(lhs);
+
+			var case_name = "";
+			match parsed_rhs {
+				case Name: parsed_name -> case_name = parsed_name.name;
+				case MemberName : parsed_name -> case_name = parsed_name.name;
+				else -> {
+					this.error("invalid rhs for 'operator is'", span);
+					return Expr::Empty(span, TypeRef::unknown());
+				}
+			}
+
+			const case_decl = lhs_type_decl.getVariantCase(case_name) else {
+				this.error("unknown variant case", span);
+				return Expr::Empty(span, TypeRef::unknown());
+			}
+
+			var template_parameters: List!<TemplateParameter>;
+			template_parameters.append(TemplateParameter::Integer(case_decl.id));
+
+			return this.checkCall(
+				List!<String>(), "operator is", template_parameters,
+				arguments, false, CallKind::MemberCall, span
+			);
+		} else {
+			this.error("'operator is' requires lhs to be an enum or a variant instance", span);
+			return Expr::Empty(span, TypeRef::unknown());
+		}
+	}
+
+	func checkOperatorAsExpr(this: &&TCContext, parsed_lhs: ParsedExpr, parsed_rhs: ParsedExpr, span: Span) -> Expr {
+		const lhs = this.checkExpr(parsed_lhs, TypeRef::unknown());
+		if lhs.type.isUnknown() {
+			return Expr::Empty(span, TypeRef::unknown());
+		}
+
+		const lhs_type_decl = lhs.type.lock().value();
+
+		if lhs_type_decl.body is Variant && parsed_rhs is Name {
+			const parsed_name = (parsed_rhs as Name).value();
+			if parsed_name.namespaces.isEmpty() && parsed_name.template_parameters.isEmpty() && lhs_type_decl.getVariantCase(parsed_name.name).hasValue() {
+				return this.createSafeVariantCastExpr(lhs, parsed_name.name, span);
+			}
+		}
+
+		const parsed_target_type = parsed_rhs.toType() else {
+			this.error("rhs of cast is not a type", parsed_rhs.span);
+			return Expr::Empty(span, TypeRef::unknown());
+		}
+
+		const source_type = lhs.type;
+		var target_type = TypeRef::unknown();
+		match this.checkTypeUsage(parsed_target_type) {
+			case Ok: type -> target_type = type;
+			case Error: errors -> {
+				this.program.printErrors(errors);
+				return Expr::Empty(span, TypeRef::unknown());
+			}
+		}
+
+		var cast_name = "";
+
+		if source_type.isIntType() && target_type.isIntType() {
+			cast_name = "intCast";
+		} else if source_type.isIntType() && target_type.isFloatType() {
+			cast_name = "intToFloat";
+		} else if source_type.isFloatType() && target_type.isIntType() {
+			cast_name = "floatToInt";
+		} else if source_type.isFloatType() && target_type.isFloatType() {
+			cast_name = "floatCast";
+		} else if source_type.isPtrType() && target_type.isPtrType() {
+			cast_name = "ptrCast";
+		}
+
+		var cast_template_parameters: List!<TemplateParameter>;
+		var cast_arguments: List!<Expr>;
+		cast_arguments.append(lhs);
+
+		if cast_name == "" { // lhs.operator as!<target_type>()
+			cast_template_parameters.append(TemplateParameter::Type(target_type));
+
+			return this.checkCall(
+				List!<String>(), "operator as",
+				cast_template_parameters,
+				cast_arguments,
+				false, CallKind::MemberCall, span
+			);
+		} else {
+			cast_template_parameters.append(TemplateParameter::Type(source_type));
+			cast_template_parameters.append(TemplateParameter::Type(target_type));
+
+			return this.checkCall(
+				List!<String>(), cast_name,
+				cast_template_parameters,
+				cast_arguments,
+				false, CallKind::Static, span
+			);
+		}
+	}
+
+	func createSafeVariantCastExpr(this: &&TCContext, value: Expr, case_name: String, span: Span) -> Expr {
+		// x as Foo
+		// ->
+		// match x {
+		//     case Foo: val -> yield Some(val);
+		//     else -> yield None;
+		// }
+
+		const type_decl = value.type.lock().value();
+		const case_decl = type_decl.getVariantCase(case_name).value();
+
+		if case_decl.type.isUnknown() {
+			this.error("invalid variant cast: no type attached to this case", span);
+			return Expr::Empty(span, TypeRef::unknown());
+		}
+
+		var yield_type = TypeRef::unknown();
+		match this.getType(List!<String>(), "Optional", List!<TemplateParameter>(1u, TemplateParameter::Type(case_decl.type)), span) {
+			case Ok: type -> yield_type = type;
+			case Error: errors -> {
+				this.program.printErrors(errors);
+				return Expr::Empty(span, TypeRef::unknown());
+			}
+		}
+
+		var cases: List!<ParsedStmt>;
+
+		var value_invoke_expr = ParsedExpr::Name(ParsedName(span, List!<String>(), "#value", List!<ParsedExpr>()), span);
+		match case_decl.type.kind {
+			case Var -> value_invoke_expr = ParsedExpr::Operator(ParsedOperatorExpr(Operator::VarRef, value_invoke_expr), span);
+			case Const -> value_invoke_expr = ParsedExpr::Operator(ParsedOperatorExpr(Operator::ConstRef, value_invoke_expr), span);
+			else -> {}
+		}
+
+		// case Foo: val -> yield Some(val)
+		cases.append(ParsedStmt::Case(ParsedCaseStmt(
+			List!<ParsedExpr>(1u, ParsedExpr::Name(ParsedName(span, List!<String>(), case_name, List!<ParsedExpr>()), span)),
+			Optional!<String>::Some("#value"),
+			case_decl.type.kind,
+			ParsedStmt::Yield(Optional!<ParsedExpr>::Some(
+				ParsedExpr::Operator(ParsedOperatorExpr(
+					ParsedExpr::Name(ParsedName(span, List!<String>(), "Some", List!<ParsedExpr>()), span),
+					Operator::Call,
+					value_invoke_expr
+				), span)
+			), span, false)
+		), span, false));
+
+		// else -> yield None
+		cases.append(ParsedStmt::ElseCase(Box!<ParsedStmt>(
+			ParsedStmt::Yield(Optional!<ParsedExpr>::Some(
+				ParsedExpr::Name(ParsedName(span, List!<String>(), "None", List!<ParsedExpr>()), span)
+			), span, false)
+		), span, false));
+
+		return this.checkMatchExpr(value, cases, yield_type, span);
+	}
+
+	func checkValidateExpr(this: &&TCContext, parsed_value: ParsedExpr, op: Operator, span: Span) -> Expr {
+		// try foo()
+		// ->
+		// match foo() {
+		//     Ok: val -> yield val;
+		//     Error: err -> throw err;
+		// }
+
+		// must foo()
+		// ->
+		// match foo() {
+		//     Ok: val -> yield val;
+		//     Error: err -> panic(err);
+		// }
+
+		const value = this.checkExpr(parsed_value, TypeRef::unknown());
+		if value.type.isUnknown() {
+			return Expr::Empty(span, TypeRef::unknown());
+		}
+
+		const type_decl = value.type.lock().value();
+
+		const ok_case_decl = type_decl.getVariantCase("Ok") else {
+			this.error("value has invalid type: expected std::core::Result or similar, but got " + value.type.signature(), span);
+			return Expr::Empty(span, TypeRef::unknown());
+		}
+
+		const error_case_decl = type_decl.getVariantCase("Error") else {
+			this.error("value has invalid type: expected std::core::Result or similar, but got " + value.type.signature(), span);
+			return Expr::Empty(span, TypeRef::unknown());
+		}
+
+		var yield_type = ok_case_decl.type;
+		if ok_case_decl.type.isUnknown() {
+			yield_type = this.program.void_type;
+		}
+
+		var cases: List!<ParsedStmt>;
+
+		if yield_type == this.program.void_type {
+			// case Ok -> yield
+			cases.append(ParsedStmt::Case(ParsedCaseStmt(
+				List!<ParsedExpr>(1u, ParsedExpr::Name(ParsedName(span, List!<String>(), "Ok", List!<ParsedExpr>()), span)),
+				Optional!<String>::None,
+				ok_case_decl.type.kind,
+				ParsedStmt::Yield(Optional!<ParsedExpr>::None, span, false)
+			), span, false));
+		} else {
+			// case Ok: val -> yield val
+			var value_invoke_expr = ParsedExpr::Name(ParsedName(span, List!<String>(), "#value", List!<ParsedExpr>()), span);
+			match ok_case_decl.type.kind {
+				case Var -> value_invoke_expr = ParsedExpr::Operator(ParsedOperatorExpr(Operator::VarRef, value_invoke_expr), span);
+				case Const -> value_invoke_expr = ParsedExpr::Operator(ParsedOperatorExpr(Operator::ConstRef, value_invoke_expr), span);
+				else -> {}
+			}
+
+			cases.append(ParsedStmt::Case(ParsedCaseStmt(
+				List!<ParsedExpr>(1u, ParsedExpr::Name(ParsedName(span, List!<String>(), "Ok", List!<ParsedExpr>()), span)),
+				Optional!<String>::Some("#value"),
+				ok_case_decl.type.kind,
+				ParsedStmt::Yield(Optional!<ParsedExpr>::Some(value_invoke_expr), span, false)
+			), span, false));
+		}
+
+		var error_invoke_expr = ParsedExpr::Name(ParsedName(span, List!<String>(), "#error", List!<ParsedExpr>()), span);
+		match error_case_decl.type.kind {
+			case Var -> error_invoke_expr = ParsedExpr::Operator(ParsedOperatorExpr(Operator::VarRef, error_invoke_expr), span);
+			case Const -> error_invoke_expr = ParsedExpr::Operator(ParsedOperatorExpr(Operator::ConstRef, error_invoke_expr), span);
+			else -> {}
+		}
+
+		if op == Try {
+			// case Error: error -> throw error
+			cases.append(ParsedStmt::Case(ParsedCaseStmt(
+				List!<ParsedExpr>(1u, ParsedExpr::Name(ParsedName(span, List!<String>(), "Error", List!<ParsedExpr>()), span)),
+				Optional!<String>::Some("#error"),
+				error_case_decl.type.kind,
+				ParsedStmt::Throw(error_invoke_expr, span, false)
+			), span, false));
+		} else if op == Must {
+			// case Error: error -> panic(error)
+			cases.append(ParsedStmt::Case(ParsedCaseStmt(
+				List!<ParsedExpr>(1u, ParsedExpr::Name(ParsedName(span, List!<String>(), "Error", List!<ParsedExpr>()), span)),
+				Optional!<String>::Some("#error"),
+				error_case_decl.type.kind,
+				ParsedStmt::Expr(ParsedExpr::Operator(ParsedOperatorExpr(
+					ParsedExpr::Name(ParsedName(span, List!<String>(), "panic", List!<ParsedExpr>()), span),
+					Operator::Call,
+					error_invoke_expr
+				), span), span, false)
+			), span, false));
+		} else {
+			this.error("invalid operator for validate expr: must be try or must", span);
+			abort();
+		}
+
+		return this.checkMatchExpr(value, cases, yield_type, span);
+	}
+
+	func checkInlineIfExpr(this: &&TCContext, then_value: ParsedExpr, condition: ParsedExpr, else_value: ParsedExpr, expected_type: TypeRef, span: Span) -> Expr {
+		// x if y else z
+		// ->
+		// match y {
+		//     true -> yield x;
+		//     false -> yield z;
+		// }
+		var match_body = ParsedCompoundStmt(span);
+
+		match_body.children.append(ParsedStmt::Case(ParsedCaseStmt(
+			List!<ParsedExpr>(1u, ParsedExpr::Bool(true, then_value.span)),
+			Optional!<String>::None,
+			ReferenceKind::None,
+			ParsedStmt::Yield(Optional!<ParsedExpr>::Some(then_value), then_value.span, false)
+		), then_value.span, false));
+
+		match_body.children.append(ParsedStmt::Case(ParsedCaseStmt(
+			List!<ParsedExpr>(1u, ParsedExpr::Bool(false, else_value.span)),
+			Optional!<String>::None,
+			ReferenceKind::None,
+			ParsedStmt::Yield(Optional!<ParsedExpr>::Some(else_value), else_value.span, false)
+		), else_value.span, false));
+
+		return this.checkMatchExpr(ParsedMatchExpr(condition, match_body), expected_type, span);
+	}
+
+	func checkCall(this: &&TCContext,
+		name: ParsedName, parsed_arguments: List!<ParsedExpr>,
+		kind: CallKind, span: Span
+	) -> Expr {
+		var arguments: List!<Expr>;
+		for i in 0u..parsed_arguments.size() {
+			if i == 1 && kind == Operator && parsed_arguments.size() == 2 {
+				arguments.append(this.checkExpr(parsed_arguments[i], arguments[0u].type.base()));
+			} else {
+				arguments.append(this.checkExpr(parsed_arguments[i], TypeRef::unknown()));
+			}
+		}
+
+		return this.checkCall(name, arguments, kind, span);
+	}
+
+	func checkCall(this: &&TCContext,
+		name: ParsedName, checked_arguments: List!<Expr>,
+		kind: CallKind, span: Span
+	) -> Expr {
+		const template_parameters = this.checkTemplateParameterList(name.template_parameters);
+		return this.checkCall(name.namespaces, name.name, template_parameters, checked_arguments, true, kind, span);
+	}
+
+	func checkCall(this: &&TCContext,
+		namespaces: List!<String>, name: String,
+		template_parameters: List!<TemplateParameter>,
+		checked_arguments: List!<Expr>,
+		allow_comparison_conversion: bool,
+		kind: CallKind, span: Span
+	) -> Expr {
+		var is_equality_operator = name == "operator =="
+			|| name == "operator !=";
+
+		var is_comparison_operator = name == "operator =="
+			|| name == "operator !="
+			|| name == "operator <"
+			|| name == "operator <="
+			|| name == "operator >"
+			|| name == "operator >=";
+
+		const argument_types = checked_arguments.getTypes();
+
+		for type in argument_types {
+			if type.isUnknown() {
+				return Expr::Empty(span, TypeRef::unknown());
+			}
+		}
+
+		var parent_type = TypeRef::unknown();
+		var first_arg_max_ref_kind = ReferenceKind::None;
+
+		if kind == MemberCall || kind == Operator {
+			parent_type = checked_arguments[0u].type;
+			first_arg_max_ref_kind = checked_arguments[0u].removeDereference().type.kind;
+		} else if !checked_arguments.isEmpty() {
+			first_arg_max_ref_kind = checked_arguments[0u].type.kind;
+		}
+
+		var lookup_result = this.getFunction(
+			parent_type, namespaces, name,
+			template_parameters, argument_types,
+			first_arg_max_ref_kind,
+			name != "operator unwrap", span
+		);
+
+		var negate_result = false;
+		if lookup_result.isEmpty() && kind == Operator && is_equality_operator {
+			var negated_name = "operator !=" if name == "operator ==" else "operator ==";
+
+			lookup_result += this.getFunction(
+				parent_type, namespaces, negated_name,
+				template_parameters, argument_types,
+				first_arg_max_ref_kind,
+				true, span
+			);
+
+			negate_result = true;
+		}
+
+		var test_spaceship_operator_result = false;
+		if lookup_result.isEmpty() && kind == Operator && is_comparison_operator {
+			lookup_result += this.getFunction(
+				parent_type, namespaces, "operator <=>",
+				template_parameters, argument_types,
+				first_arg_max_ref_kind,
+				true, span
+			);
+
+			negate_result = false;
+			test_spaceship_operator_result = true;
+		}
+
+		if lookup_result.isEmpty() {
+			this.program.printErrors(lookup_result.errors);
+			return Expr::Empty(span, TypeRef::unknown());
+		}
+
+		return this.checkCall(name, lookup_result.getFunctionWithHighestRefKind(), parent_type, checked_arguments, kind, span, negate_result, test_spaceship_operator_result);
+	}
+
+	func unwrapFunctionArguments(this: &&TCContext, function: FunctionRef, checked_arguments: List!<Expr>, dont_unwrap_this: bool) -> List!<Expr> {
+		const decl = function.lock().value();
+		var arguments = checked_arguments;
+		var invalid_parameter_types = false;
+
+		for i in 0u..arguments.size() {
+			if arguments[i].type.base() == decl.parameter_types[i].base() {
+				continue;
+			}
+
+			if i == 0 && dont_unwrap_this {
+				continue;
+			}
+
+			var unwrap_argument_types: List!<TypeRef>;
+			unwrap_argument_types.append(arguments[i].type);
+
+			const unwrap_function_result = this.getFunction(
+				arguments[i].type, List!<String>(), "operator unwrap",
+				List!<TemplateParameter>(), unwrap_argument_types,
+				removeDereference(arguments[i]).type.kind,
+				false, arguments[i].span
+			);
+
+			if unwrap_function_result.isEmpty() {
+				this.program.printErrors(unwrap_function_result.errors);
+				this.error("can't unwrap parameter", arguments[i].span);
+				invalid_parameter_types = true;
+				continue;
+			}
+
+			const unwrap_function = unwrap_function_result.getFunctionWithHighestRefKind();
+			const unwrap_decl = unwrap_function.lock().value();
+
+			var unwrap_arguments: List!<Expr>;
+			if unwrap_decl.parameter_types[0u].kind != ReferenceKind::None && arguments[i].type.kind == ReferenceKind::None {
+				unwrap_arguments.append(removeDereference(arguments[i]));
+				unwrap_arguments[0u].type.kind = unwrap_decl.parameter_types[0u].kind;
+			} else {
+				unwrap_arguments.append(arguments[i]);
+			}
+
+			var result_var: WeakPtr!<VarDecl>;
+			if !unwrap_decl.return_type.isPrimitive() {
+				var function = this.current_function.lock().value();
+				result_var = function.createVariable(arguments[i].span, "#result", unwrap_decl.return_type, true);
+				// no constructor call needed, the callee does that
+				this.createDestructorCall(result_var);
+				this.addVariableToCurrentScope(result_var);
+			}
+
+			arguments[i] = Expr::Call(
+				CallExpr(unwrap_function, unwrap_arguments, result_var, ReturnKind::Value),
+				arguments[i].span, unwrap_decl.return_type
+			);
+
+			if decl.parameter_types[i].kind == ReferenceKind::None {
+				arguments[i] = addDereference(arguments[i]);
+			}
+		}
+
+		for i in 0u..arguments.size() {
+			if i == 0 && decl.parameter_types[i].kind != ReferenceKind::None {
+				arguments[i] = removeDereference(arguments[i]);
+			}
+		}
+
+		if invalid_parameter_types {
+			return List!<Expr>();
+		} else {
+			return arguments;
+		}
+	}
+
+	func checkCall(this: &&TCContext,
+		function_name: String,
+		function: FunctionRef, parent_type: TypeRef,
+		checked_arguments: List!<Expr>,
+		kind: CallKind, span: Span,
+		negate_result: bool,
+		test_spaceship_operator_result: bool
+	) -> Expr {
+		const decl = function.lock().value();
+		const unwrapped_arguments = this.unwrapFunctionArguments(function, checked_arguments, function_name == "constructor" || function_name == "destructor");
+		if unwrapped_arguments.size() != checked_arguments.size() {
+			return Expr::Empty(span, TypeRef::unknown());
+		}
+
+		var result_var: WeakPtr!<VarDecl>;
+		var result_type = decl.return_type;
+		var return_kind = ReturnKind::None;
+
+		if decl.return_type != this.program.void_type && decl.return_type != this.program.never_type {
+			return_kind = ReturnKind::Value;
+		}
+
+		if !decl.return_type.isPrimitive() {
+			if !this.current_function.isUnknown() {
+				return_kind = ReturnKind::Variable;
+
+				var function = this.current_function.lock().value();
+				result_var = function.createVariable(span, "#result", decl.return_type, true);
+				result_type = decl.return_type.constRef();
+				// no constructor call needed, the callee does that
+				this.createDestructorCall(result_var);
+				this.addVariableToCurrentScope(result_var);
+			} else {
+				this.todo("implement comptime calls, that return a non-primitive value", span);
+			}
+		}
+
+		var result = Expr::Call(CallExpr(function, unwrapped_arguments, result_var, return_kind), span, result_type);
+
+		if test_spaceship_operator_result {
+			var arguments: List!<Expr>;
+			arguments.append(result);
+			arguments.append(Expr::Integer(0, span, this.program.int_type));
+			result = this.checkCall(List!<String>(), function_name, List!<TemplateParameter>(), arguments, false, CallKind::MemberCall, span);
+		} else if negate_result {
+			result = this.checkCall(List!<String>(), "operator !", List!<TemplateParameter>(), List!<Expr>(1u, result), false, CallKind::MemberCall, span);
+		}
+
+		result = addDereference(result);
+
+		if unwrapped_arguments.size() >= 1 {
+			if const member_var_invoke_expr = unwrapped_arguments[0u] as MemberVarInvoke {
+				if const object = member_var_invoke_expr.object.operator unwrap() as VarInvoke {
+					const object_decl = object.lock().value();
+					if object_decl.id == 0 { // this parameter
+						if function_name == "constructor" {
+							if this.active_member_variables.contains(member_var_invoke_expr.id) {
+								this.error("double initialization of member variable", span);
+							}
+
+							this.active_member_variables.add(member_var_invoke_expr.id);
+						} else if function_name == "destructor" {
+							if !this.active_member_variables.contains(member_var_invoke_expr.id) {
+								this.error("double de-initialization of member variable", span);
+							}
+
+							this.active_member_variables.remove(member_var_invoke_expr.id);
+						}
+					}
+				}
+			}
+		}
+
+		return result;
+	}
+
+	func checkExplicitMemberCall(this: &&TCContext, parent_type: TypeRef, name: String, parsed_template_parameters: List!<ParsedExpr>, parsed_arguments: List!<ParsedExpr>, span: Span) -> Expr {
+		var template_parameters = this.checkTemplateParameterList(parsed_template_parameters);
+
+		if name == "" {
+			return this.checkTemporaryVariable(parent_type, template_parameters, parsed_arguments, span);
+		}
+
+		if template_parameters.isEmpty() {
+			const parent_type_decl = parent_type.lock().value();
+			if const c = parent_type_decl.getVariantCase(name) {
+				template_parameters.append(TemplateParameter::Integer(c.id));
+				return this.checkTemporaryVariable(parent_type, template_parameters, parsed_arguments, span);
+			}
+		}
+
+		var contains_errors = false;
+		var checked_arguments: List!<Expr>;
+		for parsed_argument in parsed_arguments {
+			const checked_argument = this.checkExpr(parsed_argument, TypeRef::unknown());
+			if checked_argument.type.isUnknown() {
+				contains_errors = true;
+			}
+
+			checked_arguments.append(checked_argument);
+		}
+
+		if contains_errors {
+			return Expr::Empty(span, TypeRef::unknown());
+		}
+
+		const lookup_result = this.getMemberFunction(
+			parent_type, name,
+			template_parameters, checked_arguments.getTypes(),
+			ReferenceKind::Var,
+			true, span
+		);
+
+		if lookup_result.isEmpty() {
+			this.program.printErrors(lookup_result.errors);
+			return Expr::Empty(span, TypeRef::unknown());
+		}
+
+		return this.checkCall(name, lookup_result.getFunctionWithHighestRefKind(), parent_type, checked_arguments, CallKind::Static, span, false, false);
+	}
+
+	func checkTemporaryVariable(this: &&TCContext, type: TypeRef, template_parameters: List!<TemplateParameter>, parsed_arguments: List!<ParsedExpr>, span: Span) -> Expr {
+		var contains_errors = false;
+		var checked_arguments: List!<Expr>;
+		for parsed_argument in parsed_arguments {
+			const checked_argument = this.checkExpr(parsed_argument, TypeRef::unknown());
+			if checked_argument.type.isUnknown() {
+				contains_errors = true;
+			}
+
+			checked_arguments.append(checked_argument);
+		}
+
+		if contains_errors {
+			return Expr::Empty(span, TypeRef::unknown());
+		}
+
+		return this.checkTemporaryVariable(type, template_parameters, checked_arguments, span);
+	}
+
+	func checkTemporaryVariable(this: &&TCContext, type: TypeRef, template_parameters: List!<TemplateParameter>, checked_arguments: List!<Expr>, span: Span) -> Expr {
+		var function = this.current_function.lock().value();
+		const variable = function.createVariable(span, "#tmp", type, true);
+
+		this.createDestructorCall(variable);
+		this.addVariableToCurrentScope(variable);
+
+		if type.kind == ReferenceKind::None {
+			var constructor_arguments: List!<Expr>;
+			constructor_arguments.append(Expr::VarInvoke(variable, span, type.varRef()));
+			constructor_arguments.append(checked_arguments);
+
+			const argument_types = constructor_arguments.getTypes();
+
+			const lookup_result = this.getMemberFunction(
+				type, "constructor",
+				template_parameters, argument_types,
+				ReferenceKind::Var,
+				true, span
+			);
+
+			if lookup_result.isEmpty() {
+				this.program.printErrors(lookup_result.errors);
+				return Expr::Empty(span, TypeRef::unknown());
+			}
+
+			const function = lookup_result.getFunctionWithHighestRefKind();
+			const unwrapped_arguments = this.unwrapFunctionArguments(function, constructor_arguments, true);
+			if unwrapped_arguments.size() != constructor_arguments.size() {
+				return Expr::Empty(span, TypeRef::unknown());
+			}
+
+			return Expr::Dereference(
+				Box!<Expr>(Expr::Call(CallExpr(function, unwrapped_arguments, variable, ReturnKind::Parameter), span, type.constRef())),
+				span, type
+			);
+		} else {
+			if checked_arguments.size() != 1 {
+				this.error("invalid arguments for temporary variable of reference type", span);
+				return Expr::Empty(span, TypeRef::unknown());
+			}
+
+			return Expr::Dereference(Box!<Expr>(
+				Expr::ShallowCopy(ShallowCopyExpr(Expr::VarInvoke(variable, span, type), checked_arguments[0u]), span, type)
+			), span, type.base());
+		}
+	}
+}

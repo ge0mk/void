@@ -1,4 +1,4 @@
-//> error "no matching module or directory found"
+//> error "no matching module found"
 
 import std/core;
 import a/b/c;

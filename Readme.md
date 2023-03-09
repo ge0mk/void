@@ -3,20 +3,11 @@ void - language & compiler
 
 build the compiler
 --
-
-1) build & install jakt:
-	- `git clone https://github.com/SerenityOS/jakt`
-	- `cd jakt`
-	- `cmake -B build -GNinja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=<install path>`
-	- `ninja -C build install`
-
-2) build void compiler:
-	- `git clone https://github.com/ge0mk/void`
-	- `cd void`
-	- `make`
-
-3) run tests:
-	- `make test`
+```bash
+git clone https://github.com/ge0mk/void
+cd void
+make
+```
 
 hello world
 --
@@ -32,7 +23,6 @@ func main() {
 planned features (wip / near future)
 --
 - meta: write a better readme
-- selfhosted compiler
 - compiler: generate better llvm ir
 	- lifetime intrinsics
 	- function attributes (especially for allocators)
@@ -53,7 +43,6 @@ planned features (wip / near future)
 - compiler: tuples
 - compiler: tuple unpacking / destructuring assignments
 - compiler: match strings
-- compiler: handle name lookup more generic
 - compiler: track member (de)initialization through if & match stmts
 - compiler: unsafe functions, which can only be called in unsafe blocks
 - compiler: public / private functions (module scope) & member variables

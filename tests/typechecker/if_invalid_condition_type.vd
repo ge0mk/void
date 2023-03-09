@@ -1,9 +1,9 @@
-//> error "condition has invalid type"
+//> error "invalid condition type"
 
 import std/core;
 
 func main() -> int {
-	if 1 {
+	if 1u32 {
 		return 0;
 	} else {
 		return 2;

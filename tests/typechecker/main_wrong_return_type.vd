@@ -1,4 +1,4 @@
-//> error "return type of main must be int or void"
+//> error "invalid return type for main"
 
 import std/core;
 

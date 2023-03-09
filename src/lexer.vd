@@ -1,0 +1,1139 @@
+import std/core;
+import std/format;
+import std/io;
+import std/list;
+import std/string;
+
+import span;
+
+struct CharLiteral {
+	// TODO: update for uft-8 char literals
+	var value: byte;
+	var postfix: String;
+
+	func constructor(this: &&CharLiteral, value: byte, postfix: String) -> void {
+		this.value := value;
+		this.postfix := postfix;
+	}
+
+	func constructor(this: &&CharLiteral, other: CharLiteral) -> void = default;
+	operator =(this: &&CharLiteral, other: CharLiteral) -> void = default;
+	func destructor(this: &&CharLiteral) -> void = default;
+
+	operator ==(this: CharLiteral, other: CharLiteral) -> bool = default;
+
+	func dump(this: &CharLiteral) -> String {
+		return "'" + this.value + "'" + this.postfix;
+	}
+}
+
+struct StringLiteral {
+	var value: String;
+	var postfix: String;
+
+	func constructor(this: &&StringLiteral, value: String, postfix: String) -> void {
+		this.value := value;
+		this.postfix := postfix;
+	}
+
+	func constructor(this: &&StringLiteral, other: StringLiteral) -> void = default;
+	operator =(this: &&StringLiteral, other: StringLiteral) -> void = default;
+	func destructor(this: &&StringLiteral) -> void = default;
+
+	operator ==(this: StringLiteral, other: StringLiteral) -> bool = default;
+
+	func dump(this: &StringLiteral) -> String {
+		return "\"" + this.value + "\"" + this.postfix;
+	}
+}
+
+struct NumberLiteral {
+	var value: ParsedNumber;
+	var postfix: String;
+
+	func constructor(this: &&NumberLiteral, value: ParsedNumber, postfix: String) -> void {
+		this.value := value;
+		this.postfix := postfix;
+	}
+
+	func constructor(this: &&NumberLiteral, other: NumberLiteral) -> void = default;
+	operator =(this: &&NumberLiteral, other: NumberLiteral) -> void = default;
+	func destructor(this: &&NumberLiteral) -> void = default;
+
+	operator ==(this: NumberLiteral, other: NumberLiteral) -> bool = default;
+
+	func dump(this: &NumberLiteral) -> String {
+		return format(this.value.significant) + " * " + format(this.value.base) + "^" + format(this.value.exponent) + this.postfix;
+	}
+}
+
+
+enum TokenId {
+	case Identifier;
+
+	// literals
+	case CharLiteral;
+	case StringLiteral;
+	case NumberLiteral;
+
+	// structural tokens
+	case LParen;					// (
+	case RParen;					// )
+	case LSquare;					// [
+	case RSquare;					// ]
+	case LCurly;					// {
+	case RCurly;					// }
+
+	case Comma;						// ,
+	case Semicolon;					// ;
+	case Dot;						// .
+	case QuestionMark;				// ?
+	case Colon;						// :
+	case DoubleColon;				// ::
+	case AtSign;					// @
+
+	// operators
+	case Assign;					// =
+	case Plus;						// +
+	case Minus;						// -
+	case Asterisk;					// *
+	case Slash;						// /
+	case Percent;					// %
+	case Ampersand;					// &
+	case Pipe;						// |
+	case Caret;						// ^
+	case Tilde;						// ~
+	case ExclamationMark;			// !
+	case Arrow;						// ->
+	case DoubleDot;					// ..
+	case DoubleQuestionMark;		// ??
+	case DoublePlus;				// ++
+	case DoubleMinus;				// --
+	case DoubleAmpersand;			// &&
+	case DoublePipe;				// ||
+
+	// comparison operators
+	case Equal;						// ==
+	case NotEqual;					// !=
+	case LessThan;					// <
+	case LessEqual;					// <=
+	case GreaterThan;				// >
+	case GreaterEqual;				// >=
+	case Spaceship;					// <=>
+
+	// assignment operators
+	case ColonAssign;				// :=
+	case PlusAssign;				// +=
+	case MinusAssign;				// -=
+	case AsteriskAssign;			// *=
+	case SlashAssign;				// /=
+	case PercentAssign;				// %=
+	case AmpersandAssign;			// &=
+	case PipeAssign;				// |=
+	case CaretAssign;				// ^=
+	case DoubleQuestionMarkAssign;	// ??=
+
+	// keywords
+	case KeywordAs;
+	case KeywordBreak;
+	case KeywordCase;
+	case KeywordComptime;
+	case KeywordConst;
+	case KeywordContinue;
+	case KeywordDefault;
+	case KeywordDiscard;
+	case KeywordDo;
+	case KeywordElse;
+	case KeywordEnum;
+	case KeywordExtend;
+	case KeywordExtern;
+	case KeywordFalse;
+	case KeywordFor;
+	case KeywordFunc;
+	case KeywordIf;
+	case KeywordImport;
+	case KeywordIn;
+	case KeywordIs;
+	case KeywordMatch;
+	case KeywordMust;
+	case KeywordOperator;
+	case KeywordPragma;
+	case KeywordPrivate;
+	case KeywordPublic;
+	case KeywordReturn;
+	case KeywordStruct;
+	case KeywordTemplate;
+	case KeywordThrow;
+	case KeywordTrue;
+	case KeywordTry;
+	case KeywordUnsafe;
+	case KeywordUnwrap;
+	case KeywordVar;
+	case KeywordVariant;
+	case KeywordWhile;
+	case KeywordYield;
+	case Unknown;
+	case EndOfFile;
+
+	func toString(this: TokenId) -> String {
+		match this {
+			case Identifier -> return "identifier";
+			case CharLiteral -> return "char literal";
+			case StringLiteral -> return "string literal";
+			case NumberLiteral -> return "number literal";
+			case LParen -> return "<token> (";
+			case RParen -> return "<token> )";
+			case LSquare -> return "<token> [";
+			case RSquare -> return "<token> ]";
+			case LCurly -> return "<token> {";
+			case RCurly -> return "<token> }";
+			case Comma -> return "<token> ,";
+			case Semicolon -> return "<token> ;";
+			case Dot -> return "<token> .";
+			case QuestionMark -> return "<token> ?";
+			case Colon -> return "<token> :";
+			case DoubleColon -> return "<token> ::";
+			case AtSign -> return "<token> @";
+			case Assign -> return "<token> =";
+			case Plus -> return "<token> +";
+			case Minus -> return "<token> -";
+			case Asterisk -> return "<token> *";
+			case Slash -> return "<token> /";
+			case Percent -> return "<token> %";
+			case Ampersand -> return "<token> &";
+			case Pipe -> return "<token> |";
+			case Caret -> return "<token> ^";
+			case Tilde -> return "<token> ~";
+			case ExclamationMark -> return "<token> !";
+			case Arrow -> return "<token> ->";
+			case DoubleDot -> return "<token> ..";
+			case DoubleQuestionMark -> return "<token> ??";
+			case DoublePlus -> return "<token> ++";
+			case DoubleMinus -> return "<token> --";
+			case DoubleAmpersand -> return "<token> &&";
+			case DoublePipe -> return "<token> ||";
+			case Equal -> return "<token> ==";
+			case NotEqual -> return "<token> !=";
+			case LessThan -> return "<token> <";
+			case LessEqual -> return "<token> <=";
+			case GreaterThan -> return "<token> >";
+			case GreaterEqual -> return "<token> >=";
+			case Spaceship -> return "<token> <=>";
+			case ColonAssign -> return "<token> :=";
+			case PlusAssign -> return "<token> +=";
+			case MinusAssign -> return "<token> -=";
+			case AsteriskAssign -> return "<token> *=";
+			case SlashAssign -> return "<token> /=";
+			case PercentAssign -> return "<token> %=";
+			case AmpersandAssign -> return "<token> &=";
+			case PipeAssign -> return "<token> |=";
+			case CaretAssign -> return "<token> ^=";
+			case DoubleQuestionMarkAssign -> return "<token> ??=";
+			case KeywordAs -> return "<keyword> as";
+			case KeywordBreak -> return "<keyword> break";
+			case KeywordCase -> return "<keyword> case";
+			case KeywordComptime -> return "<keyword> comptime";
+			case KeywordConst -> return "<keyword> const";
+			case KeywordContinue -> return "<keyword> continue";
+			case KeywordDefault -> return "<keyword> default";
+			case KeywordDiscard -> return "<keyword> discard";
+			case KeywordDo -> return "<keyword> do";
+			case KeywordElse -> return "<keyword> else";
+			case KeywordEnum -> return "<keyword> enum";
+			case KeywordExtend -> return "<keyword> extend";
+			case KeywordExtern -> return "<keyword> extern";
+			case KeywordFalse -> return "<keyword> false";
+			case KeywordFor -> return "<keyword> for";
+			case KeywordFunc -> return "<keyword> func";
+			case KeywordIf -> return "<keyword> if";
+			case KeywordImport -> return "<keyword> import";
+			case KeywordIn -> return "<keyword> in";
+			case KeywordIs -> return "<keyword> is";
+			case KeywordMatch -> return "<keyword> match";
+			case KeywordMust -> return "<keyword> must";
+			case KeywordOperator -> return "<keyword> operator";
+			case KeywordPragma -> return "<keyword> pragma";
+			case KeywordPrivate -> return "<keyword> private";
+			case KeywordPublic -> return "<keyword> public";
+			case KeywordReturn -> return "<keyword> return";
+			case KeywordStruct -> return "<keyword> struct";
+			case KeywordTemplate -> return "<keyword> template";
+			case KeywordThrow -> return "<keyword> throw";
+			case KeywordTrue -> return "<keyword> true";
+			case KeywordTry -> return "<keyword> try";
+			case KeywordUnsafe -> return "<keyword> unsafe";
+			case KeywordUnwrap -> return "<keyword> unwrap";
+			case KeywordVar -> return "<keyword> var";
+			case KeywordVariant -> return "<keyword> variant";
+			case KeywordWhile -> return "<kewyord> while";
+			case KeywordYield -> return "<kewyord> yield";
+			else -> return "";
+		}
+	}
+}
+
+variant Token {
+	var span: Span;
+
+	case Identifier: String;
+
+	// literals
+	case CharLiteral: CharLiteral;
+	case StringLiteral: StringLiteral;
+	case NumberLiteral: NumberLiteral;
+
+	// structural tokens
+	case LParen;					// (
+	case RParen;					// )
+	case LSquare;					// [
+	case RSquare;					// ]
+	case LCurly;					// {
+	case RCurly;					// }
+
+	case Comma;						// ,
+	case Semicolon;					// ;
+	case Dot;						// .
+	case QuestionMark;				// ?
+	case Colon;						// :
+	case DoubleColon;				// ::
+	case AtSign;					// @
+
+	// operators
+	case Assign;					// =
+	case Plus;						// +
+	case Minus;						// -
+	case Asterisk;					// *
+	case Slash;						// /
+	case Percent;					// %
+	case Ampersand;					// &
+	case Pipe;						// |
+	case Caret;						// ^
+	case Tilde;						// ~
+	case ExclamationMark;			// !
+	case Arrow;						// ->
+	case DoubleDot;					// ..
+	case DoubleQuestionMark;		// ??
+	case DoublePlus;				// ++
+	case DoubleMinus;				// --
+	case DoubleAmpersand;			// &&
+	case DoublePipe;				// ||
+
+	// comparison operators
+	case Equal;						// ==
+	case NotEqual;					// !=
+	case LessThan;					// <
+	case LessEqual;					// <=
+	case GreaterThan;				// >
+	case GreaterEqual;				// >=
+	case Spaceship;					// <=>
+
+	// assignment operators
+	case ColonAssign;				// :=
+	case PlusAssign;				// +=
+	case MinusAssign;				// -=
+	case AsteriskAssign;			// *=
+	case SlashAssign;				// /=
+	case PercentAssign;				// %=
+	case AmpersandAssign;			// &=
+	case PipeAssign;				// |=
+	case CaretAssign;				// ^=
+	case DoubleQuestionMarkAssign;	// ??=
+
+	// keywords
+	case KeywordAs;
+	case KeywordBreak;
+	case KeywordCase;
+	case KeywordComptime;
+	case KeywordConst;
+	case KeywordContinue;
+	case KeywordDefault;
+	case KeywordDiscard;
+	case KeywordDo;
+	case KeywordElse;
+	case KeywordEnum;
+	case KeywordExtend;
+	case KeywordExtern;
+	case KeywordFalse;
+	case KeywordFor;
+	case KeywordFunc;
+	case KeywordIf;
+	case KeywordImport;
+	case KeywordIn;
+	case KeywordIs;
+	case KeywordMatch;
+	case KeywordMust;
+	case KeywordOperator;
+	case KeywordPragma;
+	case KeywordPrivate;
+	case KeywordPublic;
+	case KeywordReturn;
+	case KeywordStruct;
+	case KeywordTemplate;
+	case KeywordThrow;
+	case KeywordTrue;
+	case KeywordTry;
+	case KeywordUnsafe;
+	case KeywordUnwrap;
+	case KeywordVar;
+	case KeywordVariant;
+	case KeywordWhile;
+	case KeywordYield;
+
+	case Unknown: byte;
+	case EndOfFile;
+
+	operator ==(this: Token, other: Token) -> bool = default;
+
+	operator ==(this: Token, other: TokenId) -> bool {
+		match this {
+			case Identifier -> return other == Identifier;
+			case CharLiteral -> return other == CharLiteral;
+			case StringLiteral -> return other == StringLiteral;
+			case NumberLiteral -> return other == NumberLiteral;
+			case LParen -> return other == LParen;
+			case RParen -> return other == RParen;
+			case LSquare -> return other == LSquare;
+			case RSquare -> return other == RSquare;
+			case LCurly -> return other == LCurly;
+			case RCurly -> return other == RCurly;
+			case Comma -> return other == Comma;
+			case Semicolon -> return other == Semicolon;
+			case Dot -> return other == Dot;
+			case QuestionMark -> return other == QuestionMark;
+			case Colon -> return other == Colon;
+			case DoubleColon -> return other == DoubleColon;
+			case AtSign -> return other == AtSign;
+			case Assign -> return other == Assign;
+			case Plus -> return other == Plus;
+			case Minus -> return other == Minus;
+			case Asterisk -> return other == Asterisk;
+			case Slash -> return other == Slash;
+			case Percent -> return other == Percent;
+			case Ampersand -> return other == Ampersand;
+			case Pipe -> return other == Pipe;
+			case Caret -> return other == Caret;
+			case Tilde -> return other == Tilde;
+			case ExclamationMark -> return other == ExclamationMark;
+			case Arrow -> return other == Arrow;
+			case DoubleDot -> return other == DoubleDot;
+			case DoubleQuestionMark -> return other == DoubleQuestionMark;
+			case DoublePlus -> return other == DoublePlus;
+			case DoubleMinus -> return other == DoubleMinus;
+			case DoubleAmpersand -> return other == DoubleAmpersand;
+			case DoublePipe -> return other == DoublePipe;
+			case Equal -> return other == Equal;
+			case NotEqual -> return other == NotEqual;
+			case LessThan -> return other == LessThan;
+			case LessEqual -> return other == LessEqual;
+			case GreaterThan -> return other == GreaterThan;
+			case GreaterEqual -> return other == GreaterEqual;
+			case Spaceship -> return other == Spaceship;
+			case ColonAssign -> return other == ColonAssign;
+			case PlusAssign -> return other == PlusAssign;
+			case MinusAssign -> return other == MinusAssign;
+			case AsteriskAssign -> return other == AsteriskAssign;
+			case SlashAssign -> return other == SlashAssign;
+			case PercentAssign -> return other == PercentAssign;
+			case AmpersandAssign -> return other == AmpersandAssign;
+			case PipeAssign -> return other == PipeAssign;
+			case CaretAssign -> return other == CaretAssign;
+			case DoubleQuestionMarkAssign -> return other == DoubleQuestionMarkAssign;
+			case KeywordAs -> return other == KeywordAs;
+			case KeywordBreak -> return other == KeywordBreak;
+			case KeywordCase -> return other == KeywordCase;
+			case KeywordComptime -> return other == KeywordComptime;
+			case KeywordConst -> return other == KeywordConst;
+			case KeywordContinue -> return other == KeywordContinue;
+			case KeywordDefault -> return other == KeywordDefault;
+			case KeywordDiscard -> return other == KeywordDiscard;
+			case KeywordDo -> return other == KeywordDo;
+			case KeywordElse -> return other == KeywordElse;
+			case KeywordEnum -> return other == KeywordEnum;
+			case KeywordExtend -> return other == KeywordExtend;
+			case KeywordExtern -> return other == KeywordExtern;
+			case KeywordFalse -> return other == KeywordFalse;
+			case KeywordFor -> return other == KeywordFor;
+			case KeywordFunc -> return other == KeywordFunc;
+			case KeywordIf -> return other == KeywordIf;
+			case KeywordImport -> return other == KeywordImport;
+			case KeywordIn -> return other == KeywordIn;
+			case KeywordIs -> return other == KeywordIs;
+			case KeywordMatch -> return other == KeywordMatch;
+			case KeywordMust -> return other == KeywordMust;
+			case KeywordOperator -> return other == KeywordOperator;
+			case KeywordPragma -> return other == KeywordPragma;
+			case KeywordPrivate -> return other == KeywordPrivate;
+			case KeywordPublic -> return other == KeywordPublic;
+			case KeywordReturn -> return other == KeywordReturn;
+			case KeywordStruct -> return other == KeywordStruct;
+			case KeywordTemplate -> return other == KeywordTemplate;
+			case KeywordThrow -> return other == KeywordThrow;
+			case KeywordTrue -> return other == KeywordTrue;
+			case KeywordTry -> return other == KeywordTry;
+			case KeywordUnsafe -> return other == KeywordUnsafe;
+			case KeywordUnwrap -> return other == KeywordUnwrap;
+			case KeywordVar -> return other == KeywordVar;
+			case KeywordVariant -> return other == KeywordVariant;
+			case KeywordWhile -> return other == KeywordWhile;
+			case KeywordYield -> return other == KeywordYield;
+			case Unknown -> return other == Unknown;
+			case EndOfFile -> return other == EndOfFile;
+		}
+	}
+
+	func toString(this: &Token) -> String {
+		match this {
+			case Identifier: name -> return "<identifier> " + name;
+			case CharLiteral: char -> return "<char> '" + char.value + "'" + char.postfix;
+			case StringLiteral: str -> return "<str> \"" + str.value + "\"" + str.postfix;
+			case NumberLiteral: number -> return "<number> " + format(number.value.toInt()) + number.postfix;
+			case LParen -> return "<token> (";
+			case RParen -> return "<token> )";
+			case LSquare -> return "<token> [";
+			case RSquare -> return "<token> ]";
+			case LCurly -> return "<token> {";
+			case RCurly -> return "<token> }";
+			case Comma -> return "<token> ,";
+			case Semicolon -> return "<token> ;";
+			case Dot -> return "<token> .";
+			case QuestionMark -> return "<token> ?";
+			case Colon -> return "<token> :";
+			case DoubleColon -> return "<token> ::";
+			case AtSign -> return "<token> @";
+			case Assign -> return "<token> =";
+			case Plus -> return "<token> +";
+			case Minus -> return "<token> -";
+			case Asterisk -> return "<token> *";
+			case Slash -> return "<token> /";
+			case Percent -> return "<token> %";
+			case Ampersand -> return "<token> &";
+			case Pipe -> return "<token> |";
+			case Caret -> return "<token> ^";
+			case Tilde -> return "<token> ~";
+			case ExclamationMark -> return "<token> !";
+			case Arrow -> return "<token> ->";
+			case DoubleDot -> return "<token> ..";
+			case DoubleQuestionMark -> return "<token> ??";
+			case DoublePlus -> return "<token> ++";
+			case DoubleMinus -> return "<token> --";
+			case DoubleAmpersand -> return "<token> &&";
+			case DoublePipe -> return "<token> ||";
+			case Equal -> return "<token> ==";
+			case NotEqual -> return "<token> !=";
+			case LessThan -> return "<token> <";
+			case LessEqual -> return "<token> <=";
+			case GreaterThan -> return "<token> >";
+			case GreaterEqual -> return "<token> >=";
+			case Spaceship -> return "<token> <=>";
+			case ColonAssign -> return "<token> :=";
+			case PlusAssign -> return "<token> +=";
+			case MinusAssign -> return "<token> -=";
+			case AsteriskAssign -> return "<token> *=";
+			case SlashAssign -> return "<token> /=";
+			case PercentAssign -> return "<token> %=";
+			case AmpersandAssign -> return "<token> &=";
+			case PipeAssign -> return "<token> |=";
+			case CaretAssign -> return "<token> ^=";
+			case DoubleQuestionMarkAssign -> return "<token> ??=";
+			case KeywordAs -> return "<keyword> as";
+			case KeywordBreak -> return "<keyword> break";
+			case KeywordCase -> return "<keyword> case";
+			case KeywordComptime -> return "<keyword> comptime";
+			case KeywordConst -> return "<keyword> const";
+			case KeywordContinue -> return "<keyword> continue";
+			case KeywordDefault -> return "<keyword> default";
+			case KeywordDiscard -> return "<keyword> discard";
+			case KeywordDo -> return "<keyword> do";
+			case KeywordElse -> return "<keyword> else";
+			case KeywordEnum -> return "<keyword> enum";
+			case KeywordExtend -> return "<keyword> extend";
+			case KeywordExtern -> return "<keyword> extern";
+			case KeywordFalse -> return "<keyword> false";
+			case KeywordFor -> return "<keyword> for";
+			case KeywordFunc -> return "<keyword> func";
+			case KeywordIf -> return "<keyword> if";
+			case KeywordImport -> return "<keyword> import";
+			case KeywordIn -> return "<keyword> in";
+			case KeywordIs -> return "<keyword> is";
+			case KeywordMatch -> return "<keyword> match";
+			case KeywordMust -> return "<keyword> must";
+			case KeywordOperator -> return "<keyword> operator";
+			case KeywordPragma -> return "<keyword> pragma";
+			case KeywordPrivate -> return "<keyword> private";
+			case KeywordPublic -> return "<keyword> public";
+			case KeywordReturn -> return "<keyword> return";
+			case KeywordStruct -> return "<keyword> struct";
+			case KeywordTemplate -> return "<keyword> template";
+			case KeywordThrow -> return "<keyword> throw";
+			case KeywordTrue -> return "<keyword> true";
+			case KeywordTry -> return "<keyword> try";
+			case KeywordUnsafe -> return "<keyword> unsafe";
+			case KeywordUnwrap -> return "<keyword> unwrap";
+			case KeywordVar -> return "<keyword> var";
+			case KeywordVariant -> return "<keyword> variant";
+			case KeywordWhile -> return "<kewyord> while";
+			case KeywordYield -> return "<kewyord> yield";
+			case Unknown: byte -> return "<unknown> " + byte;
+			case EndOfFile -> return "<eof>";
+		}
+	}
+}
+
+func dump(tokens: &List!<Token>) -> String {
+	var result = "";
+
+	for tok in tokens {
+		var tmp = tok.toString();
+		match tmp.find(" ") {
+			case Some: first_index -> tmp.replace(first_index..(first_index + 1), "\e[0m \e[34m");
+			else -> {}
+		}
+
+		result += "\e[32m" + tmp + "\e[0m - " + tok.span.dump() + "\n";
+	}
+
+	return result;
+}
+
+struct Lexer {
+	var src: String;
+
+	var index: uint;
+	var line_start: uint;
+	var line: u32;
+	var file_id: u16;
+
+	func constructor(this: &&Lexer, src: String, file_id: u16) -> void {
+		this.src := src;
+		this.index := 0;
+		this.line_start := 0;
+		this.line := 0;
+		this.file_id := file_id;
+	}
+
+	func constructor(this: &&Lexer, other: Lexer) -> void = default;
+	func destructor(this: &&Lexer) -> void = default;
+
+	func lex(src: String, file_id: u16) -> List!<Token> {
+		var lexer = Lexer(src, file_id);
+		var result: List!<Token>;
+
+		var token = lexer.next();
+		while token.hasValue() {
+			result.append(token.value());
+			token = lexer.next();
+		}
+
+		return result;
+	}
+
+	func span(this: &Lexer, start: uint, end: uint) -> Span {
+		return Span(start, end, this.line, (start - this.line_start) as u16, this.file_id);
+	}
+
+	func skipWhitespaceAndComments(this: &&Lexer) {
+		while this.index < this.src.size() {
+			match this.src[this.index] {
+				case ' 'b | '\t'b | '\r'b -> this.index++;
+				case '\n'b -> {
+					this.index++;
+					this.line++;
+					this.line_start = this.index;
+				}
+				case '/'b -> {
+					if this.index + 1 >= this.src.size() {
+						break;
+					}
+
+					if this.src[this.index + 1] == '/'b {
+						this.skipSinglelineComment();
+					} else if this.src[this.index + 1] == '*'b {
+						this.skipMultilineComment();
+					} else {
+						break;
+					}
+				}
+				else -> break;
+			}
+		}
+	}
+
+	func skipSinglelineComment(this: &&Lexer) -> void {
+		this.index += 2;
+
+		while this.index < this.src.size() {
+			if this.src[this.index] == '\n'b {
+				break;
+			} else {
+				this.index++;
+			}
+		}
+	}
+
+	func skipMultilineComment(this: &&Lexer) -> void {
+		this.index += 2;
+
+		var comment_completed = false;
+		while this.index + 1 < this.src.size() {
+			if this.src[this.index] == '*'b && this.src[this.index + 1] == '/'b {
+				this.index += 2;
+				comment_completed = true;
+				break;
+			} else {
+				this.index++;
+			}
+		}
+
+		// if multiline comment wasn't properly completed with */ skip until end of file
+		if !comment_completed {
+			this.index = this.src.size();
+		}
+	}
+
+	func next(this: &&Lexer) -> Optional!<Token> {
+		this.skipWhitespaceAndComments();
+
+		if this.index >= this.src.size() {
+			return None;
+		}
+
+		const start = this.index;
+		match this.src[this.index] {
+			case '('b -> {
+				this.index++;
+				return Some(Token::LParen(this.span(start, this.index)));
+			}
+			case ')'b -> {
+				this.index++;
+				return Some(Token::RParen(this.span(start, this.index)));
+			}
+			case '['b -> {
+				this.index++;
+				return Some(Token::LSquare(this.span(start, this.index)));
+			}
+			case ']'b -> {
+				this.index++;
+				return Some(Token::RSquare(this.span(start, this.index)));
+			}
+			case '{'b -> {
+				this.index++;
+				return Some(Token::LCurly(this.span(start, this.index)));
+			}
+			case '}'b -> {
+				this.index++;
+				return Some(Token::RCurly(this.span(start, this.index)));
+			}
+			case ','b -> {
+				this.index++;
+				return Some(Token::Comma(this.span(start, this.index)));
+			}
+			case ';'b -> {
+				this.index++;
+				return Some(Token::Semicolon(this.span(start, this.index)));
+			}
+			case '@'b -> {
+				this.index++;
+				return Some(Token::AtSign(this.span(start, this.index)));
+			}
+			case '~'b -> {
+				this.index++;
+				return Some(Token::Tilde(this.span(start, this.index)));
+			}
+			case '.'b -> return Some(this.lexDot());
+			case '?'b -> return Some(this.lexQuestionmark());
+			case ':'b -> return Some(this.lexColon());
+			case '='b -> return Some(this.lexEqual());
+			case '+'b -> return Some(this.lexPlus());
+			case '-'b -> return Some(this.lexMinus());
+			case '*'b -> return Some(this.lexAsterisk());
+			case '/'b -> return Some(this.lexSlash());
+			case '%'b -> return Some(this.lexPercent());
+			case '&'b -> return Some(this.lexAmpersand());
+			case '|'b -> return Some(this.lexPipe());
+			case '^'b -> return Some(this.lexCaret());
+			case '<'b -> return Some(this.lexLess());
+			case '>'b -> return Some(this.lexGreater());
+			case '!'b -> return Some(this.lexExclamationMark());
+			case '\''b -> return Some(this.lexCharLiteral());
+			case '"'b -> return Some(this.lexStringLiteral());
+			else -> if isDigit(this.src[this.index]) {
+				return Some(this.lexNumber());
+			} else if isAlpha(this.src[this.index]) || this.src[this.index] == '_'b || this.src[this.index] > 127 {
+				return Some(this.lexName());
+			} else {
+				this.index++;
+				return Some(Token::Unknown(this.src[this.index], this.span(start, this.index)));
+			}
+		}
+	}
+
+	func lexDot(this: &&Lexer) -> Token {
+		if this.src.at(this.index + 1) ?? '\0'b == '.'b {
+			this.index += 2;
+			return Token::DoubleDot(this.span(this.index - 2, this.index));
+		} else {
+			this.index += 1;
+			return Token::Dot(this.span(this.index - 1, this.index));
+		}
+	}
+
+	func lexQuestionmark(this: &&Lexer) -> Token {
+		if this.src.at(this.index + 1) ?? '\0'b == '?'b {
+			if this.src.at(this.index + 2) ?? '\0'b == '='b {
+				this.index += 3;
+				return Token::DoubleQuestionMarkAssign(this.span(this.index - 3, this.index));
+			} else {
+				this.index += 2;
+				return Token::DoubleQuestionMark(this.span(this.index - 2, this.index));
+			}
+		} else {
+			this.index += 1;
+			return Token::QuestionMark(this.span(this.index - 1, this.index));
+		}
+	}
+
+	func lexColon(this: &&Lexer) -> Token {
+		if this.src.at(this.index + 1) ?? '\0'b == ':'b {
+			this.index += 2;
+			return Token::DoubleColon(this.span(this.index - 2, this.index));
+		} else if this.src.at(this.index + 1) ?? '\0'b == '='b {
+			this.index += 2;
+			return Token::ColonAssign(this.span(this.index - 2, this.index));
+		} else {
+			this.index += 1;
+			return Token::Colon(this.span(this.index - 1, this.index));
+		}
+	}
+
+	func lexEqual(this: &&Lexer) -> Token {
+		if this.src.at(this.index + 1) ?? '\0'b == '='b {
+			this.index += 2;
+			return Token::Equal(this.span(this.index - 2, this.index));
+		} else {
+			this.index += 1;
+			return Token::Assign(this.span(this.index - 1, this.index));
+		}
+	}
+
+	func lexPlus(this: &&Lexer) -> Token {
+		if this.src.at(this.index + 1) ?? '\0'b == '+'b {
+			this.index += 2;
+			return Token::DoublePlus(this.span(this.index - 2, this.index));
+		} else if this.src.at(this.index + 1) ?? '\0'b == '='b {
+			this.index += 2;
+			return Token::PlusAssign(this.span(this.index - 2, this.index));
+		} else {
+			this.index += 1;
+			return Token::Plus(this.span(this.index - 1, this.index));
+		}
+	}
+
+	func lexMinus(this: &&Lexer) -> Token {
+		if this.src.at(this.index + 1) ?? '\0'b == '-'b {
+			this.index += 2;
+			return Token::DoubleMinus(this.span(this.index - 2, this.index));
+		} else if this.src.at(this.index + 1) ?? '\0'b == '='b {
+			this.index += 2;
+			return Token::MinusAssign(this.span(this.index - 2, this.index));
+		} else if this.src.at(this.index + 1) ?? '\0'b == '>'b {
+			this.index += 2;
+			return Token::Arrow(this.span(this.index - 2, this.index));
+		} else {
+			this.index += 1;
+			return Token::Minus(this.span(this.index - 1, this.index));
+		}
+	}
+
+	func lexAsterisk(this: &&Lexer) -> Token {
+		if this.src.at(this.index + 1) ?? '\0'b == '='b {
+			this.index += 2;
+			return Token::AsteriskAssign(this.span(this.index - 2, this.index));
+		} else {
+			this.index += 1;
+			return Token::Asterisk(this.span(this.index - 1, this.index));
+		}
+	}
+
+	func lexSlash(this: &&Lexer) -> Token {
+		if this.src.at(this.index + 1) ?? '\0'b == '='b {
+			this.index += 2;
+			return Token::SlashAssign(this.span(this.index - 2, this.index));
+		} else {
+			this.index += 1;
+			return Token::Slash(this.span(this.index - 1, this.index));
+		}
+	}
+
+	func lexPercent(this: &&Lexer) -> Token {
+		if this.src.at(this.index + 1) ?? '\0'b == '='b {
+			this.index += 2;
+			return Token::PercentAssign(this.span(this.index - 2, this.index));
+		} else {
+			this.index += 1;
+			return Token::Percent(this.span(this.index - 1, this.index));
+		}
+	}
+
+	func lexAmpersand(this: &&Lexer) -> Token {
+		if this.src.at(this.index + 1) ?? '\0'b == '&'b {
+			this.index += 2;
+			return Token::DoubleAmpersand(this.span(this.index - 2, this.index));
+		} else if this.src.at(this.index + 1) ?? '\0'b == '='b {
+			this.index += 2;
+			return Token::AmpersandAssign(this.span(this.index - 2, this.index));
+		} else {
+			this.index += 1;
+			return Token::Ampersand(this.span(this.index - 1, this.index));
+		}
+	}
+
+	func lexPipe(this: &&Lexer) -> Token {
+		if this.src.at(this.index + 1) ?? '\0'b == '|'b {
+			this.index += 2;
+			return Token::DoublePipe(this.span(this.index - 2, this.index));
+		} else if this.src.at(this.index + 1) ?? '\0'b == '='b {
+			this.index += 2;
+			return Token::PipeAssign(this.span(this.index - 2, this.index));
+		} else {
+			this.index += 1;
+			return Token::Pipe(this.span(this.index - 1, this.index));
+		}
+	}
+
+	func lexCaret(this: &&Lexer) -> Token {
+		if this.src.at(this.index + 1) ?? '\0'b == '='b {
+			this.index += 2;
+			return Token::CaretAssign(this.span(this.index - 2, this.index));
+		} else {
+			this.index += 1;
+			return Token::Caret(this.span(this.index - 1, this.index));
+		}
+	}
+
+	func lexLess(this: &&Lexer) -> Token {
+		if this.src.at(this.index + 1) ?? '\0'b == '='b {
+			if this.src.at(this.index + 2) ?? '\0'b == '>'b {
+				this.index += 3;
+				return Token::Spaceship(this.span(this.index - 3, this.index));
+			} else {
+				this.index += 2;
+				return Token::LessEqual(this.span(this.index - 2, this.index));
+			}
+		} else {
+			this.index += 1;
+			return Token::LessThan(this.span(this.index - 1, this.index));
+		}
+	}
+
+	func lexGreater(this: &&Lexer) -> Token {
+		if this.src.at(this.index + 1) ?? '\0'b == '='b {
+			this.index += 2;
+			return Token::GreaterEqual(this.span(this.index - 2, this.index));
+		} else {
+			this.index += 1;
+			return Token::GreaterThan(this.span(this.index - 1, this.index));
+		}
+	}
+
+	func lexExclamationMark(this: &&Lexer) -> Token {
+		if this.src.at(this.index + 1) ?? '\0'b == '='b {
+			this.index += 2;
+			return Token::NotEqual(this.span(this.index - 2, this.index));
+		} else {
+			this.index += 1;
+			return Token::ExclamationMark(this.span(this.index - 1, this.index));
+		}
+	}
+
+	func lexEscapedString(this: &&Lexer, end: byte) -> String {
+		const start = this.index;
+		var result = "";
+
+		while this.index < this.src.size() {
+			if this.src[this.index] == end {
+				break;
+			}
+
+			if this.src[this.index] == '\\'b {
+				this.index++;
+				if this.index >= this.src.size() {
+					break;
+				}
+
+				match this.src[this.index] {
+					case '0'b -> result += '\0'b;
+					case 'a'b -> result += '\a'b;
+					case 'b'b -> result += '\b'b;
+					case 'e'b -> result += '\e'b;
+					case 'f'b -> result += '\f'b;
+					case 'n'b -> result += '\n'b;
+					case 'r'b -> result += '\r'b;
+					case 't'b -> result += '\t'b;
+					case 'v'b -> result += '\v'b;
+					case '\\'b -> result += '\\'b;
+					case '\''b -> result += '\''b;
+					case '\"'b -> result += '\"'b;
+					case '\?'b -> result += '\?'b;
+					else -> panic("unknown escape sequence: '" + this.src[this.index] + "'");
+				}
+
+				this.index++;
+			} else {
+				result += this.src[this.index];
+				this.index++;
+			}
+		}
+
+		return result;
+	}
+
+	func lexPostfix(this: &&Lexer) -> String {
+		const start = this.index;
+		while this.index < this.src.size() {
+			if !isWordChar(this.src[this.index]) {
+				break;
+			}
+
+			this.index++;
+		}
+		return this.src.substring(start..this.index);
+	}
+
+	func lexCharLiteral(this: &&Lexer) -> Token {
+		const start = this.index;
+
+		this.index++; // skip '
+		const str = this.lexEscapedString('\''b);
+		this.index++; // skip '
+
+		const postfix = this.lexPostfix();
+		const span = this.span(start, this.index);
+
+		return Token::CharLiteral(CharLiteral(str[0u], postfix), span);
+	}
+
+	func lexStringLiteral(this: &&Lexer) -> Token {
+		const start = this.index;
+
+		this.index++; // skip "
+		const str = this.lexEscapedString('\"'b);
+		this.index++; // skip "
+
+		const postfix = this.lexPostfix();
+		const span = this.span(start, this.index);
+
+		return Token::StringLiteral(StringLiteral(str, postfix), span);
+	}
+
+	func lexNumber(this: &&Lexer) -> Token {
+		const start = this.index;
+		const parsed_number = parseNumber(this.src, start);
+		assert(parsed_number.length != 0);
+
+		this.index += parsed_number.length;
+
+		const postfix = this.lexPostfix();
+		const span = this.span(start, this.index);
+
+		return Token::NumberLiteral(NumberLiteral(parsed_number, postfix), span);
+	}
+
+	func lexName(this: &&Lexer) -> Token {
+		const start = this.index;
+
+		while this.index < this.src.size() {
+			if !isWordChar(this.src[this.index]) {
+				break;
+			}
+
+			this.index++;
+		}
+
+		const name = this.src.substring(start..this.index);
+		const span = this.span(start, this.index);
+
+		if name == "as" {
+			return Token::KeywordAs(span);
+		} else if name == "break" {
+			return Token::KeywordBreak(span);
+		} else if name == "case" {
+			return Token::KeywordCase(span);
+		} else if name == "comptime" {
+			return Token::KeywordComptime(span);
+		} else if name == "const" {
+			return Token::KeywordConst(span);
+		} else if name == "continue" {
+			return Token::KeywordContinue(span);
+		} else if name == "default" {
+			return Token::KeywordDefault(span);
+		} else if name == "discard" {
+			return Token::KeywordDiscard(span);
+		} else if name == "do" {
+			return Token::KeywordDo(span);
+		} else if name == "else" {
+			return Token::KeywordElse(span);
+		} else if name == "enum" {
+			return Token::KeywordEnum(span);
+		} else if name == "extend" {
+			return Token::KeywordExtend(span);
+		} else if name == "extern" {
+			return Token::KeywordExtern(span);
+		} else if name == "false" {
+			return Token::KeywordFalse(span);
+		} else if name == "for" {
+			return Token::KeywordFor(span);
+		} else if name == "func" {
+			return Token::KeywordFunc(span);
+		} else if name == "if" {
+			return Token::KeywordIf(span);
+		} else if name == "import" {
+			return Token::KeywordImport(span);
+		} else if name == "in" {
+			return Token::KeywordIn(span);
+		} else if name == "is" {
+			return Token::KeywordIs(span);
+		} else if name == "match" {
+			return Token::KeywordMatch(span);
+		} else if name == "must" {
+			return Token::KeywordMust(span);
+		} else if name == "operator" {
+			return Token::KeywordOperator(span);
+		} else if name == "pragma" {
+			return Token::KeywordPragma(span);
+		} else if name == "private" {
+			return Token::KeywordPrivate(span);
+		} else if name == "public" {
+			return Token::KeywordPublic(span);
+		} else if name == "return" {
+			return Token::KeywordReturn(span);
+		} else if name == "struct" {
+			return Token::KeywordStruct(span);
+		} else if name == "template" {
+			return Token::KeywordTemplate(span);
+		} else if name == "throw" {
+			return Token::KeywordThrow(span);
+		} else if name == "true" {
+			return Token::KeywordTrue(span);
+		} else if name == "try" {
+			return Token::KeywordTry(span);
+		} else if name == "unsafe" {
+			return Token::KeywordUnsafe(span);
+		} else if name == "unwrap" {
+			return Token::KeywordUnwrap(span);
+		} else if name == "var" {
+			return Token::KeywordVar(span);
+		} else if name == "variant" {
+			return Token::KeywordVariant(span);
+		} else if name == "while" {
+			return Token::KeywordWhile(span);
+		} else if name == "yield" {
+			return Token::KeywordYield(span);
+		} else {
+			return Token::Identifier(name, span);
+		}
+	}
+
+	func isWordChar(char: byte) -> bool {
+		return isAlpha(char) || isDigit(char) || char == '_'b || char > 127;
+	}
+}

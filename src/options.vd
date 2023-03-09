@@ -1,0 +1,116 @@
+import std/core;
+import std/format;
+import std/list;
+import std/path;
+import std/set;
+import std/string;
+
+enum SymbolType {
+	case None;
+	case Name;	// only name -> will probably cause duplicate names
+	case Full;	// signature is used as name
+}
+
+enum OutputType {
+	case Assembly;
+	case Bitcode;
+}
+
+struct ModulePathAndName {
+	var path: String;
+	var name: String;
+
+	func constructor(this: &&ModulePathAndName, path: String, name: String) -> void {
+		this.path := path;
+		this.name := name;
+	}
+
+	func constructor(this: &&ModulePathAndName, other: ModulePathAndName) -> void = default;
+	func destructor(this: &&ModulePathAndName) -> void = default;
+
+	operator =(this: &&ModulePathAndName, other: ModulePathAndName) -> void = default;
+	operator ==(this: ModulePathAndName, other: ModulePathAndName) -> bool = default;
+}
+
+struct CompilerOptions {
+	var dump_tokens: bool;
+	var dump_ast: bool;
+	var dump_program: bool;
+	var dump_import_tree: bool;
+
+	var hide_errors: bool;
+
+	var root_module_path: String;
+	var program_name: String;
+	var build_dir: String;
+
+	var import_search_paths: List!<Path>;
+
+	var target_triple: String;
+	var target_data_layout: String;
+	var codegen_only: bool;
+	var symbol_type: SymbolType;
+	var output_type: OutputType;
+	var generate_debug_info: bool;
+	var dont_codegen_builtins: bool;
+
+	var interpret: bool;
+
+	var link_libraries: List!<String>;
+
+	func constructor(this: &&CompilerOptions) -> void {
+		this.symbol_type := Full;
+		this.output_type := Assembly;
+	}
+
+	func constructor(this: &&CompilerOptions, other: CompilerOptions) -> void = default;
+	func destructor(this: &&CompilerOptions) -> void = default;
+
+	operator =(this: &&CompilerOptions, other: CompilerOptions) -> void = default;
+
+	func getImportPaths(this: CompilerOptions, module: String) -> List!<ModulePathAndName> {
+		var result: List!<ModulePathAndName>;
+
+		for i in 0u..this.import_search_paths.size() {
+			const path = this.import_search_paths[i];
+			const prefix = "{" + format(i) + "}";
+
+			const file_path = (path / (module + ".vd"));
+			const dir_path = (path / module);
+
+			if file_path.isFile() {
+				result.append(ModulePathAndName(
+					file_path.toString(),
+					prefix + "/" + module
+				));
+
+				break;
+			} else if dir_path.isDirectory() {
+				for file in dir_path.recursiveRange() {
+					if file.extension() != "vd" {
+						continue;
+					}
+
+					const relative_path = Path(List!<String>(file.segments[path.segments.size()..file.segments.size()]));
+					var name = "{" + format(i) + "}/" + relative_path.toString();
+					name = name.substring(0u..(name.size() - 3));
+					result.append(ModulePathAndName(
+						file.toString(),
+						name
+					));
+				}
+				break;
+			}
+		}
+
+		return result;
+	}
+
+	func getOutputCodePath(this: CompilerOptions, file_ending: String) -> String {
+		return this.build_dir + "/" + this.program_name + file_ending;
+	}
+
+	func getOutputBinaryPath(this: CompilerOptions) -> String {
+		return this.build_dir + "/" + this.program_name;
+	}
+}

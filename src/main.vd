@@ -1,0 +1,162 @@
+import std/core;
+import std/io;
+import std/list;
+import std/libc/stdlib;
+import std/path;
+import std/range;
+import std/string;
+
+import args;
+import codegen/llvm;
+import interpreter;
+import options;
+import program;
+import span;
+import typechecker;
+
+func parseArguments(arguments: Range!<String>, options: &&CompilerOptions) -> bool {
+	var args_parser = ArgsParser(arguments, "");
+
+	options.dump_tokens = args_parser.flag("dump-tokens", "t", "dump tokens") ?? false;
+	options.dump_ast = args_parser.flag("dump-ast", "a", "dump ast") ?? false;
+	options.dump_program = args_parser.flag("dump-program", "p", "dump program") ?? false;
+	options.dump_import_tree = args_parser.flag("dump-import-tree", "", "dump import tree") ?? false;
+
+	options.hide_errors = args_parser.flag("hide_errors", "q", "do not display error messages") ?? false;
+
+	options.program_name = args_parser.value("program-name", "o", "program name & output file name") ?? "";
+	options.build_dir = args_parser.value("build-dir", "B", "build dir & output file location") ?? "build";
+
+	// TODO: replace default values with host platform specific ones
+	options.target_triple = args_parser.value("target-triple", "", "target triple string passed to llvm") ?? "x86_64-pc-linux-gnu";
+	options.target_data_layout = args_parser.value("target-data-layout", "", "target data layout string passed to llvm") ?? "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128";
+	options.codegen_only = args_parser.flag("codegen-only", "c", "don't compile output code to a binary") ?? false;
+	options.generate_debug_info = args_parser.flag("generate-debug-info", "g", "generate debug information") ?? false;
+	options.dont_codegen_builtins = args_parser.flag("cg-no-builtins", "m", "don't codegen inlinable builtin functions") ?? false;
+
+	if args_parser.flag("strip-symbols", "s", "strip symbols") ?? false {
+		options.symbol_type = None;
+	}
+
+	if args_parser.flag("bitcode", "b", "generate llvm bitcode") ?? false {
+		options.output_type = Bitcode;
+	}
+
+	if args_parser.flag("emit-llvm", "S", "generate llvm ir") ?? false {
+		options.output_type = Assembly;
+	}
+
+	var library = args_parser.value("link-library", "l", "library to link against");
+	while library.hasValue() {
+		options.link_libraries.append(library.value());
+		library = args_parser.value("link-library", "l", "library to link against");
+	}
+
+	options.interpret = args_parser.flag("interpret", "i", "interpret") ?? false;
+
+	match args_parser.anonymous("path", "path to the root module file") {
+		case Some: value -> options.root_module_path = value;
+		else -> {
+			eprintln("no root module specified");
+			return false;
+		}
+	}
+
+	const path = options.root_module_path;
+	if !path.endsWith(".vd") || path.size() <= 3 {
+		eprintln("invalid source file");
+		return false;
+	}
+
+	if options.program_name == "" {
+		var name_begin: uint;
+		match path.rfind('/'b) {
+			case Some: index -> name_begin = index + 1;
+			else -> name_begin = 0;
+		}
+
+		const name_end = path.rfind('.'b) ?? path.size();
+		options.program_name = path.substring(name_begin..name_end);
+	}
+
+	const compiler_binary_path = Path(arguments[0u]); // FIXME: depends on how the program was run
+	if const compiler_binary_dir = compiler_binary_path.parentDir() {
+		if const compiler_install_dir = compiler_binary_dir.parentDir() {
+			options.import_search_paths.append(compiler_install_dir);
+		}
+	}
+
+	const absolute_root_module_path = Path::cwd() / Path(options.root_module_path);
+	if const root_module_dir = absolute_root_module_path.parentDir() {
+		options.import_search_paths.append(root_module_dir);
+	}
+
+	options.import_search_paths.append(Path::cwd());
+
+	return true;
+}
+
+func main(args: Range!<String>) -> int {
+	var options: CompilerOptions;
+	if !args.parseArguments(&&options) {
+		return 1;
+	}
+
+	var program: Program = (options);
+	if const error = program.loadModule(options.root_module_path, options.program_name) as Error {
+		eprintln("couldn't load module " + options.root_module_path + ": " + String::fromErrorCode(error));
+		return 1;
+	}
+
+	program.typecheck(&&program.modules[0u].operator unwrap());
+
+	if options.dump_import_tree {
+		print(program.dumpImportTree());
+	}
+
+	if options.dump_program {
+		print(program.dump());
+	}
+
+	if program.has_errors {
+		return 1;
+	}
+
+	if options.interpret {
+		var interpreter: Interpreter = (&&program);
+		var interpret_args: List!<interpreter::Value>;
+		match interpreter.interpret(program.main_function, interpret_args, Span(0u16)) {
+			case Void -> return 0;
+			case Integer: value -> return value;
+			else -> return 1;
+		}
+	} else {
+		const assembly_path = llvm::codegen(&&program);
+		if program.has_errors || assembly_path is None {
+			return 1;
+		}
+
+		if options.codegen_only {
+			return 0;
+		}
+
+		var clang_command = "clang " + assembly_path.value();
+		clang_command += " -o " + options.getOutputBinaryPath();
+		clang_command += " -lc -lm";
+
+		for lib in options.link_libraries {
+			clang_command += " -l" + lib;
+		}
+
+		if options.symbol_type == None {
+			clang_command += " -s";
+		}
+
+		if options.generate_debug_info {
+			clang_command += " -g";
+		}
+
+		clang_command += "\0";
+		return system(clang_command.data()) as int;
+	}
+}

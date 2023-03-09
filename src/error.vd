@@ -1,0 +1,59 @@
+import std/core;
+import std/string;
+
+import span;
+
+enum ErrorType {
+	case Error;		// invalid code
+	case Warning;	// not an error, but 'could' cause bugs
+	case Hint;		// non critical issue like code formatting
+	case Info;		// additional info for previous error/warning/hint
+	case Todo;		// reached a not yet implemented part of the compiler
+}
+
+enum ErrorStage {
+	case Parser;
+	case Typechecker;
+	case Interpreter;
+	case CodeGenerator;
+}
+
+struct CompilationError {
+	var message: String;
+	var type: ErrorType;
+	var stage: ErrorStage;
+	var span: Span;
+
+	func constructor(this: &&CompilationError, other: CompilationError) -> void = default;
+
+	func constructor(this: &&CompilationError, message: String, type: ErrorType, stage: ErrorStage, span: Span) -> void {
+		this.message := message;
+		this.type := type;
+		this.stage := stage;
+		this.span := span;
+	}
+
+	func destructor(this: &&CompilationError) -> void = default;
+
+	operator =(this: &&CompilationError, other: CompilationError) -> void = default;
+
+	operator ==(this: CompilationError, other: CompilationError) -> bool = default;
+
+	func toString(this: CompilationError, file_name: String) -> String {
+		var result = "";
+		match this.type {
+			case Error -> result += "Error: ";
+			case Warning -> result += "Warning: ";
+			case Hint -> result += "Hint: ";
+			case Info -> result += "Info: ";
+			case Todo -> result += "Todo: ";
+		}
+
+		result += this.message;
+		if this.span.start != this.span.end {
+			result += " at " + this.span.dump(file_name);
+		}
+
+		return result;
+	}
+}

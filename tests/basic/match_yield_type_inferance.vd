@@ -1,0 +1,17 @@
+import std/core;
+
+func foo(x: int) -> Optional!<int> {
+	return match x {
+		case 0 -> yield None;
+		else -> yield Some(x + 2);
+	}
+}
+
+func main() {
+	const a = foo(0);
+	assert(a is None);
+
+	const b = foo(5);
+	assert(b is Some);
+	assert(b.value() == 7);
+}

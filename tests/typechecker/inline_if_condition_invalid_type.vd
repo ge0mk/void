@@ -1,7 +1,0 @@
-//> error "condition has invalid type"
-
-import std/core;
-
-func main() -> int {
-	return 0 if 1 else 2;
-}

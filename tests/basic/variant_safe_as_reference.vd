@@ -1,18 +1,16 @@
 import std/core;
 
 variant Foo {
-	case A: int;
+	case A: &&int;
 	case B: bool;
 }
 
 func main() {
-	var a = Foo::A(5);
-	if var b = &&a as A {
-		b = 42;
-	}
+	var a = 5;
+	var b = Foo::A(&&a);
+	var c = b as A
 
-	match a {
-		case A: x -> assert(x == 42);
-		else -> assert(false);
-	}
+	assert(c is Some);
+	c.value() = 42;
+	assert(a == 42);
 }

@@ -1,4 +1,4 @@
-//> error "continue stmt must be inside a loop"
+//> error "continue statements must be inside of a loop"
 
 import std/core;
 

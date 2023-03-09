@@ -1,0 +1,16 @@
+import std/core;
+
+func foo(counter: &&int) -> Result!<int> {
+	counter++;
+	return Ok(0);
+}
+
+func main() {
+	var counter = 0;
+	match foo(&&counter) {
+		case Ok: value -> {}
+		else -> {}
+	}
+
+	assert(counter == 1);
+}

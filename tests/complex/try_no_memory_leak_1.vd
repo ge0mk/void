@@ -1,17 +1,20 @@
-//> output "+"
-//> output "-"
-
 import std/core;
-import std/string;
-import std/io;
 
 struct Foo {
-	func constructor(this: &&Foo) {
-		println("+");
+	var counter: &&int;
+
+	func constructor(this: &&Foo, counter: &&int) {
+		this.counter := &&counter;
+		this.counter++;
+	}
+
+	func constructor(this: &&Foo, other: Foo) {
+		this.counter := &&other.counter;
+		this.counter++;
 	}
 
 	func destructor(this: &&Foo) {
-		println("-");
+		this.counter--;
 	}
 }
 
@@ -21,12 +24,13 @@ func foo() -> Result!<int, int> {
 
 func bar(a: Foo, b: int) {}
 
-func baz() -> Result!<void, int> {
-	bar(Foo(), try foo());
+func baz(counter: &&int) -> Result!<void, int> {
+	bar(Foo(&&counter), try foo());
 	return Ok;
 }
 
 func main() {
-	const r = baz();
+	var counter = 0;
+	const r = baz(&&counter);
 	assert(r is Error);
 }

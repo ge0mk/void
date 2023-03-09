@@ -1,4 +1,4 @@
-//> error "uninitialized member reference variable"
+//> error "uninitialized reference member variable"
 
 import std/core;
 

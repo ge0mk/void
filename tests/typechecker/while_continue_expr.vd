@@ -1,8 +1,0 @@
-//> error "continue expr in while stmt must yield type void"
-
-import std/core;
-
-func main() {
-	var i = 0;
-	while i < 10; i * 2 {}
-}

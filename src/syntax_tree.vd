@@ -1,0 +1,1426 @@
+import std/core;
+import std/string;
+import std/shared;
+import std/list;
+import std/box;
+import std/format;
+
+import error;
+import lexer;
+import span;
+import tree_formatter;
+
+func toString(this: ReferenceKind) -> String {
+	match this {
+		case None -> return "";
+		case Const -> return "&";
+		case Var -> return "&&";
+	}
+}
+
+struct ParsedModule {
+	var children: List!<ParsedStmt>;
+	var errors: List!<CompilationError>;
+
+	func constructor(this: &&ParsedModule) -> void = default;
+	func constructor(this: &&ParsedModule, other: ParsedModule) -> void = default;
+	func destructor(this: &&ParsedModule) -> void = default;
+
+	operator =(this: &&ParsedModule, other: ParsedModule) -> void = default;
+	operator ==(this: ParsedModule, other: ParsedModule) -> bool = default;
+
+	func dump(this: &ParsedModule) -> String {
+		var out: TreeFormatter = ("Module");
+
+		for i in 0u..this.children.size() {
+			this.children[i].dump(&&out, i == this.children.size() - 1);
+		}
+
+		return out.finalize();
+	}
+}
+
+variant ParsedAnnotation {
+	var span: Span;
+	var name: String;
+
+	case Flag;
+	case String: String;
+	case Number: NumberLiteral;
+
+	operator ==(this: ParsedAnnotation, other: ParsedAnnotation) -> bool = default;
+
+	func dump(this: &ParsedAnnotation, out: &&TreeFormatter, is_last: bool) -> void {
+		out.push("Annotation", is_last);
+		out.attribute(this.name);
+
+		match this {
+			case Flag -> {}
+			case String: value -> out.value(value);
+			case Number: value -> out.value(value.dump());
+		}
+
+		out.span(this.span);
+		out.pop();
+	}
+}
+
+struct ParsedTemplateParameterDecl {
+	var span: Span;
+	var name: String;
+	var concept: String;
+	var value: Optional!<ParsedExpr>;
+
+	func constructor(this: &&ParsedTemplateParameterDecl, span: Span, name: String, concept: String, value: Optional!<ParsedExpr>) -> void {
+		this.span := span;
+		this.name := name;
+		this.concept := concept;
+		this.value := value;
+	}
+
+	func constructor(this: &&ParsedTemplateParameterDecl, other: ParsedTemplateParameterDecl) -> void = default;
+	func destructor(this: &&ParsedTemplateParameterDecl) -> void = default;
+
+	operator =(this: &&ParsedTemplateParameterDecl, other: ParsedTemplateParameterDecl) -> void = default;
+	operator ==(this: ParsedTemplateParameterDecl, other: ParsedTemplateParameterDecl) -> bool = default;
+
+	func dump(this: &ParsedTemplateParameterDecl, out: &&TreeFormatter, is_last: bool) -> void {
+		out.push("TemplateParameterDecl", is_last);
+
+		out.attribute(this.name);
+		out.text(": ");
+		out.attribute(this.concept);
+
+		if const value = this.value {
+			value.dump(&&out, true);
+		}
+
+		out.pop();
+	}
+}
+
+enum TypeDeclKind {
+	case Struct;
+	case Enum;
+	case Variant;
+	case Extension;
+	case Garbage;
+}
+
+struct ParsedTypeDecl {
+	var span: Span;
+	var name_span: Span;
+
+	var annotations: List!<ParsedAnnotation>;
+	var template_parameters: List!<ParsedTemplateParameterDecl>;
+	var kind: TypeDeclKind;
+	var name: String;
+	var base_type: Optional!<ParsedType>;
+	var children: SharedPtr!<List!<ParsedStmt>>;
+
+	func constructor(this: &&ParsedTypeDecl, start: Span, annotations: List!<ParsedAnnotation>, template_parameters: List!<ParsedTemplateParameterDecl>) -> void {
+		this.span := start;
+		this.name_span := 0u16;
+
+		this.annotations := annotations;
+		this.template_parameters := template_parameters;
+		this.kind := Garbage;
+		this.children := SharedPtr!<List!<ParsedStmt>>::new(List!<ParsedStmt>());
+	}
+
+	func constructor(this: &&ParsedTypeDecl, other: ParsedTypeDecl) -> void = default;
+	func destructor(this: &&ParsedTypeDecl) -> void = default;
+
+	operator =(this: &&ParsedTypeDecl, other: ParsedTypeDecl) -> void = default;
+	operator ==(this: ParsedTypeDecl, other: ParsedTypeDecl) -> bool = default;
+
+	func dump(this: &ParsedTypeDecl, out: &&TreeFormatter, is_last: bool) -> void {
+		match this.kind {
+			case Struct -> out.push("StructDecl", is_last);
+			case Enum -> out.push("EnumDecl", is_last);
+			case Variant -> out.push("VariantDecl", is_last);
+			case Extension -> out.push("ExtensionDecl", is_last);
+			case Garbage -> out.push("GarbageTypeDecl", is_last);
+		}
+
+		out.attribute(this.name);
+		out.span(this.span);
+
+		for i in 0u..this.annotations.size() {
+			this.annotations[i].dump(&&out, (i == this.annotations.size() - 1) && this.template_parameters.isEmpty() && this.children.isEmpty());
+		}
+
+		for i in 0u..this.template_parameters.size() {
+			this.template_parameters[i].dump(&&out, (i == this.template_parameters.size() - 1) && this.children.isEmpty());
+		}
+
+		for i in 0u..this.children.size() {
+			this.children[i].dump(&&out, (i == this.children.size() - 1));
+		}
+
+		out.pop();
+	}
+}
+
+struct ParsedVarDecl {
+	var span: Span;
+	var name: String;
+	var is_const: bool;
+	var type: Optional!<ParsedType>;
+	var initializer: Optional!<ParsedExpr>;
+
+	func constructor(this: &&ParsedVarDecl, span: Span, name: String, is_const: bool, type: Optional!<ParsedType>, initializer: Optional!<ParsedExpr>) -> void {
+		this.span := span;
+		this.name := name;
+		this.is_const := is_const;
+		this.type := type;
+		this.initializer := initializer;
+	}
+
+	func constructor(this: &&ParsedVarDecl, other: ParsedVarDecl) -> void = default;
+	func destructor(this: &&ParsedVarDecl) -> void = default;
+
+	operator =(this: &&ParsedVarDecl, other: ParsedVarDecl) -> void = default;
+	operator ==(this: ParsedVarDecl, other: ParsedVarDecl) -> bool = default;
+
+	func dump(this: &ParsedVarDecl, out: &&TreeFormatter, is_last: bool) -> void {
+		out.push("VarDecl", is_last);
+		out.attribute("const" if this.is_const else "var");
+		out.attribute(this.name);
+
+		if const type = this.type {
+			type.dump(&&out, !this.initializer.hasValue());
+		}
+
+		if const initializer = this.initializer {
+			initializer.dump(&&out, true);
+		}
+
+		out.pop();
+	}
+}
+
+struct ParsedCaseDecl {
+	var span: Span;
+	var name: String;
+	var payload: Optional!<ParsedType>;
+	var id: Optional!<ParsedExpr>;
+
+	func constructor(this: &&ParsedCaseDecl, span: Span, name: String, payload: Optional!<ParsedType>, id: Optional!<ParsedExpr>) -> void {
+		this.span := span;
+		this.name := name;
+		this.payload := payload;
+		this.id := id;
+	}
+
+	func constructor(this: &&ParsedCaseDecl, other: ParsedCaseDecl) -> void = default;
+	func destructor(this: &&ParsedCaseDecl) -> void = default;
+
+	operator =(this: &&ParsedCaseDecl, other: ParsedCaseDecl) -> void = default;
+	operator ==(this: ParsedCaseDecl, other: ParsedCaseDecl) -> bool = default;
+
+	func dump(this: &ParsedCaseDecl, out: &&TreeFormatter, is_last: bool) -> void {
+		out.push("CaseDecl", is_last);
+		out.attribute(this.name);
+
+		if const payload = this.payload {
+			payload.dump(&&out, this.id is None);
+		}
+
+		if const id = this.id {
+			id.dump(&&out, true);
+		}
+
+		out.pop();
+	}
+}
+
+struct ParsedFunctionDecl {
+	var span: Span;
+	var annotations: List!<ParsedAnnotation>;
+	var template_parameters: List!<ParsedTemplateParameterDecl>;
+	var is_comptime: bool;
+	var signature: ParsedFunctionSignature;
+	var body: ParsedFunctionBody;
+
+	func constructor(this: &&ParsedFunctionDecl, start: Span, annotations: List!<ParsedAnnotation>, template_parameters: List!<ParsedTemplateParameterDecl>, is_comptime: bool, signature: ParsedFunctionSignature) -> void {
+		this.span := start;
+		this.annotations := annotations;
+		this.template_parameters := template_parameters;
+		this.is_comptime := is_comptime;
+		this.signature := signature;
+	}
+
+	func constructor(this: &&ParsedFunctionDecl, other: ParsedFunctionDecl) -> void = default;
+	func destructor(this: &&ParsedFunctionDecl) -> void = default;
+
+	operator =(this: &&ParsedFunctionDecl, other: ParsedFunctionDecl) -> void = default;
+	operator ==(this: ParsedFunctionDecl, other: ParsedFunctionDecl) -> bool = default;
+
+	func dump(this: &ParsedFunctionDecl, out: &&TreeFormatter, is_last: bool) -> void {
+		match this.body {
+			case Garbage -> out.push("GarbageFunctionDecl", is_last);
+			case Extern -> out.push("ExternFunctionDecl", is_last);
+			case Default -> out.push("DefaultFunctionDecl", is_last);
+			case Compound -> out.push("FunctionDecl", is_last);
+		}
+
+		if this.is_comptime {
+			out.value("comptime");
+		}
+
+		out.span(this.span);
+
+		for annotation in this.annotations {
+			annotation.dump(&&out, false);
+		}
+
+		for template_parameter in this.template_parameters {
+			template_parameter.dump(&&out, false);
+		}
+
+		this.signature.dump(&&out, !(this.body is Compound));
+
+		if const body = this.body as Compound {
+			body.dump(&&out, true);
+		}
+
+		out.pop();
+	}
+}
+
+struct ParsedFunctionSignature {
+	var span: Span;
+	var name: String;
+	var parameters: List!<ParsedParameterDecl>;
+	var return_type: Optional!<ParsedType>;
+
+	func constructor(this: &&ParsedFunctionSignature, span: Span, name: String, parameters: List!<ParsedParameterDecl>, return_type: Optional!<ParsedType>) -> void {
+		this.span := span;
+		this.name := name;
+		this.parameters := parameters;
+		this.return_type := return_type;
+	}
+
+	func constructor(this: &&ParsedFunctionSignature, other: ParsedFunctionSignature) -> void = default;
+	func destructor(this: &&ParsedFunctionSignature) -> void = default;
+
+	operator =(this: &&ParsedFunctionSignature, other: ParsedFunctionSignature) -> void = default;
+	operator ==(this: ParsedFunctionSignature, other: ParsedFunctionSignature) -> bool = default;
+
+	func dump(this: &ParsedFunctionSignature, out: &&TreeFormatter, is_last: bool) -> void {
+		out.push("FunctionSignature", is_last);
+		out.attribute(this.name);
+		out.span(this.span);
+
+		for i in 0u..this.parameters.size() {
+			this.parameters[i].dump(&&out, (i == this.parameters.size() - 1) && !this.return_type.hasValue());
+		}
+
+		if const return_type = this.return_type {
+			return_type.dump(&&out, true);
+		}
+
+		out.pop();
+	}
+}
+
+variant ParsedFunctionBody {
+	case Garbage;
+	case Extern;
+	case Default;
+	case Compound: ParsedCompoundStmt;
+
+	func constructor(this: &&ParsedFunctionBody) -> void {
+		this.constructor!<0>();
+	}
+
+	operator ==(this: ParsedFunctionBody, other: ParsedFunctionBody) -> bool = default;
+}
+
+struct ParsedParameterDecl {
+	var span: Span;
+	var name: String;
+	var type: ParsedType;
+	var initializer: Optional!<ParsedExpr>;
+
+	func constructor(this: &&ParsedParameterDecl, span: Span, name: String, type: ParsedType, initializer: Optional!<ParsedExpr>) -> void {
+		this.span := span;
+		this.name := name;
+		this.type := type;
+		this.initializer := initializer;
+	}
+
+	func constructor(this: &&ParsedParameterDecl, other: ParsedParameterDecl) -> void = default;
+	func destructor(this: &&ParsedParameterDecl) -> void = default;
+
+	operator =(this: &&ParsedParameterDecl, other: ParsedParameterDecl) -> void = default;
+	operator ==(this: ParsedParameterDecl, other: ParsedParameterDecl) -> bool = default;
+
+	func dump(this: &ParsedParameterDecl, out: &&TreeFormatter, is_last: bool) -> void {
+		out.push("ParameterDecl", is_last);
+		out.attribute(this.name);
+		out.span(this.span);
+
+		this.type.dump(&&out, !this.initializer.hasValue());
+
+		if const initializer = this.initializer {
+			initializer.dump(&&out, true);
+		}
+
+		out.pop();
+	}
+}
+
+variant ParsedType {
+	var span: Span;
+
+	case Name: ParsedName;
+	case ConstReference: Box!<ParsedType>;
+	case VarReference: Box!<ParsedType>;
+	case Optional: Box!<ParsedType>;
+	case List: Box!<ParsedType>;
+	case Array: ParsedArrayType;
+	case Dict: ParsedDictType;
+	case Garbage;
+
+	operator ==(this: ParsedType, other: ParsedType) -> bool = default;
+
+	func dump(this: &ParsedType, out: &&TreeFormatter, is_last: bool) -> void {
+		match this {
+			case Name: name -> {
+				out.push("NamedType", is_last);
+				out.attribute("::".join(name.namespaces + name.name));
+				out.span(this.span);
+
+				for i in 0u..name.template_parameters.size() {
+					name.template_parameters[i].dump(&&out, i == name.template_parameters.size() - 1);
+				}
+			}
+			case ConstReference: base -> {
+				out.push("ConstReferenceType", is_last);
+				out.span(this.span);
+				base.dump(&&out, true);
+			}
+			case VarReference: base -> {
+				out.push("VarReferenceType", is_last);
+				out.span(this.span);
+				base.dump(&&out, true);
+			}
+			case Optional: base -> {
+				out.push("OptionalType", is_last);
+				out.span(this.span);
+				base.dump(&&out, true);
+			}
+			case List: element_type -> {
+				out.push("ListType", is_last);
+				out.span(this.span);
+				element_type.dump(&&out, true);
+			}
+			case Array: array_type -> {
+				out.push("ArrayType", is_last);
+				out.span(this.span);
+				array_type.element_type.dump(&&out, true);
+				array_type.size.dump(&&out, true);
+			}
+			case Dict: dict_type -> {
+				out.push("DictType", is_last);
+				out.span(this.span);
+				dict_type.key_type.dump(&&out, true);
+				dict_type.value_type.dump(&&out, true);
+			}
+			case Garbage -> {
+				out.push("GarbageType", is_last);
+				out.span(this.span);
+			}
+		}
+
+		out.pop();
+	}
+}
+
+struct ParsedName {
+	var span: Span;
+	var namespaces: List!<String>;
+	var name: String;
+	var template_parameters: List!<ParsedExpr>;
+
+	func constructor(this: &&ParsedName, span: Span, namespaces: List!<String>, name: String, template_parameters: List!<ParsedExpr>) -> void {
+		this.span := span;
+		this.namespaces := namespaces;
+		this.name := name;
+		this.template_parameters := template_parameters;
+	}
+
+	func constructor(this: &&ParsedName, other: ParsedName) -> void = default;
+	func destructor(this: &&ParsedName) -> void = default;
+
+	operator =(this: &&ParsedName, other: ParsedName) -> void = default;
+	operator ==(this: ParsedName, other: ParsedName) -> bool = default;
+
+	func dump(this: &ParsedName, out: &&TreeFormatter, is_last: bool) -> void {
+		out.push("Name", is_last);
+		out.attribute("::".join(this.namespaces + this.name));
+		out.span(this.span);
+
+		for i in 0u..this.template_parameters.size() {
+			this.template_parameters[i].dump(&&out, i == this.template_parameters.size() - 1);
+		}
+
+		out.pop();
+	}
+}
+
+struct ParsedArrayType {
+	var element_type: Box!<ParsedType>;
+	var size: ParsedExpr;
+
+	func constructor(this: &&ParsedArrayType, element_type: ParsedType, size: ParsedExpr) -> void {
+		this.element_type := element_type;
+		this.size := size;
+	}
+
+	func constructor(this: &&ParsedArrayType, other: ParsedArrayType) -> void = default;
+	func destructor(this: &&ParsedArrayType) -> void = default;
+
+	operator =(this: &&ParsedArrayType, other: ParsedArrayType) -> void = default;
+	operator ==(this: ParsedArrayType, other: ParsedArrayType) -> bool = default;
+}
+
+struct ParsedDictType {
+	var key_type: Box!<ParsedType>;
+	var value_type: Box!<ParsedType>;
+
+	func constructor(this: &&ParsedDictType, key_type: ParsedType, value_type: ParsedType) -> void {
+		this.key_type := key_type;
+		this.value_type := value_type;
+	}
+
+	func constructor(this: &&ParsedDictType, other: ParsedDictType) -> void = default;
+	func destructor(this: &&ParsedDictType) -> void = default;
+
+	operator =(this: &&ParsedDictType, other: ParsedDictType) -> void = default;
+	operator ==(this: ParsedDictType, other: ParsedDictType) -> bool = default;
+}
+
+variant ParsedStmt {
+	var span: Span;
+	var is_comptime: bool;
+
+	case Pragma: String;
+	case Import: String;
+	case TypeDecl: ParsedTypeDecl;
+	case FunctionDecl: ParsedFunctionDecl;
+
+	case VarDecl: ParsedVarDecl;
+	case CaseDecl: ParsedCaseDecl;
+
+	case Compound: ParsedCompoundStmt;
+
+	case If: ParsedIfStmt;
+	case IfVar: ParsedIfVarStmt;
+	case VarElse: ParsedVarElseStmt;
+
+	case While: ParsedWhileStmt;
+	case DoWhile: ParsedDoWhileStmt;
+	case For: ParsedForStmt;
+
+	case Case: ParsedCaseStmt;
+	case ElseCase: Box!<ParsedStmt>;
+
+	case Break;
+	case Continue;
+	case Throw: ParsedExpr;
+	case Return: Optional!<ParsedExpr>;
+	case Yield: Optional!<ParsedExpr>;
+
+	case Discard: ParsedExpr;
+	case Expr: ParsedExpr;
+
+	case Garbage;
+
+	operator ==(this: ParsedStmt, other: ParsedStmt) -> bool = default;
+
+	func dump(this: &ParsedStmt, out: &&TreeFormatter, is_last: bool) -> void {
+		match this {
+			case Pragma: name -> {
+				out.push("Pragma", is_last);
+				out.attribute(name);
+				out.span(this.span);
+				out.pop();
+			}
+			case Import: name -> {
+				out.push("Import", is_last);
+				out.attribute(name);
+				out.span(this.span);
+				out.pop();
+			}
+			case TypeDecl: decl -> return decl.dump(&&out, is_last);
+			case FunctionDecl: decl -> return decl.dump(&&out, is_last);
+			case VarDecl: decl -> return decl.dump(&&out, is_last);
+			case CaseDecl: decl -> return decl.dump(&&out, is_last);
+			case Compound: stmt -> return stmt.dump(&&out, is_last);
+			case If: if_stmt -> {
+				out.push("IfStmt", is_last);
+				out.span(this.span);
+
+				if_stmt.condition.dump(&&out, false);
+				if_stmt.then_branch.dump(&&out, !if_stmt.else_branch.hasValue());
+				if const else_branch = if_stmt.else_branch {
+					else_branch.dump(&&out, true);
+				}
+
+				out.pop();
+			}
+			case IfVar: if_var_stmt -> {
+				out.push("IfVarStmt", is_last);
+				out.span(this.span);
+
+				if_var_stmt.var_decl.dump(&&out, false);
+				if_var_stmt.body.dump(&&out, true);
+
+				out.pop();
+			}
+			case VarElse: var_else_stmt -> {
+				out.push("VarElseStmt", is_last);
+
+				if const capture_name = var_else_stmt.capture_name {
+					out.attribute(var_else_stmt.capture_kind.toString() + capture_name);
+				}
+
+				out.span(this.span);
+
+				var_else_stmt.var_decl.dump(&&out, false);
+				var_else_stmt.body.dump(&&out, true);
+
+				out.pop();
+			}
+			case While: while_stmt -> {
+				out.push("WhileStmt", is_last);
+				out.span(this.span);
+
+				while_stmt.condition.dump(&&out, false);
+				while_stmt.body.dump(&&out, true);
+
+				out.pop();
+			}
+			case DoWhile: do_while_stmt -> {
+				out.push("DoWhileStmt", is_last);
+				out.span(this.span);
+
+				do_while_stmt.body.dump(&&out, false);
+				do_while_stmt.condition.dump(&&out, true);
+
+				out.pop();
+			}
+			case For: for_stmt -> {
+				out.push("ForStmt", is_last);
+				out.attribute(for_stmt.capture_kind.toString() + for_stmt.capture_name);
+				out.span(this.span);
+
+				for_stmt.range.dump(&&out, false);
+				for_stmt.body.dump(&&out, true);
+
+				out.pop();
+			}
+			case Case: case_stmt -> {
+				out.push("CaseStmt", is_last);
+
+				if const capture_name = case_stmt.capture_name {
+					out.attribute(case_stmt.capture_kind.toString() + capture_name);
+				}
+				out.span(this.span);
+
+				for pattern in case_stmt.patterns {
+					pattern.dump(&&out, false);
+				}
+
+				case_stmt.body.dump(&&out, true);
+
+				out.pop();
+			}
+			case ElseCase: body -> {
+				out.push("ElseCase", is_last);
+				out.span(this.span);
+				body.dump(&&out, true);
+				out.pop();
+			}
+			case Break -> {
+				out.push("BreakStmt", is_last);
+				out.span(this.span);
+				out.pop();
+			}
+			case Continue -> {
+				out.push("ContinueStmt", is_last);
+				out.span(this.span);
+				out.pop();
+			}
+			case Throw: expr -> {
+				out.push("ThrowStmt", is_last);
+				out.span(this.span);
+
+				expr.dump(&&out, true);
+
+				out.pop();
+			}
+			case Return: return_value -> {
+				out.push("ReturnStmt", is_last);
+				out.span(this.span);
+
+				if const tmp = return_value {
+					tmp.dump(&&out, true);
+				}
+
+				out.pop();
+			}
+			case Yield: value -> {
+				out.push("YieldStmt", is_last);
+				out.span(this.span);
+
+				if const tmp = value {
+					tmp.dump(&&out, true);
+				}
+
+				out.pop();
+			}
+			case Discard: expr -> {
+				out.push("DiscardStmt", is_last);
+				out.span(this.span);
+
+				expr.dump(&&out, true);
+
+				out.pop();
+			}
+			case Expr: expr -> return expr.dump(&&out, is_last);
+			case Garbage -> {
+				out.push("GarbageStmt", is_last);
+				out.span(this.span);
+				out.pop();
+			}
+		}
+	}
+}
+
+struct ParsedCompoundStmt {
+	var span: Span;
+	var children: SharedPtr!<List!<ParsedStmt>>;
+
+	func constructor(this: &&ParsedCompoundStmt, span: Span) -> void {
+		this.span := span;
+		this.children := SharedPtr!<List!<ParsedStmt>>::new(List!<ParsedStmt>());
+	}
+
+	func constructor(this: &&ParsedCompoundStmt, other: ParsedCompoundStmt) -> void = default;
+	func destructor(this: &&ParsedCompoundStmt) -> void = default;
+
+	operator =(this: &&ParsedCompoundStmt, other: ParsedCompoundStmt) -> void = default;
+	operator ==(this: ParsedCompoundStmt, other: ParsedCompoundStmt) -> bool = default;
+
+	func dump(this: &ParsedCompoundStmt, out: &&TreeFormatter, is_last: bool) -> void {
+		out.push("CompoundStmt", is_last);
+		out.span(this.span);
+
+		for i in 0u..this.children.size() {
+			this.children[i].dump(&&out, i == this.children.size() - 1);
+		}
+
+		out.pop();
+	}
+}
+
+struct ParsedIfStmt {
+	var condition: ParsedExpr;
+	var then_branch: ParsedCompoundStmt;
+	var else_branch: Optional!<Box!<ParsedStmt>>;
+
+	func constructor(this: &&ParsedIfStmt, condition: ParsedExpr, then_branch: ParsedCompoundStmt, else_branch: Optional!<Box!<ParsedStmt>>) -> void {
+		this.condition := condition;
+		this.then_branch := then_branch;
+		this.else_branch := else_branch;
+	}
+
+	func constructor(this: &&ParsedIfStmt, other: ParsedIfStmt) -> void = default;
+	func destructor(this: &&ParsedIfStmt) -> void = default;
+
+	operator =(this: &&ParsedIfStmt, other: ParsedIfStmt) -> void = default;
+	operator ==(this: ParsedIfStmt, other: ParsedIfStmt) -> bool = default;
+}
+
+struct ParsedIfVarStmt {
+	var var_decl: ParsedVarDecl;
+	var body: ParsedCompoundStmt;
+
+	func constructor(this: &&ParsedIfVarStmt, var_decl: ParsedVarDecl, body: ParsedCompoundStmt) -> void {
+		this.var_decl := var_decl;
+		this.body := body;
+	}
+
+	func constructor(this: &&ParsedIfVarStmt, other: ParsedIfVarStmt) -> void = default;
+	func destructor(this: &&ParsedIfVarStmt) -> void = default;
+
+	operator =(this: &&ParsedIfVarStmt, other: ParsedIfVarStmt) -> void = default;
+	operator ==(this: ParsedIfVarStmt, other: ParsedIfVarStmt) -> bool = default;
+}
+
+struct ParsedVarElseStmt {
+	var var_decl: ParsedVarDecl;
+	var body: ParsedCompoundStmt;
+	var capture_name: Optional!<String>;
+	var capture_kind: ReferenceKind;
+
+	func constructor(this: &&ParsedVarElseStmt, var_decl: ParsedVarDecl, body: ParsedCompoundStmt, capture_name: Optional!<String>, capture_kind: ReferenceKind) -> void {
+		this.var_decl := var_decl;
+		this.body := body;
+		this.capture_name := capture_name;
+		this.capture_kind := capture_kind;
+	}
+
+	func constructor(this: &&ParsedVarElseStmt, other: ParsedVarElseStmt) -> void = default;
+	func destructor(this: &&ParsedVarElseStmt) -> void = default;
+
+	operator =(this: &&ParsedVarElseStmt, other: ParsedVarElseStmt) -> void = default;
+	operator ==(this: ParsedVarElseStmt, other: ParsedVarElseStmt) -> bool = default;
+}
+
+struct ParsedWhileStmt {
+	var condition: ParsedExpr;
+	var body: ParsedCompoundStmt;
+
+	func constructor(this: &&ParsedWhileStmt, condition: ParsedExpr, body: ParsedCompoundStmt) -> void {
+		this.condition := condition;
+		this.body := body;
+	}
+
+	func constructor(this: &&ParsedWhileStmt, other: ParsedWhileStmt) -> void = default;
+	func destructor(this: &&ParsedWhileStmt) -> void = default;
+
+	operator =(this: &&ParsedWhileStmt, other: ParsedWhileStmt) -> void = default;
+	operator ==(this: ParsedWhileStmt, other: ParsedWhileStmt) -> bool = default;
+}
+
+struct ParsedDoWhileStmt {
+	var body: ParsedCompoundStmt;
+	var condition: ParsedExpr;
+
+	func constructor(this: &&ParsedDoWhileStmt, body: ParsedCompoundStmt, condition: ParsedExpr) -> void {
+		this.body := body;
+		this.condition := condition;
+	}
+
+	func constructor(this: &&ParsedDoWhileStmt, other: ParsedDoWhileStmt) -> void = default;
+	func destructor(this: &&ParsedDoWhileStmt) -> void = default;
+
+	operator =(this: &&ParsedDoWhileStmt, other: ParsedDoWhileStmt) -> void = default;
+	operator ==(this: ParsedDoWhileStmt, other: ParsedDoWhileStmt) -> bool = default;
+}
+
+struct ParsedForStmt {
+	var capture_name: String;
+	var capture_kind: ReferenceKind;
+	var capture_span: Span;
+	var range: ParsedExpr;
+	var body: ParsedCompoundStmt;
+
+	func constructor(this: &&ParsedForStmt, capture_name: String, capture_kind: ReferenceKind, capture_span: Span, range: ParsedExpr, body: ParsedCompoundStmt) -> void {
+		this.capture_name := capture_name;
+		this.capture_kind := capture_kind;
+		this.capture_span := capture_span;
+		this.range := range;
+		this.body := body;
+	}
+
+	func constructor(this: &&ParsedForStmt, other: ParsedForStmt) -> void = default;
+	func destructor(this: &&ParsedForStmt) -> void = default;
+
+	operator =(this: &&ParsedForStmt, other: ParsedForStmt) -> void = default;
+	operator ==(this: ParsedForStmt, other: ParsedForStmt) -> bool = default;
+}
+
+struct ParsedCaseStmt {
+	var patterns: List!<ParsedExpr>;
+	var capture_name: Optional!<String>;
+	var capture_kind: ReferenceKind;
+	var body: Box!<ParsedStmt>;
+
+	func constructor(this: &&ParsedCaseStmt, patterns: List!<ParsedExpr>, capture_name: Optional!<String>, capture_kind: ReferenceKind, body: ParsedStmt) -> void {
+		this.patterns := patterns;
+		this.capture_name := capture_name;
+		this.capture_kind := capture_kind;
+		this.body := body;
+	}
+
+	func constructor(this: &&ParsedCaseStmt, other: ParsedCaseStmt) -> void = default;
+	func destructor(this: &&ParsedCaseStmt) -> void = default;
+
+	operator =(this: &&ParsedCaseStmt, other: ParsedCaseStmt) -> void = default;
+	operator ==(this: ParsedCaseStmt, other: ParsedCaseStmt) -> bool = default;
+}
+
+variant ParsedExpr {
+	var span: Span;
+
+	case Char: CharLiteral;
+	case String: StringLiteral;
+	case Number: NumberLiteral;
+	case Bool: bool;
+
+	case Name: ParsedName;
+	case MemberName: ParsedMemberName;
+	case Operator: ParsedOperatorExpr;
+
+	case Paren: Box!<ParsedExpr>;
+
+	case Array: List!<ParsedExpr>;
+	case Tuple: List!<ParsedTupleElement>;
+	case Dict: List!<ParsedDictElement>;
+
+	case Match: ParsedMatchExpr;
+
+	case Garbage;
+
+	operator ==(this: ParsedExpr, other: ParsedExpr) -> bool = default;
+
+	func dump(this: &ParsedExpr, out: &&TreeFormatter, is_last: bool) -> void {
+		match this {
+			case Char: value -> {
+				out.push("CharLiteral", is_last);
+				out.attribute(value.dump());
+				out.span(this.span);
+				out.pop();
+			}
+			case String: value -> {
+				out.push("StringLiteral", is_last);
+				out.attribute(value.dump());
+				out.span(this.span);
+				out.pop();
+			}
+			case Number: value -> {
+				out.push("NumberLiteral", is_last);
+				out.attribute(value.dump());
+				out.span(this.span);
+				out.pop();
+			}
+			case Bool: value -> {
+				out.push("BoolLiteral", is_last);
+				out.attribute(format(value));
+				out.span(this.span);
+				out.pop();
+			}
+			case Name: name -> name.dump(&&out, is_last);
+			case MemberName: member_name -> {
+				out.push("MemberName", is_last);
+				out.attribute(member_name.name);
+				out.span(this.span);
+
+				member_name.parent.dump(&&out, !member_name.template_parameters.isEmpty());
+
+				for i in 0u..member_name.template_parameters.size() {
+					member_name.template_parameters[i].dump(&&out, i == member_name.template_parameters.size() - 1);
+				}
+
+				out.pop();
+			}
+			case Operator: operator_expr -> {
+				if operator_expr.op.isUnaryOperator() {
+					out.push("UnaryOperatorExpr", is_last);
+				} else if operator_expr.op.isBinaryOperator() {
+					out.push("BinaryOperatorExpr", is_last);
+				} else if operator_expr.op.isTernaryOperator() {
+					out.push("TernaryOperatorExpr", is_last);
+				} else if operator_expr.op == Call {
+					out.push("CallExpr", is_last);
+				} else if operator_expr.op == Index {
+					out.push("IndexExpr", is_last);
+				} else if operator_expr.op == MemberAccess {
+					out.push("MemberAccessExpr", is_last);
+				} else {
+					out.push("OperatorExpr", is_last);
+				}
+
+				out.attribute(operator_expr.op.toString());
+				out.span(this.span);
+
+				for i in 0u..operator_expr.operands.size() {
+					operator_expr.operands[i].dump(&&out, i == operator_expr.operands.size() - 1);
+				}
+
+				out.pop();
+			}
+			case Paren: child -> {
+				out.push("ParenExpr", is_last);
+				out.span(this.span);
+				child.dump(&&out, true);
+				out.pop();
+			}
+			case Array: elements -> {
+				out.push("ArrayExpr", is_last);
+				out.span(this.span);
+
+				for i in 0u..elements.size() {
+					elements[i].dump(&&out, i == elements.size() - 1);
+				}
+
+				out.pop();
+			}
+			case Tuple: elements -> {
+				out.push("TupleExpr", is_last);
+				out.span(this.span);
+
+				for i in 0u..elements.size() {
+					elements[i].dump(&&out, i == elements.size() - 1);
+				}
+
+				out.pop();
+			}
+			case Dict: elements -> {
+				out.push("DictExpr", is_last);
+				out.span(this.span);
+
+				for i in 0u..elements.size() {
+					elements[i].dump(&&out, i == elements.size() - 1);
+				}
+
+				out.pop();
+			}
+			case Match: match_expr -> {
+				out.push("MatchExpr", is_last);
+				out.span(this.span);
+
+				match_expr.value.dump(&&out, false);
+				match_expr.body.dump(&&out, true);
+
+				out.pop();
+			}
+			case Garbage -> {
+				out.push("GarbageExpr", is_last);
+				out.span(this.span);
+				out.pop();
+			}
+		}
+	}
+
+	func toType(this: &ParsedExpr) -> Optional!<ParsedType> {
+		match this {
+			case Name: name -> return Some(ParsedType::Name(name, this.span));
+			case Operator: operator_expr -> {
+				if operator_expr.operands.size() != 1 {
+					return None;
+				}
+
+				const base = operator_expr.operands[0u].toType() else {
+					return None;
+				}
+
+				match operator_expr.op {
+					case ConstRef -> return Some(ParsedType::ConstReference(Box!<ParsedType>(base), this.span));
+					case VarRef -> return Some(ParsedType::VarReference(Box!<ParsedType>(base), this.span));
+					else -> return None;
+				}
+			}
+			// TODO: Array, List & Dict types
+			else -> return None;
+		}
+	}
+
+	func isAnonymousTuple(this: &ParsedExpr) -> bool {
+		const elements = this as Tuple else {
+			return false;
+		}
+
+		for element in elements {
+			if element.name != "" {
+				return false;
+			}
+		}
+
+		return true;
+	}
+}
+
+struct ParsedMemberName {
+	var parent: ParsedName;
+	var name: String;
+	var template_parameters: List!<ParsedExpr>;
+
+	func constructor(this: &&ParsedMemberName, parent: ParsedName, name: String, template_parameters: List!<ParsedExpr>) -> void {
+		this.parent := parent;
+		this.name := name;
+		this.template_parameters := template_parameters;
+	}
+
+	func constructor(this: &&ParsedMemberName, other: ParsedMemberName) -> void = default;
+	func destructor(this: &&ParsedMemberName) -> void = default;
+
+	operator =(this: &&ParsedMemberName, other: ParsedMemberName) -> void = default;
+	operator ==(this: ParsedMemberName, other: ParsedMemberName) -> bool = default;
+}
+
+struct ParsedOperatorExpr {
+	var op: Operator;
+	var operands: List!<ParsedExpr>;
+
+	func constructor(this: &&ParsedOperatorExpr, op: Operator, operand: ParsedExpr) -> void {
+		this.op := op;
+		this.operands := ();
+		this.operands.append(operand);
+	}
+
+	func constructor(this: &&ParsedOperatorExpr, lhs: ParsedExpr, op: Operator, rhs: ParsedExpr) -> void {
+		this.op := op;
+		this.operands := ();
+		this.operands.append(lhs);
+		this.operands.append(rhs);
+	}
+
+	func constructor(this: &&ParsedOperatorExpr, op: Operator, operands: List!<ParsedExpr>) -> void {
+		this.op := op;
+		this.operands := operands;
+	}
+
+	func constructor(this: &&ParsedOperatorExpr, other: ParsedOperatorExpr) -> void = default;
+	func destructor(this: &&ParsedOperatorExpr) -> void = default;
+
+	operator =(this: &&ParsedOperatorExpr, other: ParsedOperatorExpr) -> void = default;
+	operator ==(this: ParsedOperatorExpr, other: ParsedOperatorExpr) -> bool = default;
+}
+
+struct ParsedTupleElement {
+	var span: Span;
+	var name: String;
+	var value: ParsedExpr;
+
+	func constructor(this: &&ParsedTupleElement, span: Span, name: String, value: ParsedExpr) -> void {
+		this.span := span;
+		this.name := name;
+		this.value := value;
+	}
+
+	func constructor(this: &&ParsedTupleElement, other: ParsedTupleElement) -> void = default;
+	func destructor(this: &&ParsedTupleElement) -> void = default;
+
+	operator =(this: &&ParsedTupleElement, other: ParsedTupleElement) -> void = default;
+	operator ==(this: ParsedTupleElement, other: ParsedTupleElement) -> bool = default;
+
+	func dump(this: &ParsedTupleElement, out: &&TreeFormatter, is_last: bool) -> void {
+		out.push("TupleElement", is_last);
+		out.attribute(this.name);
+		out.span(this.span);
+
+		this.value.dump(&&out, true);
+
+		out.pop();
+	}
+}
+
+struct ParsedDictElement {
+	var span: Span;
+	var key: ParsedExpr;
+	var value: ParsedExpr;
+
+	func constructor(this: &&ParsedDictElement, span: Span, key: ParsedExpr, value: ParsedExpr) -> void {
+		this.span := span;
+		this.key := key;
+		this.value := value;
+	}
+
+	func constructor(this: &&ParsedDictElement, other: ParsedDictElement) -> void = default;
+	func destructor(this: &&ParsedDictElement) -> void = default;
+
+	operator =(this: &&ParsedDictElement, other: ParsedDictElement) -> void = default;
+	operator ==(this: ParsedDictElement, other: ParsedDictElement) -> bool = default;
+
+	func dump(this: &ParsedDictElement, out: &&TreeFormatter, is_last: bool) -> void {
+		out.push("DictElement", is_last);
+		out.span(this.span);
+
+		this.key.dump(&&out, true);
+		this.value.dump(&&out, true);
+
+		out.pop();
+	}
+}
+
+struct ParsedMatchExpr {
+	var value: Box!<ParsedExpr>;
+	var body: ParsedCompoundStmt;
+
+	func constructor(this: &&ParsedMatchExpr, value: ParsedExpr, body: ParsedCompoundStmt) -> void {
+		this.value := value;
+		this.body := body;
+	}
+
+	func constructor(this: &&ParsedMatchExpr, other: ParsedMatchExpr) -> void = default;
+	func destructor(this: &&ParsedMatchExpr) -> void = default;
+
+	operator =(this: &&ParsedMatchExpr, other: ParsedMatchExpr) -> void = default;
+	operator ==(this: ParsedMatchExpr, other: ParsedMatchExpr) -> bool = default;
+}
+
+enum Operator {
+	case Add;
+	case Sub;
+	case Mul;
+	case Div;
+	case Mod;
+
+	case Increment;
+	case Decrement;
+	case Negate;
+
+	case BitwiseAnd;
+	case BitwiseOr;
+	case BitwiseXOr;
+	case BitwiseNot;
+
+	case ShiftLeft;
+	case ShiftRight;
+
+	case LogicalAnd;
+	case LogicalOr;
+	case LogicalNot;
+
+	case Coalescing;
+
+	case Assign;
+	case Initialize;
+
+	case AddAssign;
+	case SubAssign;
+	case MulAssign;
+	case DivAssign;
+	case ModAssign;
+
+	case BitwiseAndAssign;
+	case BitwiseOrAssign;
+	case BitwiseXOrAssign;
+
+	case ShiftLeftAssign;
+	case ShiftRightAssign;
+
+	case CoalescingAssign;
+
+	case Equal;
+	case NotEqual;
+	case LessThan;
+	case LessEqual;
+	case GreaterThan;
+	case GreaterEqual;
+	case Spaceship;
+
+	case Range;			// a..b
+
+	case Call;			// foo(...)
+	case Index;			// foo[...]
+
+	case ConstRef;		// &foo
+	case VarRef;		// &&foo
+
+	case Is;			// foo is bar
+	case As;			// foo as bar
+
+	case Try;			// try foo
+	case Must;			// must foo
+	case InlineIf;		// a if b else c
+
+	case MemberAccess;	// foo.bar
+
+	func isUnaryOperator(this: Operator) -> bool {
+		match this {
+			case Increment
+			| Decrement
+			| Negate
+			| BitwiseNot
+			| LogicalNot
+			| ConstRef
+			| VarRef
+			| Try
+			| Must -> return true;
+			else -> return false;
+		}
+	}
+
+	func isBinaryOperator(this: Operator) -> bool {
+		match this {
+			case Add | Sub
+			| Mul | Div | Mod
+			| BitwiseAnd
+			| BitwiseOr
+			| BitwiseXOr
+			| ShiftLeft
+			| ShiftRight
+			| LogicalAnd
+			| LogicalOr
+			| Coalescing
+			| Assign
+			| Initialize
+			| AddAssign
+			| SubAssign
+			| MulAssign
+			| DivAssign
+			| ModAssign
+			| BitwiseAndAssign
+			| BitwiseOrAssign
+			| BitwiseXOrAssign
+			| ShiftLeftAssign
+			| ShiftRightAssign
+			| CoalescingAssign
+			| Equal | NotEqual
+			| LessThan | LessEqual
+			| GreaterThan | GreaterEqual
+			| Spaceship
+			| Range
+			| Is | As
+			| MemberAccess -> return true;
+			else -> return false;
+		}
+	}
+
+	func isTernaryOperator(this: Operator) -> bool {
+		match this {
+			case InlineIf -> return true;
+			else -> return false;
+		}
+	}
+
+	func isAssignmentOperator(this: Operator) -> bool {
+		match this {
+			case Assign
+			| Initialize
+			| AddAssign
+			| SubAssign
+			| MulAssign
+			| DivAssign
+			| ModAssign
+			| BitwiseAndAssign
+			| BitwiseOrAssign
+			| BitwiseXOrAssign
+			| ShiftLeftAssign
+			| ShiftRightAssign
+			| CoalescingAssign -> return true;
+			else -> return false;
+		}
+	}
+
+	func precedence(this: Operator) -> int {
+		match this {
+			case MemberAccess -> return 18;
+
+			case Call
+			| Index
+			| Increment
+			| Decrement -> return 17;
+
+			case Negate
+			| BitwiseNot
+			| LogicalNot
+			| ConstRef
+			| VarRef
+			| Try
+			| Must -> return 16;
+
+			case Is
+			| As -> return 15;
+
+			case Coalescing -> return 14;
+
+			case Mul
+			| Div
+			| Mod -> return 13;
+
+			case Add
+			| Sub -> return 12;
+
+			case Range -> return 11;
+
+			case ShiftLeft
+			| ShiftRight -> return 10;
+
+			case Spaceship -> return 9;
+
+			case LessThan
+			| LessEqual
+			| GreaterThan
+			| GreaterEqual -> return 8;
+
+			case Equal
+			| NotEqual -> return 7;
+
+			case BitwiseAnd -> return 6;
+			case BitwiseXOr -> return 5;
+			case BitwiseOr -> return 4;
+
+			case LogicalAnd -> return 3;
+			case LogicalOr -> return 2;
+
+			case InlineIf -> return 1;
+
+			case Assign
+			| Initialize
+			| AddAssign
+			| SubAssign
+			| MulAssign
+			| DivAssign
+			| ModAssign
+			| BitwiseAndAssign
+			| BitwiseOrAssign
+			| BitwiseXOrAssign
+			| ShiftLeftAssign
+			| ShiftRightAssign
+			| CoalescingAssign -> return 0;
+		}
+	}
+
+	func toString(this: Operator) -> String {
+		match this {
+			case Add -> return "+";
+			case Sub -> return "-";
+			case Mul -> return "*";
+			case Div -> return "/";
+			case Mod -> return "%";
+			case Increment -> return "++";
+			case Decrement -> return "--";
+			case Negate -> return "-";
+			case BitwiseAnd -> return "&";
+			case BitwiseOr -> return "|";
+			case BitwiseXOr -> return "^";
+			case BitwiseNot -> return "~";
+			case ShiftLeft -> return "<<";
+			case ShiftRight -> return ">>";
+			case LogicalAnd -> return "&&";
+			case LogicalOr -> return "||";
+			case LogicalNot -> return "!";
+			case Coalescing -> return "??";
+			case Assign -> return "=";
+			case Initialize -> return ":=";
+			case AddAssign -> return "+=";
+			case SubAssign -> return "-=";
+			case MulAssign -> return "*=";
+			case DivAssign -> return "/=";
+			case ModAssign -> return "%=";
+			case BitwiseAndAssign -> return "&=";
+			case BitwiseOrAssign -> return "|=";
+			case BitwiseXOrAssign -> return "^=";
+			case ShiftLeftAssign -> return "<<=";
+			case ShiftRightAssign -> return ">>=";
+			case CoalescingAssign -> return "??=";
+			case Equal -> return "==";
+			case NotEqual -> return "!=";
+			case LessThan -> return "<";
+			case LessEqual -> return "<=";
+			case GreaterThan -> return ">";
+			case GreaterEqual -> return ">=";
+			case Spaceship -> return "<=>";
+			case Range -> return "..";
+			case Call -> return "()";
+			case Index -> return "[]";
+			case ConstRef -> return "&";
+			case VarRef -> return "&&";
+			case Is -> return "is";
+			case As -> return "as";
+			case Try -> return "try";
+			case Must -> return "must";
+			case InlineIf -> return "if..else";
+			case MemberAccess -> return ".";
+		}
+	}
+}

@@ -1,0 +1,82 @@
+import std/core;
+import std/string;
+
+import span;
+
+struct TreeFormatter {
+	var buffer: String;
+	var current_indent: String;
+	var i_indent: String;
+	var t_indent: String;
+	var l_indent: String;
+	var e_indent: String;
+
+	func constructor(this: &&TreeFormatter, root_name: String) -> void {
+		this.buffer := "\e[32m" + root_name + "\e[0m";
+		this.current_indent := "";
+		this.i_indent := " │ ";
+		this.t_indent := " ├╴";
+		this.l_indent := " ╰╴";
+		this.e_indent := "   ";
+	}
+
+	func destructor(this: &&TreeFormatter) -> void = default;
+
+	func push(this: &&TreeFormatter, name: String, is_last: bool) -> void {
+		if !this.buffer.endsWith("\n") {
+			this.buffer += '\n'b;
+		}
+
+		this.buffer += this.current_indent;
+
+		if is_last {
+			this.buffer += this.l_indent;
+		} else {
+			this.buffer += this.t_indent;
+		}
+
+		this.buffer += "\e[32m" + name + "\e[0m";
+
+		if is_last {
+			this.current_indent += this.e_indent;
+		} else {
+			this.current_indent += this.i_indent;
+		}
+	}
+
+	func attribute(this: &&TreeFormatter, name: String) -> void {
+		this.buffer += " \e[34m" + name + "\e[0m";
+	}
+
+	func value(this: &&TreeFormatter, value: String) -> void {
+		this.buffer += " \e[33m" + value + "\e[0m";
+	}
+
+	func span(this: &&TreeFormatter, span: Span) -> void {
+		this.buffer += " " + span.dump();
+	}
+
+	func text(this: &&TreeFormatter, value: String) -> void {
+		this.buffer += value;
+	}
+
+	func pop(this: &&TreeFormatter) -> void {
+		if !this.buffer.endsWith("\n") {
+			this.buffer += '\n'b;
+		}
+
+		if this.current_indent.endsWith(this.i_indent) {
+			this.current_indent.remove((this.current_indent.size() - this.i_indent.size())..this.current_indent.size());
+		} else if this.current_indent.endsWith(this.e_indent) { // │ is more than 1 byte
+			this.current_indent.remove((this.current_indent.size() - this.e_indent.size())..this.current_indent.size());
+		}
+	}
+
+	func finalize(this: &&TreeFormatter) -> String {
+		if !this.buffer.endsWith("\n") {
+			this.buffer += '\n'b;
+		}
+
+		return this.buffer;
+	}
+}

@@ -1,0 +1,29 @@
+import std/core;
+
+variant Foo {
+	case A: int;
+	case B;
+}
+
+struct Bar {
+	var x: Foo;
+
+	func constructor(this: &&Bar) -> void {
+		this.x := A(5);
+	}
+
+	func destructor(this: &&Bar) -> void = default;
+}
+
+func main() {
+	var y: Bar = ();
+	match &&y.x {
+		case A: &&z -> z = 10;
+		else -> {}
+	}
+
+	match y.x {
+		case A: z -> assert(z == 10);
+		else -> assert(false);
+	}
+}

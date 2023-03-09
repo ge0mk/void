@@ -1,4 +1,4 @@
-//> error "no matching function found"
+//> error "no function with matching name found"
 
 import std/core;
 

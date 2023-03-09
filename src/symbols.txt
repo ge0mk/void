@@ -1,0 +1,15 @@
+full lines: ─│
+half lines: ╶╷╵╴
+corners: ┐┘└┌ ╮╯╰╭
+arrows: ▲ ▶ ▼ ◀
+crossings: ┤┬ ┼ ┴├
+
+<module> ...
+├╴<import> ...
+├╴<stmt>
+│ ├╴<stmt>
+│ ╰╴<stmt>
+│   ╰╴<expr>
+╰╴<stmt>
+  ├╴<stmt>
+  ╰╴<stmt>

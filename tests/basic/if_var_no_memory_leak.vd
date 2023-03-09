@@ -1,39 +1,30 @@
-//> output "+-"
-
 import std/core;
-import std/string;
-import std/io;
-
-struct Foo {
-	var x: int;
-
-	func constructor(this: &&Foo) {}
-	func constructor(this: &&Foo, other: Foo) {}
-	func destructor(this: &&Foo) {}
-
-	func hasValue(this: Foo) -> bool {
-		return true;
-	}
-
-	func value(this: Foo) -> Bar {
-		return Bar();
-	}
-}
 
 struct Bar {
-	var x: int;
+	var counter: &&int;
 
-	func constructor(this: &&Bar) {
-		print("+");
+	func constructor(this: &&Bar, counter: &&int) {
+		this.counter := &&counter;
+		this.counter++;
+	}
+
+	func constructor(this: &&Bar, other: Bar) -> void {
+		this.counter := &&other.counter;
+		this.counter++;
 	}
 
 	func destructor(this: &&Bar) {
-		print("-");
+		this.counter--;
 	}
+
+	operator =(this: &&Bar, other: Bar) -> void = default;
+	operator ==(this: Bar, other: Bar) -> bool = default;
 }
 
 func main() {
-	if var bar = Foo() {
+	var counter = 0;
+	if var bar = Optional!<Bar>::Some(Bar(&&counter)) {
 		// should call bar.destructor();
 	}
+	assert(counter == 0);
 }

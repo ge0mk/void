@@ -1,0 +1,56 @@
+import std/core;
+import std/string;
+import std/format;
+
+@[packed]
+struct Span {
+	var start: uint;
+	var end: uint;
+	var line: u32;
+	var column: u16;
+	var module: u16;
+
+	func constructor(this: &&Span, module: u16) -> void {
+		this.module := module;
+	}
+
+	func constructor(this: &&Span, start: uint, end: uint, line: u32, column: u16, module: u16) -> void {
+		this.start := start;
+		this.end := end;
+		this.line := line;
+		this.column := column;
+		this.module := module;
+	}
+
+	func constructor(this: &&Span, other: Span) -> void = default;
+	func destructor(this: &&Span) -> void = default;
+
+	operator =(this: &&Span, other: Span) -> void = default;
+	operator ==(this: Span, other: Span) -> bool = default;
+
+	operator ..(this: Span, other: Span) -> Span {
+		assert(this.module == other.module);
+
+		return Span(
+			this.start,
+			other.end,
+			this.line,
+			this.column,
+			this.module
+		);
+	}
+
+	func length(this: Span) -> uint {
+		return this.end - this.start;
+	}
+
+	func dump(this: Span) -> String {
+		return "\e[90m" + format(this.module as int) + "[" + format(this.start as int) + ".." + format(this.end as int) + "]\e[0m"
+			+ " \e[33m@ " + format(this.line as int + 1) + ":" + format(this.column as int + 1) + "\e[0m";
+	}
+
+	func dump(this: Span, file_name: String) -> String {
+		return "\e[90m" + file_name + "[" + format(this.start as int) + ".." + format(this.end as int) + "]\e[0m"
+			+ " \e[33m@ " + format(this.line as int + 1) + ":" + format(this.column as int + 1) + "\e[0m";
+	}
+}

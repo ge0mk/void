@@ -1,7 +1,0 @@
-//> error "expected ; at"
-
-func foo() -> void {}
-
-func main() {
-	foo()
-}
