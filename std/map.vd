@@ -17,6 +17,8 @@ struct MapEntry {
 	}
 
 	func destructor(this: &&MapEntry!<Tkey, Tvalue>) {}
+
+	operator ==(this: MapEntry!<Tkey, Tvalue>, other: MapEntry!<Tkey, Tvalue>) -> bool = default;
 }
 
 template <Tkey: type, Tvalue: type>

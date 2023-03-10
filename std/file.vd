@@ -138,6 +138,10 @@ struct File {
 		}
 	}
 
+	operator ==(this: File, other: File) -> bool {
+		return this.c_file == other.c_file;
+	}
+
 	func open(path: String, mode: OpenMode) -> Result!<File> {
 		const cpath = path + '\0'b;
 		const flags = try mode.toUnixMode(false);

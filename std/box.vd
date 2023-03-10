@@ -22,6 +22,14 @@ struct Box {
 		libc::stdlib::free(this.data as vptr);
 	}
 
+	operator ==(this: Box!<T>, other: Box!<T>) -> bool {
+		return this.operator unwrap() == other.operator unwrap();
+	}
+
+	operator ==(this: Box!<T>, other: T) -> bool {
+		return this.operator unwrap() == other;
+	}
+
 	operator unwrap(this: Box!<T>) -> T {
 		return this.data.value();
 	}

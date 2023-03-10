@@ -126,6 +126,8 @@ struct Path {
 
 	func destructor(this: &&Path) -> void = default;
 
+	operator ==(this: Path, other: Path) -> bool = default;
+
 	func toString(this: Path) -> String {
 		return must "/".join(this.segments);
 	}

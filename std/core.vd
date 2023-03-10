@@ -301,6 +301,20 @@ struct Range {
 		return Ok(&this.data[index]);
 	}
 
+	operator ==(this: Range!<T>, other: Range!<T>) -> bool {
+		if this.size != other.size {
+			return false;
+		}
+
+		for i in 0u..this.size {
+			if this.data[i] != other.data[i] {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
 	func iterator(this: &Range!<T>) -> RangeIterator!<T> {
 		return RangeIterator!<T>(this.data, this.data + this.size);
 	}
@@ -365,6 +379,20 @@ struct VRange {
 		}
 
 		return Ok(&&this.data[index]);
+	}
+
+	operator ==(this: VRange!<T>, other: VRange!<T>) -> bool {
+		if this.size != other.size {
+			return false;
+		}
+
+		for i in 0u..this.size {
+			if this.data[i] != other.data[i] {
+				return false;
+			}
+		}
+
+		return true;
 	}
 
 	func iterator(this: &VRange!<T>) -> VRangeIterator!<T> {
@@ -448,6 +476,16 @@ variant Optional {
 			else -> return other;
 		}
 	}
+
+	operator ==(this: Optional!<T>, other: Optional!<T>) -> bool {
+		match this {
+			case Some: a -> match other {
+				case Some: b -> return a == b;
+				else -> return false;
+			}
+			case None -> return other is None;
+		}
+	}
 }
 
 template <Tok: type, Terr: type>
@@ -507,6 +545,19 @@ variant Result {
 			}
 		}
 	}
+
+	operator ==(this: Result!<Tok, Terr>, other: Result!<Tok, Terr>) -> bool {
+		match this {
+			case Ok: a -> match other {
+				case Ok: b -> return a == b;
+				else -> return false;
+			}
+			case Error: a -> match other {
+				case Error: b -> return a == b;
+				else -> return false;
+			}
+		}
+	}
 }
 
 template <Tok: type = void, Terr: type>
@@ -528,6 +579,16 @@ variant Result {
 		match this {
 			case Error: error -> return error;
 			else -> abort();
+		}
+	}
+
+	operator ==(this: Result!<Tok, Terr>, other: Result!<Tok, Terr>) -> bool {
+		match this {
+			case Ok -> return other is Ok;
+			case Error: a -> match other {
+				case Error: b -> return a == b;
+				else -> return false;
+			}
 		}
 	}
 }
@@ -589,6 +650,19 @@ variant Result {
 			}
 		}
 	}
+
+	operator ==(this: Result!<Tok>, other: Result!<Tok>) -> bool {
+		match this {
+			case Ok: a -> match other {
+				case Ok: b -> return a == b;
+				else -> return false;
+			}
+			case Error: a -> match other {
+				case Error: b -> return a == b;
+				else -> return false;
+			}
+		}
+	}
 }
 
 template <Tok: type = void>
@@ -610,6 +684,16 @@ variant Result {
 		match this {
 			case Error: error -> return error;
 			else -> abort();
+		}
+	}
+
+	operator ==(this: Result!<Tok>, other: Result!<Tok>) -> bool {
+		match this {
+			case Ok -> return other is Ok;
+			case Error: a -> match other {
+				case Error: b -> return a == b;
+				else -> return false;
+			}
 		}
 	}
 }
