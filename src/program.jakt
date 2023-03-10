@@ -772,6 +772,7 @@ class MemberVar {
 	public type_destructor: Function? = None
 	public type_op_assign: Function? = None
 	public type_op_equal: Function? = None
+	public type_op_unwrap: Function? = None
 }
 
 class EnumCaseDecl {
@@ -788,6 +789,7 @@ class VariantCaseDecl {
 	public type_copy_constructor: Function? = None
 	public type_destructor: Function? = None
 	public type_op_equal: Function? = None
+	public type_op_unwrap: Function? = None
 }
 
 class FunctionDecl {

@@ -1174,6 +1174,19 @@ struct Typechecker {
 							allow_spaceship_operator: false
 						)
 
+						let func_type = .program.functions[v.type_copy_constructor!.id].type
+						if v.type.id != func_type.param_types[1].id {
+							v.type_op_unwrap = .getFunction(
+								namespaces: [],
+								name: "operator unwrap",
+								parent_type: v.type,
+								template_parameters: [],
+								param_types: [v.type],
+								firstArgRefType: None,
+								span: Span::empty(),
+							)
+						}
+
 						v.type_destructor = .getFunction(
 							namespaces: [], name: "destructor",
 							parent_type: v.type,
@@ -1203,6 +1216,20 @@ struct Typechecker {
 
 		let type = decl.type
 		decl.type_copy_constructor = .getFunction(namespaces: [], name: "constructor", parent_type: type, template_parameters: [], param_types: [type.varRef(), type], firstArgRefType: type.varRef(), span: decl.span)
+
+		let func_type = .program.functions[decl.type_copy_constructor!.id].type
+		if type.id != func_type.param_types[1].id {
+			decl.type_op_unwrap = .getFunction(
+				namespaces: [],
+				name: "operator unwrap",
+				parent_type: type,
+				template_parameters: [],
+				param_types: [type],
+				firstArgRefType: None,
+				span: Span::empty(),
+			)
+		}
+
 		decl.type_destructor = .getFunction(namespaces: [], name: "destructor", parent_type: type, template_parameters: [], param_types: [type.varRef()], firstArgRefType: type.varRef(), span: decl.span)
 
 		guard decl.type_copy_constructor.has_value() and decl.type_destructor.has_value() else {
@@ -1351,6 +1378,19 @@ struct Typechecker {
 				firstArgRefType: v.type.varRef(),
 				span: error_span
 			)
+
+			let func_type = .program.functions[v.type_copy_constructor!.id].type
+			if v.type.id != func_type.param_types[1].id {
+				v.type_op_unwrap = .getFunction(
+					namespaces: [],
+					name: "operator unwrap",
+					parent_type: v.type,
+					template_parameters: [],
+					param_types: [v.type],
+					firstArgRefType: None,
+					span: Span::empty(),
+				)
+			}
 		}
 
 		.program.functions[func.id].kind = FunctionDeclKind::Builtin(
@@ -1395,6 +1435,19 @@ struct Typechecker {
 				firstArgRefType: v.type.varRef(),
 				span: error_span
 			)
+
+			let func_type = .program.functions[v.type_op_assign!.id].type
+			if v.type.id != func_type.param_types[1].id and not v.type_op_unwrap.has_value() {
+				v.type_op_unwrap = .getFunction(
+					namespaces: [],
+					name: "operator unwrap",
+					parent_type: v.type,
+					template_parameters: [],
+					param_types: [v.type],
+					firstArgRefType: None,
+					span: Span::empty(),
+				)
+			}
 		}
 
 		.program.functions[func.id].kind = FunctionDeclKind::Builtin(

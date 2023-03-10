@@ -1,0 +1,25 @@
+import std/core;
+import std/box;
+
+variant Foo {
+	case A: Box!<int>;
+	case B;
+}
+
+func main() {
+	// indirectly calls Box!<int>::constructor(&&Box!<int>, int)
+	// -> Box!<int>(5) must be unwrapped internally by Foo::constructor<id = 0>()
+	const a = Foo::A(Box!<int>(5));
+	assert(a is A);
+	const val = a as A else {
+		abort();
+	}
+
+	const b = a;
+	assert(b is A);
+	const val2 = b as A else {
+		abort();
+	}
+
+	assert(val2 == 5);
+}
