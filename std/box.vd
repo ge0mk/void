@@ -5,12 +5,6 @@ template <T: type>
 struct Box {
 	var data: vptr!<T>;
 
-	func constructor(this: &&Box!<T>) -> void {
-		this.data = libc::stdlib::malloc(sizeOf!<T>()) as vptr!<T>;
-		assert(this.data != vptr::null());
-		this.data.value().constructor();
-	}
-
 	func constructor(this: &&Box!<T>, value: T) -> void {
 		this.data = libc::stdlib::malloc(sizeOf!<T>()) as vptr!<T>;
 		assert(this.data != vptr::null());
