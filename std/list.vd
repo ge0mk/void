@@ -335,26 +335,26 @@ struct List {
 
 	// ensure that memory for at least 'new_capacity' elements is available
 	func grow(this: &&List!<T>, new_capacity: uint) -> Result!<void> {
-		if new_capacity < this.capacity {
+		const old_capacity = this.capacity;
+		if new_capacity <= old_capacity {
 			return Ok;
 		}
 
-		const old_capacity = this.capacity;
-
+		var new_data: vptr!<T>;
 		if this.data == vptr::null() {
-			this.data = libc::stdlib::malloc(new_capacity * sizeOf!<T>()) as vptr!<T>;
+			new_data = libc::stdlib::malloc(new_capacity * sizeOf!<T>()) as vptr!<T>;
 		} else {
-			this.data = libc::stdlib::realloc(this.data as vptr, new_capacity * sizeOf!<T>()) as vptr!<T>;
+			new_data = libc::stdlib::realloc(this.data as vptr, new_capacity * sizeOf!<T>()) as vptr!<T>;
 		}
 
-		if this.data == vptr::null() {
+		if new_data == vptr::null() {
 			throw Error::ENOMEM;
 		}
 
+		this.data = new_data;
 		this.capacity = new_capacity;
-		if new_capacity > old_capacity {
-			memset!<T>(this.data + old_capacity, '\0'b, new_capacity - old_capacity);
-		}
+
+		memset!<T>(this.data + old_capacity, '\0'b, new_capacity - old_capacity);
 
 		return Ok;
 	}

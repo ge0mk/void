@@ -241,29 +241,31 @@ struct Map {
 
 	// ensure that memory for at least 'new_capacity' elements is available
 	func grow(this: &&Map!<Tkey, Tvalue>, new_capacity: uint) -> Result!<void> {
-		if new_capacity < this.capacity {
+		const old_capacity = this.capacity;
+		if new_capacity <= old_capacity {
 			return Ok;
 		}
 
-		const old_capacity = this.capacity;
-
+		var new_keys: vptr!<Tkey>;
+		var new_values: vptr!<Tvalue>;
 		if this.keys == vptr::null() {
-			this.keys = libc::stdlib::malloc(new_capacity * sizeOf!<Tkey>()) as vptr!<Tkey>;
-			this.values = libc::stdlib::malloc(new_capacity * sizeOf!<Tvalue>()) as vptr!<Tvalue>;
+			new_keys = libc::stdlib::malloc(new_capacity * sizeOf!<Tkey>()) as vptr!<Tkey>;
+			new_values = libc::stdlib::malloc(new_capacity * sizeOf!<Tvalue>()) as vptr!<Tvalue>;
 		} else {
-			this.keys = libc::stdlib::realloc(this.keys as vptr, new_capacity * sizeOf!<Tkey>()) as vptr!<Tkey>;
-			this.values = libc::stdlib::realloc(this.values as vptr, new_capacity * sizeOf!<Tvalue>()) as vptr!<Tvalue>;
+			new_keys = libc::stdlib::realloc(this.keys as vptr, new_capacity * sizeOf!<Tkey>()) as vptr!<Tkey>;
+			new_values = libc::stdlib::realloc(this.values as vptr, new_capacity * sizeOf!<Tvalue>()) as vptr!<Tvalue>;
 		}
 
-		if this.keys == vptr::null() || this.values == vptr::null() {
+		if new_keys == vptr::null() || new_values == vptr::null() {
 			throw Error::ENOMEM;
 		}
 
+		this.keys = new_keys;
+		this.values = new_values;
 		this.capacity = new_capacity;
-		if new_capacity > old_capacity {
-			memset!<Tkey>(this.keys + old_capacity, '\0'b, new_capacity - old_capacity);
-			memset!<Tvalue>(this.values + old_capacity, '\0'b, new_capacity - old_capacity);
-		}
+
+		memset!<Tkey>(this.keys + old_capacity, '\0'b, new_capacity - old_capacity);
+		memset!<Tvalue>(this.values + old_capacity, '\0'b, new_capacity - old_capacity);
 
 		return Ok;
 	}
