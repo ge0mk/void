@@ -187,6 +187,7 @@ import llvm {
 	LLVMBuildSIToFP
 	LLVMBuildFPTrunc
 	LLVMBuildFPExt
+	LLVMBuildPtrToInt
 	LLVMBuildBitCast
 	LLVMBuildPointerCast
 
@@ -1660,7 +1661,7 @@ struct CodegenContext {
 				return LLVMBuildFPToUI(builder, args[0], .types[target!.id], "".c_string())
 			}
 		}
-		SizeOf(type) => LLVMConstInt(LLVMIntTypeInContext(.llvm_context, 64), LLVMStoreSizeOfType(.data_layout, .types[type!.id]) as! i64, false)
+		SizeOf(type) => .codegenSizeOf(builder, type: .types[type!.id])
 		AlignmentOf(type) => LLVMConstInt(LLVMIntTypeInContext(.llvm_context, 64), LLVMPreferredAlignmentOfType(.data_layout, .types[type!.id]) as! i64, false)
 		IsVarRef(type) => match type! {
 			VarRef => LLVMConstInt(LLVMIntTypeInContext(.llvm_context, 1), 1, false)
@@ -1673,11 +1674,9 @@ struct CodegenContext {
 		Memset(type) => {
 			let size = LLVMBuildMul(
 				builder, args[2],
-				LLVMConstInt(
-					.types[.program.uint_type.id],
-					LLVMStoreSizeOfType(.data_layout, .types[type!.id]) as! i64,
-					false),
-				"".c_string())
+				.codegenSizeOf(builder, type: .types[type!.id]),
+				"".c_string()
+			)
 			LLVMBuildMemSet(builder, args[0], args[1], size, 0)
 			yield None
 		}
@@ -1685,11 +1684,9 @@ struct CodegenContext {
 			let alignment = LLVMPreferredAlignmentOfType(.data_layout, .types[type!.id])
 			let size = LLVMBuildMul(
 				builder, args[2],
-				LLVMConstInt(
-					.types[.program.uint_type.id],
-					LLVMStoreSizeOfType(.data_layout, .types[type!.id]) as! i64,
-					false),
-				"".c_string())
+				.codegenSizeOf(builder, type: .types[type!.id]),
+				"".c_string()
+			)
 			LLVMBuildMemCpy(builder, args[0], alignment, args[1], alignment, size)
 			yield None
 		}
@@ -1697,11 +1694,9 @@ struct CodegenContext {
 			let alignment = LLVMPreferredAlignmentOfType(.data_layout, .types[type!.id])
 			let size = LLVMBuildMul(
 				builder, args[2],
-				LLVMConstInt(
-					.types[.program.uint_type.id],
-					LLVMStoreSizeOfType(.data_layout, .types[type!.id]) as! i64,
-					false),
-				"".c_string())
+				.codegenSizeOf(builder, type: .types[type!.id]),
+				"".c_string()
+			)
 			LLVMBuildMemMove(builder, args[0], alignment, args[1], alignment, size)
 			yield None
 		}
@@ -2196,6 +2191,19 @@ struct CodegenContext {
 				LLVMBuildRetVoid(builder)
 			}
 		}
+	}
+
+	// LLVMStoreSizeOfType only consideres a single value, in case of an array there might be padding after each element
+	fn codegenSizeOf(mut this, builder: LLVMBuilderRef, type: LLVMTypeRef) -> LLVMValueRef {
+		mut size = LLVMConstNull(LLVMPointerTypeInContext(.llvm_context, 0))
+		try {
+			let indices = [LLVMConstInt(.types[.program.int_type.id], 1, false)]
+			size = LLVMBuildGEP2(builder, type, LLVMConstNull(LLVMPointerTypeInContext(.llvm_context, 0)), &raw indices[0], indices.size() as! u32, "".c_string())
+		} catch {
+			abort()
+		}
+
+		return LLVMBuildPtrToInt(builder, size, .types[.program.int_type.id], "".c_string())
 	}
 
 	fn codegenMainFunction(mut this, main: Function) throws -> void {

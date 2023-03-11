@@ -178,6 +178,7 @@ import extern c "llvm-c/Core.h" {
 	extern fn LLVMBuildSIToFP(anon builder: LLVMBuilderRef, anon value: LLVMValueRef, anon destType: LLVMTypeRef, anon name: raw c_char) -> LLVMValueRef
 	extern fn LLVMBuildFPTrunc(anon builder: LLVMBuilderRef, anon value: LLVMValueRef, anon destType: LLVMTypeRef, anon name: raw c_char) -> LLVMValueRef
 	extern fn LLVMBuildFPExt(anon builder: LLVMBuilderRef, anon value: LLVMValueRef, anon destType: LLVMTypeRef, anon name: raw c_char) -> LLVMValueRef
+	extern fn LLVMBuildPtrToInt(anon builder: LLVMBuilderRef, anon value: LLVMValueRef, anon destType: LLVMTypeRef, anon name: raw c_char) -> LLVMValueRef
 	extern fn LLVMBuildBitCast(anon builder: LLVMBuilderRef, anon val: LLVMValueRef, anon dst: LLVMTypeRef, anon name: raw c_char) -> LLVMValueRef
 	extern fn LLVMBuildPointerCast(anon builder: LLVMBuilderRef, anon val: LLVMValueRef, anon dst: LLVMTypeRef, anon name: raw c_char) -> LLVMValueRef
 
