@@ -1606,10 +1606,7 @@ struct Typechecker {
 		.module.createBuiltinFunction(
 			parent_type: type,
 			name: "operator as",
-			param_types: [match type {
-				VarRef => type.varRef()
-				else => type.constRef()
-			}],
+			param_types: [type],
 			return_type: optional_type,
 			body: BuiltinFunction::VariantOpSafeAs(
 				type, id: c.id,

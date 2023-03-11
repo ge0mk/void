@@ -1190,7 +1190,11 @@ struct CodegenContext {
 				else => index
 			} as! u32
 
-			yield LLVMBuildStructGEP2(builder, type, built_object, offset, "".c_string())
+			if LLVMTypeOf(built_object) == LLVMPointerTypeInContext(.llvm_context, 0) {
+				return LLVMBuildStructGEP2(builder, type, built_object, offset, "".c_string())
+			} else {
+				return LLVMBuildExtractValue(builder, built_object, offset, "".c_string())
+			}
 		}
 		Dereference(span, type, value) => {
 			let built_value = .codegenExpr(builder, expr: value, llvm_func, cleanup_list)!
@@ -1999,6 +2003,15 @@ struct CodegenContext {
 					panic("enum case not found")
 				}
 
+				mut obj_ptr = match type {
+					Base => {
+						let tmp = LLVMBuildAlloca(builder, .types[type.id], "".c_string())
+						LLVMBuildStore(builder, llvm_func.args[0], tmp)
+						yield tmp
+					}
+					else => llvm_func.args[0]
+				}
+
 				let id_type_impl = .types[id_type.id]
 
 				let result = LLVMBuildAlloca(builder, .types[optional_type.id], "".c_string())
@@ -2007,14 +2020,14 @@ struct CodegenContext {
 				let none_branch = LLVMAppendBasicBlockInContext(.llvm_context, llvm_func.impl, "none".c_string())
 				let continue_branch = LLVMAppendBasicBlockInContext(.llvm_context, llvm_func.impl, "continue".c_string())
 
-				let id_ptr = LLVMBuildStructGEP2(builder, .types[type.id], llvm_func.args[0], 0, "".c_string())
+				let id_ptr = LLVMBuildStructGEP2(builder, .types[type.id], obj_ptr, 0, "".c_string())
 				let id_val = LLVMBuildLoad2(builder, .types[id_type.id], id_ptr, "".c_string())
 
 				let same_id = LLVMBuildICmp(builder, _LLVMIntPredicate::LLVMIntEQ.v(), id_val, LLVMConstInt(.types[id_type.id], id, false), "".c_string())
 				LLVMBuildCondBr(builder, same_id, some_branch, none_branch)
 
 				LLVMPositionBuilderAtEnd(builder, some_branch)
-				let value_ptr = LLVMBuildStructGEP2(builder, .types[type.id], llvm_func.args[0], 1, "".c_string())
+				let value_ptr = LLVMBuildStructGEP2(builder, .types[type.id], obj_ptr, 1, "".c_string())
 				let value = match type {
 					Base => LLVMBuildLoad2(builder, .types[case_decl!.type.id], value_ptr, "".c_string())
 					else => value_ptr
