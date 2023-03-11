@@ -471,6 +471,9 @@ contexts:
     - match: '='
       set: var_decl_init
 
+    - match: \{
+      set: compound_stmt
+
     - match: ;
       pop: true
 
@@ -486,6 +489,12 @@ contexts:
     - match: '='
       set: var_decl_init
 
+    - match: \{
+      set: compound_stmt
+
+    - match: ;
+      pop: true
+
   else_body:
     - match: '{'
       set: compound_stmt
@@ -496,11 +505,17 @@ contexts:
     - match: '='
       set: var_decl_init
 
+    - match: \{
+      set: compound_stmt
+
     - match: ;
       pop: true
 
   var_decl_init:
     - include: expr
+
+    - match: \{
+      set: compound_stmt
 
     - match: ;
       pop: true
@@ -515,6 +530,9 @@ contexts:
 
   var_decl_init_2:
     - include: expr
+
+    - match: \{
+      set: compound_stmt
 
     - match: ;
       pop: true
@@ -549,14 +567,14 @@ contexts:
       scope: keyword.control
       push: match_stmt
 
-    - match: '{'
+    - match: \{
       scope: punctuation.section.block.begin
       push: compound_stmt
 
   match_stmt:
     - include: expr
 
-    - match: '{'
+    - match: \{
       scope: punctuation.section.block.begin
       set: case_stmt
 
