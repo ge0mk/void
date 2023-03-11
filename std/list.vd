@@ -97,6 +97,14 @@ struct List {
 		return this.data as cptr!<T>;
 	}
 
+	func at(this: &List!<T>, index: uint) -> Result!<T> {
+		if index >= this.size() {
+			throw Error::ERANGE;
+		}
+
+		return Ok(this.data[index]);
+	}
+
 	operator [](this: &List!<T>, index: uint) -> Result!<&T> {
 		if index >= this.size() {
 			throw Error::ERANGE;
