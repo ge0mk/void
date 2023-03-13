@@ -18,6 +18,7 @@ enum Token {
 	Dot
 	Comma
 	Colon
+	AtSign
 	Namespace
 	Semicolon
 	QuestionMark
@@ -122,6 +123,7 @@ enum Token {
 			Dot => "<token> ."
 			Comma => "<token> ,"
 			Colon => "<token> :"
+			AtSign => "<token> @"
 			Namespace => "<token> ::"
 			Semicolon => "<token> ;"
 			QuestionMark => "<token> ?"
@@ -218,6 +220,7 @@ enum Token {
 		Dot => "."
 		Comma => ","
 		Colon => ":"
+		AtSign => "@"
 		Namespace => "::"
 		Semicolon => ";"
 		QuestionMark => "?"
@@ -364,6 +367,7 @@ struct Lexer {
 				b'}' => { return Token::RCurly(span: .span(start, ++.index)) }
 				b',' => { return Token::Comma(span: .span(start, ++.index)) }
 				b';' => { return Token::Semicolon(span: .span(start, ++.index)) }
+				b'@' => { return Token::AtSign(span: .span(start, ++.index)) }
 				b'.' => { return .lexDot() }
 				b'?' => { return .lexQuestionmark() }
 				b':' => { return .lexColon() }
@@ -610,6 +614,7 @@ struct Lexer {
 				b'0' => { ch = b'\0' }
 				b'a' => { ch = b'\a' }
 				b'b' => { ch = b'\b' }
+				b'e' => { ch = b'\e' }
 				b'f' => { ch = b'\f' }
 				b'n' => { ch = b'\n' }
 				b'r' => { ch = b'\r' }
@@ -655,6 +660,7 @@ struct Lexer {
 					b'\\' => string_builder.append(b'\\')
 					b'0' => string_builder.append(b'\0')
 					b'a' => string_builder.append(b'\a')
+					b'e' => string_builder.append(b'\e')
 					b'b' => string_builder.append(b'\b')
 					b'f' => string_builder.append(b'\f')
 					b'n' => string_builder.append(b'\n')

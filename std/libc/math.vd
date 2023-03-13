@@ -1,13 +1,13 @@
 import std/core;
 
-[extern_name: "sqrtf"]
+@[extern_name: "sqrtf"]
 extern func sqrt(value: f32) -> f32;
 
-[extern_name: "sqrt"]
+@[extern_name: "sqrt"]
 extern func sqrt(value: f64) -> f64;
 
-[extern_name: "powf"]
+@[extern_name: "powf"]
 extern func pow(value: f32, exponent: f32) -> f32;
 
-[extern_name: "pow"]
+@[extern_name: "pow"]
 extern func pow(value: f64, exponent: f64) -> f64;

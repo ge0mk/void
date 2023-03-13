@@ -29,7 +29,7 @@ struct Parser {
 
 		while .index < .tokens.size() {
 			let annotations = match .current() {
-				LSquare => .parseAnnotations()
+				AtSign => .parseAnnotations()
 				else => []
 			}
 
@@ -129,6 +129,12 @@ struct Parser {
 	}
 
 	fn parseAnnotations(mut this) throws -> [ParsedAnnotation] {
+		guard .current() is AtSign else {
+			.error("expected @", .current().span)
+			return []
+		}
+		.index++
+
 		guard .current() is LSquare else {
 			.error("expected [", .current().span)
 			return []

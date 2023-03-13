@@ -1,4 +1,4 @@
 import std/core;
 
-[extern_name: "get_errno"]
+@[extern_name: "get_errno"]
 extern func errno() -> &&Error;
