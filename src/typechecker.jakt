@@ -4064,23 +4064,24 @@ struct Typechecker {
 		for i in 0..stmt.children.size() {
 			match stmt.children[i] {
 				VarDecl(var) => {
-					mut varDecl = func.variables[var.id]
-					if varDecl.destructor_call.has_value() {
-						local_function_cleanup_list.insert(before_index: 0, value: varDecl.destructor_call!)
-						local_loop_cleanup_list.insert(before_index: 0, value: varDecl.destructor_call!)
-						stmt.cleanup_list.insert(before_index: 0, value: varDecl.destructor_call!)
+					mut var_decl = func.variables[var.id]
+					if var_decl.destructor_call.has_value() {
+						local_function_cleanup_list.insert(before_index: 0, value: var_decl.destructor_call!)
+						local_loop_cleanup_list.insert(before_index: 0, value: var_decl.destructor_call!)
+						stmt.cleanup_list.insert(before_index: 0, value: var_decl.destructor_call!)
 					}
 				}
-				IfVar(var, temp_var, body) => {
+				IfVar(var, temp_var, mut body) => {
 					.regroupDestructorCalls(func, expr: temp_var, function_cleanup_list: local_function_cleanup_list, loop_cleanup_list: local_loop_cleanup_list)
 
 					mut tmp_function_cleanup_list = cloneList<Expr>(list: local_function_cleanup_list)
 					mut tmp_loop_cleanup_list = cloneList<Expr>(list: local_loop_cleanup_list)
 
-					mut varDecl = func.variables[var.id]
-					if varDecl.destructor_call.has_value() {
-						tmp_function_cleanup_list.insert(before_index: 0, value: varDecl.destructor_call!)
-						tmp_loop_cleanup_list.insert(before_index: 0, value: varDecl.destructor_call!)
+					mut var_decl = func.variables[var.id]
+					if var_decl.destructor_call.has_value() {
+						tmp_function_cleanup_list.insert(before_index: 0, value: var_decl.destructor_call!)
+						tmp_loop_cleanup_list.insert(before_index: 0, value: var_decl.destructor_call!)
+						body.cleanup_list.insert(before_index: 0, value: var_decl.destructor_call!)
 					}
 
 					.regroupDestructorCalls(func, stmt: body, function_cleanup_list: tmp_function_cleanup_list, loop_cleanup_list: tmp_loop_cleanup_list)

@@ -1,0 +1,39 @@
+//> output "+-"
+
+import std/core;
+import std/string;
+import std/io;
+
+struct Foo {
+	var x: int;
+
+	func constructor(this: &&Foo) {}
+	func constructor(this: &&Foo, other: Foo) {}
+	func destructor(this: &&Foo) {}
+
+	func hasValue(this: Foo) -> bool {
+		return true;
+	}
+
+	func value(this: Foo) -> Bar {
+		return Bar();
+	}
+}
+
+struct Bar {
+	var x: int;
+
+	func constructor(this: &&Bar) {
+		print("+");
+	}
+
+	func destructor(this: &&Bar) {
+		print("-");
+	}
+}
+
+func main() {
+	if var bar = Foo() {
+		// should call bar.destructor();
+	}
+}
