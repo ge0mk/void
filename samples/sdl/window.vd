@@ -32,5 +32,5 @@ struct Window {}
 
 extern func SDL_CreateWindow(title: cptr!<byte>, x: i32, y: i32, w: i32, h: i32, flags: WindowFlags) -> vptr!<Window>;
 
-[extern_name: "SDL_DestroyWindow"]
+@[extern_name: "SDL_DestroyWindow"]
 extern func destroy(window: vptr!<Window>) -> void;

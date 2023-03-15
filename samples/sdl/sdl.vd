@@ -17,13 +17,13 @@ enum SDL {
 	case Everything     = 0x0000f231;
 }
 
-[extern_name: "SDL_Init"]
+@[extern_name: "SDL_Init"]
 extern func init(flags: SDL) -> i32;
 
-[extern_name: "SDL_Quit"]
+@[extern_name: "SDL_Quit"]
 extern func quit() -> void;
 
-[extern_name: "SDL_GetTicks"]
+@[extern_name: "SDL_GetTicks"]
 extern func getTicks() -> u32;
 
 func createWindow(title: String, x: int, y: int, width: int, height: int, flags: WindowFlags) -> vptr!<Window> {

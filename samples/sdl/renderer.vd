@@ -13,16 +13,16 @@ enum RendererFlags {
 
 struct Renderer {}
 
-[extern_name: "SDL_CreateRenderer"]
+@[extern_name: "SDL_CreateRenderer"]
 extern func createRenderer(window: vptr!<Window>, index: i32, flags: RendererFlags) -> vptr!<Renderer>;
 
-[extern_name: "SDL_DestroyRenderer"]
+@[extern_name: "SDL_DestroyRenderer"]
 extern func destroy(renderer: vptr!<Renderer>) -> void;
 
-[extern_name: "SDL_RenderClear"]
+@[extern_name: "SDL_RenderClear"]
 extern func clear(renderer: vptr!<Renderer>) -> void;
 
-[extern_name: "SDL_RenderPresent"]
+@[extern_name: "SDL_RenderPresent"]
 extern func present(renderer: vptr!<Renderer>) -> void;
 
 extern func SDL_SetRenderDrawColor(renderer: vptr!<Renderer>, r: u8, g: u8, b: u8, a: u8) -> i32;

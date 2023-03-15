@@ -21,6 +21,9 @@ struct KeyboardEvent {
 
 	func constructor(this: &&KeyboardEvent, other: KeyboardEvent) -> void = default;
 	func destructor(this: &&KeyboardEvent) -> void = default;
+
+	operator =(this: &&KeyboardEvent, other: KeyboardEvent) -> void = default;
+	operator ==(this: KeyboardEvent, other: KeyboardEvent) -> bool = default;
 }
 
 variant Event: i32 {
@@ -86,5 +89,5 @@ variant Event: i32 {
 	case Padding: Array!<byte, 56>;
 }
 
-[extern_name: "SDL_PollEvent"]
+@[extern_name: "SDL_PollEvent"]
 extern func pollEvent(event: &&Event) -> bool;
