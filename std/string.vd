@@ -591,9 +591,7 @@ func parseNumber(str: String, start: uint) -> Result!<ParsedNumber> {
 				case 'o'b -> base = 8;
 				case 'd'b -> base = 10;
 				case 'x'b -> base = 16;
-				else -> {
-					throw Error::EINVAL;
-				}
+				else -> return Ok(ParsedNumber(0, 10, 0, 1u));
 			}
 
 			if isDigit(try str[index + 2], base) {
