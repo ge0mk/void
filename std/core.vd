@@ -301,6 +301,20 @@ struct Range {
 		return Ok(&this.data[index]);
 	}
 
+	func find(this: Range!<T>, value: T) -> Optional!<uint> {
+		for index in 0u..this.size() {
+			if this.data[index] == value {
+				return Some(index);
+			}
+		}
+
+		return None;
+	}
+
+	func contains(this: Range!<T>, value: T) -> bool {
+		return this.find(value) is Some;
+	}
+
 	operator ==(this: Range!<T>, other: Range!<T>) -> bool {
 		if this.size != other.size {
 			return false;
@@ -379,6 +393,20 @@ struct VRange {
 		}
 
 		return Ok(&&this.data[index]);
+	}
+
+	func find(this: VRange!<T>, value: T) -> Optional!<uint> {
+		for index in 0u..this.size() {
+			if this.data[index] == value {
+				return Some(index);
+			}
+		}
+
+		return None;
+	}
+
+	func contains(this: VRange!<T>, value: T) -> bool {
+		return this.find(value) is Some;
 	}
 
 	operator ==(this: VRange!<T>, other: VRange!<T>) -> bool {
