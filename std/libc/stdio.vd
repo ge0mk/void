@@ -4,27 +4,27 @@ import std/libc/errno;
 struct FILE {}
 
 @[extern_name: "std::libc::stdin"]
-extern func stdin() -> vptr!<FILE>;
+func stdin() -> vptr!<FILE> = extern;
 
 @[extern_name: "std::libc::stdout"]
-extern func stdout() -> vptr!<FILE>;
+func stdout() -> vptr!<FILE> = extern;
 
 @[extern_name: "std::libc::stderr"]
-extern func stderr() -> vptr!<FILE>;
+func stderr() -> vptr!<FILE> = extern;
 
-extern func fopen(pathname: cptr!<byte>, mode: cptr!<byte>) -> vptr!<FILE>;
-extern func freopen(pathname: cptr!<byte>, mode: cptr!<byte>, file: vptr!<FILE>) -> vptr!<FILE>;
-extern func fclose(file: vptr!<FILE>) -> void;
+func fopen(pathname: cptr!<byte>, mode: cptr!<byte>) -> vptr!<FILE> = extern;
+func freopen(pathname: cptr!<byte>, mode: cptr!<byte>, file: vptr!<FILE>) -> vptr!<FILE> = extern;
+func fclose(file: vptr!<FILE>) -> void = extern;
 
-extern func feof(file: vptr!<FILE>) -> bool;
-extern func ferror(file: vptr!<FILE>) -> Error;
-extern func fflush(file: vptr!<FILE>) -> i32;
-extern func clearerr(file: vptr!<FILE>) -> void;
+func feof(file: vptr!<FILE>) -> bool = extern;
+func ferror(file: vptr!<FILE>) -> Error = extern;
+func fflush(file: vptr!<FILE>) -> i32 = extern;
+func clearerr(file: vptr!<FILE>) -> void = extern;
 
-extern func fread(data: vptr, size: uint, elements: uint, file: vptr!<FILE>) -> uint;
-extern func fwrite(data: cptr, size: uint, elements: uint, file: vptr!<FILE>) -> uint;
+func fread(data: vptr, size: uint, elements: uint, file: vptr!<FILE>) -> uint = extern;
+func fwrite(data: cptr, size: uint, elements: uint, file: vptr!<FILE>) -> uint = extern;
 
-extern func fgetc(file: vptr!<FILE>) -> i32;
-extern func fputc(data: i32, file: vptr!<FILE>) -> i32;
+func fgetc(file: vptr!<FILE>) -> i32 = extern;
+func fputc(data: i32, file: vptr!<FILE>) -> i32 = extern;
 
-extern func fdopen(fd: i32, mode: cptr!<byte>) -> vptr!<FILE>;
+func fdopen(fd: i32, mode: cptr!<byte>) -> vptr!<FILE> = extern;

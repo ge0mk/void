@@ -782,7 +782,7 @@ struct Typechecker {
 
 		.checkForDuplicateFunction(func: decl)
 
-		if parsed_function.is_extern {
+		if parsed_function.body is ExternFunctionBody {
 			.program.functions[func.id].extern_name = .program.functions[func.id].name
 		}
 
@@ -1623,22 +1623,15 @@ struct Typechecker {
 			return
 		}
 
-		if parsed_function.is_extern {
-			.program.functions[func.id].kind = FunctionDeclKind::Extern
-			return
-		}
-
-		guard parsed_function.body.has_value() else {
-			.module.error("missing function body", parsed_function.span)
-			return
-		}
-
-		match parsed_function.body! {
+		match parsed_function.body {
 			Compound => .checkFunctionBody(func, parsed_function)
 			Expr => {
 				panic("not implemented")
 			}
 			DefaultFunctionBody => .createDefaultFunctionImpl(func)
+			ExternFunctionBody => {
+				.program.functions[func.id].kind = FunctionDeclKind::Extern
+			}
 			else => {
 				panic("invalid function body")
 			}
@@ -1649,11 +1642,7 @@ struct Typechecker {
 		let decl = .program.functions[func.id]
 		let func_type = decl.type
 
-		guard parsed_function.body.has_value() else {
-			panic("missing function body")
-		}
-
-		let body = parsed_function.body!
+		let body = parsed_function.body
 		guard body is Compound else {
 			panic("invalid function body")
 		}
@@ -2116,10 +2105,7 @@ struct Typechecker {
 			}
 			return Stmt::Expr(span, checked_expr)
 		}
-		DefaultFunctionBody => {
-			panic("default stmt should only occur as function body")
-		}
-		Garbage => Stmt::Garbage(span: stmt.span)
+		else => Stmt::Garbage(span: stmt.span)
 	}
 
 	fn checkVarDeclStmt(mut this, var: ParsedVarDecl, mut context: FunctionContext) throws -> Stmt {

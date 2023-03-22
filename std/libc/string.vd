@@ -1,9 +1,9 @@
 import std/core;
 import std/libc/errno;
 
-extern func strlen(str: cptr!<byte>) -> uint;
-extern func strerror(error: Error) -> cptr!<byte>;
+func strlen(str: cptr!<byte>) -> uint = extern;
+func strerror(error: Error) -> cptr!<byte> = extern;
 
-extern func memchr(s: cptr!<byte>, c: i32, n: uint) -> cptr!<byte>;
-extern func memrchr(s: cptr!<byte>, c: i32, n: uint) -> cptr!<byte>;
-extern func memmem(haystack: cptr!<byte>, haystack_len: uint, needle: cptr!<byte>, needle_len: uint) -> cptr!<byte>;
+func memchr(s: cptr!<byte>, c: i32, n: uint) -> cptr!<byte> = extern;
+func memrchr(s: cptr!<byte>, c: i32, n: uint) -> cptr!<byte> = extern;
+func memmem(haystack: cptr!<byte>, haystack_len: uint, needle: cptr!<byte>, needle_len: uint) -> cptr!<byte> = extern;

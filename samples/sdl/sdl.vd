@@ -18,13 +18,13 @@ enum SDL {
 }
 
 @[extern_name: "SDL_Init"]
-extern func init(flags: SDL) -> i32;
+func init(flags: SDL) -> i32 = extern;
 
 @[extern_name: "SDL_Quit"]
-extern func quit() -> void;
+func quit() -> void = extern;
 
 @[extern_name: "SDL_GetTicks"]
-extern func getTicks() -> u32;
+func getTicks() -> u32 = extern;
 
 func createWindow(title: String, x: int, y: int, width: int, height: int, flags: WindowFlags) -> vptr!<Window> {
 	const ctitle = title + '\0'b;

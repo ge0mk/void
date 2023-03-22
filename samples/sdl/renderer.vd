@@ -14,21 +14,21 @@ enum RendererFlags {
 struct Renderer {}
 
 @[extern_name: "SDL_CreateRenderer"]
-extern func createRenderer(window: vptr!<Window>, index: i32, flags: RendererFlags) -> vptr!<Renderer>;
+func createRenderer(window: vptr!<Window>, index: i32, flags: RendererFlags) -> vptr!<Renderer> = extern;
 
 @[extern_name: "SDL_DestroyRenderer"]
-extern func destroy(renderer: vptr!<Renderer>) -> void;
+func destroy(renderer: vptr!<Renderer>) -> void = extern;
 
 @[extern_name: "SDL_RenderClear"]
-extern func clear(renderer: vptr!<Renderer>) -> void;
+func clear(renderer: vptr!<Renderer>) -> void = extern;
 
 @[extern_name: "SDL_RenderPresent"]
-extern func present(renderer: vptr!<Renderer>) -> void;
+func present(renderer: vptr!<Renderer>) -> void = extern;
 
-extern func SDL_SetRenderDrawColor(renderer: vptr!<Renderer>, r: u8, g: u8, b: u8, a: u8) -> i32;
+func SDL_SetRenderDrawColor(renderer: vptr!<Renderer>, r: u8, g: u8, b: u8, a: u8) -> i32 = extern;
 
-extern func SDL_RenderDrawRect(renderer: vptr!<Renderer>, rect: cptr!<Rect>) -> i32;
-extern func SDL_RenderFillRect(renderer: vptr!<Renderer>, rect: cptr!<Rect>) -> i32;
+func SDL_RenderDrawRect(renderer: vptr!<Renderer>, rect: cptr!<Rect>) -> i32 = extern;
+func SDL_RenderFillRect(renderer: vptr!<Renderer>, rect: cptr!<Rect>) -> i32 = extern;
 
 struct Rect {
 	var x: i32;

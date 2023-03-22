@@ -93,10 +93,9 @@ enum ParsedTypeDecl {
 struct ParsedFunctionDecl {
 	span: Span
 	name: String
-	is_extern: bool
 	parameters: [ParsedFunctionParameterDecl]
 	return_type: ParsedType?
-	body: ParsedStmt?
+	body: ParsedStmt
 	template_parameters: [ParsedTemplateParameterDecl]
 	annotations: [ParsedAnnotation]
 
@@ -201,6 +200,7 @@ boxed enum ParsedStmt {
 	Throw(value: ParsedExpr)
 	Expr(expr: ParsedExpr)
 	DefaultFunctionBody
+	ExternFunctionBody
 	Garbage
 }
 

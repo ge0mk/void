@@ -1,3 +1,3 @@
 import std/core;
 
-extern func open(pathname: cptr!<byte>, flags: i32, mode: u32) -> i32;
+func open(pathname: cptr!<byte>, flags: i32, mode: u32) -> i32 = extern;

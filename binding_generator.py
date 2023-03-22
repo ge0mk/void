@@ -233,9 +233,9 @@ def main(args):
 		output += "\n\n"
 
 	for name, func in function_decls.items():
-		output += "extern func " + name + "("
+		output += "func " + name + "("
 		output += ", ".join(param[0] + ": " + param[1] for param in func["parameters"])
-		output += ") -> " + func["return_type"] + ";\n"
+		output += ") -> " + func["return_type"] + " = extern;\n"
 
 	with open(dst, "w") as f:
 		f.write(output)

@@ -90,4 +90,4 @@ variant Event: i32 {
 }
 
 @[extern_name: "SDL_PollEvent"]
-extern func pollEvent(event: &&Event) -> bool;
+func pollEvent(event: &&Event) -> bool = extern;

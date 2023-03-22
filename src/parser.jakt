@@ -58,7 +58,7 @@ struct Parser {
 					}
 					.index++
 				}
-				KeywordExtern | KeywordFunc | KeywordOperator => {
+				KeywordFunc | KeywordOperator => {
 					functions.push(.parseFunctionDecl(template_parameters, annotations))
 				}
 				KeywordStruct => {
@@ -430,20 +430,13 @@ struct Parser {
 
 	fn parseFunctionDecl(mut this, template_parameters: [ParsedTemplateParameterDecl], annotations: [ParsedAnnotation]) throws -> ParsedFunctionDecl {
 		let start = .current().span
-		let is_extern = match .current() {
-			KeywordExtern => {
-				.index++
-				yield true
-			}
-			else => false
-		}
 
 		let name = match .current() {
 			KeywordFunc => {
 				.index++
 				guard .current() is Identifier(name) else {
 					.error("expected identifier", .current().span)
-					return ParsedFunctionDecl(span: mergeSpans(start, end: .current().span), name: "", is_extern, parameters: [], return_type: None, body: None, template_parameters, annotations)
+					return ParsedFunctionDecl(span: mergeSpans(start, end: .current().span), name: "", parameters: [], return_type: None, body: ParsedStmt::Garbage(span: mergeSpans(start, end: .current().span)), template_parameters, annotations)
 				}
 				.index++
 				yield name
@@ -451,7 +444,7 @@ struct Parser {
 			KeywordOperator => .parseOperatorName()
 			else => {
 				.error("expected keyword func or operator", .current().span)
-				return ParsedFunctionDecl(span: mergeSpans(start, end: .current().span), name: "", is_extern, parameters: [], return_type: None, body: None, template_parameters, annotations)
+				return ParsedFunctionDecl(span: mergeSpans(start, end: .current().span), name: "", parameters: [], return_type: None, body: ParsedStmt::Garbage(span: mergeSpans(start, end: .current().span)), template_parameters, annotations)
 			}
 		}
 		let parameters = .parseFunctionParameters()
@@ -462,11 +455,7 @@ struct Parser {
 			return_type = .parseType()
 		}
 
-		let body: ParsedStmt? = match .current() {
-			Semicolon => {
-				.index++
-				yield None
-			}
+		let body: ParsedStmt = match .current() {
 			Assign => {
 				.index++
 				yield match .current() {
@@ -476,11 +465,23 @@ struct Parser {
 
 						guard .current() is Semicolon else {
 							.error("expected ;", .current().span)
-							return ParsedFunctionDecl(span: mergeSpans(start, end: .current().span), name: "", is_extern, parameters: [], return_type, body: None, template_parameters, annotations)
+							return ParsedFunctionDecl(span: mergeSpans(start, end: .current().span), name: "", parameters: [], return_type, body: ParsedStmt::Garbage(span: mergeSpans(start, end: .current().span)), template_parameters, annotations)
 						}
 						.index++
 
 						yield ParsedStmt::DefaultFunctionBody(span)
+					}
+					KeywordExtern => {
+						let span = .current().span
+						.index++
+
+						guard .current() is Semicolon else {
+							.error("expected ;", .current().span)
+							return ParsedFunctionDecl(span: mergeSpans(start, end: .current().span), name: "", parameters: [], return_type, body: ParsedStmt::Garbage(span: mergeSpans(start, end: .current().span)), template_parameters, annotations)
+						}
+						.index++
+
+						yield ParsedStmt::ExternFunctionBody(span)
 					}
 					else => {
 						let start = .current().span
@@ -488,7 +489,7 @@ struct Parser {
 						let expr = .parseExpr(allow_assignments: true)
 						guard .current() is Semicolon else {
 							.error("expected ;", .current().span)
-							return ParsedFunctionDecl(span: mergeSpans(start, end: .current().span), name: "", is_extern, parameters: [], return_type, body: None, template_parameters, annotations)
+							return ParsedFunctionDecl(span: mergeSpans(start, end: .current().span), name: "", parameters: [], return_type, body: ParsedStmt::Garbage(span: mergeSpans(start, end: .current().span)), template_parameters, annotations)
 						}
 						let end = .current().span
 						.index++
@@ -500,7 +501,7 @@ struct Parser {
 			else => .parseCompoundStmt()
 		}
 
-		return ParsedFunctionDecl(span: mergeSpans(start, end: .tokens[.index - 1].span), name, is_extern, parameters, return_type, body, template_parameters, annotations)
+		return ParsedFunctionDecl(span: mergeSpans(start, end: .tokens[.index - 1].span), name, parameters, return_type, body, template_parameters, annotations)
 	}
 
 	fn parseOperatorName(mut this) throws -> String {
