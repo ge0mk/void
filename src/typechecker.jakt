@@ -1062,9 +1062,7 @@ struct Typechecker {
 
 				.createCommonVariantMemberFunctions(type, decl, checked_cases)
 			}
-			else => {
-				.module.error("typechecking of type decls not yet fully implemented", parsed_type.span)
-			}
+			Extension => {}
 		}
 
 		for annotation in parsed_type.annotations {

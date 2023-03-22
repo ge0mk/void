@@ -70,9 +70,6 @@ struct Parser {
 				KeywordVariant => {
 					types.push(.parseVariantDecl(template_parameters, annotations))
 				}
-				KeywordType => {
-					types.push(.parseTypeAlias(template_parameters, annotations))
-				}
 				KeywordExtend => {
 					types.push(.parseTypeExtension(template_parameters, annotations))
 				}
@@ -231,10 +228,6 @@ struct Parser {
 				}
 
 				yield ParsedType::Name(span: mergeSpans(start, end: .tokens[.index - 1].span), namespaces, name, template_parameters)
-			}
-			KeywordType => {
-				.index++
-				yield ParsedType::Name(span: .tokens[.index - 1].span, namespaces: [], name: "type", template_parameters: [])
 			}
 			else => ParsedType::Empty
 		}
@@ -1007,66 +1000,6 @@ struct Parser {
 		return ParsedVariantCaseDecl(
 			span: mergeSpans(start, end),
 			name, type, id
-		)
-	}
-
-	fn parseTypeAlias(mut this, template_parameters: [ParsedTemplateParameterDecl], annotations: [ParsedAnnotation]) throws -> ParsedTypeDecl {
-		let start = .current().span
-		.index++
-
-		guard .current() is Identifier(name) else {
-			.error("expected name in type alias", .current().span)
-			return ParsedTypeDecl::Alias(
-				span: mergeSpans(start, end: .current().span),
-				name: "",
-				member_variables: [],
-				member_functions: [],
-				template_parameters,
-				annotations,
-				target: ParsedType::Empty
-			)
-		}
-		.index++
-
-		guard .current() is Assign else {
-			.error("expected token '=' in type alias", .current().span)
-			return ParsedTypeDecl::Alias(
-				span: mergeSpans(start, end: .current().span),
-				name,
-				member_variables: [],
-				member_functions: [],
-				template_parameters,
-				annotations,
-				target: ParsedType::Empty
-			)
-		}
-		.index++
-
-		let target = .parseType()
-
-		guard .current() is Semicolon else {
-			.error("expected token ';' after type alias", .current().span)
-			return ParsedTypeDecl::Alias(
-				span: mergeSpans(start, end: .current().span),
-				name,
-				member_variables: [],
-				member_functions: [],
-				template_parameters,
-				annotations,
-				target
-			)
-		}
-		let end = .current().span
-		.index++
-
-		return ParsedTypeDecl::Alias(
-			span: mergeSpans(start, end),
-			name,
-			member_variables: [],
-			member_functions: [],
-			template_parameters,
-			annotations,
-			target
 		)
 	}
 

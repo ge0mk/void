@@ -64,7 +64,6 @@ enum ParsedTypeDecl {
 	Struct
 	Enum(id_type: ParsedType?, cases: [ParsedEnumCaseDecl])
 	Variant(id_type: ParsedType?, cases: [ParsedVariantCaseDecl])
-	Alias(target: ParsedType)
 	Extension
 
 	fn dump(this, indent: String) throws -> String {
@@ -73,7 +72,6 @@ enum ParsedTypeDecl {
 			Struct => "struct "
 			Enum => "enum "
 			Variant => "variant "
-			Alias => "alias "
 			Extension => "alias "
 		}
 		result += .name + " " + .span.format() + "\n"

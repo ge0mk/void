@@ -69,7 +69,6 @@ enum Token {
 	KeywordStruct
 	KeywordEnum
 	KeywordVariant
-	KeywordType
 	KeywordExtend
 
 	KeywordPublic
@@ -171,7 +170,6 @@ enum Token {
 			KeywordStruct => "<keyword> struct"
 			KeywordEnum => "<keyword> enum"
 			KeywordVariant => "<keyword> variant"
-			KeywordType => "<keyword> type"
 			KeywordExtend => "<keyword> extend"
 			KeywordPublic => "<keyword> public"
 			KeywordPrivate => "<keyword> private"
@@ -268,7 +266,6 @@ enum Token {
 		KeywordStruct => "struct"
 		KeywordEnum => "enum"
 		KeywordVariant => "variant"
-		KeywordType => "type"
 		KeywordExtend => "extend"
 		KeywordPublic => "public"
 		KeywordPrivate => "private"
@@ -766,7 +763,6 @@ struct Lexer {
 			"struct" => Token::KeywordStruct(span)
 			"enum" => Token::KeywordEnum(span)
 			"variant" => Token::KeywordVariant(span)
-			"type" => Token::KeywordType(span)
 			"extend" => Token::KeywordExtend(span)
 			"public" => Token::KeywordPublic(span)
 			"private" => Token::KeywordPrivate(span)
