@@ -1127,13 +1127,21 @@ struct CodegenContext {
 			let str = LLVMBuildPointerCast(builder, global, ptrType, "".c_string())
 			let len = LLVMConstInt(isize_type, value.length() as! i64, false)
 
-			mut val = LLVMConstNull(stringviewType)
-			val = LLVMBuildInsertValue(builder, val, str, 0, "".c_string())
-
 			if .debug_info.has_value() {
 				LLVMSetCurrentDebugLocation2(builder, .getSourceLocationMetadata(span))
 			}
-			yield LLVMBuildInsertValue(builder, val, len, 1, "".c_string())
+
+			mut val = LLVMConstNull(stringviewType)
+			val = LLVMBuildInsertValue(builder, val, str, 0, "".c_string())
+
+			// set size & capacity to length of the string literal
+			val = LLVMBuildInsertValue(builder, val, len, 1, "".c_string())
+			val = LLVMBuildInsertValue(builder, val, len, 2, "".c_string())
+
+			// set is_owner to false
+			val = LLVMBuildInsertValue(builder, val, LLVMConstNull(.types[.program.bool_type.id]), 3, "".c_string())
+
+			yield val
 		}
 		ArrayLiteral(span, type, values) => {
 			mut result = LLVMGetUndef(.types[type.id])
