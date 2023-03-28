@@ -438,33 +438,33 @@ struct String {
 
 	// ensure that memory for at least 'new_capacity' elements is available
 	func grow(this: &&String, new_capacity: uint) -> Result!<void> {
-		if this.capacity >= new_capacity && this.is_owner {
+		const old_capacity = this.capacity;
+		if old_capacity >= new_capacity && this.is_owner {
 			return Ok;
 		}
 
-		const old_capacity = this.capacity;
-
-		if this.data == vptr::null() {
-			this.data = libc::stdlib::malloc(new_capacity * sizeOf!<byte>()) as vptr!<byte>;
-		} else if this.is_owner {
-			this.data = libc::stdlib::realloc(this.data as vptr, new_capacity * sizeOf!<byte>()) as vptr!<byte>;
+		var new_data = vptr::null() as vptr!<byte>;
+		if this.data == vptr::null() || !this.is_owner {
+			new_data = libc::stdlib::malloc(new_capacity * sizeOf!<byte>()) as vptr!<byte>;
 		} else {
-			const data = libc::stdlib::malloc(new_capacity * sizeOf!<byte>()) as vptr!<byte>;
-			if this.data == vptr::null() {
-				throw Error::ENOMEM;
-			}
-			memcpy!<byte>(data, this.data as cptr!<byte>, old_capacity);
+			new_data = libc::stdlib::realloc(this.data as vptr, new_capacity * sizeOf!<byte>()) as vptr!<byte>;
 		}
 
-		if this.data == vptr::null() {
+		if new_data == vptr::null() {
 			throw Error::ENOMEM;
 		}
 
-		this.is_owner = true;
-		this.capacity = new_capacity;
-		if new_capacity > old_capacity {
-			memset!<byte>(this.data + old_capacity, '\0'b, new_capacity - old_capacity);
+		if !this.is_owner {
+			memcpy!<byte>(new_data, this.data as cptr!<byte>, old_capacity);
+			this.is_owner = true;
 		}
+
+		if new_capacity > old_capacity {
+			memset!<byte>(new_data + old_capacity, '\0'b, new_capacity - old_capacity);
+		}
+
+		this.data = new_data;
+		this.capacity = new_capacity;
 
 		return Ok;
 	}
