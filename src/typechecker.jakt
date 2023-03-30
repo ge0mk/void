@@ -3581,7 +3581,7 @@ struct Typechecker {
 
 		if context.is_constructor and name == "operator =" and checked_args.size() == 2 {
 			if removeDereference(checked_args[0]) is ReferenceMemberInvoke(object, member) {
-				if removeDereference(object) is VarInvoke(var) and var.id == 0 and not context.initialized_members.contains(var.id) {
+				if removeDereference(object) is VarInvoke(var) and var.id == 0 and not context.initialized_members.contains(member.id) {
 					return Expr::ReferenceMemberInit(span, type: .program.void_type, object, member, value: checked_args[1])
 				}
 			}
