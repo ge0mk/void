@@ -40,6 +40,10 @@ struct String {
 		return String(Range!<byte>(data, strlen(data)));
 	}
 
+	func fromErrorCode(error: Error) -> String {
+		return String::fromCString(libc::string::strerror(error));
+	}
+
 	operator =(this: &&String, other: String) -> void {
 		must this.grow(other.size());
 		memcpy!<byte>(this.data, other.data(), other.size());
