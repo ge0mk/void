@@ -522,10 +522,7 @@ struct CodegenContext {
 				.types.set(type.id, LLVMStructCreateNamed(.llvm_context, name.c_string()))
 				mut elements: [LLVMTypeRef] = []
 				for var in type.member_variables {
-					elements.push(match var.type {
-						Base => .types.get(var.type.id)!
-						else => LLVMPointerTypeInContext(.llvm_context, 0)
-					})
+					elements.push(.getType(var.type))
 				}
 
 				if not elements.is_empty() {
@@ -543,10 +540,7 @@ struct CodegenContext {
 
 				mut data_size = 0u64
 				for c in cases {
-					let current_data_size = LLVMStoreSizeOfType(.data_layout, match c.type {
-						Base => .types.get(c.type.id)!
-						else => LLVMPointerTypeInContext(.llvm_context, 0)
-					})
+					let current_data_size = LLVMStoreSizeOfType(.data_layout, .getType(c.type))
 
 					if current_data_size > data_size {
 						data_size = current_data_size
@@ -555,10 +549,7 @@ struct CodegenContext {
 				elements.push(LLVMArrayType(LLVMIntTypeInContext(.llvm_context, 8), data_size as! u32))
 
 				for var in type.member_variables {
-					elements.push(match var.type {
-						Base => .types.get(var.type.id)!
-						else => LLVMPointerTypeInContext(.llvm_context, 0)
-					})
+					elements.push(.getType(var.type))
 				}
 
 				LLVMStructSetBody(.types.get(type.id)!, &raw elements[0], elements.size() as! u32, type.is_packed)
@@ -602,6 +593,13 @@ struct CodegenContext {
 		}
 	}
 
+	fn getType(this, anon type: Type) -> LLVMTypeRef {
+		return match type {
+			Base => .types[type.id]
+			else => LLVMPointerTypeInContext(.llvm_context, 0)
+		}
+	}
+
 	fn codegenFunctionDeclaration(mut this, func: FunctionDecl) throws {
 		if .program.functions[func.id].isIncompleteTemplate() or .program.functions[func.id].kind is InlineBuiltin {
 			return
@@ -610,17 +608,11 @@ struct CodegenContext {
 		let func_type = func.type
 		mut param_types: [LLVMTypeRef] = []
 
-		for param in func_type.param_types {
-			param_types.push(match param {
-				Base => .types[param.id]
-				else => LLVMPointerTypeInContext(.llvm_context, 0)
-			})
+		for param_type in func_type.param_types {
+			param_types.push(.getType(param_type))
 		}
 
-		let return_type = match func_type.return_type {
-			Base => .types[func_type.return_type.id]
-			else => LLVMPointerTypeInContext(.llvm_context, 0)
-		}
+		let return_type = .getType(func_type.return_type)
 
 		mut tmp = match param_types.size() {
 			0 => null<LLVMTypeRef>()
@@ -745,11 +737,7 @@ struct CodegenContext {
 					)
 					llvm_func.variables[var.id] = addr
 				} else {
-					mut llvm_type = match type {
-						Base => .types[type.id]
-						else => LLVMPointerTypeInContext(.llvm_context, 0)
-					}
-
+					mut llvm_type = .getType(type)
 					let addr = LLVMBuildAlloca(builder, llvm_type, var.name.c_string())
 					llvm_func.variables[var.id] = addr
 				}
@@ -1287,10 +1275,7 @@ struct CodegenContext {
 			LLVMBuildBr(builder, continue_branch)
 
 			LLVMPositionBuilderAtEnd(builder, continue_branch)
-			let result_type = match true_value.type {
-				Base => .types[true_value.type.id]
-				else => LLVMPointerTypeInContext(.llvm_context, 0)
-			}
+			let result_type = .getType(true_value.type)
 			let phi = LLVMBuildPhi(builder, result_type, "".c_string())
 
 			let incoming_values = [built_true_value, built_false_value]
@@ -1905,11 +1890,7 @@ struct CodegenContext {
 					LLVMAddCase(switch_instr, LLVMConstInt(id_type_impl, c.id, false), case_block)
 					LLVMPositionBuilderAtEnd(builder, case_block)
 
-					let value_type = match c.type {
-						Base => .types[c.type.id]
-						else => LLVMPointerTypeInContext(.llvm_context, 0)
-					}
-
+					let value_type = .getType(c.type)
 					let this_value_ptr = LLVMBuildStructGEP2(builder, .types[type.id], obj, 1, "".c_string())
 					let other_value_ptr = LLVMBuildStructGEP2(builder, .types[type.id], other, 1, "".c_string())
 					mut other_value = LLVMBuildLoad2(builder, value_type, other_value_ptr, "".c_string())
@@ -1930,10 +1911,7 @@ struct CodegenContext {
 
 				for i in 0..type_decl.member_variables.size() {
 					let var_decl = type_decl.member_variables[i]
-					let var_type = match var_decl.type {
-						Base => .types[var_decl.type.id]
-						else => LLVMPointerTypeInContext(.llvm_context, 0)
-					}
+					let var_type = .getType(var_decl.type)
 
 					let this_var_ptr = LLVMBuildStructGEP2(builder, .types[type.id], obj, i as! u32 + 2, "".c_string())
 					let other_var_ptr = LLVMBuildStructGEP2(builder, .types[type.id], other, i as! u32 + 2, "".c_string())
@@ -2102,15 +2080,8 @@ struct CodegenContext {
 					let this_value_ptr = LLVMBuildStructGEP2(builder, .types[type.id], this_ptr, 1, "".c_string())
 					let other_value_ptr = LLVMBuildStructGEP2(builder, .types[type.id], other_ptr, 1, "".c_string())
 
-					let this_value = LLVMBuildLoad2(builder, match c.type {
-						Base => .types[c.type.id]
-						else => LLVMPointerTypeInContext(.llvm_context, 0)
-					}, this_value_ptr, "".c_string())
-
-					let other_value = LLVMBuildLoad2(builder, match c.type {
-						Base => .types[c.type.id]
-						else => LLVMPointerTypeInContext(.llvm_context, 0)
-					}, other_value_ptr, "".c_string())
+					let this_value = LLVMBuildLoad2(builder, .getType(c.type), this_value_ptr, "".c_string())
+					let other_value = LLVMBuildLoad2(builder, .getType(c.type), other_value_ptr, "".c_string())
 
 					let equal_value = match c.type {
 						Base => {
