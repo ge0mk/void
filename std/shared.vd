@@ -3,54 +3,93 @@ import std/libc/stdlib;
 
 template <T: type>
 struct refc {
-	var refs: uint;
+	var strong_count: uint;
+	var weak_count: uint;
 	var value: T;
-
-	func constructor(this: &&refc!<T>, value: T) {
-		this.refs = 0;
-		this.value = value;
-	}
-
-	func destructor(this: &&refc!<T>) {}
 }
 
 template <T: type>
-struct Shared {
+struct SharedPtr {
 	var data: vptr!<refc!<T>>;
 
-	func constructor(this: &&Shared!<T>, data: vptr!<refc!<T>>) {
+	func constructor(this: &&SharedPtr!<T>, data: vptr!<refc!<T>>) {
 		this.data = data;
-		this.data.value().refs++;
+		this.data[0u].strong_count++;
 	}
 
-	func constructor(this: &&Shared!<T>, other: Shared!<T>) {
+	func constructor(this: &&SharedPtr!<T>, other: SharedPtr!<T>) {
 		this.data = other.data;
-		this.data.value().refs++;
+		this.data[0u].strong_count++;
 	}
 
-	func destructor(this: &&Shared!<T>) {
-		this.data.value().refs--;
-		if this.data.value().refs == 0 {
-			this.data.value().destructor();
+	func destructor(this: &&SharedPtr!<T>) {
+		this.data[0u].strong_count--;
+		if this.data[0u].strong_count == 0 {
+			this.data[0u].value.destructor();
+		}
+
+		if this.data[0u].strong_count == 0 && this.data[0u].weak_count == 0 {
 			libc::stdlib::free(this.data as vptr);
 		}
 	}
 
-	func new(value: T) -> Shared!<T> {
+	func new(value: T) -> SharedPtr!<T> {
 		var data = libc::stdlib::malloc(sizeOf!<refc!<T>>()) as vptr!<refc!<T>>;
-		data.value().constructor(value);
-		return Shared!<T>(data);
+		data[0u].strong_count = 0;
+		data[0u].weak_count = 0;
+		data[0u].value.constructor(value);
+		return SharedPtr!<T>(data);
 	}
 
-	operator unwrap(this: Shared!<T>) -> T {
+	operator unwrap(this: SharedPtr!<T>) -> T {
 		return this.data.value().value;
 	}
 
-	operator unwrap(this: &Shared!<T>) -> &T {
+	operator unwrap(this: &SharedPtr!<T>) -> &T {
 		return &this.data.value().value;
 	}
 
-	operator unwrap(this: &&Shared!<T>) -> &&T {
+	operator unwrap(this: &&SharedPtr!<T>) -> &&T {
 		return &&this.data.value().value;
+	}
+}
+
+template <T: type>
+struct WeakPtr {
+	var data: vptr!<refc!<T>>;
+
+	func constructor(this: &&WeakPtr!<T>, data: vptr!<refc!<T>>) {
+		this.data = data;
+		this.data[0u].weak_count++;
+	}
+
+	func constructor(this: &&WeakPtr!<T>, other: SharedPtr!<T>) {
+		this.data = other.data;
+		this.data[0u].weak_count++;
+	}
+
+	func constructor(this: &&WeakPtr!<T>, other: WeakPtr!<T>) {
+		this.data = other.data;
+		this.data[0u].weak_count++;
+	}
+
+	func destructor(this: &&WeakPtr!<T>) {
+		this.data[0u].weak_count--;
+
+		if this.data[0u].strong_count == 0 && this.data[0u].weak_count == 0 {
+			libc::stdlib::free(this.data as vptr);
+		}
+	}
+
+	func isAlive(this: WeakPtr!<T>) -> bool {
+		return this.data[0u].strong_count > 0;
+	}
+
+	func lock(this: &&WeakPtr!<T>) -> Optional!<SharedPtr!<T>> {
+		if this.data[0u].strong_count > 0 {
+			return Some(SharedPtr!<T>(this.data));
+		} else {
+			return None;
+		}
 	}
 }
