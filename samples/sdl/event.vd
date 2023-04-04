@@ -1,4 +1,5 @@
 import std/core;
+import std/array;
 
 import sdl/scancode;
 import sdl/keycode;

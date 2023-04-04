@@ -12,8 +12,10 @@ struct Typechecker {
 	fn checkProgram(options: CompilerOptions, mut program: Program) throws {
 		for module in program.modules {
 			for pragma in module.parsed_module.pragmas {
-				if pragma == "generate_core_builtins" {
+				if pragma == "generate_std_core_builtins" {
 					initCoreModule(program, module)
+				} else if pragma == "generate_std_array_builtins" {
+					initArrayModule(program, module)
 				}
 			}
 		}
@@ -4468,7 +4470,6 @@ fn initCoreModule(mut program: Program, mut module: Module) throws {
 	createFloatType(program, module, name: "f64", size: 64)
 
 	createPtrTypes(program, module)
-	createArrayType(program, module)
 
 	createReflectionFunctions(program, module)
 
@@ -4534,6 +4535,10 @@ fn initCoreModule(mut program: Program, mut module: Module) throws {
 			TemplateParameter::Type(span: Span::empty(), name: "Source", value: None),
 		]
 	)
+}
+
+fn initArrayModule(mut program: Program, mut module: Module) throws {
+	createArrayType(program, module)
 }
 
 fn createIntTypes(mut program: Program, mut module: Module) throws {

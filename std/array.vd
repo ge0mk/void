@@ -1,0 +1,90 @@
+import std/core;
+
+pragma generate_std_array_builtins;
+
+template <T: type, Size: uint>
+extend Array {
+	func iterator(this: &Array!<T, Size>) -> RangeIterator!<T> {
+		return RangeIterator!<T>(this.data(), this.data() + Size);
+	}
+
+	func iterator(this: &&Array!<T, Size>) -> VRangeIterator!<T> {
+		return VRangeIterator!<T>(this.data(), this.data() + Size);
+	}
+
+	operator [](this: &Array!<T, Size>, index: uint) -> Result!<&T> {
+		if index < 0u || index >= Size {
+			throw Error::ERANGE;
+		}
+
+		return Ok(&this.data()[index]);
+	}
+
+	operator [](this: &&Array!<T, Size>, index: uint) -> Result!<&&T> {
+		if index < 0u || index >= Size {
+			throw Error::ERANGE;
+		}
+
+		return Ok(&&this.data()[index]);
+	}
+
+	operator [](this: &Array!<T, Size>, range: NumericRange!<uint>) -> Result!<Range!<T>> {
+		if range.start < 0u || range.end >= Size {
+			throw Error::ERANGE;
+		}
+
+		if range.start >= range.end || range.step != 1u {
+			throw Error::EINVAL;
+		}
+
+		return Ok(Range!<T>(this.data() + range.start, range.end - range.start));
+	}
+
+	operator [](this: &&Array!<T, Size>, range: NumericRange!<uint>) -> Result!<VRange!<T>> {
+		if range.start < 0u || range.end >= Size {
+			throw Error::ERANGE;
+		}
+
+		if range.start >= range.end || range.step != 1u {
+			throw Error::EINVAL;
+		}
+
+		return Ok(VRange!<T>(this.data() + range.start, range.end - range.start));
+	}
+
+	func range(this: &Array!<T, Size>) -> Range!<T> {
+		return Range!<T>(this.data(), this.size());
+	}
+
+	func range(this: &&Array!<T, Size>) -> VRange!<T> {
+		return VRange!<T>(this.data(), this.size());
+	}
+
+	func find(this: &Array!<T, Size>, value: T) -> Optional!<uint> {
+		for index in 0u..this.size() {
+			if this.data()[index] == value {
+				return Some(index);
+			}
+		}
+
+		return None;
+	}
+
+	func contains(this: &Array!<T, Size>, value: T) -> bool {
+		return this.find(value) is Some;
+	}
+
+	operator ==(this: &Array!<T, Size>, other: Array!<T, Size>) -> bool {
+		if this.size() != other.size() {
+			return false;
+		}
+
+		for i in 0u..this.size() {
+			if this.data()[i] != other.data()[i] {
+				return false;
+			}
+		}
+
+		return true;
+	}
+}

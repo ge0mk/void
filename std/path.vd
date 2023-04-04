@@ -1,4 +1,5 @@
 import std/core;
+import std/array;
 import std/libc/dirent;
 import std/libc/stdio;
 import std/libc/unistd;
