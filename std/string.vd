@@ -1,5 +1,7 @@
 import std/core;
+import std/range;
 import std/list;
+
 import std/libc/math;
 import std/libc/stdlib;
 import std/libc/string;

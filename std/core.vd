@@ -58,6 +58,136 @@ extend uint {
 	}
 }
 
+template <T: type>
+struct NumericRange {
+	var start: T;
+	var end: T;
+	var step: T;
+
+	func constructor(this: &&NumericRange!<T>, other: NumericRange!<T>) -> void {
+		this.start = other.start;
+		this.end = other.end;
+		this.step = other.step;
+	}
+
+	func constructor(this: &&NumericRange!<T>, start: T, end: T, step: T) -> void {
+		this.start = start;
+		this.end = end;
+		this.step = step;
+	}
+
+	func destructor(this: &&NumericRange!<T>) -> void {}
+
+	operator | (this: NumericRange!<T>, step: T) -> NumericRange!<T> {
+		return NumericRange!<T>(this.start, this.end, step);
+	}
+
+	func iterator(this: NumericRange!<T>) -> NumericIterator!<T> {
+		return NumericIterator!<T>(this.start, this.end, this.step);
+	}
+
+	func size(this: NumericRange!<T>) -> T {
+		return (this.end - this.start) / this.step;
+	}
+}
+
+template <T: type>
+struct NumericIterator {
+	var value: T;
+	var end: T;
+	var step: T;
+
+	func constructor(this: &&NumericIterator!<T>, start: T, end: T, step: T) -> void {
+		this.value = start;
+		this.end = end;
+		this.step = step;
+	}
+
+	func destructor(this: &&NumericIterator!<T>) -> void {}
+
+	func next(this: &&NumericIterator!<T>) -> Optional!<T> {
+		if this.value >= this.end {
+			return None;
+		}
+
+		const result = this.value;
+		this.value += this.step;
+
+		return Some(result);
+	}
+}
+
+func assert(cond: bool) -> void {
+	if !cond {
+		abort();
+	}
+}
+
+template <T: type>
+variant Optional {
+	case None;
+	case Some: T;
+
+	func hasValue(this: Optional!<T>) -> bool {
+		return this is Some;
+	}
+
+	func value(this: Optional!<T>) -> T {
+		comptime if isVarRef!<T>() {
+			match this {
+				case Some: &&value -> return &&value;
+				else -> abort();
+			}
+		} else if isConstRef!<T>() {
+			match this {
+				case Some: &value -> return &value;
+				else -> abort();
+			}
+		} else {
+			match this {
+				case Some: value -> return value;
+				else -> abort();
+			}
+		}
+	}
+
+	operator ??(this: Optional!<T>, other: T) -> T {
+		comptime if isVarRef!<T>() {
+			match this {
+				case Some: &&value -> return &&value;
+				else -> return &&other;
+			}
+		} else if isConstRef!<T>() {
+			match this {
+				case Some: &value -> return &value;
+				else -> return &other;
+			}
+		} else {
+			match this {
+				case Some: value -> return value;
+				else -> return other;
+			}
+		}
+	}
+
+	operator ??(this: Optional!<T>, other: Optional!<T>) -> Optional!<T> {
+		match this {
+			case Some -> return this;
+			else -> return other;
+		}
+	}
+
+	operator ==(this: Optional!<T>, other: Optional!<T>) -> bool {
+		match this {
+			case Some: a -> match other {
+				case Some: b -> return a == b;
+				else -> return false;
+			}
+			case None -> return other is None;
+		}
+	}
+}
+
 enum Error: i32 {
 	case OK = 0;
 	case EPERM = 1;
@@ -196,324 +326,6 @@ enum Error: i32 {
 	case ENOTSUP = 95;
 
 	case EOF = -1;
-}
-
-func assert(cond: bool) -> void {
-	if !cond {
-		abort();
-	}
-}
-
-template <T: type>
-struct NumericRange {
-	var start: T;
-	var end: T;
-	var step: T;
-
-	func constructor(this: &&NumericRange!<T>, other: NumericRange!<T>) -> void {
-		this.start = other.start;
-		this.end = other.end;
-		this.step = other.step;
-	}
-
-	func constructor(this: &&NumericRange!<T>, start: T, end: T, step: T) -> void {
-		this.start = start;
-		this.end = end;
-		this.step = step;
-	}
-
-	func destructor(this: &&NumericRange!<T>) -> void {}
-
-	operator | (this: NumericRange!<T>, step: T) -> NumericRange!<T> {
-		return NumericRange!<T>(this.start, this.end, step);
-	}
-
-	func iterator(this: NumericRange!<T>) -> NumericIterator!<T> {
-		return NumericIterator!<T>(this.start, this.end, this.step);
-	}
-
-	func size(this: NumericRange!<T>) -> T {
-		return (this.end - this.start) / this.step;
-	}
-}
-
-template <T: type>
-struct NumericIterator {
-	var value: T;
-	var end: T;
-	var step: T;
-
-	func constructor(this: &&NumericIterator!<T>, start: T, end: T, step: T) -> void {
-		this.value = start;
-		this.end = end;
-		this.step = step;
-	}
-
-	func destructor(this: &&NumericIterator!<T>) -> void {}
-
-	func next(this: &&NumericIterator!<T>) -> Optional!<T> {
-		if this.value >= this.end {
-			return None;
-		}
-
-		const result = this.value;
-		this.value += this.step;
-
-		return Some(result);
-	}
-}
-
-template <T: type>
-struct Range {
-	var data: cptr!<T>;
-	var size: uint;
-
-	func constructor(this: &&Range!<T>, data: cptr!<T>, size: uint) -> void {
-		this.data = data;
-		this.size = size;
-	}
-
-	func constructor(this: &&Range!<T>, other: Range!<T>) -> void {
-		this.data = other.data;
-		this.size = other.size;
-	}
-
-	operator =(this: &&Range!<T>, other: Range!<T>) -> void {
-		this.data = other.data;
-		this.size = other.size;
-	}
-
-	func destructor(this: &&Range!<T>) -> void {}
-
-	func data(this: &Range!<T>) -> cptr!<T> {
-		return this.data;
-	}
-
-	func size(this: &Range!<T>) -> uint {
-		return this.size;
-	}
-
-	operator [](this: &Range!<T>, index: uint) -> Result!<&T, Error> {
-		if index >= this.size {
-			throw Error::ERANGE;
-		}
-
-		return Ok(&this.data[index]);
-	}
-
-	func find(this: Range!<T>, value: T) -> Optional!<uint> {
-		for index in 0u..this.size() {
-			if this.data[index] == value {
-				return Some(index);
-			}
-		}
-
-		return None;
-	}
-
-	func contains(this: Range!<T>, value: T) -> bool {
-		return this.find(value) is Some;
-	}
-
-	operator ==(this: Range!<T>, other: Range!<T>) -> bool {
-		if this.size != other.size {
-			return false;
-		}
-
-		for i in 0u..this.size {
-			if this.data[i] != other.data[i] {
-				return false;
-			}
-		}
-
-		return true;
-	}
-
-	func iterator(this: &Range!<T>) -> RangeIterator!<T> {
-		return RangeIterator!<T>(this.data, this.data + this.size);
-	}
-}
-
-template <T: type>
-struct RangeIterator {
-	var current: cptr!<T>;
-	var end: cptr!<T>;
-
-	func constructor(this: &&RangeIterator!<T>, begin: cptr!<T>, end: cptr!<T>) -> void {
-		this.current = begin;
-		this.end = end;
-	}
-
-	func destructor(this: &&RangeIterator!<T>) -> void {}
-
-	func next(this: &&RangeIterator!<T>) -> Optional!<&T> {
-		if this.current >= this.end {
-			return None;
-		}
-
-		const r = Optional!<&T>::Some(&this.current.value());
-		this.current = this.current + 1;
-		return r;
-	}
-}
-
-template <T: type>
-struct VRange {
-	var data: vptr!<T>;
-	var size: uint;
-
-	func constructor(this: &&VRange!<T>, data: vptr!<T>, size: uint) -> void {
-		this.data = data;
-		this.size = size;
-	}
-
-	func constructor(this: &&VRange!<T>, other: VRange!<T>) -> void {
-		this.data = other.data;
-		this.size = other.size;
-	}
-
-	operator =(this: &&VRange!<T>, other: VRange!<T>) -> void {
-		this.data = other.data;
-		this.size = other.size;
-	}
-
-	func destructor(this: &&VRange!<T>) -> void {}
-
-	func data(this: &VRange!<T>) -> vptr!<T> {
-		return this.data;
-	}
-
-	func size(this: &VRange!<T>) -> uint {
-		return this.size;
-	}
-
-	operator [](this: &VRange!<T>, index: uint) -> Result!<&&T, Error> {
-		if index >= this.size {
-			throw Error::ERANGE;
-		}
-
-		return Ok(&&this.data[index]);
-	}
-
-	func find(this: VRange!<T>, value: T) -> Optional!<uint> {
-		for index in 0u..this.size() {
-			if this.data[index] == value {
-				return Some(index);
-			}
-		}
-
-		return None;
-	}
-
-	func contains(this: VRange!<T>, value: T) -> bool {
-		return this.find(value) is Some;
-	}
-
-	operator ==(this: VRange!<T>, other: VRange!<T>) -> bool {
-		if this.size != other.size {
-			return false;
-		}
-
-		for i in 0u..this.size {
-			if this.data[i] != other.data[i] {
-				return false;
-			}
-		}
-
-		return true;
-	}
-
-	func iterator(this: &VRange!<T>) -> VRangeIterator!<T> {
-		return VRangeIterator!<T>(this.data, this.data + this.size);
-	}
-}
-
-template <T: type>
-struct VRangeIterator {
-	var current: vptr!<T>;
-	var end: vptr!<T>;
-
-	func constructor(this: &&VRangeIterator!<T>, begin: vptr!<T>, end: vptr!<T>) -> void {
-		this.current = begin;
-		this.end = end;
-	}
-
-	func destructor(this: &&VRangeIterator!<T>) -> void {}
-
-	func next(this: &&VRangeIterator!<T>) -> Optional!<&&T> {
-		if this.current >= this.end {
-			return None;
-		}
-
-		const r = Optional!<&&T>::Some(&&this.current.value());
-		this.current = this.current + 1;
-		return r;
-	}
-}
-
-template <T: type>
-variant Optional {
-	case None;
-	case Some: T;
-
-	func hasValue(this: Optional!<T>) -> bool {
-		return this is Some;
-	}
-
-	func value(this: Optional!<T>) -> T {
-		comptime if isVarRef!<T>() {
-			match this {
-				case Some: &&value -> return &&value;
-				else -> abort();
-			}
-		} else if isConstRef!<T>() {
-			match this {
-				case Some: &value -> return &value;
-				else -> abort();
-			}
-		} else {
-			match this {
-				case Some: value -> return value;
-				else -> abort();
-			}
-		}
-	}
-
-	operator ??(this: Optional!<T>, other: T) -> T {
-		comptime if isVarRef!<T>() {
-			match this {
-				case Some: &&value -> return &&value;
-				else -> return &&other;
-			}
-		} else if isConstRef!<T>() {
-			match this {
-				case Some: &value -> return &value;
-				else -> return &other;
-			}
-		} else {
-			match this {
-				case Some: value -> return value;
-				else -> return other;
-			}
-		}
-	}
-
-	operator ??(this: Optional!<T>, other: Optional!<T>) -> Optional!<T> {
-		match this {
-			case Some -> return this;
-			else -> return other;
-		}
-	}
-
-	operator ==(this: Optional!<T>, other: Optional!<T>) -> bool {
-		match this {
-			case Some: a -> match other {
-				case Some: b -> return a == b;
-				else -> return false;
-			}
-			case None -> return other is None;
-		}
-	}
 }
 
 template <Tok: type, Terr: type>

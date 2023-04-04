@@ -1,4 +1,5 @@
 import std/core;
+import std/range;
 
 pragma generate_std_array_builtins;
 

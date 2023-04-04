@@ -3,6 +3,7 @@
 //> test-ec "0"
 
 import std/core;
+import std/range;
 import std/string;
 import std/io;
 

@@ -1,4 +1,6 @@
 import std/core;
+import std/range;
+
 import std/libc/stdlib;
 
 template <Tkey: type, Tvalue: type>

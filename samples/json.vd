@@ -1,9 +1,9 @@
 import std/core;
+import std/range;
+import std/string;
 import std/file;
 import std/json;
-import std/string;
 import std/io;
-import std/format;
 
 func main(args: Range!<String>) -> int {
 	const path = args[1u] else {
