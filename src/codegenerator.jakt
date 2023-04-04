@@ -1345,7 +1345,7 @@ struct CodegenContext {
 		}
 
 		if decl.kind is InlineBuiltin(builtin) {
-			return .codegenInlineBuiltinFunction(builder, args, builtin)
+			return .codegenInlineBuiltinFunction(builder, func_id: func.id, args, builtin)
 		}
 
 		let tmp = match args.size() {
@@ -1370,7 +1370,7 @@ struct CodegenContext {
 		}
 	}
 
-	fn codegenInlineBuiltinFunction(mut this, builder: LLVMBuilderRef, args: [LLVMValueRef], builtin: InlineBuiltinFunction) -> LLVMValueRef? => match builtin {
+	fn codegenInlineBuiltinFunction(mut this, builder: LLVMBuilderRef, func_id: u64, args: [LLVMValueRef], builtin: InlineBuiltinFunction) -> LLVMValueRef? => match builtin {
 		PrimitiveNullConstructor(type) => {
 			LLVMBuildStore(builder, LLVMConstNull(.types[type.id]), args[0])
 			yield None
@@ -1660,13 +1660,10 @@ struct CodegenContext {
 		}
 		SizeOf(type) => .codegenSizeOf(builder, type: .types[type!.id])
 		AlignmentOf(type) => LLVMConstInt(LLVMIntTypeInContext(.llvm_context, 64), LLVMPreferredAlignmentOfType(.data_layout, .types[type!.id]) as! i64, false)
-		IsVarRef(type) => match type! {
-			VarRef => LLVMConstInt(LLVMIntTypeInContext(.llvm_context, 1), 1, false)
-			else => LLVMConstInt(LLVMIntTypeInContext(.llvm_context, 1), 0, false)
-		}
-		IsConstRef(type) => match type! {
-			ConstRef => LLVMConstInt(LLVMIntTypeInContext(.llvm_context, 1), 1, false)
-			else => LLVMConstInt(LLVMIntTypeInContext(.llvm_context, 1), 0, false)
+		ReferenceKindOf(type) => match type! {
+			Base => LLVMConstInt(.getType(.program.functions[func_id].type.return_type), 0, false)
+			ConstRef => LLVMConstInt(.getType(.program.functions[func_id].type.return_type), 1, false)
+			VarRef => LLVMConstInt(.getType(.program.functions[func_id].type.return_type), 2, false)
 		}
 		Memset(type) => {
 			let size = LLVMBuildMul(

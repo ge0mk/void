@@ -1077,8 +1077,7 @@ enum InlineBuiltinFunction {
 
 	SizeOf(Type?)
 	AlignmentOf(Type?)
-	IsVarRef(Type?)
-	IsConstRef(Type?)
+	ReferenceKindOf(Type?)
 
 	Memset(Type?)
 	Memcpy(Type?)
@@ -1427,6 +1426,11 @@ boxed enum Expr {
 			else => { panic("invalid bool-literal expr") }
 		}
 		else => { panic("expression can't be converted to bool") }
+	}
+
+	fn toInt(this) throws -> i64 => match this {
+		IntLiteral(value) => value
+		else => { panic("expression can't be converted to int") }
 	}
 }
 

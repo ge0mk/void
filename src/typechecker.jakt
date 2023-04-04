@@ -597,27 +597,19 @@ struct Typechecker {
 
 					yield instance
 				}
-				IsVarRef => {
-					guard template_parameters.size() == 1 else { panic("invalid template parameters for isVarRef") }
-					guard template_parameters[0] is Type(value) else { panic("invalid template parameters for isVarRef") }
+				ReferenceKindOf => {
+					guard template_parameters.size() == 1 else { panic("invalid template parameters for referenceKindOf") }
+					guard template_parameters[0] is Type(value) else { panic("invalid template parameters for referenceKindOf") }
+
+					let reference_kind_type = .getType(namespaces: [], name: "ReferenceKind", template_parameters: [], template_parameters_to_search: [], error_span: Span::empty())
+					guard reference_kind_type.has_value() else {
+						panic("invalid template instantiation: referenceKindOf: no ReferenceKind type found")
+					}
 
 					let instance = .module.createBuiltinFunction2(
 						parent_type: None,
-						"isVarRef", [], .program.bool_type,
-						InlineBuiltinFunction::IsVarRef(value!),
-						template_parameters
-					)
-
-					yield instance
-				}
-				IsConstRef => {
-					guard template_parameters.size() == 1 else { panic("invalid template parameters for isConstRef") }
-					guard template_parameters[0] is Type(value) else { panic("invalid template parameters for isConstRef") }
-
-					let instance = .module.createBuiltinFunction2(
-						parent_type: None,
-						"isConstRef", [], .program.bool_type,
-						InlineBuiltinFunction::IsConstRef(value!),
+						"referenceKindOf", [], reference_kind_type!,
+						InlineBuiltinFunction::ReferenceKindOf(value!),
 						template_parameters
 					)
 
@@ -1267,6 +1259,13 @@ struct Typechecker {
 
 		.module.createBuiltinFunction(
 			parent_type: type, name: "operator ==",
+			param_types: [type, type],
+			return_type: .program.bool_type,
+			body: InlineBuiltinFunction::UIntOpEQ(type)
+		)
+
+		.module.createBuiltinFunction(
+			parent_type: type, name: "operator is",
 			param_types: [type, type],
 			return_type: .program.bool_type,
 			body: InlineBuiltinFunction::UIntOpEQ(type)
@@ -4284,18 +4283,16 @@ struct Typechecker {
 	}
 
 	fn eval(mut this, func_id: u64, builtin: InlineBuiltinFunction, args: [Expr], span: Span) throws -> Expr => match builtin {
-		IsVarRef => {
-			guard .program.functions[func_id].template_parameters[0] is Type(value) else { panic("invalid template parameter") }
-			yield Expr::IntLiteral(span, type: .program.bool_type, value: match value! is VarRef {
-				true => 1
-				else => 0
-			}, isSigned: false)
-		}
-		IsConstRef => {
-			guard .program.functions[func_id].template_parameters[0] is Type(value) else { panic("invalid template parameter") }
-			yield Expr::IntLiteral(span, type: .program.bool_type, value: match value! is ConstRef {
-				true => 1
-				else => 0
+		UIntOpEQ => Expr::IntLiteral(
+			span, type: .program.bool_type,
+			value: (args[0].toInt() == args[1].toInt()) as! i64,
+			isSigned: false
+		)
+		ReferenceKindOf(type) => {
+			yield Expr::IntLiteral(span, type: .program.functions[func_id].type.return_type, value: match type! {
+				Base => 0
+				ConstRef => 1
+				VarRef => 2
 			}, isSigned: false)
 		}
 		else => {
@@ -4834,15 +4831,8 @@ fn createReflectionFunctions(mut program: Program, mut module: Module) throws {
 
 	module.createBuiltinFunction(
 		parent_type: None,
-		"isVarRef", [], program.bool_type,
-		InlineBuiltinFunction::IsVarRef(None),
-		template_parameters: [TemplateParameter::Type(span: Span(start: 0, end: 0), name: "T", value: None)]
-	)
-
-	module.createBuiltinFunction(
-		parent_type: None,
-		"isConstRef", [], program.bool_type,
-		InlineBuiltinFunction::IsConstRef(None),
+		"referenceKindOf", [], program.void_type,
+		InlineBuiltinFunction::ReferenceKindOf(None),
 		template_parameters: [TemplateParameter::Type(span: Span(start: 0, end: 0), name: "T", value: None)]
 	)
 }

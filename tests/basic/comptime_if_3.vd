@@ -3,7 +3,7 @@
 import std/core;
 
 func main() -> int {
-	comptime if isVarRef!<&&int>() {
+	comptime if referenceKindOf!<&&int>() == ReferenceKind::Var {
 		return 0;
 	} else {
 		some(obvious(garbage_code().that_should_not_typecheck()));

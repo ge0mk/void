@@ -123,6 +123,20 @@ func assert(cond: bool) -> void {
 	}
 }
 
+enum ReferenceKind {
+	case None;
+	case Const;
+	case Var;
+
+	func constructor(this: &&ReferenceKind) -> void {
+		this.constructor(ReferenceKind::None);
+	}
+
+	operator <=>(this: ReferenceKind, other: ReferenceKind) -> int {
+		return this as int <=> other as int;
+	}
+}
+
 template <T: type>
 variant Optional {
 	case None;
@@ -133,12 +147,12 @@ variant Optional {
 	}
 
 	func value(this: Optional!<T>) -> T {
-		comptime if isVarRef!<T>() {
+		comptime if referenceKindOf!<T>() == ReferenceKind::Var {
 			match this {
 				case Some: &&value -> return &&value;
 				else -> abort();
 			}
-		} else if isConstRef!<T>() {
+		} else if referenceKindOf!<T>() == ReferenceKind::Const {
 			match this {
 				case Some: &value -> return &value;
 				else -> abort();
@@ -152,12 +166,12 @@ variant Optional {
 	}
 
 	operator ??(this: Optional!<T>, other: T) -> T {
-		comptime if isVarRef!<T>() {
+		comptime if referenceKindOf!<T>() == ReferenceKind::Var {
 			match this {
 				case Some: &&value -> return &&value;
 				else -> return &&other;
 			}
-		} else if isConstRef!<T>() {
+		} else if referenceKindOf!<T>() == ReferenceKind::Const {
 			match this {
 				case Some: &value -> return &value;
 				else -> return &other;
@@ -342,12 +356,12 @@ variant Result {
 	}
 
 	func value(this: Result!<Tok, Terr>) -> Tok {
-		comptime if isVarRef!<Tok>() {
+		comptime if referenceKindOf!<Tok>() == ReferenceKind::Var {
 			match this {
 				case Ok: &&value -> return &&value;
 				else -> abort();
 			}
-		} else if isConstRef!<Tok>() {
+		} else if referenceKindOf!<Tok>() == ReferenceKind::Const {
 			match this {
 				case Ok: &value -> return &value;
 				else -> abort();
@@ -368,12 +382,12 @@ variant Result {
 	}
 
 	operator ??(this: Result!<Tok, Terr>, other: Tok) -> Tok {
-		comptime if isVarRef!<Tok>() {
+		comptime if referenceKindOf!<Tok>() == ReferenceKind::Var {
 			match this {
 				case Ok: &&value -> return &&value;
 				else -> return &&other;
 			}
-		} else if isConstRef!<Tok>() {
+		} else if referenceKindOf!<Tok>() == ReferenceKind::Const {
 			match this {
 				case Ok: &value -> return &value;
 				else -> return &other;
@@ -447,12 +461,12 @@ variant Result {
 	}
 
 	func value(this: Result!<Tok>) -> Tok {
-		comptime if isVarRef!<Tok>() {
+		comptime if referenceKindOf!<Tok>() == ReferenceKind::Var {
 			match this {
 				case Ok: &&value -> return &&value;
 				else -> abort();
 			}
-		} else if isConstRef!<Tok>() {
+		} else if referenceKindOf!<Tok>() == ReferenceKind::Const {
 			match this {
 				case Ok: &value -> return &value;
 				else -> abort();
@@ -473,12 +487,12 @@ variant Result {
 	}
 
 	operator ??(this: Result!<Tok>, other: Tok) -> Tok {
-		comptime if isVarRef!<Tok>() {
+		comptime if referenceKindOf!<Tok>() == ReferenceKind::Var {
 			match this {
 				case Ok: &&value -> return &&value;
 				else -> return &&other;
 			}
-		} else if isConstRef!<Tok>() {
+		} else if referenceKindOf!<Tok>() == ReferenceKind::Const {
 			match this {
 				case Ok: &value -> return &value;
 				else -> return &other;
