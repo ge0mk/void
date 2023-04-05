@@ -117,6 +117,8 @@ def main(args):
 				return "cptr!<" + parse_type(t[6:-1]) + ">"
 			else:
 				return "vptr!<" + parse_type(t[:-1]) + ">"
+		elif t.endswith("*const"):
+			return "cptr!<" + parse_type(t[:-6]) + ">"
 		else:
 			print("unknown type: " + t)
 
