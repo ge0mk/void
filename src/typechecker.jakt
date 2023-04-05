@@ -2960,6 +2960,26 @@ struct Typechecker {
 				}
 			}
 
+			if not var.has_value() and type_decl.unwrapped.has_value() {
+				for decl in .program.types[type_decl.unwrapped!.id].member_variables {
+					if decl.name == name.name {
+						let operator_unwrap = .getFunction(
+							namespaces: [], name: "operator unwrap",
+							parent_type: checked_object.type
+							template_parameters: [],
+							param_types: [checked_object.type],
+							firstArgRefType: checked_object.type
+							span,
+						)
+
+						checked_object = .createCall(span, func: operator_unwrap!, args: [checked_object], caller: context.body, is_member_call: true, name: "operator unwrap")
+
+						var = decl
+						break
+					}
+				}
+			}
+
 			guard var.has_value() else {
 				.module.error("no such member var on type " + .program.formatTypeSignature(type: checked_object.type), span)
 				return Expr::Garbage(span, type: .program.void_type)
