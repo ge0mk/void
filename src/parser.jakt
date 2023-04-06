@@ -1235,7 +1235,7 @@ struct Parser {
 	}
 
 	fn parseIfStmt(mut this, is_comptime: bool) throws -> ParsedStmt {
-		if .tokens[.index + 1] is KeywordVar {
+		if .tokens[.index + 1] is KeywordVar or .tokens[.index + 1] is KeywordConst {
 			return .parseVarDeclStmt()
 		}
 
