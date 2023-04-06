@@ -92,4 +92,8 @@ struct WeakPtr {
 			return None;
 		}
 	}
+
+	operator <=>(this: WeakPtr!<T>, other: WeakPtr!<T>) -> int {
+		return this.data <=> other.data;
+	}
 }
