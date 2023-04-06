@@ -15,9 +15,9 @@ struct KeyboardEvent {
 	var mod: Keymod;
 
 	func constructor(this: &&KeyboardEvent) {
-		this.scancode = ScanCode::UNKNOWN;
-		this.keycode = KeyCode::UNKNOWN;
-		this.mod = Keymod::NONE;
+		this.scancode := ScanCode::UNKNOWN;
+		this.keycode := KeyCode::UNKNOWN;
+		this.mod := Keymod::NONE;
 	}
 
 	func constructor(this: &&KeyboardEvent, other: KeyboardEvent) -> void = default;

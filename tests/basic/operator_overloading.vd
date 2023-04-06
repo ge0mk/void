@@ -6,7 +6,7 @@ struct MyInt {
 	var value: int;
 
 	func constructor(this: &&MyInt, value: int) -> void {
-		this.value = value;
+		this.value := value;
 	}
 
 	func destructor(this: &&MyInt) -> void {}

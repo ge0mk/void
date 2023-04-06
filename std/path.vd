@@ -11,9 +11,9 @@ struct PathIterator {
 	var dir: vptr!<DIR>;
 
 	func constructor(this: &&PathIterator, path: Path) -> void {
-		this.path = path;
+		this.path := path;
 		const c_path = path.toString() + '\0'b;
-		this.dir = opendir(c_path.data());
+		this.dir := opendir(c_path.data());
 	}
 
 	func destructor(this: &&PathIterator) -> void {
@@ -36,9 +36,9 @@ struct RecursivePathIterator {
 	var dir_stack: List!<vptr!<DIR>>;
 
 	func constructor(this: &&RecursivePathIterator, path: Path) -> void {
-		this.current_path = path.segments;
+		this.current_path := path.segments;
 		const c_path = path.toString() + '\0'b;
-		this.dir_stack.constructor();
+		this.dir_stack := ();
 		must this.dir_stack.append(opendir(c_path.data()));
 	}
 
@@ -83,7 +83,7 @@ struct PathRange {
 	var path: Path;
 
 	func constructor(this: &&PathRange, path: Path) -> void {
-		this.path = path;
+		this.path := path;
 	}
 
 	func constructor(this: &&PathRange, other: PathRange) -> void = default;
@@ -98,7 +98,7 @@ struct RecursivePathRange {
 	var path: Path;
 
 	func constructor(this: &&RecursivePathRange, path: Path) -> void {
-		this.path = path;
+		this.path := path;
 	}
 
 	func constructor(this: &&RecursivePathRange, other: PathRange) -> void = default;
@@ -116,11 +116,11 @@ struct Path {
 	func constructor(this: &&Path, other: Path) -> void = default;
 
 	func constructor(this: &&Path, str: String) {
-		this.segments = must str.split('/'b);
+		this.segments := must str.split('/'b);
 	}
 
 	func constructor(this: &&Path, segments: List!<String>) {
-		this.segments = segments;
+		this.segments := segments;
 	}
 
 	operator =(this: &&Path, other: Path) -> void = default;

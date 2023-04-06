@@ -25,6 +25,7 @@ enum Token {
 	Range
 	Arrow
 	Assign
+	Initialize
 	Add
 	Sub
 	Mul
@@ -129,6 +130,7 @@ enum Token {
 			Range => "<token> .."
 			Arrow => "<token> ->"
 			Assign => "<token> ="
+			Initialize => "<token> :="
 			Add => "<token> +"
 			Sub => "<token> -"
 			Mul => "<token> *"
@@ -225,6 +227,7 @@ enum Token {
 		Range => ".."
 		Arrow => "->"
 		Assign => "="
+		Initialize => ":="
 		Add => "+"
 		Sub => "-"
 		Mul => "*"
@@ -437,6 +440,9 @@ struct Lexer {
 		if .source[.index + 1] == b':' {
 			.index += 2
 			return Token::Namespace(span: .span(start, .index))
+		} else if .source[.index + 1] == b'=' {
+			.index += 2
+			return Token::Initialize(span: .span(start, .index))
 		} else {
 			.index += 1
 			return Token::Colon(span: .span(start, .index))

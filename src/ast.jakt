@@ -239,6 +239,8 @@ enum ParsedBinaryOperator {
 	Range
 
 	Assign
+	Initialize
+
 	AddAssign
 	SubAssign
 	MulAssign
@@ -255,6 +257,7 @@ enum ParsedBinaryOperator {
 
 	fn is_assignment(this) => match this {
 		Assign
+		| Initialize
 		| AddAssign
 		| SubAssign
 		| MulAssign
@@ -301,16 +304,17 @@ enum ParsedBinaryOperator {
 		LogicalOr => 69
 
 		Assign
-		| BitwiseAndAssign
-		| BitwiseOrAssign
-		| BitwiseXorAssign
-		| BitwiseLShiftAssign
-		| BitwiseRShiftAssign
+		| Initialize
 		| AddAssign
 		| SubAssign
 		| MulAssign
 		| ModAssign
 		| DivAssign
+		| BitwiseAndAssign
+		| BitwiseOrAssign
+		| BitwiseXorAssign
+		| BitwiseLShiftAssign
+		| BitwiseRShiftAssign
 		| CoalescingAssign => 50
 	}
 
@@ -336,6 +340,7 @@ enum ParsedBinaryOperator {
 		Coalescing => "??"
 		Range => ".."
 		Assign => "="
+		Initialize => ":="
 		AddAssign => "+="
 		SubAssign => "-="
 		MulAssign => "*="

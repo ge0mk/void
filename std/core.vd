@@ -64,19 +64,16 @@ struct NumericRange {
 	var end: T;
 	var step: T;
 
-	func constructor(this: &&NumericRange!<T>, other: NumericRange!<T>) -> void {
-		this.start = other.start;
-		this.end = other.end;
-		this.step = other.step;
-	}
-
 	func constructor(this: &&NumericRange!<T>, start: T, end: T, step: T) -> void {
-		this.start = start;
-		this.end = end;
-		this.step = step;
+		this.start := start;
+		this.end := end;
+		this.step := step;
 	}
 
-	func destructor(this: &&NumericRange!<T>) -> void {}
+	func constructor(this: &&NumericRange!<T>, other: NumericRange!<T>) -> void = default;
+	func destructor(this: &&NumericRange!<T>) -> void = default;
+
+	operator =(this: &&NumericRange!<T>, other: NumericRange!<T>) -> void = default;
 
 	operator | (this: NumericRange!<T>, step: T) -> NumericRange!<T> {
 		return NumericRange!<T>(this.start, this.end, step);
@@ -98,9 +95,9 @@ struct NumericIterator {
 	var step: T;
 
 	func constructor(this: &&NumericIterator!<T>, start: T, end: T, step: T) -> void {
-		this.value = start;
-		this.end = end;
-		this.step = step;
+		this.value := start;
+		this.end := end;
+		this.step := step;
 	}
 
 	func destructor(this: &&NumericIterator!<T>) -> void {}

@@ -13,12 +13,12 @@ struct SharedPtr {
 	var data: vptr!<refc!<T>>;
 
 	func constructor(this: &&SharedPtr!<T>, data: vptr!<refc!<T>>) {
-		this.data = data;
+		this.data := data;
 		this.data[0u].strong_count++;
 	}
 
 	func constructor(this: &&SharedPtr!<T>, other: SharedPtr!<T>) {
-		this.data = other.data;
+		this.data := other.data;
 		this.data[0u].strong_count++;
 	}
 
@@ -59,17 +59,17 @@ struct WeakPtr {
 	var data: vptr!<refc!<T>>;
 
 	func constructor(this: &&WeakPtr!<T>, data: vptr!<refc!<T>>) {
-		this.data = data;
+		this.data := data;
 		this.data[0u].weak_count++;
 	}
 
 	func constructor(this: &&WeakPtr!<T>, other: SharedPtr!<T>) {
-		this.data = other.data;
+		this.data := other.data;
 		this.data[0u].weak_count++;
 	}
 
 	func constructor(this: &&WeakPtr!<T>, other: WeakPtr!<T>) {
-		this.data = other.data;
+		this.data := other.data;
 		this.data[0u].weak_count++;
 	}
 

@@ -2000,7 +2000,7 @@ struct Typechecker {
 			if checked_child is Expr(expr) and expr is Call(func, args) and args.size() >= 1 {
 				let function_decl = .program.functions[func.id]
 
-				if args[0] is MemberAccess(object, var: member) and object is VarInvoke(var: objectVar) and objectVar.id == 0 {
+				if args[0] is MemberAccess(object, var: member) and object is VarInvoke(var) and var.id == 0 {
 					if context.is_constructor and function_decl.name == "constructor" {
 						if context.initialized_members.contains(member.id) {
 							.module.error("double initialization of member", checked_child.span)
@@ -2009,46 +2009,6 @@ struct Typechecker {
 						context.initialized_members.add(member.id)
 					} else if context.is_destructor and function_decl.name == "destructor" {
 						context.deinitialized_members.add(member.id)
-					} else if context.is_constructor and function_decl.name == "operator =" and not context.initialized_members.contains(member.id) {
-						context.initialized_members.add(member.id)
-
-						mut init = removeDereference(args[1])
-
-						mut constructorArgs = match init {
-							TempVariable(var, constructor_call) => {
-								guard constructor_call is Call(args: args2) else {
-									panic("invalid temp-var")
-								}
-
-								mut tmp: [Expr] = []
-
-								if args2[0].type.id == 1 {
-									for i in 1..args2.size() {
-										tmp.push(args2[i])
-									}
-								}
-
-								context.body.variables[var.id].unused = true
-
-								yield tmp
-							}
-							else => [args[1]]
-						}
-
-						constructorArgs.insert(before_index: 0, value: args[0])
-
-						let constructor = .getFunction(
-							namespaces: [],
-							name: "constructor",
-							parent_type: function_decl.parent_type!,
-							template_parameters: [],
-							param_types: .getExprTypes(constructorArgs),
-							firstArgRefType: None,
-							span: expr.span
-						)
-
-						let constructor_call = .createCall(span: expr.span, func: constructor!, args: constructorArgs, caller: context.body, is_member_call: true)
-						checked_child = Stmt::Expr(span: checked_child.span, constructor_call)
 					}
 				}
 			} else if checked_child is Expr(expr) and expr is ReferenceMemberInit(member) {
@@ -2097,12 +2057,99 @@ struct Typechecker {
 		Discard(span, value) => Stmt::Discard(span, value: .checkExpr(expr: value, context))
 		Throw(span, value) => .checkThrowStmt(span, value, context)
 		Expr(span, expr) => {
-			let checked_expr = .checkExpr(expr, context)
-			if checked_expr.type.id != .program.void_type.id and checked_expr.type.id != .program.never_type.id {
-				.module.error("unused return value", span)
-				return Stmt::Garbage(span)
+			if expr is BinaryOp(lhs, op, rhs) and op is Initialize {
+				guard context.is_constructor else {
+					.module.error("initialization must be inside a constructor", span)
+					return Stmt::Garbage(span)
+				}
+
+				let checked_lhs = removeDereference(.checkExpr(expr: lhs, context, is_initialization_lhs: true))
+				mut checked_args: [Expr] = [checked_lhs]
+				if rhs is Tuple(elements) {
+					for (name, value) in elements {
+						if name.has_value() {
+							.module.error("named value in initializer", rhs.span())
+						}
+
+						checked_args.push(.checkExpr(expr: value, context))
+					}
+				} else {
+					checked_args.push(.checkExpr(expr: rhs, context, desired_type: checked_lhs.type))
+				}
+
+				let (object, member_var) = match checked_lhs {
+					MemberAccess(object, var) => (object, var)
+					ReferenceMemberInvoke(object, member) => (object, member)
+					else => {
+						.module.error("lhs of initialization must be a member variable", checked_lhs.span)
+						return Stmt::Garbage(span)
+					}
+				}
+
+				guard removeDereference(object) is VarInvoke(var) and var.id == 0 else {
+					.module.error("object of initialized member must be this parameter", checked_lhs.span)
+					return Stmt::Garbage(span)
+				}
+
+				let var_type = .program.types[object.type.id].member_variables[member_var.id].type
+
+				if var_type is Base {
+					mut param_types: [Type] = []
+					for param in checked_args {
+						param_types.push(param.type)
+					}
+
+					let constructor = .getFunction(
+						namespaces: [], name: "constructor",
+						parent_type: checked_lhs.type,
+						template_parameters: [],
+						param_types,
+						firstArgRefType: checked_lhs.type,
+						span,
+						allow_spaceship_operator: false
+					)
+
+					guard constructor.has_value() else {
+						return Stmt::Garbage(span)
+					}
+
+					let constructor_call = .createCall(
+						span,
+						func: constructor!,
+						args: checked_args,
+						caller: context.body,
+						is_member_call: true,
+						name: "constructor"
+					)
+
+					return Stmt::Expr(span, constructor_call)
+				} else {
+					guard checked_args.size() == 2 else {
+						.module.error("reference member variable must be initialized with exactly one value", span)
+						return Stmt::Garbage(span)
+					}
+
+					guard checked_args[1].type.equals(other: var_type) else {
+						.module.error("reference member variable initialized with wrong type", checked_args[1].span)
+						return Stmt::Garbage(span)
+					}
+
+					return Stmt::Expr(span, Expr::ReferenceMemberInit(
+						span,
+						type: .program.void_type,
+						object,
+						member: member_var,
+						value: checked_args[1]
+					))
+				}
+			} else {
+				let checked_expr = .checkExpr(expr, context)
+				if checked_expr.type.id != .program.void_type.id and checked_expr.type.id != .program.never_type.id {
+					.module.error("unused return value", span)
+					return Stmt::Garbage(span)
+				}
+				return Stmt::Expr(span, checked_expr)
 			}
-			return Stmt::Expr(span, checked_expr)
 		}
 		else => Stmt::Garbage(span: stmt.span)
 	}
@@ -2519,7 +2566,7 @@ struct Typechecker {
 		context.pushScope(type: ScopeType::Compound)
 		defer context.popScope()
 
-		mut checked_range = .checkExpr(expr: range, context, desired_type: None, is_constructor_call: false)
+		mut checked_range = .checkExpr(expr: range, context)
 		if checked_range.isTemporary() or checked_range is ArrayLiteral {
 			let range_var = context.body.createVariable(span: range.span(), is_const: capture_const, name: "#range", type: checked_range.type, init: checked_range)
 			context.addVariable(var: range_var)
@@ -2902,13 +2949,13 @@ struct Typechecker {
 		return Stmt::Return(span, value: result_value, cleanup_list: [])
 	}
 
-	fn checkExpr(mut this, expr: ParsedExpr, mut context: FunctionContext, desired_type: Type? = None, is_constructor_call: bool = false) throws -> Expr => match expr {
+	fn checkExpr(mut this, expr: ParsedExpr, mut context: FunctionContext, desired_type: Type? = None, is_initialization_lhs: bool = false) throws -> Expr => match expr {
 		BoolLiteral(span, value) => .checkBoolLiteralExpr(span, value)
 		IntLiteral(span, value, postfix) => .checkIntLiteralExpr(span, value, postfix, context, desired_type)
 		FloatLiteral(span, value, postfix) => .checkFloatLiteralExpr(span, value, postfix, context, desired_type)
 		CharLiteral(span, value, postfix) => .checkCharLiteralExpr(span, value, postfix, context)
 		StringLiteral(span, value) => .checkStringLiteralExpr(span, value, context)
-		Paren(span, child) => .checkExpr(expr: child, context, desired_type, is_constructor_call)
+		Paren(span, child) => .checkExpr(expr: child, context, desired_type)
 		Array(span, elements) => {
 			mut checked_elements: [Expr] = []
 			mut element_type: Type? = None
@@ -2986,7 +3033,7 @@ struct Typechecker {
 			}
 
 			if checked_object is VarInvoke(var: object_var) and object_var.id == 0 {
-				if context.is_constructor and not is_constructor_call {
+				if context.is_constructor and not is_initialization_lhs {
 					if not context.initialized_members.contains(var!.id) {
 						.module.error("use of uninitialized member variable", span)
 					}
@@ -3179,7 +3226,7 @@ struct Typechecker {
 			yield .createCall(span, func: func!, args: checked_args, caller: context.body, is_member_call: true)
 		}
 		OperatorAs(span, value, targetType) => {
-			let checked_value = .checkExpr(expr: value, context, is_constructor_call)
+			let checked_value = .checkExpr(expr: value, context)
 
 			if .program.types[checked_value.type.id].kind is Variant and targetType is Name(namespaces, template_parameters, name) {
 				if namespaces.is_empty() and template_parameters.is_empty() {
@@ -3410,9 +3457,9 @@ struct Typechecker {
 		Try(span, expr) => .checkValidateExpr(span, expr, context, kind: ValidationKind::Try)
 		Must(span, expr) => .checkValidateExpr(span, expr, context, kind: ValidationKind::Must)
 		InlineIf(span, true_value, condition, false_value) => {
-			let checked_true_value = .checkExpr(expr: true_value, context, desired_type, is_constructor_call)
-			let checked_condition = .checkExpr(expr: condition, context, desired_type, is_constructor_call)
-			let checked_false_value = .checkExpr(expr: false_value, context, desired_type, is_constructor_call)
+			let checked_true_value = .checkExpr(expr: true_value, context, desired_type)
+			let checked_condition = .checkExpr(expr: condition, context, desired_type)
+			let checked_false_value = .checkExpr(expr: false_value, context, desired_type)
 
 			guard checked_condition.type.equals(other: .program.bool_type) else {
 				.module.error(format("condition has invalid type: expected {}, but got {}",
@@ -3582,7 +3629,7 @@ struct Typechecker {
 		for i in 0..arguments.size() {
 			let arg = arguments[i]
 			if i == 0 and is_member_call {
-				checked_args.push(.checkExpr(expr: arg, context, is_constructor_call: name == "constructor" or name == "operator ="))
+				checked_args.push(.checkExpr(expr: arg, context))
 			} else if i == 1 and is_binary_op {
 				checked_args.push(.checkExpr(expr: arg, context, desired_type: checked_args[0].type))
 			} else {
@@ -3598,14 +3645,6 @@ struct Typechecker {
 		let parent_type: Type? = match is_member_call {
 			true => checked_args[0].type
 			else => None
-		}
-
-		if context.is_constructor and name == "operator =" and checked_args.size() == 2 {
-			if removeDereference(checked_args[0]) is ReferenceMemberInvoke(object, member) {
-				if removeDereference(object) is VarInvoke(var) and var.id == 0 and not context.initialized_members.contains(member.id) {
-					return Expr::ReferenceMemberInit(span, type: .program.void_type, object, member, value: checked_args[1])
-				}
-			}
 		}
 
 		mut firstArgRefType: Type? = None
@@ -3720,7 +3759,7 @@ struct Typechecker {
 	}
 
 	fn checkValidateExpr(mut this, span: Span, expr: ParsedExpr, context: FunctionContext, kind: ValidationKind) throws -> Expr {
-		let checked_expr = .checkExpr(expr, context, is_constructor_call: false)
+		let checked_expr = .checkExpr(expr, context)
 		let temp_var_expr = .checkTemporaryVariable(span, type: checked_expr.type, arguments: [checked_expr], constructorTemplateParameters: [], context)
 		guard temp_var_expr is Dereference(value: tmp) and tmp is TempVariable(var: var_id) else {
 			panic("unreachable")

@@ -10,15 +10,15 @@ struct List {
 	var capacity: uint;
 
 	func constructor(this: &&List!<T>) -> void {
-		this.data = vptr::null() as vptr!<T>;
-		this.size = 0u;
-		this.capacity = 0u;
+		this.data := vptr::null() as vptr!<T>;
+		this.size := 0;
+		this.capacity := 0;
 	}
 
 	func constructor(this: &&List!<T>, other: List!<T>) -> void {
-		this.data = vptr::null() as vptr!<T>;
-		this.size = 0u;
-		this.capacity = 0u;
+		this.data := vptr::null() as vptr!<T>;
+		this.size := 0;
+		this.capacity := 0;
 
 		must this.grow(other.size());
 
@@ -29,9 +29,9 @@ struct List {
 	}
 
 	func constructor(this: &&List!<T>, range: Range!<T>) -> void {
-		this.data = vptr::null() as vptr!<T>;
-		this.size = 0u;
-		this.capacity = 0u;
+		this.data := vptr::null() as vptr!<T>;
+		this.size := 0;
+		this.capacity := 0;
 
 		must this.grow(range.size());
 
@@ -43,9 +43,9 @@ struct List {
 	}
 
 	func constructor(this: &&List!<T>, range: VRange!<T>) -> void {
-		this.data = vptr::null() as vptr!<T>;
-		this.size = 0u;
-		this.capacity = 0u;
+		this.data := vptr::null() as vptr!<T>;
+		this.size := 0;
+		this.capacity := 0;
 
 		must this.grow(range.size());
 
@@ -57,9 +57,9 @@ struct List {
 	}
 
 	func constructor(this: &&List!<T>, size: uint, value: T) -> void {
-		this.data = vptr::null() as vptr!<T>;
-		this.size = 0;
-		this.capacity = 0;
+		this.data := vptr::null() as vptr!<T>;
+		this.size := 0;
+		this.capacity := 0;
 
 		must this.grow(size);
 

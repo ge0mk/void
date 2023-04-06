@@ -6,13 +6,13 @@ struct Range {
 	var size: uint;
 
 	func constructor(this: &&Range!<T>, data: cptr!<T>, size: uint) -> void {
-		this.data = data;
-		this.size = size;
+		this.data := data;
+		this.size := size;
 	}
 
 	func constructor(this: &&Range!<T>, other: Range!<T>) -> void {
-		this.data = other.data;
-		this.size = other.size;
+		this.data := other.data;
+		this.size := other.size;
 	}
 
 	operator =(this: &&Range!<T>, other: Range!<T>) -> void {
@@ -77,8 +77,8 @@ struct RangeIterator {
 	var end: cptr!<T>;
 
 	func constructor(this: &&RangeIterator!<T>, begin: cptr!<T>, end: cptr!<T>) -> void {
-		this.current = begin;
-		this.end = end;
+		this.current := begin;
+		this.end := end;
 	}
 
 	func destructor(this: &&RangeIterator!<T>) -> void {}
@@ -100,13 +100,13 @@ struct VRange {
 	var size: uint;
 
 	func constructor(this: &&VRange!<T>, data: vptr!<T>, size: uint) -> void {
-		this.data = data;
-		this.size = size;
+		this.data := data;
+		this.size := size;
 	}
 
 	func constructor(this: &&VRange!<T>, other: VRange!<T>) -> void {
-		this.data = other.data;
-		this.size = other.size;
+		this.data := other.data;
+		this.size := other.size;
 	}
 
 	operator =(this: &&VRange!<T>, other: VRange!<T>) -> void {
@@ -171,8 +171,8 @@ struct VRangeIterator {
 	var end: vptr!<T>;
 
 	func constructor(this: &&VRangeIterator!<T>, begin: vptr!<T>, end: vptr!<T>) -> void {
-		this.current = begin;
-		this.end = end;
+		this.current := begin;
+		this.end := end;
 	}
 
 	func destructor(this: &&VRangeIterator!<T>) -> void {}

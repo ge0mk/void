@@ -12,30 +12,30 @@ struct String {
 	var capacity: uint;
 	var is_owner: bool;
 
-	func constructor(this: &&String) {}
+	func constructor(this: &&String) = default;
 
 	func constructor(this: &&String, other: String) -> void {
-		this.data = libc::stdlib::malloc(other.size() * sizeOf!<byte>()) as vptr!<byte>;
+		this.data := libc::stdlib::malloc(other.size() * sizeOf!<byte>()) as vptr!<byte>;
 		memcpy!<byte>(this.data, other.data(), other.size());
-		this.size = other.size();
-		this.capacity = other.size();
-		this.is_owner = true;
+		this.size := other.size();
+		this.capacity := other.size();
+		this.is_owner := true;
 	}
 
 	func constructor(this: &&String, size: uint, fill_char: byte) -> void {
-		this.data = libc::stdlib::malloc(size * sizeOf!<byte>()) as vptr!<byte>;
+		this.data := libc::stdlib::malloc(size * sizeOf!<byte>()) as vptr!<byte>;
 		memset!<byte>(this.data, fill_char, size);
-		this.size = size;
-		this.capacity = size;
-		this.is_owner = true;
+		this.size := size;
+		this.capacity := size;
+		this.is_owner := true;
 	}
 
 	func constructor(this: &&String, bytes: Range!<byte>) -> void {
-		this.data = libc::stdlib::malloc(bytes.size() * sizeOf!<byte>()) as vptr!<byte>;
+		this.data := libc::stdlib::malloc(bytes.size() * sizeOf!<byte>()) as vptr!<byte>;
 		memcpy!<byte>(this.data, bytes.data(), bytes.size());
-		this.size = bytes.size();
-		this.capacity = bytes.size();
-		this.is_owner = true;
+		this.size := bytes.size();
+		this.capacity := bytes.size();
+		this.is_owner := true;
 	}
 
 	func fromCString(data: cptr!<byte>) -> String {
@@ -488,10 +488,10 @@ struct ParsedNumber {
 	var length: uint;
 
 	func constructor(this: &&ParsedNumber, significant: int, base: int, exponent: int, length: uint) -> void {
-		this.significant = significant;
-		this.base = base;
-		this.exponent = exponent;
-		this.length = length;
+		this.significant := significant;
+		this.base := base;
+		this.exponent := exponent;
+		this.length := length;
 
 		this.normalize();
 	}

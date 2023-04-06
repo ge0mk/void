@@ -9,13 +9,13 @@ struct MapEntry {
 	var value: Tvalue;
 
 	func constructor(this: &&MapEntry!<Tkey, Tvalue>, other: MapEntry!<Tkey, Tvalue>) {
-		this.key = other.key;
-		this.value = other.value;
+		this.key := other.key;
+		this.value := other.value;
 	}
 
 	func constructor(this: &&MapEntry!<Tkey, Tvalue>, key: Tkey, value: Tvalue) {
-		this.key = key;
-		this.value = value;
+		this.key := key;
+		this.value := value;
 	}
 
 	func destructor(this: &&MapEntry!<Tkey, Tvalue>) {}
@@ -30,9 +30,9 @@ struct MapIterator {
 	var end: cptr!<Tkey>;
 
 	func constructor(this: &&MapIterator!<Tkey, Tvalue>, keys: cptr!<Tkey>, values: cptr!<Tvalue>, end: cptr!<Tkey>) -> void {
-		this.keys = keys;
-		this.values = values;
-		this.end = end;
+		this.keys := keys;
+		this.values := values;
+		this.end := end;
 	}
 
 	func destructor(this: &&MapIterator!<Tkey, Tvalue>) -> void {}
@@ -58,17 +58,17 @@ struct Map {
 	var capacity: uint;
 
 	func constructor(this: &&Map!<Tkey, Tvalue>) -> void {
-		this.keys = vptr::null() as vptr!<Tkey>;
-		this.values = vptr::null() as vptr!<Tvalue>;
-		this.size = 0u;
-		this.capacity = 0u;
+		this.keys := vptr::null() as vptr!<Tkey>;
+		this.values := vptr::null() as vptr!<Tvalue>;
+		this.size := 0;
+		this.capacity := 0;
 	}
 
 	func constructor(this: &&Map!<Tkey, Tvalue>, other: Map!<Tkey, Tvalue>) -> void {
-		this.keys = vptr::null() as vptr!<Tkey>;
-		this.values = vptr::null() as vptr!<Tvalue>;
-		this.size = 0u;
-		this.capacity = 0u;
+		this.keys := vptr::null() as vptr!<Tkey>;
+		this.values := vptr::null() as vptr!<Tvalue>;
+		this.size := 0;
+		this.capacity := 0;
 
 		must this.grow(other.size());
 		for index in 0u..other.size() {

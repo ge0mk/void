@@ -106,16 +106,16 @@ struct File {
 	var ref_count: vptr!<uint>;
 
 	func constructor(this: &&File, c_file: vptr!<FILE>, ref_count: vptr!<uint>) -> void {
-		this.c_file = c_file;
-		this.ref_count = ref_count;
+		this.c_file := c_file;
+		this.ref_count := ref_count;
 		if this.ref_count != vptr::null() {
 			this.ref_count.value()++;
 		}
 	}
 
 	func constructor(this: &&File, other: File) -> void {
-		this.c_file = other.c_file;
-		this.ref_count = other.ref_count;
+		this.c_file := other.c_file;
+		this.ref_count := other.ref_count;
 		if this.ref_count != vptr::null() {
 			this.ref_count.value()++;
 		}

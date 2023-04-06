@@ -12,12 +12,12 @@ struct Foo {
 	var id: int;
 
 	func constructor(this: &&Foo) {
-		this.id = 0;
+		this.id := 0;
 		println("+" + format(this.id));
 	}
 
 	func constructor(this: &&Foo, other: Foo) {
-		this.id = other.id + 1;
+		this.id := other.id + 1;
 		println("+" + format(this.id));
 	}
 

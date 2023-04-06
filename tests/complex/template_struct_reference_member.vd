@@ -5,7 +5,13 @@ struct Foo {
 	var x: T;
 
 	func constructor(this: &&Foo!<T>, val: T) -> void {
-		this.x = val;
+		comptime if referenceKindOf!<T>() == ReferenceKind::Var {
+			this.x := &&val;
+		} else if referenceKindOf!<T>() == ReferenceKind::Const {
+			this.x := &val;
+		} else {
+			this.x := val;
+		}
 	}
 
 	func destructor(this: &&Foo!<T>) -> void {}

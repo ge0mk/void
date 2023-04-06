@@ -21,10 +21,10 @@ struct Application {
 	var drop_timer: u32;
 
 	func constructor(this: &&Application) {
-		this.window = sdl::createWindow("Tetris", 0, 0, 500, 1000, WindowFlags::None);
-		this.renderer = this.window.createRenderer(0i32, RendererFlags::PresentVSync);
+		this.window := sdl::createWindow("Tetris", 0, 0, 500, 1000, WindowFlags::None);
+		this.renderer := this.window.createRenderer(0i32, RendererFlags::PresentVSync);
 
-		this.tetrominos = [
+		this.tetrominos := [
 			// L
 			[0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0],
 			[0, 0, 0, 0, 0, 1, 1, 1, 0, 1, 0, 0, 0, 0, 0, 0],
@@ -62,7 +62,7 @@ struct Application {
 			[0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0]
 		];
 
-		this.colors = [
+		this.colors := [
 			[0x10, 0x1e, 0x29, 0xff],
 			[0x1a, 0xbc, 0x9c, 0xff],
 			[0x2e, 0xcc, 0x71, 0xff],
@@ -73,11 +73,11 @@ struct Application {
 			[0xe7, 0x4c, 0x3c, 0xff],
 		];
 
-		this.rng = 12345u;
-		this.id = 0u;
-		this.rotation = 0u;
-		this.offset_x = 3;
-		this.offset_y = 0;
+		this.rng := 12345;
+		this.id := 0;
+		this.rotation := 0;
+		this.offset_x := 3;
+		this.offset_y := 0;
 
 		this.createRandomTetromino();
 	}

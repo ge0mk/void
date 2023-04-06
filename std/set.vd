@@ -10,22 +10,22 @@ struct Set {
 	var capacity: uint;
 
 	func constructor(this: &&Set!<T>) -> void {
-		this.data = vptr::null() as vptr!<T>;
-		this.size = 0u;
-		this.capacity = 0u;
+		this.data := vptr::null() as vptr!<T>;
+		this.size := 0;
+		this.capacity := 0;
 	}
 
 	func constructor(this: &&Set!<T>, range: Range!<T>) -> void {
-		this.data = vptr::null() as vptr!<T>;
-		this.size = 0u;
-		this.capacity = 0u;
+		this.data := vptr::null() as vptr!<T>;
+		this.size := 0;
+		this.capacity := 0;
 		must this.add(range);
 	}
 
 	func constructor(this: &&Set!<T>, other: Set!<T>) -> void {
-		this.data = vptr::null() as vptr!<T>;
-		this.size = 0u;
-		this.capacity = 0u;
+		this.data := vptr::null() as vptr!<T>;
+		this.size := 0;
+		this.capacity := 0;
 
 		must this.grow(other.size());
 		for index in 0u..other.size() {

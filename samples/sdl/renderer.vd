@@ -37,10 +37,10 @@ struct Rect {
 	var height: i32;
 
 	func constructor(this: &&Rect, x: i32, y: i32, width: i32, height: i32) {
-		this.x = x;
-		this.y = y;
-		this.width = width;
-		this.height = height;
+		this.x := x;
+		this.y := y;
+		this.width := width;
+		this.height := height;
 	}
 
 	func destructor(this: &&Rect) {}

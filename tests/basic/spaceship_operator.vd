@@ -4,7 +4,7 @@ struct Foo {
 	var value: int;
 
 	func constructor(this: &&Foo, value: int) {
-		this.value = value;
+		this.value := value;
 	}
 
 	func destructor(this: &&Foo) {}
