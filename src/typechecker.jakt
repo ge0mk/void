@@ -1,4 +1,3 @@
-import jakt::platform::utility
 import utility
 import ast
 import program {*}

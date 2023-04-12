@@ -1,4 +1,4 @@
-import utility { Span, loadFile, CompilerOptions, SymbolType }
+import utility { Span, loadFile, CompilerOptions, SymbolType, join }
 import lexer
 import ast
 import parser
@@ -9,7 +9,6 @@ import codegenerator
 import jakt::libc::io { system }
 import jakt::platform { platform_module }
 import platform_module("jakt::platform::fs") { current_directory }
-import jakt::platform::utility
 import jakt::file_iterator
 
 struct Compiler {

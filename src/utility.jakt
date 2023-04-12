@@ -1,5 +1,3 @@
-import jakt::platform::utility
-
 class CompilerOptions {
 	public dbg_lexer: bool
 	public dbg_parser: bool
@@ -208,4 +206,38 @@ fn setToOrderedList(set: {u64}) throws -> [u64] {
 	}
 
 	return result
+}
+
+fn join(anon args: [String], separator: String) throws -> String {
+	mut result = ""
+	for i in 0..args.size() {
+		if i != 0 {
+			result += separator
+		}
+		result += args[i]
+	}
+	return result
+}
+
+fn null<T>() -> raw T {
+	unsafe {
+		cpp {
+			"return nullptr;"
+		}
+	}
+	abort()
+}
+
+fn allocate<T>(count: usize) -> raw T {
+	let alloc_impl = fn[count](anon ptr: &mut raw T) -> void {
+		unsafe {
+			cpp {
+				"ptr = static_cast<RemoveReference<decltype(ptr)>>(calloc(count, sizeof(*ptr)));"
+			}
+		}
+	}
+
+	mut ptr = null<T>()
+	alloc_impl(&mut ptr)
+	return ptr
 }

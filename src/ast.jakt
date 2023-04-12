@@ -318,7 +318,7 @@ enum ParsedBinaryOperator {
 		| CoalescingAssign => 50
 	}
 
-	fn to_string(this) => match this {
+	fn to_string(this) throws => match this {
 		Add => "+"
 		Sub => "-"
 		Mul => "*"
@@ -365,14 +365,12 @@ enum ParsedUnaryOperator {
 	LogicalNot
 	BitwiseNot
 
-	fn to_string(this) -> String {
-		return match this {
-			Increment => "++"
-			Decrement => "--"
-			Negate => "-"
-			LogicalNot => "!"
-			BitwiseNot => "~"
-		}
+	fn to_string(this) throws -> String => match this {
+		Increment => "++"
+		Decrement => "--"
+		Negate => "-"
+		LogicalNot => "!"
+		BitwiseNot => "~"
 	}
 }
 

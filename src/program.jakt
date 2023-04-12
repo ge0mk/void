@@ -1,4 +1,3 @@
-import jakt::platform::utility
 import utility { Span, cloneList, printError, panic }
 import ast
 
@@ -834,7 +833,7 @@ class FunctionDecl {
 		}
 	}
 
-	public fn matches(this, namespaces: [String], name: String, is_comparison: bool) -> bool {
+	public fn matches(this, namespaces: [String], name: String, is_comparison: bool) throws -> bool {
 		if namespaces.is_empty() and is_comparison {
 			if .name == "operator <=>" {
 				return true

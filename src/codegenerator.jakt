@@ -1,4 +1,3 @@
-import jakt::platform::utility
 import utility
 import program {*}
 
@@ -1370,7 +1369,7 @@ struct CodegenContext {
 		}
 	}
 
-	fn codegenInlineBuiltinFunction(mut this, builder: LLVMBuilderRef, func_id: u64, args: [LLVMValueRef], builtin: InlineBuiltinFunction) -> LLVMValueRef? => match builtin {
+	fn codegenInlineBuiltinFunction(mut this, builder: LLVMBuilderRef, func_id: u64, args: [LLVMValueRef], builtin: InlineBuiltinFunction) throws -> LLVMValueRef? => match builtin {
 		PrimitiveNullConstructor(type) => {
 			LLVMBuildStore(builder, LLVMConstNull(.types[type.id]), args[0])
 			yield None
@@ -2196,7 +2195,7 @@ struct CodegenContext {
 	}
 
 	// LLVMStoreSizeOfType only consideres a single value, in case of an array there might be padding after each element
-	fn codegenSizeOf(mut this, builder: LLVMBuilderRef, type: LLVMTypeRef) -> LLVMValueRef {
+	fn codegenSizeOf(mut this, builder: LLVMBuilderRef, type: LLVMTypeRef) throws -> LLVMValueRef {
 		mut size = LLVMConstNull(LLVMPointerTypeInContext(.llvm_context, 0))
 		try {
 			let indices = [LLVMConstInt(.types[.program.int_type.id], 1, false)]
