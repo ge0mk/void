@@ -58,26 +58,36 @@ template <T: type>
 struct WeakPtr {
 	var data: vptr!<refc!<T>>;
 
+	func constructor(this: &&WeakPtr!<T>) -> void = default;
+
 	func constructor(this: &&WeakPtr!<T>, data: vptr!<refc!<T>>) {
 		this.data := data;
-		this.data[0u].weak_count++;
+		if this.data != vptr::null() {
+			this.data[0u].weak_count++;
+		}
 	}
 
 	func constructor(this: &&WeakPtr!<T>, other: SharedPtr!<T>) {
 		this.data := other.data;
-		this.data[0u].weak_count++;
+		if this.data != vptr::null() {
+			this.data[0u].weak_count++;
+		}
 	}
 
 	func constructor(this: &&WeakPtr!<T>, other: WeakPtr!<T>) {
 		this.data := other.data;
-		this.data[0u].weak_count++;
+		if this.data != vptr::null() {
+			this.data[0u].weak_count++;
+		}
 	}
 
 	func destructor(this: &&WeakPtr!<T>) {
-		this.data[0u].weak_count--;
+		if this.data != vptr::null() {
+			this.data[0u].weak_count--;
 
-		if this.data[0u].strong_count == 0 && this.data[0u].weak_count == 0 {
-			libc::stdlib::free(this.data as vptr);
+			if this.data[0u].strong_count == 0 && this.data[0u].weak_count == 0 {
+				libc::stdlib::free(this.data as vptr);
+			}
 		}
 	}
 
@@ -87,15 +97,23 @@ struct WeakPtr {
 	}
 
 	func isAlive(this: WeakPtr!<T>) -> bool {
+		if this.data == vptr::null() {
+			return false;
+		}
+
 		return this.data[0u].strong_count > 0;
 	}
 
 	func lock(this: &WeakPtr!<T>) -> Optional!<SharedPtr!<T>> {
-		if this.data[0u].strong_count > 0 {
-			return Some(SharedPtr!<T>(this.data));
-		} else {
+		if this.data == vptr::null() {
 			return None;
 		}
+
+		if this.data[0u].strong_count <= 0 {
+			return None;
+		}
+
+		return Some(SharedPtr!<T>(this.data));
 	}
 
 	operator <=>(this: WeakPtr!<T>, other: WeakPtr!<T>) -> int {
