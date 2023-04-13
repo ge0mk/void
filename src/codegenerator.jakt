@@ -509,6 +509,7 @@ struct CodegenContext {
 		}
 
 		let name = match .options.symbol_type {
+			None => ""
 			Id => format("t{}", type.id)
 			Name => type.name
 			Signature => .program.formatTypeSignature(type: Type::Base(id: type.id))
@@ -621,6 +622,7 @@ struct CodegenContext {
 		let name = match func.extern_name.has_value() {
 			true => func.extern_name!
 			else => match .options.symbol_type {
+				None => ""
 				Id => format("f{}", func.id)
 				Name => func.name
 				Signature => .program.formatFunctionSignature(func: Function(id: func.id))

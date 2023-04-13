@@ -211,7 +211,7 @@ fn main(args: [String]) -> c_int {
 		additional_llvm_ir_files: []
 
 		symbol_type: match args.contains("-s") {
-			true => SymbolType::Id
+			true => SymbolType::None
 			else => SymbolType::Signature
 		}
 
