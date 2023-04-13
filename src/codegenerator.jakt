@@ -1331,19 +1331,6 @@ struct CodegenContext {
 
 	fn codegenCall(mut this, builder: LLVMBuilderRef, func: Function, args: [LLVMValueRef]) throws -> LLVMValueRef? {
 		let decl = .program.functions[func.id]
-		if decl.name == "constructor" and args.size() >= 1 {
-			let (ifunc, itype) = .getIntrinsic(name: "llvm.lifetime.start", arg_types: [LLVMPointerTypeInContext(.llvm_context, 0)])
-			let iargs = [LLVMConstInt(LLVMIntTypeInContext(.llvm_context, 64), 1, false), args[0]]
-			LLVMBuildCall2(builder, itype, ifunc, &raw iargs[0], iargs.size() as! u64, "".c_string())
-		}
-
-		defer {
-			if decl.name == "destructor" and args.size() >= 1 {
-				let (ifunc, itype) = .getIntrinsic(name: "llvm.lifetime.end", arg_types: [LLVMPointerTypeInContext(.llvm_context, 0)])
-				let iargs = [LLVMConstInt(LLVMIntTypeInContext(.llvm_context, 64), 1, false), args[0]]
-				LLVMBuildCall2(builder, itype, ifunc, &raw iargs[0], iargs.size() as! u64, "".c_string())
-			}
-		}
 
 		if decl.kind is InlineBuiltin(builtin) {
 			return .codegenInlineBuiltinFunction(builder, func_id: func.id, args, builtin)

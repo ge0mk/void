@@ -33,6 +33,9 @@ planned features (wip / near future)
 --
 - meta: write a better readme
 - selfhosted compiler
+- compiler: generate better llvm ir
+	- lifetime intrinsics
+	- function attributes (especially for allocators)
 - compiler: optional chaining `foo()?.bar()`
 	- `bar()` can be any operator, function call or member var access
 	- codegen to `foo().value().bar() if foo().hasValue() else None` (but only codegen `foo()` once)
