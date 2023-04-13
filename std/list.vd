@@ -107,6 +107,14 @@ struct List {
 		return Ok(this.data[index]);
 	}
 
+	operator [](this: List!<T>, index: uint) -> Result!<T> {
+		if index >= this.size() {
+			throw Error::ERANGE;
+		}
+
+		return Ok(this.data[index]);
+	}
+
 	operator [](this: &List!<T>, index: uint) -> Result!<&T> {
 		if index >= this.size() {
 			throw Error::ERANGE;
@@ -267,7 +275,7 @@ struct List {
 	}
 
 	func remove(this: &&List!<T>, range: NumericRange!<uint>) -> Result!<void> {
-		if range.end >= this.size() {
+		if range.start > this.size || range.end > this.size {
 			throw Error::ERANGE;
 		}
 

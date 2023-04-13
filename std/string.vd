@@ -183,7 +183,7 @@ struct String {
 	}
 
 	func remove(this: &&String, range: NumericRange!<uint>) -> Result!<void> {
-		if range.start >= this.size || range.end >= this.size {
+		if range.start > this.size || range.end > this.size {
 			throw Error::ERANGE;
 		}
 

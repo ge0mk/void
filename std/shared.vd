@@ -81,11 +81,16 @@ struct WeakPtr {
 		}
 	}
 
+	operator =(this: &&WeakPtr!<T>, other: WeakPtr!<T>) -> void {
+		this.destructor();
+		this.constructor(other);
+	}
+
 	func isAlive(this: WeakPtr!<T>) -> bool {
 		return this.data[0u].strong_count > 0;
 	}
 
-	func lock(this: &&WeakPtr!<T>) -> Optional!<SharedPtr!<T>> {
+	func lock(this: &WeakPtr!<T>) -> Optional!<SharedPtr!<T>> {
 		if this.data[0u].strong_count > 0 {
 			return Some(SharedPtr!<T>(this.data));
 		} else {

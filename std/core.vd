@@ -139,6 +139,10 @@ variant Optional {
 	case None;
 	case Some: T;
 
+	func constructor(this: &&Optional!<T>) -> void {
+		this.constructor!<0>();	// default to None
+	}
+
 	func hasValue(this: Optional!<T>) -> bool {
 		return this is Some;
 	}
