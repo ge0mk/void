@@ -3019,6 +3019,7 @@ struct Typechecker {
 						)
 
 						checked_object = .createCall(span, func: operator_unwrap!, args: [checked_object], caller: context.body, is_member_call: true, name: "operator unwrap")
+						checked_object = removeDereference(checked_object)
 
 						var = decl
 						break
