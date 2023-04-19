@@ -4203,61 +4203,35 @@ struct Typechecker {
 				cleanup_list = cloneList<Expr>(list: loop_cleanup_list)
 			}
 			Return(span, &mut value, &mut cleanup_list) => {
-				if value.has_value() {
-					.regroupDestructorCalls(func, expr: value!, function_cleanup_list, loop_cleanup_list)
-				}
-
 				cleanup_list = cloneList<Expr>(list: function_cleanup_list)
 
-				if value.has_value() {
-					mut tmp = removeDereference(value!)
-
-					mut copyReturnValue = false
-
-					if tmp is VarInvoke(var) {
-						if func.variables[var.id].is_param and not .program.isPrimitive(type: func.variables[var.id].type) {
-							copyReturnValue = true
-						} else {
-							// if the return value is a var-invoke expr,
-							// don't call the destructor of that variable,
-							// the caller should call the destructor of the returned value
-							mut tmpCleanupList: [Expr] = []
-							for call in cleanup_list {
-								guard call is Call(args) else {
-									panic("invalid cleanup_list")
-								}
-
-								guard args[0] is VarInvoke(var: other) else {
-									panic("invalid destructor call")
-								}
-
-								if other.id != var.id {
-									tmpCleanupList.push(call)
-								}
-							}
-							cleanup_list = tmpCleanupList
-						}
-					} else if tmp is MemberAccess {
-						copyReturnValue = true
-					}
-
-					// if the value is a member var invoke expr or a parameter return a copy to avoid double free
-					if copyReturnValue and value!.type is Base {
-						let type = value!.type
-						let var = func.createVariable(span: Span::empty(), is_const: true, name: "", type, init: value!)
-						let constructor_call = .createConstructorCall(var: func.variables[var.id], caller: func)
-
-						value = Expr::Dereference(
-							span: Span::empty(), type
-							value: Expr::TempVariable(
-								span: Span::empty(),
-								type: Type::ConstRef(id: type.id),
-								constructor_call, var,
-								destructor_call: None
-							)
-						)
-					}
+				guard value.has_value() else {
+					break
 				}
+
+				.regroupDestructorCalls(func, expr: value!, function_cleanup_list, loop_cleanup_list)
+
+				guard value! is Dereference(value: base) else {
+					break
+				}
+
+				if .program.isPrimitive(type: value!.type) or base is TempVariable {
+					break
+				}
+
+				let type = value!.type
+				let var = func.createVariable(span: Span::empty(), is_const: true, name: "", type, init: value!)
+				let constructor_call = .createConstructorCall(var: func.variables[var.id], caller: func)
+
+				value = Expr::Dereference(
+					span: Span::empty(), type
+					value: Expr::TempVariable(
+						span: Span::empty(),
+						type: Type::ConstRef(id: type.id),
+						constructor_call, var,
+						destructor_call: None
+					)
+				)
 			}
 			Discard(value) => {
 				.regroupDestructorCalls(func, expr: value, function_cleanup_list, loop_cleanup_list)
@@ -4302,6 +4276,9 @@ struct Typechecker {
 				.regroupDestructorCalls(func, expr: true_value, function_cleanup_list, loop_cleanup_list)
 				.regroupDestructorCalls(func, expr: condition, function_cleanup_list, loop_cleanup_list)
 				.regroupDestructorCalls(func, expr: false_value, function_cleanup_list, loop_cleanup_list)
+			}
+			TempVariable(constructor_call) => {
+				.regroupDestructorCalls(func, expr: constructor_call, function_cleanup_list, loop_cleanup_list)
 			}
 			else => {}
 		}

@@ -1,0 +1,32 @@
+import std/core;
+import std/string;
+import std/io;
+
+struct Foo {
+	var x: int;
+
+	func constructor(this: &&Foo) {
+		print("+");
+	}
+
+	func constructor(this: &&Foo, other: Foo) {
+		print("=");
+	}
+
+	func destructor(this: &&Foo) {
+		print("-");
+	}
+
+	operator ==(this: Foo, other: Foo) -> bool {
+		return true;
+	}
+}
+
+func bar(x: Result!<&&Foo>) -> Foo {
+	return must x;
+}
+
+func main() {
+	var x: Foo;
+	discard bar(Result!<&&Foo>::Ok(&&x));
+}

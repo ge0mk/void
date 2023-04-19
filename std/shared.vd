@@ -23,6 +23,8 @@ struct SharedPtr {
 	}
 
 	func destructor(this: &&SharedPtr!<T>) {
+		assert(this.data[0u].strong_count > 0);
+
 		if this.data[0u].strong_count == 1 {
 			this.data[0u].value.destructor();
 		}
