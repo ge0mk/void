@@ -69,6 +69,9 @@ planned features (wip / near future)
 - compiler: better debug info
 	- types
 	- variables
+- compiler: optimizations on ast-level:
+	- eliminate unnecessary copying
+	- function inlining
 - compiler: cashing of (partially) compiled modules (llvm-ir, output of typechecker ?)
 - stdlib:
 	- `format("{}", ...)` for text formatting, similar to https://github.com/fmtlib/fmt
