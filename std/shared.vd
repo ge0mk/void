@@ -23,10 +23,11 @@ struct SharedPtr {
 	}
 
 	func destructor(this: &&SharedPtr!<T>) {
-		this.data[0u].strong_count--;
-		if this.data[0u].strong_count == 0 {
+		if this.data[0u].strong_count == 1 {
 			this.data[0u].value.destructor();
 		}
+
+		this.data[0u].strong_count--;
 
 		if this.data[0u].strong_count == 0 && this.data[0u].weak_count == 0 {
 			libc::stdlib::free(this.data as vptr);
