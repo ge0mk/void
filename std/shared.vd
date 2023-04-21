@@ -36,6 +36,11 @@ struct SharedPtr {
 		}
 	}
 
+	operator =(this: &&SharedPtr!<T>, other: SharedPtr!<T>) -> void {
+		this.destructor();
+		this.constructor(other);
+	}
+
 	func new(value: T) -> SharedPtr!<T> {
 		var data = libc::stdlib::malloc(sizeOf!<refc!<T>>()) as vptr!<refc!<T>>;
 		data[0u].strong_count = 0;

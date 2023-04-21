@@ -11,17 +11,27 @@ struct Box {
 		this.data.value().constructor(value);
 	}
 
+	func constructor(this: &&Box!<T>, other: Box!<T>) -> void {
+		this.data := libc::stdlib::malloc(sizeOf!<T>()) as vptr!<T>;
+		assert(this.data != vptr::null());
+		this.data.value().constructor(other.data.value());
+	}
+
 	func destructor(this: &&Box!<T>) -> void {
 		this.data.value().destructor();
 		libc::stdlib::free(this.data as vptr);
 	}
 
+	operator =(this: &&Box!<T>, other: Box!<T>) -> void {
+		this.data.value() = other.data.value();
+	}
+
 	operator ==(this: Box!<T>, other: Box!<T>) -> bool {
-		return this.operator unwrap() == other.operator unwrap();
+		return this.data.value() == other.data.value();
 	}
 
 	operator ==(this: Box!<T>, other: T) -> bool {
-		return this.operator unwrap() == other;
+		return this.data.value() == other;
 	}
 
 	operator unwrap(this: Box!<T>) -> T {
