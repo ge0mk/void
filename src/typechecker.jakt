@@ -249,7 +249,7 @@ struct Typechecker {
 		return instance
 	}
 
-	fn getFunction(mut this, namespaces: [String], name: String, parent_type: Type?, template_parameters: [TemplateParameter], param_types: [Type], firstArgRefType: Type?, span: Span, allow_spaceship_operator: bool = false) throws -> Function? {
+	fn getFunction(mut this, namespaces: [String], name: String, parent_type: Type?, template_parameters: [TemplateParameter], param_types: [Type], firstArgRefType: Type?, span: Span, allow_spaceship_operator: bool = false, allow_unwrapping: bool = true) throws -> Function? {
 		let is_comparison = match name {
 			"operator =="
 			| "operator !="
@@ -259,7 +259,6 @@ struct Typechecker {
 			| "operator >=" => allow_spaceship_operator
 			else => false
 		}
-		let allow_unwrapping = name != "operator unwrap"
 
 		let functions_with_matching_name = .module.getMatchingFunctions(namespaces, name, parent_type, is_comparison)
 
@@ -283,7 +282,7 @@ struct Typechecker {
 		mut matching_functions: [u64] = []
 		mut most_matching_parameters = 0
 		for id in unique_functions {
-			let (is_match, matching_parameters) = .doFunctionParametersMatch(func: Function(id), param_types, firstArgRefType, allow_unwrapping)
+			let (is_match, matching_parameters) = .doFunctionParametersMatch(func: Function(id), param_types, firstArgRefType, allow_unwrapping: allow_unwrapping and name != "operator unwrap")
 
 			guard is_match and matching_parameters >= most_matching_parameters else {
 				continue
@@ -1162,21 +1161,9 @@ struct Typechecker {
 							param_types: [v.type.varRef(), v.type],
 							firstArgRefType: v.type.varRef(),
 							span: v.span,
-							allow_spaceship_operator: false
+							allow_spaceship_operator: false,
+							allow_unwrapping: false
 						)
-
-						let func_type = .program.functions[v.type_copy_constructor!.id].type
-						if v.type.id != func_type.param_types[1].id {
-							v.type_op_unwrap = .getFunction(
-								namespaces: [],
-								name: "operator unwrap",
-								parent_type: v.type,
-								template_parameters: [],
-								param_types: [v.type],
-								firstArgRefType: None,
-								span: Span::empty(),
-							)
-						}
 
 						v.type_destructor = .getFunction(
 							namespaces: [], name: "destructor",
@@ -1185,7 +1172,8 @@ struct Typechecker {
 							param_types: [v.type.varRef()],
 							firstArgRefType: v.type.varRef(),
 							span: v.span,
-							allow_spaceship_operator: false
+							allow_spaceship_operator: false,
+							allow_unwrapping: false
 						)
 					}
 				}
@@ -1206,22 +1194,27 @@ struct Typechecker {
 		}
 
 		let type = decl.type
-		decl.type_copy_constructor = .getFunction(namespaces: [], name: "constructor", parent_type: type, template_parameters: [], param_types: [type.varRef(), type], firstArgRefType: type.varRef(), span: decl.span)
+		decl.type_copy_constructor = .getFunction(
+			namespaces: [],
+			name: "constructor",
+			parent_type: type,
+			template_parameters: [],
+			param_types: [type.varRef(), type],
+			firstArgRefType: type.varRef(),
+			span: decl.span,
+			allow_unwrapping: false
+		)
 
-		let func_type = .program.functions[decl.type_copy_constructor!.id].type
-		if type.id != func_type.param_types[1].id {
-			decl.type_op_unwrap = .getFunction(
-				namespaces: [],
-				name: "operator unwrap",
-				parent_type: type,
-				template_parameters: [],
-				param_types: [type],
-				firstArgRefType: None,
-				span: Span::empty(),
-			)
-		}
-
-		decl.type_destructor = .getFunction(namespaces: [], name: "destructor", parent_type: type, template_parameters: [], param_types: [type.varRef()], firstArgRefType: type.varRef(), span: decl.span)
+		decl.type_destructor = .getFunction(
+			namespaces: [],
+			name: "destructor",
+			parent_type: type,
+			template_parameters: [],
+			param_types: [type.varRef()],
+			firstArgRefType: type.varRef(),
+			span: decl.span,
+			allow_unwrapping: false
+		)
 
 		guard decl.type_copy_constructor.has_value() and decl.type_destructor.has_value() else {
 			.module.error("type attached to variant case must implement copy constructor and destructor", decl.span)
@@ -1352,7 +1345,8 @@ struct Typechecker {
 				template_parameters: [],
 				param_types: [v.type.varRef()],
 				firstArgRefType: v.type.varRef(),
-				span: error_span
+				span: error_span,
+				allow_unwrapping: false
 			)
 		}
 
@@ -1374,21 +1368,9 @@ struct Typechecker {
 				template_parameters: [],
 				param_types: [v.type.varRef(), v.type],
 				firstArgRefType: v.type.varRef(),
-				span: error_span
+				span: error_span,
+				allow_unwrapping: false
 			)
-
-			let func_type = .program.functions[v.type_copy_constructor!.id].type
-			if v.type.id != func_type.param_types[1].id {
-				v.type_op_unwrap = .getFunction(
-					namespaces: [],
-					name: "operator unwrap",
-					parent_type: v.type,
-					template_parameters: [],
-					param_types: [v.type],
-					firstArgRefType: None,
-					span: Span::empty(),
-				)
-			}
 		}
 
 		.program.functions[func.id].kind = FunctionDeclKind::Builtin(
@@ -1409,7 +1391,8 @@ struct Typechecker {
 				template_parameters: [],
 				param_types: [v.type.varRef()],
 				firstArgRefType: v.type.varRef(),
-				span: error_span
+				span: error_span,
+				allow_unwrapping: false
 			)
 		}
 
@@ -1431,21 +1414,9 @@ struct Typechecker {
 				template_parameters: [],
 				param_types: [v.type.varRef(), v.type],
 				firstArgRefType: v.type.varRef(),
-				span: error_span
+				span: error_span,
+				allow_unwrapping: false
 			)
-
-			let func_type = .program.functions[v.type_op_assign!.id].type
-			if v.type.id != func_type.param_types[1].id and not v.type_op_unwrap.has_value() {
-				v.type_op_unwrap = .getFunction(
-					namespaces: [],
-					name: "operator unwrap",
-					parent_type: v.type,
-					template_parameters: [],
-					param_types: [v.type],
-					firstArgRefType: None,
-					span: Span::empty(),
-				)
-			}
 		}
 
 		.program.functions[func.id].kind = FunctionDeclKind::Builtin(
@@ -1466,7 +1437,8 @@ struct Typechecker {
 				template_parameters: [],
 				param_types: [v.type, v.type],
 				firstArgRefType: None,
-				span: error_span
+				span: error_span,
+				allow_unwrapping: false
 			)
 		}
 
@@ -1527,7 +1499,8 @@ struct Typechecker {
 				template_parameters: [],
 				param_types: [c.type, c.type],
 				firstArgRefType: None,
-				span: error_span
+				span: error_span,
+				allow_unwrapping: false
 			)
 		}
 
@@ -1543,7 +1516,8 @@ struct Typechecker {
 				template_parameters: [],
 				param_types: [v.type, v.type],
 				firstArgRefType: None,
-				span: error_span
+				span: error_span,
+				allow_unwrapping: false
 			)
 		}
 
@@ -1585,7 +1559,8 @@ struct Typechecker {
 			param_types: [optional_type.varRef(), case_type],
 			firstArgRefType: optional_type.varRef(),
 			span: c.span,
-			allow_spaceship_operator: false
+			allow_spaceship_operator: false,
+			allow_unwrapping: false
 		)!
 
 		let none_constructor: Function = .getFunction(
@@ -1598,7 +1573,8 @@ struct Typechecker {
 			param_types: [optional_type.varRef()],
 			firstArgRefType: optional_type.varRef(),
 			span: c.span,
-			allow_spaceship_operator: false
+			allow_spaceship_operator: false,
+			allow_unwrapping: false
 		)!
 
 		.module.createBuiltinFunction(

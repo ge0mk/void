@@ -1735,9 +1735,6 @@ struct CodegenContext {
 					mut other_member = LLVMBuildExtractValue(builder, llvm_func.args[1], v.id as! u32, "".c_string())
 
 					if v.type is Base {
-						if .program.functions[v.type_copy_constructor!.id].type.param_types[1].id != v.type.id {
-							other_member = .codegenCall(builder, func: v.type_op_unwrap!, args: [other_member])!
-						}
 						let _ = .codegenCall(builder, func: v.type_copy_constructor!, args: [this_member_ptr, other_member])
 					} else {
 						LLVMBuildStore(builder, other_member, this_member_ptr)
@@ -1760,10 +1757,6 @@ struct CodegenContext {
 					mut other_member = LLVMBuildExtractValue(builder, llvm_func.args[1], v.id as! u32, "".c_string())
 
 					if v.type is Base {
-						if .program.functions[v.type_op_assign!.id].type.param_types[1].id != v.type.id {
-							other_member = .codegenCall(builder, func: v.type_op_unwrap!, args: [other_member])!
-						}
-
 						let _ = .codegenCall(builder, func: v.type_op_assign!, args: [this_member_ptr, other_member])
 					} else {
 						LLVMBuildStore(builder, other_member, this_member_ptr)
@@ -1816,10 +1809,6 @@ struct CodegenContext {
 					mut other_value = llvm_func.args[1]
 
 					if case_decl!.type is Base {
-						if .program.functions[case_decl!.type_copy_constructor!.id].type.param_types[1].id != case_decl!.type.id {
-							other_value = .codegenCall(builder, func: case_decl!.type_op_unwrap!, args: [other_value])!
-						}
-
 						let _ = .codegenCall(builder, func: case_decl!.type_copy_constructor!, args: [value_ptr, other_value])
 					} else {
 						LLVMBuildStore(builder, llvm_func.args[1], value_ptr)
@@ -1834,10 +1823,6 @@ struct CodegenContext {
 					let var_ptr = LLVMBuildStructGEP2(builder, .types[type.id], obj, i as! u32 + 2, "".c_string())
 
 					if var_decl.type is Base {
-						if .program.functions[var_decl.type_copy_constructor!.id].type.param_types[1].id != var_decl.type.id {
-							other_value = .codegenCall(builder, func: var_decl.type_op_unwrap!, args: [other_value])!
-						}
-
 						let _ = .codegenCall(builder, func: var_decl.type_copy_constructor!, args: [var_ptr, other_value])
 					} else {
 						LLVMBuildStore(builder, other_value, var_ptr)
@@ -1881,10 +1866,6 @@ struct CodegenContext {
 					mut other_value = LLVMBuildLoad2(builder, value_type, other_value_ptr, "".c_string())
 
 					if c.type is Base {
-						if .program.functions[c.type_copy_constructor!.id].type.param_types[1].id != c.type.id {
-							other_value = .codegenCall(builder, func: c.type_op_unwrap!, args: [other_value])!
-						}
-
 						let _ = .codegenCall(builder, func: c.type_copy_constructor!, args: [this_value_ptr, other_value])
 					} else {
 						LLVMBuildStore(builder, other_value, this_value_ptr)
@@ -1903,10 +1884,6 @@ struct CodegenContext {
 					mut other_value = LLVMBuildLoad2(builder, var_type, other_var_ptr, "".c_string())
 
 					if var_decl.type is Base {
-						if .program.functions[var_decl.type_copy_constructor!.id].type.param_types[1].id != var_decl.type.id {
-							other_value = .codegenCall(builder, func: var_decl.type_op_unwrap!, args: [other_value])!
-						}
-
 						let _ = .codegenCall(builder, func: var_decl.type_copy_constructor!, args: [this_var_ptr, other_value])
 					} else {
 						LLVMBuildStore(builder, other_value, this_var_ptr)
