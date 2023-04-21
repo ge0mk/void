@@ -249,7 +249,7 @@ struct Typechecker {
 		return instance
 	}
 
-	fn getFunction(mut this, namespaces: [String], name: String, parent_type: Type?, template_parameters: [TemplateParameter], param_types: [Type], firstArgRefType: Type?, span: Span, allow_spaceship_operator: bool = false, allow_unwrapping: bool = true) throws -> Function? {
+	fn getFunction(mut this, namespaces: [String], name: String, parent_type: Type?, template_parameters: [TemplateParameter], param_types: [Type], first_arg_ref_type: Type?, span: Span, allow_spaceship_operator: bool = false, allow_unwrapping: bool = true) throws -> Function? {
 		let is_comparison = match name {
 			"operator =="
 			| "operator !="
@@ -282,7 +282,12 @@ struct Typechecker {
 		mut matching_functions: [u64] = []
 		mut most_matching_parameters = 0
 		for id in unique_functions {
-			let (is_match, matching_parameters) = .doFunctionParametersMatch(func: Function(id), param_types, firstArgRefType, allow_unwrapping: allow_unwrapping and name != "operator unwrap")
+			let (is_match, matching_parameters) = .doFunctionParametersMatch(
+				func: Function(id),
+				param_types,
+				first_arg_ref_type,
+				allow_unwrapping: allow_unwrapping and name != "operator unwrap"
+			)
 
 			guard is_match and matching_parameters >= most_matching_parameters else {
 				continue
@@ -298,7 +303,16 @@ struct Typechecker {
 
 		if matching_functions.is_empty() {
 			if not allow_spaceship_operator and namespaces.is_empty() and parent_type.has_value() {
-				return .getFunction(namespaces, name, parent_type, template_parameters, param_types, firstArgRefType, span, allow_spaceship_operator: true)
+				return .getFunction(
+					namespaces,
+					name,
+					parent_type,
+					template_parameters,
+					param_types,
+					first_arg_ref_type,
+					span,
+					allow_spaceship_operator: true
+				)
 			}
 
 			.module.error(format("no matching function found: {}::{}{}{}", 
@@ -693,7 +707,7 @@ struct Typechecker {
 		}
 	}
 
-	fn doFunctionParametersMatch(this, func: Function, param_types: [Type], firstArgRefType: Type?, allow_unwrapping: bool) throws -> (bool, i64) {
+	fn doFunctionParametersMatch(this, func: Function, param_types: [Type], first_arg_ref_type: Type?, allow_unwrapping: bool) throws -> (bool, i64) {
 		let func_type = .program.functions[func.id].type
 
 		if param_types.size() != func_type.param_types.size() {
@@ -706,8 +720,8 @@ struct Typechecker {
 			let requiredType = func_type.param_types[index]
 			mut must_be_unwrapped = false
 
-			if index == 0 and firstArgRefType.has_value() {
-				givenType = firstArgRefType!
+			if index == 0 and first_arg_ref_type.has_value() {
+				givenType = first_arg_ref_type!
 			}
 
 			if givenType.id != requiredType.id and allow_unwrapping and .program.types[givenType.id].unwrapped.has_value() {
@@ -1159,7 +1173,7 @@ struct Typechecker {
 							parent_type: v.type,
 							template_parameters: [],
 							param_types: [v.type.varRef(), v.type],
-							firstArgRefType: v.type.varRef(),
+							first_arg_ref_type: v.type.varRef(),
 							span: v.span,
 							allow_spaceship_operator: false,
 							allow_unwrapping: false
@@ -1170,7 +1184,7 @@ struct Typechecker {
 							parent_type: v.type,
 							template_parameters: [],
 							param_types: [v.type.varRef()],
-							firstArgRefType: v.type.varRef(),
+							first_arg_ref_type: v.type.varRef(),
 							span: v.span,
 							allow_spaceship_operator: false,
 							allow_unwrapping: false
@@ -1200,7 +1214,7 @@ struct Typechecker {
 			parent_type: type,
 			template_parameters: [],
 			param_types: [type.varRef(), type],
-			firstArgRefType: type.varRef(),
+			first_arg_ref_type: type.varRef(),
 			span: decl.span,
 			allow_unwrapping: false
 		)
@@ -1211,7 +1225,7 @@ struct Typechecker {
 			parent_type: type,
 			template_parameters: [],
 			param_types: [type.varRef()],
-			firstArgRefType: type.varRef(),
+			first_arg_ref_type: type.varRef(),
 			span: decl.span,
 			allow_unwrapping: false
 		)
@@ -1344,7 +1358,7 @@ struct Typechecker {
 				parent_type: v.type,
 				template_parameters: [],
 				param_types: [v.type.varRef()],
-				firstArgRefType: v.type.varRef(),
+				first_arg_ref_type: v.type.varRef(),
 				span: error_span,
 				allow_unwrapping: false
 			)
@@ -1367,7 +1381,7 @@ struct Typechecker {
 				parent_type: v.type,
 				template_parameters: [],
 				param_types: [v.type.varRef(), v.type],
-				firstArgRefType: v.type.varRef(),
+				first_arg_ref_type: v.type.varRef(),
 				span: error_span,
 				allow_unwrapping: false
 			)
@@ -1390,7 +1404,7 @@ struct Typechecker {
 				parent_type: v.type,
 				template_parameters: [],
 				param_types: [v.type.varRef()],
-				firstArgRefType: v.type.varRef(),
+				first_arg_ref_type: v.type.varRef(),
 				span: error_span,
 				allow_unwrapping: false
 			)
@@ -1413,7 +1427,7 @@ struct Typechecker {
 				parent_type: v.type,
 				template_parameters: [],
 				param_types: [v.type.varRef(), v.type],
-				firstArgRefType: v.type.varRef(),
+				first_arg_ref_type: v.type.varRef(),
 				span: error_span,
 				allow_unwrapping: false
 			)
@@ -1436,7 +1450,7 @@ struct Typechecker {
 				parent_type: v.type,
 				template_parameters: [],
 				param_types: [v.type, v.type],
-				firstArgRefType: None,
+				first_arg_ref_type: None,
 				span: error_span,
 				allow_unwrapping: false
 			)
@@ -1498,7 +1512,7 @@ struct Typechecker {
 				parent_type: c.type,
 				template_parameters: [],
 				param_types: [c.type, c.type],
-				firstArgRefType: None,
+				first_arg_ref_type: None,
 				span: error_span,
 				allow_unwrapping: false
 			)
@@ -1515,7 +1529,7 @@ struct Typechecker {
 				parent_type: v.type,
 				template_parameters: [],
 				param_types: [v.type, v.type],
-				firstArgRefType: None,
+				first_arg_ref_type: None,
 				span: error_span,
 				allow_unwrapping: false
 			)
@@ -1557,7 +1571,7 @@ struct Typechecker {
 				TemplateParameter::IntLiteral(span: Span::empty(), name: "id", value: some_case.id)
 			],
 			param_types: [optional_type.varRef(), case_type],
-			firstArgRefType: optional_type.varRef(),
+			first_arg_ref_type: optional_type.varRef(),
 			span: c.span,
 			allow_spaceship_operator: false,
 			allow_unwrapping: false
@@ -1571,7 +1585,7 @@ struct Typechecker {
 				TemplateParameter::IntLiteral(span: Span::empty(), name: "id", value: none_case.id)
 			],
 			param_types: [optional_type.varRef()],
-			firstArgRefType: optional_type.varRef(),
+			first_arg_ref_type: optional_type.varRef(),
 			span: c.span,
 			allow_spaceship_operator: false,
 			allow_unwrapping: false
@@ -1736,7 +1750,7 @@ struct Typechecker {
 						parent_type: var.type,
 						template_parameters: [],
 						param_types: [memberVarExpr.type],
-						firstArgRefType: None,
+						first_arg_ref_type: None,
 						span: Span::empty()
 					)
 
@@ -1775,7 +1789,7 @@ struct Typechecker {
 						parent_type: var.type,
 						template_parameters: [],
 						param_types: [memberVarExpr.type],
-						firstArgRefType: None,
+						first_arg_ref_type: None,
 						span: Span::empty()
 					)
 
@@ -2079,7 +2093,7 @@ struct Typechecker {
 						parent_type: checked_lhs.type,
 						template_parameters: [],
 						param_types,
-						firstArgRefType: checked_lhs.type,
+						first_arg_ref_type: checked_lhs.type,
 						span,
 						allow_spaceship_operator: false
 					)
@@ -2169,7 +2183,7 @@ struct Typechecker {
 					parent_type: checked_condition.type,
 					template_parameters: [],
 					param_types: [checked_condition.type],
-					firstArgRefType: match checked_condition {
+					first_arg_ref_type: match checked_condition {
 						Dereference(value) => value.type
 						else => checked_condition.type
 					}, span, allow_spaceship_operator: false
@@ -2252,7 +2266,7 @@ struct Typechecker {
 			parent_type: value.type,
 			template_parameters: [],
 			param_types: [value.type],
-			firstArgRefType: value.type.constRef(),
+			first_arg_ref_type: value.type.constRef(),
 			span: var.span,
 			allow_spaceship_operator: false
 		)
@@ -2263,7 +2277,7 @@ struct Typechecker {
 			parent_type: value.type,
 			template_parameters: [],
 			param_types: [value.type],
-			firstArgRefType: value.type.constRef(),
+			first_arg_ref_type: value.type.constRef(),
 			span: var.span,
 			allow_spaceship_operator: false
 		)
@@ -2331,7 +2345,7 @@ struct Typechecker {
 				parent_type: value.type,
 				template_parameters: [],
 				param_types: [value.type],
-				firstArgRefType: value.type.constRef(),
+				first_arg_ref_type: value.type.constRef(),
 				span: var.span,
 				allow_spaceship_operator: false
 			)
@@ -2372,7 +2386,7 @@ struct Typechecker {
 			parent_type: value.type,
 			template_parameters: [],
 			param_types: [value.type],
-			firstArgRefType: value.type.constRef(),
+			first_arg_ref_type: value.type.constRef(),
 			span: var.span,
 			allow_spaceship_operator: false
 		)
@@ -2383,7 +2397,7 @@ struct Typechecker {
 			parent_type: value.type,
 			template_parameters: [],
 			param_types: [value.type],
-			firstArgRefType: value.type.constRef(),
+			first_arg_ref_type: value.type.constRef(),
 			span: var.span,
 			allow_spaceship_operator: false
 		)
@@ -2435,7 +2449,7 @@ struct Typechecker {
 					parent_type: checked_condition.type,
 					template_parameters: [],
 					param_types: [checked_condition.type],
-					firstArgRefType: match checked_condition {
+					first_arg_ref_type: match checked_condition {
 						Dereference(value) => value.type
 						else => checked_condition.type
 					}, span, allow_spaceship_operator: false
@@ -2489,7 +2503,7 @@ struct Typechecker {
 					parent_type: checked_condition.type,
 					template_parameters: [],
 					param_types: [checked_condition.type],
-					firstArgRefType: match checked_condition {
+					first_arg_ref_type: match checked_condition {
 						Dereference(value) => value.type
 						else => checked_condition.type
 					}, span, allow_spaceship_operator: false
@@ -2560,7 +2574,7 @@ struct Typechecker {
 			parent_type: checked_range.type,
 			template_parameters: [],
 			param_types: [checked_range.type],
-			firstArgRefType: match checked_range {
+			first_arg_ref_type: match checked_range {
 				Dereference(value) => value.type
 				else => checked_range.type
 			}, span: range.span(),
@@ -2795,7 +2809,7 @@ struct Typechecker {
 						parent_type: match_value.type,
 						template_parameters: [TemplateParameter::IntLiteral(span: Span::empty(), name: "", value: case_id)],
 						param_types: [match_value.type],
-						firstArgRefType: match_value.type.varRef(),
+						first_arg_ref_type: match_value.type.varRef(),
 						span: parsed_stmt.span
 					)
 
@@ -2882,7 +2896,7 @@ struct Typechecker {
 				parent_type: return_value_type,
 				template_parameters: [],
 				param_types: [return_value_type],
-				firstArgRefType: match checked_value! {
+				first_arg_ref_type: match checked_value! {
 					Dereference(value) => value.type
 					else => checked_value!.type
 				}, span, allow_spaceship_operator: false
@@ -2990,7 +3004,7 @@ struct Typechecker {
 							parent_type: checked_object.type
 							template_parameters: [],
 							param_types: [checked_object.type],
-							firstArgRefType: checked_object.type
+							first_arg_ref_type: checked_object.type
 							span,
 						)
 
@@ -3081,7 +3095,7 @@ struct Typechecker {
 						param_types.push(arg.type)
 					}
 
-					let func = .getFunction(namespaces: [], name, parent_type: type, template_parameters: checked_template_parameters, param_types, firstArgRefType: None, span)
+					let func = .getFunction(namespaces: [], name, parent_type: type, template_parameters: checked_template_parameters, param_types, first_arg_ref_type: None, span)
 					guard func.has_value() else {
 						return Expr::Garbage(span, type: .program.void_type)
 					}
@@ -3190,12 +3204,12 @@ struct Typechecker {
 			let checked_args: [Expr] = [checked_value]
 			let param_types: [Type] = [checked_value.type]
 
-			mut firstArgRefType = checked_value.type
+			mut first_arg_ref_type = checked_value.type
 			if checked_value is Dereference(value) {
-				firstArgRefType = value.type
+				first_arg_ref_type = value.type
 			}
 
-			let func = .getFunction(namespaces: [], name: "operator is", parent_type: checked_value.type, template_parameters, param_types, firstArgRefType, span)
+			let func = .getFunction(namespaces: [], name: "operator is", parent_type: checked_value.type, template_parameters, param_types, first_arg_ref_type, span)
 			guard func.has_value() else {
 				return Expr::Garbage(span, type: .program.void_type)
 			}
@@ -3215,7 +3229,7 @@ struct Typechecker {
 								TemplateParameter::IntLiteral(span, name: "", value: c!.id)
 							], param_types: [
 								checked_value.type
-							], firstArgRefType: match checked_value {
+							], first_arg_ref_type: match checked_value {
 								Dereference(value) => value.type
 								else => checked_value.type
 							}, span
@@ -3247,7 +3261,7 @@ struct Typechecker {
 					template_parameters: [
 						TemplateParameter::Type(span: Span::empty(), name: "Target", value: checked_target_type)
 						TemplateParameter::Type(span: Span::empty(), name: "Source", value: checked_value.type)
-					], param_types, firstArgRefType: None, span
+					], param_types, first_arg_ref_type: None, span
 				)
 
 				guard func.has_value() else {
@@ -3263,7 +3277,7 @@ struct Typechecker {
 					template_parameters: [
 						TemplateParameter::Type(span: Span::empty(), name: "Target", value: checked_target_type)
 						TemplateParameter::Type(span: Span::empty(), name: "Source", value: checked_value.type)
-					], param_types, firstArgRefType: None, span
+					], param_types, first_arg_ref_type: None, span
 				)
 
 				guard func.has_value() else {
@@ -3279,7 +3293,7 @@ struct Typechecker {
 					template_parameters: [
 						TemplateParameter::Type(span: Span::empty(), name: "Target", value: checked_target_type)
 						TemplateParameter::Type(span: Span::empty(), name: "Source", value: checked_value.type)
-					], param_types, firstArgRefType: None, span
+					], param_types, first_arg_ref_type: None, span
 				)
 
 				guard func.has_value() else {
@@ -3295,7 +3309,7 @@ struct Typechecker {
 					template_parameters: [
 						TemplateParameter::Type(span: Span::empty(), name: "Target", value: checked_target_type)
 						TemplateParameter::Type(span: Span::empty(), name: "Source", value: checked_value.type)
-					], param_types, firstArgRefType: None, span
+					], param_types, first_arg_ref_type: None, span
 				)
 
 				guard func.has_value() else {
@@ -3311,7 +3325,7 @@ struct Typechecker {
 					template_parameters: [
 						TemplateParameter::Type(span: Span::empty(), name: "Target", value: checked_target_type)
 						TemplateParameter::Type(span: Span::empty(), name: "Source", value: checked_value.type)
-					], param_types, firstArgRefType: None, span
+					], param_types, first_arg_ref_type: None, span
 				)
 
 				guard func.has_value() else {
@@ -3319,9 +3333,9 @@ struct Typechecker {
 				}
 				return .createCall(span, func: func!, args: checked_args, caller: context.body, is_member_call: true, name: "ptrCast")
 			} else {
-				mut firstArgRefType = checked_value.type
+				mut first_arg_ref_type = checked_value.type
 				if checked_value is Dereference(value) {
-					firstArgRefType = value.type
+					first_arg_ref_type = value.type
 				}
 
 				let func = .getFunction(
@@ -3330,7 +3344,7 @@ struct Typechecker {
 					parent_type: checked_value.type,
 					template_parameters: [
 						TemplateParameter::Type(span: Span::empty(), name: "", value: checked_target_type)
-					], param_types, firstArgRefType, span
+					], param_types, first_arg_ref_type, span
 				)
 
 				guard func.has_value() else {
@@ -3339,8 +3353,26 @@ struct Typechecker {
 				return .createCall(span, func: func!, args: checked_args, caller: context.body, is_member_call: true, name: "operator as")
 			}
 		}
-		UnaryOp(span, expr, op) => .checkFunctionCall(span, namespaces: [], name: "operator " + op.to_string(), parsed_template_parameters: [], arguments: [expr], is_member_call: true, is_binary_op: false, context)
-		BinaryOp(span, lhs, op, rhs) => .checkFunctionCall(span, namespaces: [], name: "operator " + op.to_string(), parsed_template_parameters: [], arguments: [lhs, rhs], is_member_call: true, is_binary_op: true, context)
+		UnaryOp(span, expr, op) => .checkFunctionCall(
+			span,
+			namespaces: [],
+			name: "operator " + op.to_string(),
+			parsed_template_parameters: [],
+			arguments: [expr],
+			is_member_call: true,
+			is_binary_op: false,
+			context
+		)
+		BinaryOp(span, lhs, op, rhs) => .checkFunctionCall(
+			span,
+			namespaces: [],
+			name: "operator " + op.to_string(),
+			parsed_template_parameters: [],
+			arguments: [lhs, rhs],
+			is_member_call: true,
+			is_binary_op: true,
+			context
+		)
 		Name(span, namespaces, name) => {
 			if namespaces.is_empty() and desired_type.has_value() {
 				if .program.getVariantCase(type: desired_type!, name: name.name).has_value() {
@@ -3459,7 +3491,7 @@ struct Typechecker {
 				parent_type: type,
 				template_parameters: [],
 				param_types: [type.varRef()],
-				firstArgRefType: None, span, allow_spaceship_operator: false
+				first_arg_ref_type: None, span, allow_spaceship_operator: false
 			)
 
 			let cleanup_call = .createCall(span, func: destructor_func!, args: [
@@ -3623,16 +3655,16 @@ struct Typechecker {
 			else => None
 		}
 
-		mut firstArgRefType: Type? = None
+		mut first_arg_ref_type: Type? = None
 		if is_member_call {
 			if checked_args[0] is Dereference(value) {
-				firstArgRefType = value.type
+				first_arg_ref_type = value.type
 			} else {
-				firstArgRefType = checked_args[0].type
+				first_arg_ref_type = checked_args[0].type
 			}
 		}
 
-		let func = .getFunction(namespaces, name, parent_type, template_parameters, param_types, firstArgRefType, span)
+		let func = .getFunction(namespaces, name, parent_type, template_parameters, param_types, first_arg_ref_type, span)
 		guard func.has_value() else {
 			return Expr::Garbage(span, type: .program.void_type)
 		}
@@ -3661,13 +3693,13 @@ struct Typechecker {
 			param_types.push(arg.type)
 		}
 
-		mut firstArgRefType = checked_object.type
+		mut first_arg_ref_type = checked_object.type
 		if checked_object is Dereference(value) {
-			firstArgRefType = value.type
+			first_arg_ref_type = value.type
 		}
 
-		let constructor_func = .getFunction(namespaces: [], name: "constructor", parent_type: type, template_parameters: constructorTemplateParameters, param_types, firstArgRefType, span)
-		let destructor_func = .getFunction(namespaces: [], name: "destructor", parent_type: type, template_parameters: [], param_types: [checked_object.type], firstArgRefType, span)
+		let constructor_func = .getFunction(namespaces: [], name: "constructor", parent_type: type, template_parameters: constructorTemplateParameters, param_types, first_arg_ref_type, span)
+		let destructor_func = .getFunction(namespaces: [], name: "destructor", parent_type: type, template_parameters: [], param_types: [checked_object.type], first_arg_ref_type, span)
 
 		guard constructor_func.has_value() and destructor_func.has_value() else {
 			return Expr::Garbage(span, type: .program.void_type)
@@ -3751,7 +3783,7 @@ struct Typechecker {
 			parent_type: checked_expr.type,
 			template_parameters: [],
 			param_types: [checked_expr.type],
-			firstArgRefType: None,
+			first_arg_ref_type: None,
 			span
 		)
 
@@ -3761,7 +3793,7 @@ struct Typechecker {
 			parent_type: checked_expr.type,
 			template_parameters: [],
 			param_types: [checked_expr.type],
-			firstArgRefType: None,
+			first_arg_ref_type: None,
 			span
 		)
 
@@ -3771,7 +3803,7 @@ struct Typechecker {
 			parent_type: checked_expr.type,
 			template_parameters: [],
 			param_types: [checked_expr.type],
-			firstArgRefType: None,
+			first_arg_ref_type: None,
 			span
 		)
 
@@ -3794,7 +3826,7 @@ struct Typechecker {
 					parent_type: None,
 					template_parameters: [],
 					param_types: [],
-					firstArgRefType: None,
+					first_arg_ref_type: None,
 					span
 				)
 				yield .createCall(span, func: abort_func!, args: [], caller: context.body, is_member_call: false)
@@ -3837,7 +3869,7 @@ struct Typechecker {
 					parent_type: args[i].type,
 					template_parameters: [],
 					param_types: [args[i].type],
-					firstArgRefType: match args[i] {
+					first_arg_ref_type: match args[i] {
 						Dereference(value) => value.type
 						else => args[i].type
 					},
@@ -3882,7 +3914,7 @@ struct Typechecker {
 				name: "destructor",
 				parent_type,
 				template_parameters: [], param_types,
-				firstArgRefType: None,
+				first_arg_ref_type: None,
 				span: Span::empty(),
 			)
 
@@ -3899,12 +3931,12 @@ struct Typechecker {
 		if name.has_value() and name! != func_decl.name {
 			if func_decl.name == "operator <=>" {
 				let comp_func = match func_decl.parent_type.has_value() {
-					true => .getFunction(namespaces: [], name: name!, parent_type: func_decl.parent_type!, template_parameters: [], param_types: [.program.int_type, .program.int_type], firstArgRefType: None, span)
-					else => .getFunction(namespaces: [], name: name!, parent_type: None, template_parameters: [], param_types: [.program.int_type, .program.int_type], firstArgRefType: None, span)
+					true => .getFunction(namespaces: [], name: name!, parent_type: func_decl.parent_type!, template_parameters: [], param_types: [.program.int_type, .program.int_type], first_arg_ref_type: None, span)
+					else => .getFunction(namespaces: [], name: name!, parent_type: None, template_parameters: [], param_types: [.program.int_type, .program.int_type], first_arg_ref_type: None, span)
 				}
 				return .createCall(span, func: comp_func!, args: [result, Expr::IntLiteral(span, type: .program.int_type, value: 0, isSigned: true)], caller, is_member_call)
 			} else if func_decl.name == "operator ==" or func_decl.name == "operator !=" {
-				let not_func = .getFunction(namespaces: [], name: "operator !", parent_type: .program.bool_type, template_parameters: [], param_types: [.program.bool_type], firstArgRefType: None, span)
+				let not_func = .getFunction(namespaces: [], name: "operator !", parent_type: .program.bool_type, template_parameters: [], param_types: [.program.bool_type], first_arg_ref_type: None, span)
 				return .createCall(span, func: not_func!, args: [result], caller, is_member_call)
 			} else {
 				panic("cannot convert call")
@@ -4044,7 +4076,7 @@ struct Typechecker {
 					parent_type,
 					template_parameters: [],
 					param_types,
-					firstArgRefType: None,
+					first_arg_ref_type: None,
 					span: Span::empty(),
 				)
 			}
@@ -4070,7 +4102,7 @@ struct Typechecker {
 			name: "destructor",
 			parent_type,
 			template_parameters: [], param_types,
-			firstArgRefType: None,
+			first_arg_ref_type: None,
 			span: Span::empty(),
 		)
 
@@ -4375,7 +4407,7 @@ struct Typechecker {
 			name: "constructor",
 			parent_type: element_type,
 			template_parameters: [], param_types: [element_type.varRef()],
-			firstArgRefType: None,
+			first_arg_ref_type: None,
 			span: Span::empty()
 		)
 
@@ -4384,7 +4416,7 @@ struct Typechecker {
 			name: "constructor",
 			parent_type: element_type,
 			template_parameters: [], param_types: [element_type.varRef(), element_type],
-			firstArgRefType: None,
+			first_arg_ref_type: None,
 			span: Span::empty()
 		)
 
@@ -4393,7 +4425,7 @@ struct Typechecker {
 			name: "operator =",
 			parent_type: element_type,
 			template_parameters: [], param_types: [element_type.varRef(), element_type],
-			firstArgRefType: None,
+			first_arg_ref_type: None,
 			span: Span::empty()
 		)
 
@@ -4402,7 +4434,7 @@ struct Typechecker {
 			name: "destructor",
 			parent_type: element_type,
 			template_parameters: [], param_types: [element_type.varRef()],
-			firstArgRefType: None,
+			first_arg_ref_type: None,
 			span: Span::empty()
 		)
 
