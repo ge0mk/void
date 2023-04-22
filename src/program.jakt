@@ -511,7 +511,7 @@ class Module {
 		return matching_types
 	}
 
-	public fn getMatchingFunctions(this, namespaces: [String], name: String, parent_type: Type?, is_comparison: bool) throws -> {u64} {
+	public fn getMatchingFunctions(this, namespaces: [String], name: String, parent_type: Type?, is_comparison: bool, allow_unwrapping: bool) throws -> {u64} {
 		mut matching_functions: {u64} = {}
 
 		for id in .functions {
@@ -538,7 +538,7 @@ class Module {
 			}
 
 			let unwrapped = .program!.types[parent_type!.id].unwrapped
-			if unwrapped.has_value() {
+			if unwrapped.has_value() and allow_unwrapping {
 				let type_decl = .program!.types[unwrapped!.id]
 				for id in type_decl.member_functions {
 					if .program!.functions[id].matches(namespaces: [], name, is_comparison) {

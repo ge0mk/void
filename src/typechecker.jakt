@@ -249,7 +249,7 @@ struct Typechecker {
 		return instance
 	}
 
-	fn getFunction(mut this, namespaces: [String], name: String, parent_type: Type?, template_parameters: [TemplateParameter], param_types: [Type], first_arg_ref_type: Type?, span: Span, allow_spaceship_operator: bool = false, allow_unwrapping: bool = true) throws -> Function? {
+	fn getFunction(mut this, namespaces: [String], name: String, parent_type: Type?, template_parameters: [TemplateParameter], param_types: [Type], first_arg_ref_type: Type?, span: Span, allow_spaceship_operator: bool = false, mut allow_unwrapping: bool = true) throws -> Function? {
 		let is_comparison = match name {
 			"operator =="
 			| "operator !="
@@ -260,7 +260,9 @@ struct Typechecker {
 			else => false
 		}
 
-		let functions_with_matching_name = .module.getMatchingFunctions(namespaces, name, parent_type, is_comparison)
+		allow_unwrapping = allow_unwrapping and name != "operator unwrap"
+
+		let functions_with_matching_name = .module.getMatchingFunctions(namespaces, name, parent_type, is_comparison, allow_unwrapping)
 
 		mut unique_functions: {u64} = {}
 		for id in functions_with_matching_name {
@@ -286,7 +288,7 @@ struct Typechecker {
 				func: Function(id),
 				param_types,
 				first_arg_ref_type,
-				allow_unwrapping: allow_unwrapping and name != "operator unwrap"
+				allow_unwrapping
 			)
 
 			guard is_match and matching_parameters >= most_matching_parameters else {
@@ -311,7 +313,8 @@ struct Typechecker {
 					param_types,
 					first_arg_ref_type,
 					span,
-					allow_spaceship_operator: true
+					allow_spaceship_operator: true,
+					allow_unwrapping
 				)
 			}
 
