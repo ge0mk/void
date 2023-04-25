@@ -2646,6 +2646,8 @@ struct Typechecker {
 		guard body is Compound(children) else {
 			panic("invalid for stmt")
 		}
+		context.pushScope(type: ScopeType::Loop)
+		defer context.popScope()
 
 		let next_value = ParsedExpr::MemberCall(
 			span: range.span(),
