@@ -3041,7 +3041,8 @@ struct Typechecker {
 
 			let result = match var!.type {
 				Base => Expr::MemberAccess(
-					span, type: match checked_object.type {
+					span,
+					type: match checked_object.type {
 						Base => var!.type
 						ConstRef => var!.type.constRef()
 						VarRef => var!.type.varRef()
@@ -3050,13 +3051,8 @@ struct Typechecker {
 					var: Variable(id: var!.id)
 				)
 				else => Expr::ReferenceMemberInvoke(
-					span, type: match checked_object.type {
-						VarRef => match var!.type {
-							VarRef => var!.type.varRef()
-							else => var!.type.constRef()
-						}
-						else => var!.type.constRef()
-					},
+					span,
+					type: var!.type,
 					object: checked_object,
 					member: Variable(id: var!.id)
 				)
