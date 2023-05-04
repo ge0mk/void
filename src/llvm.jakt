@@ -2,8 +2,17 @@ import extern c "llvm-c/Types.h" {
 	extern struct LLVMMemoryBufferRef {}
 	extern struct LLVMContextRef {}
 	extern struct LLVMModuleRef {}
-	extern struct LLVMTypeRef {}
-	extern struct LLVMValueRef {}
+
+	extern struct LLVMTypeRef implements (Equal<LLVMTypeRef>) {
+		[[name="operator(==)"]]
+		public fn equals(this, anon rhs: LLVMTypeRef) -> bool
+	}
+
+	extern struct LLVMValueRef implements (Equal<LLVMValueRef>) {
+		[[name="operator(==)"]]
+		public fn equals(this, anon rhs: LLVMValueRef) -> bool
+	}
+
 	extern struct LLVMBasicBlockRef {}
 	extern struct LLVMMetadataRef {}
 	extern struct LLVMBuilderRef {}

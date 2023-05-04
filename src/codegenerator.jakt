@@ -2270,7 +2270,7 @@ struct CodegenContext {
 	}
 
 	fn finalize(mut this, options: CompilerOptions, mut module: Module) throws -> String {
-		if module == .program.functions[.program.main!.id].module! {
+		if module.id == .program.functions[.program.main!.id].module!.id {
 			.codegenMainFunction(main: .program.main!)
 		}
 
