@@ -343,6 +343,9 @@ enum Error: i32 {
 	case EOF = -1;
 }
 
+@[extern_name: "panic_errno"]
+func panic(error: Error) -> never = extern;
+
 template <Tok: type, Terr: type>
 variant Result {
 	case Ok: Tok;

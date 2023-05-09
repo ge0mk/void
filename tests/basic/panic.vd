@@ -1,0 +1,8 @@
+//> output "(internal error) Invalid argument"
+//> test-crash
+
+import std/core;
+
+func main() {
+	panic(Error::EINVAL);
+}

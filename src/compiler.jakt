@@ -119,10 +119,6 @@ struct Compiler {
 			}
 		}
 
-		if import_path.contains("std/libc") and not .options.additional_llvm_ir_files.contains("libc.ll") {
-			.options.additional_llvm_ir_files.push("libc.ll")
-		}
-
 		return .checkModule(path: import_path + ".vd", import_path)
 	}
 
@@ -208,7 +204,7 @@ fn main(args: [String]) -> c_int {
 		strip_symbol_names: args.contains("-s")
 
 		build_dir: "build"
-		additional_llvm_ir_files: []
+		additional_llvm_ir_files: ["libc.ll"]
 
 		symbol_type: match args.contains("-s") {
 			true => SymbolType::None
