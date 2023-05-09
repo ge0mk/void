@@ -76,7 +76,7 @@ struct String {
 
 	operator [](this: String, index: uint) -> Result!<byte> {
 		if index >= this.size() {
-			throw Error::ERANGE;
+			throw Error::EINVAL;
 		}
 
 		return Ok(this.data[index]);
@@ -84,7 +84,7 @@ struct String {
 
 	operator [](this: &&String, index: uint) -> Result!<&&byte> {
 		if index >= this.size() {
-			throw Error::ERANGE;
+			throw Error::EINVAL;
 		}
 
 		return Ok(&&this.data[index]);
@@ -92,7 +92,7 @@ struct String {
 
 	operator [](this: String, range: NumericRange!<uint>) -> Result!<Range!<byte>> {
 		if range.end > this.size() {
-			throw Error::ERANGE;
+			throw Error::EINVAL;
 		}
 
 		if range.start > range.end || range.step != 1u {
@@ -108,7 +108,7 @@ struct String {
 
 	func at(this: String, index: uint) -> Result!<byte> {
 		if index >= this.size() {
-			throw Error::ERANGE;
+			throw Error::EINVAL;
 		}
 
 		return Ok(this.data[index]);
@@ -142,7 +142,7 @@ struct String {
 
 	func insert(this: &&String, index: uint, value: byte) -> Result!<void> {
 		if index > this.size {
-			throw Error::ERANGE;
+			throw Error::EINVAL;
 		}
 
 		try this.grow();
@@ -160,7 +160,7 @@ struct String {
 
 	func insert(this: &&String, index: uint, bytes: Range!<byte>) -> Result!<void> {
 		if index > this.size {
-			throw Error::ERANGE;
+			throw Error::EINVAL;
 		}
 
 		try this.grow(this.size + bytes.size());
@@ -173,7 +173,7 @@ struct String {
 
 	func remove(this: &&String, index: uint) -> Result!<void> {
 		if index >= this.size {
-			throw Error::ERANGE;
+			throw Error::EINVAL;
 		}
 
 		this.size -= 1u;
@@ -184,7 +184,7 @@ struct String {
 
 	func remove(this: &&String, range: NumericRange!<uint>) -> Result!<void> {
 		if range.start > this.size || range.end > this.size {
-			throw Error::ERANGE;
+			throw Error::EINVAL;
 		}
 
 		if range.start > range.end || range.step != 1u {
@@ -273,7 +273,7 @@ struct String {
 
 	func replace(this: &&String, range: NumericRange!<uint>, with: String) -> Result!<void> {
 		if range.start > this.size || range.end > this.size {
-			throw Error::ERANGE;
+			throw Error::EINVAL;
 		}
 
 		if range.start > range.end || range.step != 1u {

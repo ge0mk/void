@@ -32,7 +32,7 @@ struct Range {
 
 	operator [](this: &Range!<T>, index: uint) -> Result!<&T> {
 		if index >= this.size {
-			throw Error::ERANGE;
+			throw Error::EINVAL;
 		}
 
 		return Ok(&this.data[index]);
@@ -126,7 +126,7 @@ struct VRange {
 
 	operator [](this: &VRange!<T>, index: uint) -> Result!<&&T> {
 		if index >= this.size {
-			throw Error::ERANGE;
+			throw Error::EINVAL;
 		}
 
 		return Ok(&&this.data[index]);

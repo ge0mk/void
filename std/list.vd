@@ -101,7 +101,7 @@ struct List {
 
 	func at(this: &List!<T>, index: uint) -> Result!<T> {
 		if index >= this.size() {
-			throw Error::ERANGE;
+			throw Error::EINVAL;
 		}
 
 		return Ok(this.data[index]);
@@ -109,7 +109,7 @@ struct List {
 
 	operator [](this: List!<T>, index: uint) -> Result!<T> {
 		if index >= this.size() {
-			throw Error::ERANGE;
+			throw Error::EINVAL;
 		}
 
 		return Ok(this.data[index]);
@@ -117,7 +117,7 @@ struct List {
 
 	operator [](this: &List!<T>, index: uint) -> Result!<&T> {
 		if index >= this.size() {
-			throw Error::ERANGE;
+			throw Error::EINVAL;
 		}
 
 		return Ok(&this.data[index]);
@@ -125,7 +125,7 @@ struct List {
 
 	operator [](this: &&List!<T>, index: uint) -> Result!<&&T> {
 		if index >= this.size() {
-			throw Error::ERANGE;
+			throw Error::EINVAL;
 		}
 
 		return Ok(&&this.data[index]);
@@ -133,7 +133,7 @@ struct List {
 
 	operator [](this: &List!<T>, range: NumericRange!<uint>) -> Result!<Range!<T>> {
 		if range.end >= this.size() {
-			throw Error::ERANGE;
+			throw Error::EINVAL;
 		}
 
 		if range.start > range.end || range.step != 1u {
@@ -145,7 +145,7 @@ struct List {
 
 	operator [](this: &&List!<T>, range: NumericRange!<uint>) -> Result!<VRange!<T>> {
 		if range.end >= this.size() {
-			throw Error::ERANGE;
+			throw Error::EINVAL;
 		}
 
 		if range.start > range.end || range.step != 1u {
@@ -229,7 +229,7 @@ struct List {
 
 	func insert(this: &&List!<T>, index: uint, value: T) -> Result!<void> {
 		if index > this.size() {
-			throw Error::ERANGE;
+			throw Error::EINVAL;
 		}
 
 		try this.grow();
@@ -243,7 +243,7 @@ struct List {
 
 	func insert(this: &&List!<T>, index: uint, values: Range!<T>) -> Result!<void> {
 		if index > this.size() {
-			throw Error::ERANGE;
+			throw Error::EINVAL;
 		}
 
 		try this.grow(this.size() + values.size());
@@ -265,7 +265,7 @@ struct List {
 
 	func remove(this: &&List!<T>, index: uint) -> Result!<void> {
 		if index >= this.size() {
-			throw Error::ERANGE;
+			throw Error::EINVAL;
 		}
 
 		this.data[index].destructor();
@@ -276,7 +276,7 @@ struct List {
 
 	func remove(this: &&List!<T>, range: NumericRange!<uint>) -> Result!<void> {
 		if range.start > this.size || range.end > this.size {
-			throw Error::ERANGE;
+			throw Error::EINVAL;
 		}
 
 		if range.start > range.end || range.step != 1u {
@@ -295,7 +295,7 @@ struct List {
 
 	func removeLast(this: &&List!<T>) -> Result!<void> {
 		if this.size == 0 {
-			throw Error::ERANGE;
+			throw Error::EINVAL;
 		}
 
 		return this.remove(this.size - 1);

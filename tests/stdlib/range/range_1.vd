@@ -15,5 +15,5 @@ func main(args: Range!<String>) {
 
 	const b = args[3u];
 	assert(b is Error);
-	assert(b.error() == Error::ERANGE);
+	assert(b.error() == Error::EINVAL);
 }

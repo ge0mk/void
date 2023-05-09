@@ -15,7 +15,7 @@ extend Array {
 
 	operator [](this: &Array!<T, Size>, index: uint) -> Result!<&T> {
 		if index < 0u || index >= Size {
-			throw Error::ERANGE;
+			throw Error::EINVAL;
 		}
 
 		return Ok(&this.data()[index]);
@@ -23,7 +23,7 @@ extend Array {
 
 	operator [](this: &&Array!<T, Size>, index: uint) -> Result!<&&T> {
 		if index < 0u || index >= Size {
-			throw Error::ERANGE;
+			throw Error::EINVAL;
 		}
 
 		return Ok(&&this.data()[index]);
@@ -31,7 +31,7 @@ extend Array {
 
 	operator [](this: &Array!<T, Size>, range: NumericRange!<uint>) -> Result!<Range!<T>> {
 		if range.start < 0u || range.end >= Size {
-			throw Error::ERANGE;
+			throw Error::EINVAL;
 		}
 
 		if range.start >= range.end || range.step != 1u {
@@ -43,7 +43,7 @@ extend Array {
 
 	operator [](this: &&Array!<T, Size>, range: NumericRange!<uint>) -> Result!<VRange!<T>> {
 		if range.start < 0u || range.end >= Size {
-			throw Error::ERANGE;
+			throw Error::EINVAL;
 		}
 
 		if range.start >= range.end || range.step != 1u {
