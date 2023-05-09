@@ -3817,20 +3817,20 @@ struct Typechecker {
 
 		let check_call = .createCall(span, func: check_func!, args: [var], caller: context.body, is_member_call: true)
 		let value_call = removeDereference(.createCall(span, func: value_func!, args: [var], caller: context.body, is_member_call: true))
-		let error_call = removeDereference(.createCall(span, func: error_func!, args: [var], caller: context.body, is_member_call: true))
+		let error_call = .createCall(span, func: error_func!, args: [var], caller: context.body, is_member_call: true)
 
 		let abort_call: Expr? = match kind {
 			Must => {
 				let abort_func = .getFunction(
 					namespaces: []
-					name: "abort",
+					name: "panic",
 					parent_type: None,
 					template_parameters: [],
-					param_types: [],
+					param_types: [error_call.type],
 					first_arg_ref_type: None,
 					span
 				)
-				yield .createCall(span, func: abort_func!, args: [], caller: context.body, is_member_call: false)
+				yield .createCall(span, func: abort_func!, args: [error_call], caller: context.body, is_member_call: false)
 			}
 			else => None
 		}

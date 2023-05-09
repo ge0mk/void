@@ -25,8 +25,8 @@ struct Foo {
 		return 42;
 	}
 
-	func error(this: Foo) -> int {
-		return 0;
+	func error(this: Foo) -> Error {
+		return Error::EINVAL;
 	}
 }
 

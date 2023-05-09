@@ -1,0 +1,26 @@
+//> output "(internal error) Invalid argument"
+//> test-crash
+
+import std/core;
+
+struct Foo {
+	func constructor(this: &&Foo) {}
+	func constructor(this: &&Foo, other: Foo) {}
+	func destructor(this: &&Foo) {}
+
+	func hasValue(this: Foo) -> bool {
+		return false;
+	}
+
+	func value(this: Foo) -> int {
+		return 0;
+	}
+
+	func error(this: Foo) -> Error {
+		return Error::EINVAL;
+	}
+}
+
+func main() {
+	discard must Foo();
+}
