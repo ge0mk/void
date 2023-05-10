@@ -3,9 +3,9 @@ import std/string;
 
 func main() {
 	const a = "hello world 123";
-	const b = must a.split(' 'b);
+	const b = a.split(' 'b);
 	assert(b.size() == 3u);
-	assert((must b[0u]) == "hello");
-	assert((must b[1u]) == "world");
-	assert((must b[2u]) == "123");
+	assert(b[0u] == "hello");
+	assert(b[1u] == "world");
+	assert(b[2u] == "123");
 }

@@ -6,19 +6,19 @@ func main() {
 	assert(a.size() == 0);
 
 	assert(a.getInsertPos(0) == 0);
-	must a.add(0);
+	a.add(0);
 
 	assert(a.getInsertPos(2) == 1);
-	must a.add(2);
+	a.add(2);
 
 	assert(a.getInsertPos(1) == 1);
-	must a.add(1);
+	a.add(1);
 
 	assert(a.getInsertPos(4) == 3);
-	must a.add(4);
+	a.add(4);
 
 	assert(a.getInsertPos(3) == 3);
-	must a.add(3);
+	a.add(3);
 
 	assert(a.size() == 5);
 }

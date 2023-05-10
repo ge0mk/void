@@ -4,9 +4,9 @@ import std/list;
 func main() {
 	var a = List!<int>();
 
-	must a.append(1);
-	must a.append(2);
-	must a.append(3);
+	a.append(1);
+	a.append(2);
+	a.append(3);
 
 	assert(a.find(2) is Some);
 	assert(a.contains(2));

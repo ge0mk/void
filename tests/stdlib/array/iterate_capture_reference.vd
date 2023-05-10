@@ -7,5 +7,5 @@ func main() {
 		b += 2;
 	}
 
-	assert((must a[2u]) == 5);
+	assert(a[2u] == 5);
 }

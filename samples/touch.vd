@@ -5,12 +5,12 @@ import std/file;
 import std/io;
 
 func main(args: Range!<String>) -> int {
-	var path = args[1u] else {
+	var path = args.at(1u) else {
 		println("usage: touch <path>");
 		return 1;
 	}
 
-	var file = File::create(path, mode::read, FilePermissions::uread | uwrite | gread | oread) else {
+	var file = File::create(path, OpenMode::read, FilePermissions::uread | uwrite | gread | oread) else {
 		println("couldn't create file");
 		return 1;
 	}

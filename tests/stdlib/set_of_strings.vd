@@ -6,8 +6,8 @@ import std/string;
 
 func main() {
 	var a: Set!<String>;
-	must a.add("hello");
-	must a.add("world");
+	a.add("hello");
+	a.add("world");
 
 	assert(a.contains("hello"));
 	assert(!a.contains("abc"));

@@ -3,8 +3,8 @@ import std/string;
 
 func main() {
 	const a = "hello world 123";
-	const b = must a.split("orl");
+	const b = a.split("orl");
 	assert(b.size() == 2u);
-	assert((must b[0u]) == "hello w");
-	assert((must b[1u]) == "d 123");
+	assert(b[0u] == "hello w");
+	assert(b[1u] == "d 123");
 }

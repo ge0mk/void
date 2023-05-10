@@ -30,12 +30,20 @@ struct Range {
 		return this.size;
 	}
 
-	operator [](this: &Range!<T>, index: uint) -> Result!<&T> {
+	func at(this: &Range!<T>, index: uint) -> Optional!<&T> {
 		if index >= this.size {
-			throw Error::EINVAL;
+			return None;
 		}
 
-		return Ok(&this.data[index]);
+		return Some(&this.data[index]);
+	}
+
+	operator [](this: &Range!<T>, index: uint) -> &T {
+		if index >= this.size {
+			panic(Error::EINVAL);
+		}
+
+		return &this.data[index];
 	}
 
 	func find(this: Range!<T>, value: T) -> Optional!<uint> {
@@ -124,12 +132,20 @@ struct VRange {
 		return this.size;
 	}
 
-	operator [](this: &VRange!<T>, index: uint) -> Result!<&&T> {
+	func at(this: &VRange!<T>, index: uint) -> Optional!<&&T> {
 		if index >= this.size {
-			throw Error::EINVAL;
+			return None;
 		}
 
-		return Ok(&&this.data[index]);
+		return Some(&&this.data[index]);
+	}
+
+	operator [](this: &VRange!<T>, index: uint) -> &&T {
+		if index >= this.size {
+			panic(Error::EINVAL);
+		}
+
+		return &&this.data[index];
 	}
 
 	func find(this: VRange!<T>, value: T) -> Optional!<uint> {

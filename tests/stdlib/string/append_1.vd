@@ -8,10 +8,10 @@ func main() {
 	var a = "hello";
 	assert(a.size() == 5u);
 
-	must a.append(' 'b);
+	a.append(' 'b);
 	assert(a.size() == 6u);
 
-	must a.append("world");
+	a.append("world");
 	assert(a.size() == 11u);
 
 	assert(a == "hello world");

@@ -4,7 +4,7 @@ import std/map;
 func main() {
 	var a: Map!<uint, int>;
 	assert(a.isEmpty());
-	must a.set(0u, 10);
+	a.set(0u, 10);
 	assert(!a.isEmpty());
 	assert(a.size() == 1u);
 	assert(a.contains(0u));

@@ -19,7 +19,7 @@ struct Set {
 		this.data := vptr::null() as vptr!<T>;
 		this.size := 0;
 		this.capacity := 0;
-		must this.add(range);
+		this.add(range);
 	}
 
 	func constructor(this: &&Set!<T>, other: Set!<T>) -> void {
@@ -27,7 +27,7 @@ struct Set {
 		this.size := 0;
 		this.capacity := 0;
 
-		must this.grow(other.size());
+		this.grow(other.size());
 		for index in 0u..other.size() {
 			this.data[index].constructor(other.data[index]);
 		}
@@ -36,7 +36,7 @@ struct Set {
 
 	operator =(this: &&Set!<T>, other: Set!<T>) -> void {
 		this.clear();
-		must this.grow(other.size());
+		this.grow(other.size());
 
 		for index in 0u..other.size() {
 			this.data[index].constructor(other.data[index]);
@@ -100,36 +100,32 @@ struct Set {
 		}
 	}
 
-	func add(this: &&Set!<T>, value: T) -> Result!<void> {
+	func add(this: &&Set!<T>, value: T) -> void {
 		const index = this.getInsertPos(value);
 		if index < this.size {
 			if this.data[index] == value {
-				return Ok;
+				return;
 			}
 		}
 
-		try this.grow();
+		this.grow();
 
 		memmove!<T>(this.data + index + 1, this.data as cptr!<T> + index, this.size - index);
 
 		this.data[index].constructor(value);
 		this.size += 1u;
-
-		return Ok;
 	}
 
-	func add(this: &&Set!<T>, range: Range!<T>) -> Result!<void> {
+	func add(this: &&Set!<T>, range: Range!<T>) -> void {
 		for value in range {
-			try this.add(value);
+			this.add(value);
 		}
-		return Ok;
 	}
 
-	func add(this: &&Set!<T>, other: Set!<T>) -> Result!<void> {
+	func add(this: &&Set!<T>, other: Set!<T>) -> void {
 		for value in other {
-			try this.add(value);
+			this.add(value);
 		}
-		return Ok;
 	}
 
 	func remove(this: &&Set!<T>, value: T) -> void {
@@ -185,7 +181,7 @@ struct Set {
 		var result = this;
 
 		for element in other {
-			must result.add(element);
+			result.add(element);
 		}
 
 		return result;
@@ -197,7 +193,7 @@ struct Set {
 
 		for element in this {
 			if other.contains(element) {
-				must result.add(element);
+				result.add(element);
 			}
 		}
 
@@ -210,7 +206,7 @@ struct Set {
 
 		for element in this {
 			if !other.contains(element) {
-				must result.add(element);
+				result.add(element);
 			}
 		}
 
@@ -223,13 +219,13 @@ struct Set {
 
 		for element in this {
 			if !other.contains(element) {
-				must result.add(element);
+				result.add(element);
 			}
 		}
 
 		for element in other {
 			if !this.contains(element) {
-				must result.add(element);
+				result.add(element);
 			}
 		}
 
@@ -237,19 +233,19 @@ struct Set {
 	}
 
 	// ensure that memory for at least one more element is available
-	func grow(this: &&Set!<T>) -> Result!<void> {
+	func grow(this: &&Set!<T>) -> void {
 		if this.size < this.capacity {
-			return Ok;
+			return;
 		}
 
-		return this.grow(this.size * 3u / 2u + 1u);
+		this.grow(this.size * 3u / 2u + 1u);
 	}
 
 	// ensure that memory for at least 'new_capacity' elements is available
-	func grow(this: &&Set!<T>, new_capacity: uint) -> Result!<void> {
+	func grow(this: &&Set!<T>, new_capacity: uint) -> void {
 		const old_capacity = this.capacity;
 		if new_capacity < old_capacity {
-			return Ok;
+			return;
 		}
 
 		var new_data: vptr!<T>;
@@ -260,14 +256,12 @@ struct Set {
 		}
 
 		if new_data == vptr::null() {
-			throw Error::ENOMEM;
+			panic(Error::ENOMEM);
 		}
 
 		this.data = new_data;
 		this.capacity = new_capacity;
 
 		memset!<T>(this.data + old_capacity, '\0'b, new_capacity - old_capacity);
-
-		return Ok;
 	}
 }

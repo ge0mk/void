@@ -39,7 +39,7 @@ struct RecursivePathIterator {
 		this.current_path := path.segments;
 		const c_path = path.toString() + '\0'b;
 		this.dir_stack := ();
-		must this.dir_stack.append(opendir(c_path.data()));
+		this.dir_stack.append(opendir(c_path.data()));
 	}
 
 	func destructor(this: &&RecursivePathIterator) -> void {
@@ -56,8 +56,8 @@ struct RecursivePathIterator {
 		const current_dir = this.dir_stack.last().value();
 		const entry = readdir(current_dir);
 		if entry == vptr::null() {
-			must this.dir_stack.removeLast();
-			must this.current_path.removeLast();
+			this.dir_stack.removeLast();
+			this.current_path.removeLast();
 			return this.next();
 		}
 
@@ -70,9 +70,9 @@ struct RecursivePathIterator {
 
 		// child directory
 		if entry[0].d_type == DT::DIR && entry_name != "." && entry_name != ".." {
-			must this.current_path.append(entry_name);
-			const c_path = must "/".join(this.current_path) + '\0'b;
-			must this.dir_stack.append(opendir(c_path.data()));
+			this.current_path.append(entry_name);
+			const c_path = "/".join(this.current_path) + '\0'b;
+			this.dir_stack.append(opendir(c_path.data()));
 		}
 
 		return this.next();
@@ -116,7 +116,7 @@ struct Path {
 	func constructor(this: &&Path, other: Path) -> void = default;
 
 	func constructor(this: &&Path, str: String) {
-		this.segments := must str.split('/'b);
+		this.segments := str.split('/'b);
 	}
 
 	func constructor(this: &&Path, segments: List!<String>) {
@@ -130,7 +130,7 @@ struct Path {
 	operator ==(this: Path, other: Path) -> bool = default;
 
 	func toString(this: Path) -> String {
-		return must "/".join(this.segments);
+		return "/".join(this.segments);
 	}
 
 	operator /(this: Path, other: String) -> Path {
@@ -149,14 +149,14 @@ struct Path {
 		const str = this.toString();
 		const pos = str.rfind('.'b);
 		const extension_start = pos ?? str.size();
-		return String(must str[0u..extension_start]);
+		return str.substring(0u..extension_start);
 	}
 
 	func extension(this: Path) -> String {
 		const filename = this.filename();
 		const pos = filename.rfind('.'b);
 		const extension_start = pos.value() + 1 if pos.hasValue() else filename.size();
-		return String(must filename[extension_start..filename.size()]);
+		return filename.substring(extension_start..filename.size());
 	}
 
 	func exists(this: Path) -> bool {
@@ -191,7 +191,7 @@ struct Path {
 	func cwd() -> Path {
 		var buffer: [byte, 4096];
 		discard libc::unistd::getcwd(buffer.data(), buffer.size());
-		must buffer[buffer.size() - 1] = '\0'b;
+		buffer[buffer.size() - 1] = '\0'b;
 		return Path(String::fromCString(buffer.data() as cptr!<byte>));
 	}
 

@@ -20,10 +20,10 @@ struct List {
 		this.size := 0;
 		this.capacity := 0;
 
-		must this.grow(other.size());
+		this.grow(other.size());
 
 		for index in 0u..other.size() {
-			this.data[index].constructor(must other[index]);
+			this.data[index].constructor(other[index]);
 		}
 		this.size = other.size();
 	}
@@ -33,7 +33,7 @@ struct List {
 		this.size := 0;
 		this.capacity := 0;
 
-		must this.grow(range.size());
+		this.grow(range.size());
 
 		for element in range {
 			this.data[this.size].constructor(element);
@@ -47,7 +47,7 @@ struct List {
 		this.size := 0;
 		this.capacity := 0;
 
-		must this.grow(range.size());
+		this.grow(range.size());
 
 		for element in range {
 			this.data[this.size].constructor(element);
@@ -61,7 +61,7 @@ struct List {
 		this.size := 0;
 		this.capacity := 0;
 
-		must this.grow(size);
+		this.grow(size);
 
 		for index in 0u..size {
 			this.data[index].constructor(value);
@@ -71,10 +71,10 @@ struct List {
 
 	operator =(this: &&List!<T>, other: List!<T>) -> void {
 		this.clear();
-		must this.grow(other.size());
+		this.grow(other.size());
 
 		for index in 0u..other.size() {
-			this.data[index].constructor(must other[index]);
+			this.data[index].constructor(other[index]);
 		}
 		this.size = other.size();
 	}
@@ -99,60 +99,60 @@ struct List {
 		return this.data as cptr!<T>;
 	}
 
-	func at(this: &List!<T>, index: uint) -> Result!<T> {
+	func at(this: &List!<T>, index: uint) -> Optional!<T> {
 		if index >= this.size() {
-			throw Error::EINVAL;
+			return None;
 		}
 
-		return Ok(this.data[index]);
+		return Some(this.data[index]);
 	}
 
-	operator [](this: List!<T>, index: uint) -> Result!<T> {
+	operator [](this: List!<T>, index: uint) -> T {
 		if index >= this.size() {
-			throw Error::EINVAL;
+			panic(Error::EINVAL);
 		}
 
-		return Ok(this.data[index]);
+		return this.data[index];
 	}
 
-	operator [](this: &List!<T>, index: uint) -> Result!<&T> {
+	operator [](this: &List!<T>, index: uint) -> &T {
 		if index >= this.size() {
-			throw Error::EINVAL;
+			panic(Error::EINVAL);
 		}
 
-		return Ok(&this.data[index]);
+		return &this.data[index];
 	}
 
-	operator [](this: &&List!<T>, index: uint) -> Result!<&&T> {
+	operator [](this: &&List!<T>, index: uint) -> &&T {
 		if index >= this.size() {
-			throw Error::EINVAL;
+			panic(Error::EINVAL);
 		}
 
-		return Ok(&&this.data[index]);
+		return &&this.data[index];
 	}
 
-	operator [](this: &List!<T>, range: NumericRange!<uint>) -> Result!<Range!<T>> {
+	operator [](this: &List!<T>, range: NumericRange!<uint>) -> Range!<T> {
 		if range.end >= this.size() {
-			throw Error::EINVAL;
+			panic(Error::EINVAL);
 		}
 
 		if range.start > range.end || range.step != 1u {
-			throw Error::EINVAL;
+			panic(Error::EINVAL);
 		}
 
-		return Ok(Range!<T>(this.data as cptr!<T> + range.start, range.end - range.start));
+		return Range!<T>(this.data as cptr!<T> + range.start, range.end - range.start);
 	}
 
-	operator [](this: &&List!<T>, range: NumericRange!<uint>) -> Result!<VRange!<T>> {
+	operator [](this: &&List!<T>, range: NumericRange!<uint>) -> VRange!<T> {
 		if range.end >= this.size() {
-			throw Error::EINVAL;
+			panic(Error::EINVAL);
 		}
 
 		if range.start > range.end || range.step != 1u {
-			throw Error::EINVAL;
+			panic(Error::EINVAL);
 		}
 
-		return Ok(VRange!<T>(this.data + range.start, range.end - range.start));
+		return VRange!<T>(this.data + range.start, range.end - range.start);
 	}
 
 	func first(this: List!<T>) -> Optional!<T> {
@@ -229,17 +229,15 @@ struct List {
 		return true;
 	}
 
-	func append(this: &&List!<T>, value: T) -> Result!<void> {
-		try this.grow();
+	func append(this: &&List!<T>, value: T) -> void {
+		this.grow();
 
 		this.data[this.size].constructor(value);
 		this.size += 1u;
-
-		return Ok;
 	}
 
-	func append(this: &&List!<T>, values: Range!<T>) -> Result!<void> {
-		try this.grow(this.size() + values.size());
+	func append(this: &&List!<T>, values: Range!<T>) -> void {
+		this.grow(this.size() + values.size());
 
 		var index = 0u;
 		for element in values {
@@ -247,34 +245,30 @@ struct List {
 			index += 1u;
 		}
 		this.size += values.size();
-
-		return Ok;
 	}
 
-	func append(this: &&List!<T>, values: List!<T>) -> Result!<void> {
-		return this.append(values.range());
+	func append(this: &&List!<T>, values: List!<T>) -> void {
+		this.append(values.range());
 	}
 
-	func insert(this: &&List!<T>, index: uint, value: T) -> Result!<void> {
+	func insert(this: &&List!<T>, index: uint, value: T) -> void {
 		if index > this.size() {
-			throw Error::EINVAL;
+			panic(Error::EINVAL);
 		}
 
-		try this.grow();
+		this.grow();
 		memmove!<T>(this.data + index + 1, this.data as cptr!<T> + index, this.size - index);
 
 		this.data[index].constructor(value);
 		this.size += 1u;
-
-		return Ok;
 	}
 
-	func insert(this: &&List!<T>, index: uint, values: Range!<T>) -> Result!<void> {
+	func insert(this: &&List!<T>, index: uint, values: Range!<T>) -> void {
 		if index > this.size() {
-			throw Error::EINVAL;
+			panic(Error::EINVAL);
 		}
 
-		try this.grow(this.size() + values.size());
+		this.grow(this.size() + values.size());
 		memmove!<T>(this.data + index + values.size(), this.data as cptr!<T> + index, this.size - index);
 
 		var offset = index;
@@ -283,32 +277,29 @@ struct List {
 			offset += 1u;
 		}
 		this.size += values.size();
-
-		return Ok;
 	}
 
-	func insert(this: &&List!<T>, index: uint, values: List!<T>) -> Result!<void> {
-		return this.insert(index, values.range());
+	func insert(this: &&List!<T>, index: uint, values: List!<T>) -> void {
+		this.insert(index, values.range());
 	}
 
-	func remove(this: &&List!<T>, index: uint) -> Result!<void> {
+	func remove(this: &&List!<T>, index: uint) -> void {
 		if index >= this.size() {
-			throw Error::EINVAL;
+			panic(Error::EINVAL);
 		}
 
 		this.data[index].destructor();
 		this.size -= 1u;
 		memmove!<T>(this.data + index, this.data as cptr!<T> + index + 1, this.size - index);
-		return Ok;
 	}
 
-	func remove(this: &&List!<T>, range: NumericRange!<uint>) -> Result!<void> {
+	func remove(this: &&List!<T>, range: NumericRange!<uint>) -> void {
 		if range.start > this.size || range.end > this.size {
-			throw Error::EINVAL;
+			panic(Error::EINVAL);
 		}
 
 		if range.start > range.end || range.step != 1u {
-			throw Error::EINVAL;
+			panic(Error::EINVAL);
 		}
 
 		for index in range {
@@ -317,16 +308,14 @@ struct List {
 
 		this.size -= range.end - range.start;
 		memmove!<T>(this.data + range.start, this.data as cptr!<T> + range.end, this.size - range.start);
-
-		return Ok;
 	}
 
-	func removeLast(this: &&List!<T>) -> Result!<void> {
+	func removeLast(this: &&List!<T>) -> void {
 		if this.size == 0 {
-			throw Error::EINVAL;
+			panic(Error::EINVAL);
 		}
 
-		return this.remove(this.size - 1);
+		this.remove(this.size - 1);
 	}
 
 	func clear(this: &&List!<T>) -> void {
@@ -352,38 +341,38 @@ struct List {
 
 	operator +(this: List!<T>, value: T) -> List!<T> {
 		var tmp = this;
-		must tmp.append(value);
+		tmp.append(value);
 		return tmp;
 	}
 
 	operator +(this: List!<T>, other: List!<T>) -> List!<T> {
 		var tmp = this;
-		must tmp.append(other);
+		tmp.append(other);
 		return tmp;
 	}
 
 	operator +=(this: &&List!<T>, value: T) -> void {
-		must this.append(value);
+		this.append(value);
 	}
 
 	operator +=(this: &&List!<T>, other: List!<T>) -> void {
-		must this.append(other);
+		this.append(other);
 	}
 
 	// ensure that memory for at least one more element is available
-	func grow(this: &&List!<T>) -> Result!<void> {
+	func grow(this: &&List!<T>) -> void {
 		if this.size < this.capacity {
-			return Ok;
+			return;
 		}
 
-		return this.grow(this.size * 3u / 2u + 1u);
+		this.grow(this.size * 3u / 2u + 1u);
 	}
 
 	// ensure that memory for at least 'new_capacity' elements is available
-	func grow(this: &&List!<T>, new_capacity: uint) -> Result!<void> {
+	func grow(this: &&List!<T>, new_capacity: uint) -> void {
 		const old_capacity = this.capacity;
 		if new_capacity <= old_capacity {
-			return Ok;
+			return;
 		}
 
 		var new_data: vptr!<T>;
@@ -394,14 +383,12 @@ struct List {
 		}
 
 		if new_data == vptr::null() {
-			throw Error::ENOMEM;
+			panic(Error::ENOMEM);
 		}
 
 		this.data = new_data;
 		this.capacity = new_capacity;
 
 		memset!<T>(this.data + old_capacity, '\0'b, new_capacity - old_capacity);
-
-		return Ok;
 	}
 }

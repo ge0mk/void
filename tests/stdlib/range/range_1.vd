@@ -9,11 +9,10 @@ import std/io;
 func main(args: Range!<String>) {
 	assert(args.size() == 2u);
 
-	const a = args[1u];
-	assert(a is Ok);
+	const a = args.at(1u);
+	assert(a is Some);
 	println(a.value());
 
-	const b = args[3u];
-	assert(b is Error);
-	assert(b.error() == Error::EINVAL);
+	const b = args.at(3u);
+	assert(b is None);
 }

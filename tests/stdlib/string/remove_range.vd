@@ -3,6 +3,6 @@ import std/string;
 
 func main() {
 	var a = "abcdef";
-	must a.remove(1u..3u);
+	a.remove(1u..3u);
 	assert(a == "adef");
 }

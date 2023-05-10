@@ -3,9 +3,9 @@ import std/string;
 import std/base64;
 
 func main() {
-	assert(must encode("light work.") == "bGlnaHQgd29yay4=");
-	assert(must encode("light work") == "bGlnaHQgd29yaw==");
-	assert(must encode("light wor") == "bGlnaHQgd29y");
-	assert(must encode("light wo") == "bGlnaHQgd28=");
-	assert(must encode("light w") == "bGlnaHQgdw==");
+	assert(encode("light work.") == "bGlnaHQgd29yay4=");
+	assert(encode("light work") == "bGlnaHQgd29yaw==");
+	assert(encode("light wor") == "bGlnaHQgd29y");
+	assert(encode("light wo") == "bGlnaHQgd28=");
+	assert(encode("light w") == "bGlnaHQgdw==");
 }

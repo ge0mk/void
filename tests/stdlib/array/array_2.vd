@@ -3,6 +3,6 @@ import std/array;
 
 func main() {
 	var a = [1, 2, 3, 4, 5];
-	const b = a[10u];
-	assert(b is Error);
+	const b = a.at(10u);
+	assert(b is None);
 }

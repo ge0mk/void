@@ -5,6 +5,6 @@ import std/array;
 
 func main() -> int {
 	var a = [1, 2, 3];
-	(must a[1u]) = 10;
-	return must a[1u];
+	a[1u] = 10;
+	return a[1u];
 }

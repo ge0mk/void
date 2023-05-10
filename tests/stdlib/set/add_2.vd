@@ -3,17 +3,17 @@ import std/set;
 
 func main() {
 	var a = Set!<int>();
-	must a.add(0);
-	must a.add(1);
-	must a.add(2);
+	a.add(0);
+	a.add(1);
+	a.add(2);
 	assert(a.size() == 3);
 
 	var b = Set!<int>();
-	must b.add(1);
-	must b.add(2);
-	must b.add(3);
+	b.add(1);
+	b.add(2);
+	b.add(3);
 	assert(b.size() == 3);
 
-	must a.add(b);
+	a.add(b);
 	assert(a.size() == 4);
 }

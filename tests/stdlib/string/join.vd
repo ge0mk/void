@@ -4,10 +4,10 @@ import std/list;
 
 func main() {
 	var a: List!<String>;
-	must a.append("hello");
-	must a.append("world");
-	must a.append("123");
+	a.append("hello");
+	a.append("world");
+	a.append("123");
 
-	var b = must " / ".join(a);
+	var b = " / ".join(a);
 	assert(b == "hello / world / 123");
 }

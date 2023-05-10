@@ -4,15 +4,15 @@ import std/list;
 func main() {
 	var a = List!<int>();
 
-	must a.append(1);
-	must a.append(2);
-	must a.append(3);
-	must a.append(4);
-	must a.append(5);
+	a.append(1);
+	a.append(2);
+	a.append(3);
+	a.append(4);
+	a.append(5);
 
-	must a.remove(1u..4u);
+	a.remove(1u..4u);
 	assert(a.size() == 2u);
 
-	assert((must a[0u]) == 1);
-	assert((must a[1u]) == 5);
+	assert(a[0u] == 1);
+	assert(a[1u] == 5);
 }

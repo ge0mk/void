@@ -47,7 +47,7 @@ struct String {
 	}
 
 	operator =(this: &&String, other: String) -> void {
-		must this.grow(other.size());
+		this.grow(other.size());
 		memcpy!<byte>(this.data, other.data(), other.size());
 		this.size = other.size();
 	}
@@ -74,127 +74,123 @@ struct String {
 		return Range!<byte>(this.data as cptr!<byte>, this.size);
 	}
 
-	operator [](this: String, index: uint) -> Result!<byte> {
+	operator [](this: String, index: uint) -> byte {
 		if index >= this.size() {
-			throw Error::EINVAL;
+			panic(Error::EINVAL);
 		}
 
-		return Ok(this.data[index]);
+		return this.data[index];
 	}
 
-	operator [](this: &&String, index: uint) -> Result!<&&byte> {
+	operator [](this: &String, index: uint) -> &byte {
 		if index >= this.size() {
-			throw Error::EINVAL;
+			panic(Error::EINVAL);
 		}
 
-		return Ok(&&this.data[index]);
+		return &this.data[index];
 	}
 
-	operator [](this: String, range: NumericRange!<uint>) -> Result!<Range!<byte>> {
+	operator [](this: &&String, index: uint) -> &&byte {
+		if index >= this.size() {
+			panic(Error::EINVAL);
+		}
+
+		return &&this.data[index];
+	}
+
+	operator [](this: String, range: NumericRange!<uint>) -> Range!<byte> {
 		if range.end > this.size() {
-			throw Error::EINVAL;
+			panic(Error::EINVAL);
 		}
 
 		if range.start > range.end || range.step != 1u {
-			throw Error::EINVAL;
+			panic(Error::EINVAL);
 		}
 
-		return Ok(Range!<byte>(this.data as cptr!<byte> + range.start, range.end - range.start));
+		return Range!<byte>(this.data as cptr!<byte> + range.start, range.end - range.start);
 	}
 
-	func substring(this: String, range: NumericRange!<uint>) -> Result!<String> {
-		return Ok(String(try this[range]));
+	func substring(this: String, range: NumericRange!<uint>) -> String {
+		return String(this[range]);
 	}
 
-	func at(this: String, index: uint) -> Result!<byte> {
+	func at(this: String, index: uint) -> Optional!<byte> {
 		if index >= this.size() {
-			throw Error::EINVAL;
+			return None;
 		}
 
-		return Ok(this.data[index]);
+		return Some(this.data[index]);
 	}
 
 	func clear(this: &&String) {
 		this.size = 0u;
 	}
 
-	func append(this: &&String, value: byte) -> Result!<void> {
-		try this.grow();
+	func append(this: &&String, value: byte) -> void {
+		this.grow();
 
 		this.data[this.size] = value;
 		this.size += 1u;
-
-		return Ok;
 	}
 
-	func append(this: &&String, other: String) -> Result!<void> {
-		return this.append(other.bytes());
+	func append(this: &&String, other: String) -> void {
+		this.append(other.bytes());
 	}
 
-	func append(this: &&String, bytes: Range!<byte>) -> Result!<void> {
-		try this.grow(this.size + bytes.size());
+	func append(this: &&String, bytes: Range!<byte>) -> void {
+		this.grow(this.size + bytes.size());
 
 		memcpy!<byte>(this.data + this.size, bytes.data() as cptr!<byte>, bytes.size());
 		this.size += bytes.size();
-
-		return Ok;
 	}
 
-	func insert(this: &&String, index: uint, value: byte) -> Result!<void> {
+	func insert(this: &&String, index: uint, value: byte) -> void {
 		if index > this.size {
-			throw Error::EINVAL;
+			panic(Error::EINVAL);
 		}
 
-		try this.grow();
+		this.grow();
 		memmove!<byte>(this.data + index + 1, this.data as cptr!<byte> + index, this.size - index);
 
 		this.data[index] = value;
 		this.size += 1u;
-
-		return Ok;
 	}
 
-	func insert(this: &&String, index: uint, other: String) -> Result!<void> {
-		return this.insert(index, other.bytes());
+	func insert(this: &&String, index: uint, other: String) -> void {
+		this.insert(index, other.bytes());
 	}
 
-	func insert(this: &&String, index: uint, bytes: Range!<byte>) -> Result!<void> {
+	func insert(this: &&String, index: uint, bytes: Range!<byte>) -> void {
 		if index > this.size {
-			throw Error::EINVAL;
+			panic(Error::EINVAL);
 		}
 
-		try this.grow(this.size + bytes.size());
+		this.grow(this.size + bytes.size());
 		memmove!<byte>(this.data + index + bytes.size(), this.data as cptr!<byte> + index, this.size - index);
 		memcpy!<byte>(this.data + index, bytes.data(), bytes.size());
 		this.size += bytes.size();
-
-		return Ok;
 	}
 
-	func remove(this: &&String, index: uint) -> Result!<void> {
+	func remove(this: &&String, index: uint) -> void {
 		if index >= this.size {
-			throw Error::EINVAL;
+			panic(Error::EINVAL);
 		}
 
 		this.size -= 1u;
 		memmove!<byte>(this.data + index, this.data as cptr!<byte> + index + 1, this.size - index);
-
-		return Ok;
 	}
 
-	func remove(this: &&String, range: NumericRange!<uint>) -> Result!<void> {
+	func remove(this: &&String, range: NumericRange!<uint>) -> void {
 		if range.start > this.size || range.end > this.size {
-			throw Error::EINVAL;
+			panic(Error::EINVAL);
 		}
 
 		if range.start > range.end || range.step != 1u {
-			throw Error::EINVAL;
+			panic(Error::EINVAL);
 		}
 
 		this.size -= range.end - range.start;
 		memmove!<byte>(this.data + range.start, this.data as cptr!<byte> + range.end, this.size - range.start);
-
-		return Ok;
 	}
 
 	func find(this: String, start: uint, value: byte) -> Optional!<uint> {
@@ -271,19 +267,19 @@ struct String {
 		return this.find(needle) is Some;
 	}
 
-	func replace(this: &&String, range: NumericRange!<uint>, with: String) -> Result!<void> {
+	func replace(this: &&String, range: NumericRange!<uint>, with: String) -> void {
 		if range.start > this.size || range.end > this.size {
-			throw Error::EINVAL;
+			panic(Error::EINVAL);
 		}
 
 		if range.start > range.end || range.step != 1u {
-			throw Error::EINVAL;
+			panic(Error::EINVAL);
 		}
 
 		const difference = with.size() as int - range.size() as int;
 		const count = (difference if difference >= 0 else -difference) as uint;
 		if difference > 0 {
-			try this.grow(this.size + count);
+			this.grow(this.size + count);
 		}
 
 		memmove!<byte>(this.data + range.end + difference, this.data as cptr!<byte> + range.end, this.size - range.end);
@@ -294,83 +290,77 @@ struct String {
 		} else {
 			this.size += count;
 		}
-
-		return Ok;
 	}
 
-	func replace(this: &&String, pattern: byte, with: String) -> Result!<void> {
+	func replace(this: &&String, pattern: byte, with: String) -> void {
 		var start = 0u;
 		var pos = this.find(start, pattern);
 
 		while pos.hasValue(); pos = this.find(start, pattern) {
 			const index = pos.value();
-			try this.replace(index..(index + 1u), with);
+			this.replace(index..(index + 1u), with);
 			start = index + with.size();
 		}
-
-		return Ok;
 	}
 
-	func replace(this: &&String, pattern: String, with: String) -> Result!<void> {
+	func replace(this: &&String, pattern: String, with: String) -> void {
 		var start = 0u;
 		var pos = this.find(start, pattern);
 
 		while pos.hasValue(); pos = this.find(start, pattern) {
 			const index = pos.value();
-			try this.replace(index..(index + pattern.size()), with);
+			this.replace(index..(index + pattern.size()), with);
 			start = index + with.size();
 		}
-
-		return Ok;
 	}
 
-	func split(this: String, separator: byte) -> Result!<List!<String>> {
+	func split(this: String, separator: byte) -> List!<String> {
 		var result = List!<String>();
 
 		var segment_start = 0u;
 		var segment_end = this.find(segment_start, separator);
 
 		while segment_end.hasValue() {
-			const segment = must this[segment_start..(segment_end.value())];
-			try result.append(String(segment));
+			const segment = this[segment_start..(segment_end.value())];
+			result.append(String(segment));
 
 			segment_start = segment_end.value() + 1u;
 			segment_end = this.find(segment_start, separator);
 		}
-		const segment = must this[segment_start..this.size];
-		try result.append(String(segment));
+		const segment = this[segment_start..this.size];
+		result.append(String(segment));
 
-		return Ok(result);
+		return result;
 	}
 
-	func split(this: String, separator: String) -> Result!<List!<String>> {
+	func split(this: String, separator: String) -> List!<String> {
 		var result = List!<String>();
 
 		var segment_start = 0u;
 		var segment_end = this.find(segment_start, separator);
 
 		while segment_end.hasValue() {
-			const segment = must this[segment_start..(segment_end.value())];
-			try result.append(String(segment));
+			const segment = this[segment_start..(segment_end.value())];
+			result.append(String(segment));
 
 			segment_start = segment_end.value() + separator.size();
 			segment_end = this.find(segment_start, separator);
 		}
-		const segment = must this[segment_start..this.size];
-		try result.append(String(segment));
+		const segment = this[segment_start..this.size];
+		result.append(String(segment));
 
-		return Ok(result);
+		return result;
 	}
 
-	func join(separator: String, segments: List!<String>) -> Result!<String> {
+	func join(separator: String, segments: List!<String>) -> String {
 		var result = String();
 		for i in 0u..segments.size() {
 			if i != 0 {
-				try result.append(separator);
+				result.append(separator);
 			}
-			try result.append(must segments[i]);
+			result.append(segments[i]);
 		}
-		return Ok(result);
+		return result;
 	}
 
 	func startsWith(this: String, other: String) -> bool {
@@ -415,38 +405,38 @@ struct String {
 
 	operator +(this: String, value: byte) -> String {
 		var result = this;
-		must result.append(value);
+		result.append(value);
 		return result;
 	}
 
 	operator +(this: String, other: String) -> String {
 		var result = this;
-		must result.append(other);
+		result.append(other);
 		return result;
 	}
 
 	operator +=(this: &&String, value: byte) -> void {
-		must this.append(value);
+		this.append(value);
 	}
 
 	operator +=(this: &&String, other: String) -> void {
-		must this.append(other);
+		this.append(other);
 	}
 
 	// ensure that memory for at least one more element is available
-	func grow(this: &&String) -> Result!<void> {
+	func grow(this: &&String) -> void {
 		if this.size < this.capacity {
-			return Ok;
+			return;
 		}
 
-		return this.grow(this.size * 3u / 2u + 1u);
+		this.grow(this.size * 3u / 2u + 1u);
 	}
 
 	// ensure that memory for at least 'new_capacity' elements is available
-	func grow(this: &&String, new_capacity: uint) -> Result!<void> {
+	func grow(this: &&String, new_capacity: uint) -> void {
 		const old_capacity = this.capacity;
 		if old_capacity >= new_capacity && this.is_owner {
-			return Ok;
+			return;
 		}
 
 		var new_data = vptr::null() as vptr!<byte>;
@@ -457,7 +447,7 @@ struct String {
 		}
 
 		if new_data == vptr::null() {
-			throw Error::ENOMEM;
+			panic(Error::ENOMEM);
 		}
 
 		if !this.is_owner {
@@ -471,8 +461,6 @@ struct String {
 
 		this.data = new_data;
 		this.capacity = new_capacity;
-
-		return Ok;
 	}
 }
 
@@ -585,14 +573,14 @@ func parseNumber(str: String, start: uint) -> Result!<ParsedNumber> {
 	var exponent = 0;
 	var offset = 0;
 
-	if try str[index] == '-'b {
+	if str[index] == '-'b {
 		negative = true;
 		index++;
 	}
 
 	if str.size() - index >= 3 {
-		if try str[index] == '0'b && isAlpha(try str[index + 1]) {
-			match try str[index + 1] {
+		if str[index] == '0'b && isAlpha(str[index + 1]) {
+			match str[index + 1] {
 				case 'b'b -> base = 2;
 				case 'o'b -> base = 8;
 				case 'd'b -> base = 10;
@@ -600,7 +588,7 @@ func parseNumber(str: String, start: uint) -> Result!<ParsedNumber> {
 				else -> return Ok(ParsedNumber(0, 10, 0, 1u));
 			}
 
-			if isDigit(try str[index + 2], base) {
+			if isDigit(str[index + 2], base) {
 				index += 2;
 			} else {
 				// 0x -> number 0 with postfix x
@@ -609,12 +597,12 @@ func parseNumber(str: String, start: uint) -> Result!<ParsedNumber> {
 		}
 	}
 
-	if !isDigit(try str[index], base) {
+	if !isDigit(str[index], base) {
 		throw Error::EINVAL;
 	}
 
-	while isDigit(try str[index], base) {
-		const digit = parseDigit(try str[index], base);
+	while isDigit(str[index], base) {
+		const digit = parseDigit(str[index], base);
 		significant = significant * base + digit;
 		index++;
 
@@ -624,15 +612,15 @@ func parseNumber(str: String, start: uint) -> Result!<ParsedNumber> {
 	}
 
 	if str.size() - index >= 2 {
-		if try str[index] == '.'b {
+		if str[index] == '.'b {
 			index++;
 
-			if !isDigit(try str[index], base) {
+			if !isDigit(str[index], base) {
 				throw Error::EINVAL;
 			}
 
-			while isDigit(try str[index], base) {
-				const digit = parseDigit(try str[index], base);
+			while isDigit(str[index], base) {
+				const digit = parseDigit(str[index], base);
 				significant = significant * base + digit;
 				offset++;
 				index++;
@@ -645,23 +633,23 @@ func parseNumber(str: String, start: uint) -> Result!<ParsedNumber> {
 	}
 
 	if str.size() - index >= 2 {
-		if try str[index] == 'e'b || try str[index] == 'E'b {
+		if str[index] == 'e'b || str[index] == 'E'b {
 			index++;
 
 			var exponent_sign = 1;
-			if try str[index] == '-'b {
+			if str[index] == '-'b {
 				exponent_sign = -1;
 				index++;
-			} else if try str[index] == '+'b {
+			} else if str[index] == '+'b {
 				index++;
 			}
 
-			if !isDigit(try str[index], base) {
+			if !isDigit(str[index], base) {
 				throw Error::EINVAL;
 			}
 
-			while isDigit(try str[index], base) {
-				const digit = parseDigit(try str[index], base);
+			while isDigit(str[index], base) {
+				const digit = parseDigit(str[index], base);
 				exponent = exponent * base + digit;
 				index++;
 

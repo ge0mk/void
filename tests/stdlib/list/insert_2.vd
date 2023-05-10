@@ -5,17 +5,17 @@ func main() {
 	var a = List!<int>();
 	var b = List!<int>();
 
-	must a.append(1);
-	must a.append(2);
-	must a.append(3);
+	a.append(1);
+	a.append(2);
+	a.append(3);
 
-	must b.append(4);
-	must b.append(5);
-	must b.append(6);
+	b.append(4);
+	b.append(5);
+	b.append(6);
 
-	must a.insert(2u, b);
+	a.insert(2u, b);
 
-	assert((must a[1u]) == 2);
-	assert((must a[2u]) == 4);
-	assert((must a[3u]) == 5);
+	assert(a[1u] == 2);
+	assert(a[2u] == 4);
+	assert(a[3u] == 5);
 }

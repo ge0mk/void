@@ -163,15 +163,15 @@ struct Application {
 	func solidify(this: &&Application) {
 		for x in 0u..4 {
 			for y in 0u..4 {
-				if must (must this.tetrominos[this.id * 4 + this.rotation])[y * 4 + x] != 0 {
-					must (must this.field[y + this.offset_y as uint])[x + this.offset_x as uint] = this.id as int + 1;
+				if this.tetrominos[this.id * 4 + this.rotation][y * 4 + x] != 0 {
+					this.field[y + this.offset_y as uint][x + this.offset_x as uint] = this.id as int + 1;
 				}
 			}
 		}
 
 		for y in 0u..20 {
 			var is_complete = true;
-			for tile in must this.field[y] {
+			for tile in this.field[y] {
 				if tile == 0 {
 					is_complete = false;
 				}
@@ -179,9 +179,9 @@ struct Application {
 
 			if is_complete {
 				for i in 0u..y {
-					must this.field[y - i] = must this.field[y - i - 1];
+					this.field[y - i] = this.field[y - i - 1];
 				}
-				must this.field[0u] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+				this.field[0u] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 			}
 		}
 	}
@@ -189,7 +189,7 @@ struct Application {
 	func checkCollision(this: &&Application) -> bool {
 		for x in 0u..4 {
 			for y in 0u..4 {
-				if must (must this.tetrominos[this.id * 4 + this.rotation])[y * 4 + x] != 0 {
+				if this.tetrominos[this.id * 4 + this.rotation][y * 4 + x] != 0 {
 					const abs_x = x as int + this.offset_x;
 					const abs_y = y as int + this.offset_y;
 
@@ -197,7 +197,7 @@ struct Application {
 						return true;
 					}
 
-					if must (must this.field[abs_y as uint])[abs_x as uint] != 0 {
+					if this.field[abs_y as uint][abs_x as uint] != 0 {
 						return true;
 					}
 				}
@@ -234,13 +234,13 @@ struct Application {
 					48i32, 48i32,
 				));
 
-				const id = must (must this.field[y])[x];
-				const color = must this.colors[id as uint];
+				const id = this.field[y][x];
+				const color = this.colors[id as uint];
 				this.renderer.setDrawColor(
-					(must color[0u] * 4 / 5) as u8,
-					(must color[1u] * 4 / 5) as u8,
-					(must color[2u] * 4 / 5) as u8,
-					(must color[3u] * 4 / 5) as u8,
+					(color[0u] * 4 / 5) as u8,
+					(color[1u] * 4 / 5) as u8,
+					(color[2u] * 4 / 5) as u8,
+					(color[3u] * 4 / 5) as u8,
 				);
 
 				this.renderer.fillRect(Rect(
@@ -253,17 +253,17 @@ struct Application {
 	}
 
 	func renderCurrent(this: &Application) {
-		const color = must this.colors[this.id + 1];
+		const color = this.colors[this.id + 1];
 		this.renderer.setDrawColor(
-			(must color[0u]) as u8,
-			(must color[1u]) as u8,
-			(must color[2u]) as u8,
-			(must color[3u]) as u8,
+			color[0u] as u8,
+			color[1u] as u8,
+			color[2u] as u8,
+			color[3u] as u8,
 		);
 
 		for x in 0u..4 {
 			for y in 0u..4 {
-				if must (must this.tetrominos[this.id * 4 + this.rotation])[y * 4 + x] != 0 {
+				if this.tetrominos[this.id * 4 + this.rotation][y * 4 + x] != 0 {
 					this.renderer.fillRect(Rect(
 						((x + this.offset_x as uint) * 50 + 5) as i32,
 						((y + this.offset_y as uint) * 50 + 5) as i32,

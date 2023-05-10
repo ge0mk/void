@@ -70,7 +70,7 @@ struct Map {
 		this.size := 0;
 		this.capacity := 0;
 
-		must this.grow(other.size());
+		this.grow(other.size());
 		for index in 0u..other.size() {
 			this.keys[index].constructor(other.keys[index]);
 			this.values[index].constructor(other.values[index]);
@@ -153,16 +153,16 @@ struct Map {
 		}
 	}
 
-	func set(this: &&Map!<Tkey, Tvalue>, key: Tkey, value: Tvalue) -> Result!<void> {
+	func set(this: &&Map!<Tkey, Tvalue>, key: Tkey, value: Tvalue) -> void {
 		const index = this.getInsertPos(key);
 		if index < this.size {
 			if this.keys[index] == key {
 				this.values[index] = value;
-				return Ok;
+				return;
 			}
 		}
 
-		try this.grow();
+		this.grow();
 
 		memmove!<Tkey>(this.keys + index + 1, this.keys as cptr!<Tkey> + index, this.size - index);
 		memmove!<Tvalue>(this.values + index + 1, this.values as cptr!<Tvalue> + index, this.size - index);
@@ -170,8 +170,6 @@ struct Map {
 		this.keys[index].constructor(key);
 		this.values[index].constructor(value);
 		this.size += 1u;
-
-		return Ok;
 	}
 
 	func get(this: Map!<Tkey, Tvalue>, key: Tkey) -> Optional!<Tvalue> {
@@ -203,15 +201,15 @@ struct Map {
 		memmove!<Tvalue>(this.values + index, this.values as cptr!<Tvalue> + index + 1, this.size - index);
 	}
 
-	operator [](this: &&Map!<Tkey, Tvalue>, key: Tkey) -> Result!<&&Tvalue> {
+	operator [](this: &&Map!<Tkey, Tvalue>, key: Tkey) -> &&Tvalue {
 		const index = this.getInsertPos(key);
 		if index < this.size {
 			if this.keys[index] == key {
-				return Ok(&&this.values[index]);
+				return &&this.values[index];
 			}
 		}
 
-		try this.grow();
+		this.grow();
 
 		memmove!<Tkey>(this.keys + index + 1, this.keys as cptr!<Tkey> + index, this.size - index);
 		memmove!<Tvalue>(this.values + index + 1, this.values as cptr!<Tvalue> + index, this.size - index);
@@ -220,7 +218,7 @@ struct Map {
 		this.values[index].constructor();
 		this.size += 1u;
 
-		return Ok(&&this.values[index]);
+		return &&this.values[index];
 	}
 
 	func clear(this: &&Map!<Tkey, Tvalue>) -> void {
@@ -233,19 +231,19 @@ struct Map {
 	}
 
 	// ensure that memory for at least one more element is available
-	func grow(this: &&Map!<Tkey, Tvalue>) -> Result!<void> {
+	func grow(this: &&Map!<Tkey, Tvalue>) -> void {
 		if this.size < this.capacity {
-			return Ok;
+			return;
 		}
 
-		return this.grow(this.size * 3u / 2u + 1u);
+		this.grow(this.size * 3u / 2u + 1u);
 	}
 
 	// ensure that memory for at least 'new_capacity' elements is available
-	func grow(this: &&Map!<Tkey, Tvalue>, new_capacity: uint) -> Result!<void> {
+	func grow(this: &&Map!<Tkey, Tvalue>, new_capacity: uint) -> void {
 		const old_capacity = this.capacity;
 		if new_capacity <= old_capacity {
-			return Ok;
+			return;
 		}
 
 		var new_keys: vptr!<Tkey>;
@@ -259,7 +257,7 @@ struct Map {
 		}
 
 		if new_keys == vptr::null() || new_values == vptr::null() {
-			throw Error::ENOMEM;
+			panic(Error::ENOMEM);
 		}
 
 		this.keys = new_keys;
@@ -268,7 +266,5 @@ struct Map {
 
 		memset!<Tkey>(this.keys + old_capacity, '\0'b, new_capacity - old_capacity);
 		memset!<Tvalue>(this.values + old_capacity, '\0'b, new_capacity - old_capacity);
-
-		return Ok;
 	}
 }

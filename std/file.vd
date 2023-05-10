@@ -248,7 +248,7 @@ struct File {
 	func readAll(this: &&File) -> Result!<String> {
 		var result = "";
 		while !this.eof() {
-			try result.append(try this.readString(4096u));
+			result.append(try this.readString(4096u));
 		}
 		return Ok(result);
 	}
@@ -257,7 +257,7 @@ struct File {
 	func readAll(this: &&File) -> Result!<List!<T>> {
 		var result = List!<T>();
 		while !this.eof() {
-			try result.append(try this.readSome!<T>(1024u));
+			result.append(try this.readSome!<T>(1024u));
 		}
 		return Ok(result);
 	}

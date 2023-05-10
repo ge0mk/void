@@ -8,7 +8,7 @@ import std/file;
 import std/io;
 
 func main(args: Range!<String>) -> int {
-	const path = args[1u] else {
+	const path = args.at(1u) else {
 		eprintln("usage: cat <path>");
 		return 1;
 	}
@@ -20,7 +20,9 @@ func main(args: Range!<String>) -> int {
 	var stdout = stdout();
 
 	while !file.eof() {
-		const buffer = must file.readString(100u);
+		const buffer = file.readString(100u) else {
+			return 1;
+		}
 		discard stdout.writeString(buffer);
 	}
 

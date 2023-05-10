@@ -5,8 +5,8 @@ func main() {
 	var a: List!<int>;
 	var b: List!<uint>;
 
-	must append(&&a, 5);
-	must List!<uint>::append(&&b, 5u);
+	append(&&a, 5);
+	List!<uint>::append(&&b, 5u);
 
 	assert(a.size() == 1 && b.size() == 1);
 }

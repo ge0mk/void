@@ -3,6 +3,6 @@ import std/string;
 
 func main() {
 	var a = "abc";
-	must a.insert(1u, 'd'b);
+	a.insert(1u, 'd'b);
 	assert(a == "adbc");
 }

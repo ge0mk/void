@@ -13,44 +13,52 @@ extend Array {
 		return VRangeIterator!<T>(this.data(), this.data() + Size);
 	}
 
-	operator [](this: &Array!<T, Size>, index: uint) -> Result!<&T> {
+	func at(this: &Array!<T, Size>, index: uint) -> Optional!<&T> {
 		if index < 0u || index >= Size {
-			throw Error::EINVAL;
+			return None;
 		}
 
-		return Ok(&this.data()[index]);
+		return Some(&this.data()[index]);
 	}
 
-	operator [](this: &&Array!<T, Size>, index: uint) -> Result!<&&T> {
+	operator [](this: &Array!<T, Size>, index: uint) -> &T {
 		if index < 0u || index >= Size {
-			throw Error::EINVAL;
+			panic(Error::EINVAL);
 		}
 
-		return Ok(&&this.data()[index]);
+		return &this.data()[index];
 	}
 
-	operator [](this: &Array!<T, Size>, range: NumericRange!<uint>) -> Result!<Range!<T>> {
+	operator [](this: &&Array!<T, Size>, index: uint) -> &&T {
+		if index < 0u || index >= Size {
+			panic(Error::EINVAL);
+		}
+
+		return &&this.data()[index];
+	}
+
+	operator [](this: &Array!<T, Size>, range: NumericRange!<uint>) -> Range!<T> {
 		if range.start < 0u || range.end >= Size {
-			throw Error::EINVAL;
+			panic(Error::EINVAL);
 		}
 
 		if range.start >= range.end || range.step != 1u {
-			throw Error::EINVAL;
+			panic(Error::EINVAL);
 		}
 
-		return Ok(Range!<T>(this.data() + range.start, range.end - range.start));
+		return Range!<T>(this.data() + range.start, range.end - range.start);
 	}
 
-	operator [](this: &&Array!<T, Size>, range: NumericRange!<uint>) -> Result!<VRange!<T>> {
+	operator [](this: &&Array!<T, Size>, range: NumericRange!<uint>) -> VRange!<T> {
 		if range.start < 0u || range.end >= Size {
-			throw Error::EINVAL;
+			panic(Error::EINVAL);
 		}
 
 		if range.start >= range.end || range.step != 1u {
-			throw Error::EINVAL;
+			panic(Error::EINVAL);
 		}
 
-		return Ok(VRange!<T>(this.data() + range.start, range.end - range.start));
+		return VRange!<T>(this.data() + range.start, range.end - range.start);
 	}
 
 	func range(this: &Array!<T, Size>) -> Range!<T> {

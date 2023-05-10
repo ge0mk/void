@@ -6,7 +6,7 @@ import std/json;
 import std/io;
 
 func main(args: Range!<String>) -> int {
-	const path = args[1u] else {
+	const path = args.at(1u) else {
 		eprintln("usage: json <path>");
 		return 1;
 	}

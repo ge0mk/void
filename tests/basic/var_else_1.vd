@@ -8,7 +8,7 @@ import std/string;
 import std/io;
 
 func main(args: Range!<String>) -> int {
-	var str = args[1u] else {
+	var str = args.at(1u) else {
 		return 1;
 	}
 	println(str);

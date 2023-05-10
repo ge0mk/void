@@ -2,34 +2,34 @@ import std/core;
 import std/array;
 import std/string;
 
-func encode(str: String) -> Result!<String> {
+func encode(str: String) -> String {
 	const lut = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 	var padded = str;
 	while padded.size() % 3 != 0 {
-		try padded.append('\0'b);
+		padded.append('\0'b);
 	}
 
 	var result = String(padded.size() / 3 * 4, '\0'b);
 	for i in 0u..padded.size() | 3u {
-		const a = (try padded[i + 0]) as uint;
-		const b = (try padded[i + 1]) as uint;
-		const c = (try padded[i + 2]) as uint;
+		const a = padded[i + 0] as uint;
+		const b = padded[i + 1] as uint;
+		const c = padded[i + 2] as uint;
 
 		const triple = a << 16 + b << 8 + c;
 
 		const k = i / 3 * 4;
-		try result[k + 0] = try lut[triple >> 18 & 0x3F];
-		try result[k + 1] = try lut[triple >> 12 & 0x3F];
-		try result[k + 2] = try lut[triple >> 6  & 0x3F];
-		try result[k + 3] = try lut[triple >> 0  & 0x3F];
+		result[k + 0] = lut[triple >> 18 & 0x3F];
+		result[k + 1] = lut[triple >> 12 & 0x3F];
+		result[k + 2] = lut[triple >> 6  & 0x3F];
+		result[k + 3] = lut[triple >> 0  & 0x3F];
 	}
 
 	for i in 0u..((3u - str.size() % 3) % 3) {
-		try result[result.size() - (i + 1)] = '='b;
+		result[result.size() - (i + 1)] = '='b;
 	}
 
-	return Ok(result);
+	return result;
 }
 
 func generateDecodeLUT() -> [uint, 256] {
@@ -37,37 +37,37 @@ func generateDecodeLUT() -> [uint, 256] {
 	var result: [uint, 256];
 
 	for i in 0u..encode_lut.size() {
-		must result[(must encode_lut[i]) as uint] = i;
+		result[encode_lut[i] as uint] = i;
 	}
 
 	return result;
 }
 
-func decode(str: String) -> Result!<String> {
+func decode(str: String) -> String {
 	const lut = generateDecodeLUT();
 
 	var result = String(str.size() / 4 * 3, '\0'b);
 	for i in 0u..str.size() | 4u {
-		const a = try lut[(try str[i + 0]) as uint];
-		const b = try lut[(try str[i + 1]) as uint];
-		const c = try lut[(try str[i + 2]) as uint];
-		const d = try lut[(try str[i + 3]) as uint];
+		const a = lut[str[i + 0] as uint];
+		const b = lut[str[i + 1] as uint];
+		const c = lut[str[i + 2] as uint];
+		const d = lut[str[i + 3] as uint];
 
 		const triple = a << 18 + b << 12 + c << 6 + d;
 
 		const k = i / 4 * 3;
-		try result[k + 0] = ((triple >> 16) & 0xFF) as byte;
-		try result[k + 1] = ((triple >> 8) & 0xFF) as byte;
-		try result[k + 2] = (triple & 0xFF) as byte;
+		result[k + 0] = ((triple >> 16) & 0xFF) as byte;
+		result[k + 1] = ((triple >> 8) & 0xFF) as byte;
+		result[k + 2] = (triple & 0xFF) as byte;
 	}
 
-	if try str[str.size() - 1] == '='b {
+	if str[str.size() - 1] == '='b {
 		result.size--;
 	}
 
-	if try str[str.size() - 2] == '='b {
+	if str[str.size() - 2] == '='b {
 		result.size--;
 	}
 
-	return Ok(result);
+	return result;
 }
