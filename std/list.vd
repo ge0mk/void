@@ -201,6 +201,34 @@ struct List {
 		return this.find(value) is Some;
 	}
 
+	func startsWith(this: List!<T>, values: Range!<T>) -> bool {
+		if values.size() > this.size {
+			return false;
+		}
+
+		for i in 0u..values.size() {
+			if this.data[i] != values[i] {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	func endsWith(this: List!<T>, values: Range!<T>) -> bool {
+		if values.size() > this.size {
+			return false;
+		}
+
+		for i in 0u..values.size() {
+			if this.data[this.size - i - 1] != values[values.size() - i - 1] {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
 	func append(this: &&List!<T>, value: T) -> Result!<void> {
 		try this.grow();
 
