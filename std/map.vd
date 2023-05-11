@@ -146,10 +146,11 @@ struct Map {
 	}
 
 	func contains(this: Map!<Tkey, Tvalue>, key: Tkey) -> bool {
-		if this.size == 0 {
+		const index = this.getInsertPos(key);
+		if index >= this.size {
 			return false;
 		} else {
-			return this.keys[this.getInsertPos(key)] == key;
+			return this.keys[index] == key;
 		}
 	}
 

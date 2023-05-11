@@ -3,6 +3,10 @@ import std/range;
 
 import std/libc/stdlib;
 
+import std/string;
+import std/io;
+import std/format;
+
 template <T: type>
 struct Set {
 	var data: vptr!<T>;
@@ -93,10 +97,11 @@ struct Set {
 	}
 
 	func contains(this: Set!<T>, value: T) -> bool {
-		if this.size == 0 {
+		const index = this.getInsertPos(value);
+		if index >= this.size {
 			return false;
 		} else {
-			return this.data[this.getInsertPos(value)] == value;
+			return this.data[index] == value;
 		}
 	}
 
