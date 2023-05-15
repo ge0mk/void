@@ -3,13 +3,13 @@ import std/libc/errno;
 
 struct FILE {}
 
-@[extern_name: "std::libc::stdin"]
+@[extern_name: "get_stdin"]
 func stdin() -> vptr!<FILE> = extern;
 
-@[extern_name: "std::libc::stdout"]
+@[extern_name: "get_stdout"]
 func stdout() -> vptr!<FILE> = extern;
 
-@[extern_name: "std::libc::stderr"]
+@[extern_name: "get_stderr"]
 func stderr() -> vptr!<FILE> = extern;
 
 func fopen(pathname: cptr!<byte>, mode: cptr!<byte>) -> vptr!<FILE> = extern;

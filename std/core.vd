@@ -340,11 +340,17 @@ enum Error: i32 {
 	case EHWPOISON = 133;
 	case ENOTSUP = 95;
 
-	case EOF = -1;
-}
+	case EBOUNDS = 256;
+	case EOPTNONE = 257;
 
-@[extern_name: "panic_errno"]
-func panic(error: Error) -> never = extern;
+	case EOF = -1;
+
+	@[extern_name: "error_toString"]
+	func toCString(this: Error) -> cptr!<byte> = extern;
+
+	@[extern_name: "error_panic"]
+	func panic(error: Error) -> never = extern;
+}
 
 template <Tok: type, Terr: type>
 variant Result {
