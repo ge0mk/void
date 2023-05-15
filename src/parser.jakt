@@ -672,7 +672,7 @@ struct Parser {
 				member_variables.push(.parseMemberVarDecl())
 			} else {
 				let annotations = match .current() {
-					LSquare => .parseAnnotations()
+					AtSign => .parseAnnotations()
 					else => []
 				}
 
@@ -748,7 +748,7 @@ struct Parser {
 				cases.push(.parseEnumCaseDecl())
 			} else {
 				let annotations = match .current() {
-					LSquare => .parseAnnotations()
+					AtSign => .parseAnnotations()
 					else => []
 				}
 
@@ -899,7 +899,7 @@ struct Parser {
 				cases.push(.parseVariantCaseDecl())
 			} else {
 				let annotations = match .current() {
-					LSquare => .parseAnnotations()
+					AtSign => .parseAnnotations()
 					else => []
 				}
 
@@ -1023,7 +1023,7 @@ struct Parser {
 
 		while not .current() is RCurly {
 			let annotations = match .current() {
-				LSquare => .parseAnnotations()
+				AtSign => .parseAnnotations()
 				else => []
 			}
 
