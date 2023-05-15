@@ -76,7 +76,7 @@ struct String {
 
 	operator [](this: String, index: uint) -> byte {
 		if index >= this.size() {
-			panic(Error::EINVAL);
+			panic(Error::EBOUNDS);
 		}
 
 		return this.data[index];
@@ -84,7 +84,7 @@ struct String {
 
 	operator [](this: &String, index: uint) -> &byte {
 		if index >= this.size() {
-			panic(Error::EINVAL);
+			panic(Error::EBOUNDS);
 		}
 
 		return &this.data[index];
@@ -92,7 +92,7 @@ struct String {
 
 	operator [](this: &&String, index: uint) -> &&byte {
 		if index >= this.size() {
-			panic(Error::EINVAL);
+			panic(Error::EBOUNDS);
 		}
 
 		return &&this.data[index];
@@ -100,7 +100,7 @@ struct String {
 
 	operator [](this: String, range: NumericRange!<uint>) -> Range!<byte> {
 		if range.end > this.size() {
-			panic(Error::EINVAL);
+			panic(Error::EBOUNDS);
 		}
 
 		if range.start > range.end || range.step != 1u {
@@ -146,7 +146,7 @@ struct String {
 
 	func insert(this: &&String, index: uint, value: byte) -> void {
 		if index > this.size {
-			panic(Error::EINVAL);
+			panic(Error::EBOUNDS);
 		}
 
 		this.grow();
@@ -162,7 +162,7 @@ struct String {
 
 	func insert(this: &&String, index: uint, bytes: Range!<byte>) -> void {
 		if index > this.size {
-			panic(Error::EINVAL);
+			panic(Error::EBOUNDS);
 		}
 
 		this.grow(this.size + bytes.size());
@@ -173,7 +173,7 @@ struct String {
 
 	func remove(this: &&String, index: uint) -> void {
 		if index >= this.size {
-			panic(Error::EINVAL);
+			panic(Error::EBOUNDS);
 		}
 
 		this.size -= 1u;
@@ -182,7 +182,7 @@ struct String {
 
 	func remove(this: &&String, range: NumericRange!<uint>) -> void {
 		if range.start > this.size || range.end > this.size {
-			panic(Error::EINVAL);
+			panic(Error::EBOUNDS);
 		}
 
 		if range.start > range.end || range.step != 1u {
@@ -269,7 +269,7 @@ struct String {
 
 	func replace(this: &&String, range: NumericRange!<uint>, with: String) -> void {
 		if range.start > this.size || range.end > this.size {
-			panic(Error::EINVAL);
+			panic(Error::EBOUNDS);
 		}
 
 		if range.start > range.end || range.step != 1u {

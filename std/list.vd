@@ -109,7 +109,7 @@ struct List {
 
 	operator [](this: List!<T>, index: uint) -> T {
 		if index >= this.size() {
-			panic(Error::EINVAL);
+			panic(Error::EBOUNDS);
 		}
 
 		return this.data[index];
@@ -117,7 +117,7 @@ struct List {
 
 	operator [](this: &List!<T>, index: uint) -> &T {
 		if index >= this.size() {
-			panic(Error::EINVAL);
+			panic(Error::EBOUNDS);
 		}
 
 		return &this.data[index];
@@ -125,7 +125,7 @@ struct List {
 
 	operator [](this: &&List!<T>, index: uint) -> &&T {
 		if index >= this.size() {
-			panic(Error::EINVAL);
+			panic(Error::EBOUNDS);
 		}
 
 		return &&this.data[index];
@@ -133,7 +133,7 @@ struct List {
 
 	operator [](this: &List!<T>, range: NumericRange!<uint>) -> Range!<T> {
 		if range.end >= this.size() {
-			panic(Error::EINVAL);
+			panic(Error::EBOUNDS);
 		}
 
 		if range.start > range.end || range.step != 1u {
@@ -145,7 +145,7 @@ struct List {
 
 	operator [](this: &&List!<T>, range: NumericRange!<uint>) -> VRange!<T> {
 		if range.end >= this.size() {
-			panic(Error::EINVAL);
+			panic(Error::EBOUNDS);
 		}
 
 		if range.start > range.end || range.step != 1u {
@@ -253,7 +253,7 @@ struct List {
 
 	func insert(this: &&List!<T>, index: uint, value: T) -> void {
 		if index > this.size() {
-			panic(Error::EINVAL);
+			panic(Error::EBOUNDS);
 		}
 
 		this.grow();
@@ -265,7 +265,7 @@ struct List {
 
 	func insert(this: &&List!<T>, index: uint, values: Range!<T>) -> void {
 		if index > this.size() {
-			panic(Error::EINVAL);
+			panic(Error::EBOUNDS);
 		}
 
 		this.grow(this.size() + values.size());
@@ -285,7 +285,7 @@ struct List {
 
 	func remove(this: &&List!<T>, index: uint) -> void {
 		if index >= this.size() {
-			panic(Error::EINVAL);
+			panic(Error::EBOUNDS);
 		}
 
 		this.data[index].destructor();
@@ -295,7 +295,7 @@ struct List {
 
 	func remove(this: &&List!<T>, range: NumericRange!<uint>) -> void {
 		if range.start > this.size || range.end > this.size {
-			panic(Error::EINVAL);
+			panic(Error::EBOUNDS);
 		}
 
 		if range.start > range.end || range.step != 1u {
@@ -312,7 +312,7 @@ struct List {
 
 	func removeLast(this: &&List!<T>) -> void {
 		if this.size == 0 {
-			panic(Error::EINVAL);
+			panic(Error::EBOUNDS);
 		}
 
 		this.remove(this.size - 1);
