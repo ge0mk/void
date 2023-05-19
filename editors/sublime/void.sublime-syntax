@@ -48,15 +48,13 @@ contexts:
       scope: keyword.declaration.namespace
       push: type_extension
 
-    - match: \b(extern\W+)?(func|operator)\b
+    - match: \b(func|operator)\b
       scope: keyword.declaration.function
       push: func_decl
 
   pragma:
     - match: \w+
       scope: entity.name
-
-    - match: ;
       pop: true
 
   annotation:
@@ -137,10 +135,10 @@ contexts:
   import:
     - include: comments
 
-    - match: \w+
-      scope: entity.name.namespace
-
-    - match: ;
+    - match: (\w+)(/(\w+))+
+      captures:
+        1: entity.name.namespace
+        3: entity.name.namespace
       pop: true
 
   type_extension:
@@ -163,7 +161,7 @@ contexts:
     - match: '\['
       push: annotation
 
-    - match: \b(extern\W+)?(func|operator)\b
+    - match: \b(func|operator)\b
       scope: keyword.declaration.function
       push: func_decl
 
@@ -195,7 +193,7 @@ contexts:
     - match: '\['
       push: annotation
 
-    - match: \b(extern\W+)?(func|operator)\b
+    - match: \b(func|operator)\b
       scope: keyword.declaration.function
       push: func_decl
 
@@ -223,7 +221,7 @@ contexts:
     - match: '\['
       push: annotation
 
-    - match: \b(extern\W+)?(func|operator)\b
+    - match: \b(func|operator)\b
       scope: keyword.declaration.function
       push: func_decl
 
@@ -278,7 +276,7 @@ contexts:
     - match: '\['
       push: annotation
 
-    - match: \b(extern\W+)?(func|operator)\b
+    - match: \b(func|operator)\b
       scope: keyword.declaration.function
       push: func_decl
 
@@ -389,20 +387,13 @@ contexts:
     - match: '='
       set: func_decl_inline_body
 
-    - match: ;
-      pop: true
-
     - match: '{'
       scope: punctuation.section.block.begin
       set: compound_stmt
 
   func_decl_inline_body:
-    - include: expr
-
-    - match: default
+    - match: (default|extern)
       scope: keyword.control
-
-    - match: ;
       pop: true
 
   template_decl:
