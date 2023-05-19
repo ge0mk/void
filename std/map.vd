@@ -87,6 +87,17 @@ struct Map {
 		}
 	}
 
+	operator =(this: &&Map!<Tkey, Tvalue>, other: Map!<Tkey, Tvalue>) -> void {
+		this.clear();
+
+		this.grow(other.size());
+		for index in 0u..other.size() {
+			this.keys[index].constructor(other.keys[index]);
+			this.values[index].constructor(other.values[index]);
+		}
+		this.size = other.size();
+	}
+
 	func size(this: Map!<Tkey, Tvalue>) -> uint {
 		return this.size;
 	}
