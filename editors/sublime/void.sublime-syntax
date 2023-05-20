@@ -579,7 +579,7 @@ contexts:
       scope: keyword.control
       set: case_stmt_else
 
-    - match: case
+    - match: \bcase\b
       scope: keyword.control
       set: case_stmt_pattern
 
@@ -610,7 +610,7 @@ contexts:
   case_stmt_body:
     - include: stmt
 
-    - match: case
+    - match: \bcase\b
       scope: keyword.control
       set: case_stmt_pattern
 
