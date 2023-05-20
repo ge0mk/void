@@ -2002,6 +2002,24 @@ struct Typechecker {
 					} else if context.is_destructor and function_decl.name == "destructor" {
 						context.deinitialized_members.add(member.id)
 					}
+				} else if args[0] is VarInvoke(var) and var.id == 0 {
+					if context.is_constructor and function_decl.name == "constructor" {
+						if not context.initialized_members.is_empty() {
+							.module.error("double initialization of member", checked_child.span)
+						}
+
+						for member in .program.types[args[0].type.id].member_variables {
+							context.initialized_members.add(member.id)
+						}
+					} else if context.is_destructor and function_decl.name == "destructor" {
+						if not context.deinitialized_members.is_empty() {
+							.module.error("double deinitialization of member", checked_child.span)
+						}
+
+						for member in .program.types[args[0].type.id].member_variables {
+							context.deinitialized_members.add(member.id)
+						}
+					}
 				}
 			} else if checked_child is Expr(expr) and expr is ReferenceMemberInit(member) {
 				if context.initialized_members.contains(member.id) {
