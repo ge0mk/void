@@ -504,8 +504,8 @@ struct ParsedNumber {
 	}
 
 	func toInt(this: ParsedNumber) -> int {
+		const power = this.exponent if this.exponent > 0 else -this.exponent;
 		var result = this.significant;
-		var power = this.exponent if this.exponent > 0 else -this.exponent;
 		var i = 0;
 
 		while i < power; i++ {
@@ -521,6 +521,26 @@ struct ParsedNumber {
 
 	func toFloat(this: ParsedNumber) -> f64 {
 		return this.significant as f64 * pow(this.base as f64, this.exponent as f64);
+	}
+
+	func isInteger(this: ParsedNumber) -> bool {
+		if this.exponent >= 0 {
+			return true;
+		}
+
+		const power = -this.exponent;
+		var result = this.significant;
+		var i = 0;
+
+		while i < power; i++ {
+			if result % this.base != 0 { // next division would produce decimals
+				return false;
+			}
+
+			result /= this.base;
+		}
+
+		return true;
 	}
 }
 
