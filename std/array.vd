@@ -38,7 +38,7 @@ extend Array {
 	}
 
 	operator [](this: &Array!<T, Size>, range: NumericRange!<uint>) -> Range!<T> {
-		if range.start < 0u || range.end >= Size {
+		if range.start < 0u || range.end > Size {
 			panic(Error::EBOUNDS);
 		}
 
@@ -50,7 +50,7 @@ extend Array {
 	}
 
 	operator [](this: &&Array!<T, Size>, range: NumericRange!<uint>) -> VRange!<T> {
-		if range.start < 0u || range.end >= Size {
+		if range.start < 0u || range.end > Size {
 			panic(Error::EBOUNDS);
 		}
 

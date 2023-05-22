@@ -132,7 +132,7 @@ struct List {
 	}
 
 	operator [](this: &List!<T>, range: NumericRange!<uint>) -> Range!<T> {
-		if range.end >= this.size() {
+		if range.end > this.size() {
 			panic(Error::EBOUNDS);
 		}
 
@@ -144,7 +144,7 @@ struct List {
 	}
 
 	operator [](this: &&List!<T>, range: NumericRange!<uint>) -> VRange!<T> {
-		if range.end >= this.size() {
+		if range.end > this.size() {
 			panic(Error::EBOUNDS);
 		}
 
