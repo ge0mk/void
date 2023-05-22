@@ -12,9 +12,25 @@ template <T: type>
 struct SharedPtr {
 	var data: vptr!<refc!<T>>;
 
-	func constructor(this: &&SharedPtr!<T>, data: vptr!<refc!<T>>) {
-		this.data := data;
-		this.data[0u].strong_count++;
+	func constructor(this: &&SharedPtr!<T>, value: T) {
+		this.data := libc::stdlib::malloc(sizeOf!<refc!<T>>()) as vptr!<refc!<T>>;
+		this.data[0u].strong_count = 1;
+		this.data[0u].weak_count = 1;
+		this.data[0u].value.constructor(value);
+	}
+
+	func destructor(this: &&SharedPtr!<T>) {
+		assert(this.data[0u].strong_count > 0);
+
+		this.data[0u].strong_count--;
+		if this.data[0u].strong_count == 0 {
+			this.data[0u].value.destructor();
+			this.data[0u].weak_count--;
+		}
+
+		if this.data[0u].weak_count == 0 {
+			libc::stdlib::free(this.data as vptr);
+		}
 	}
 
 	func constructor(this: &&SharedPtr!<T>, other: SharedPtr!<T>) {
@@ -22,18 +38,11 @@ struct SharedPtr {
 		this.data[0u].strong_count++;
 	}
 
-	func destructor(this: &&SharedPtr!<T>) {
-		assert(this.data[0u].strong_count > 0);
+	func constructor(this: &&SharedPtr!<T>, other: WeakPtr!<T>) {
+		assert(other.data != vptr::null());
 
-		if this.data[0u].strong_count == 1 {
-			this.data[0u].value.destructor();
-		}
-
-		this.data[0u].strong_count--;
-
-		if this.data[0u].strong_count == 0 && this.data[0u].weak_count == 0 {
-			libc::stdlib::free(this.data as vptr);
-		}
+		this.data := other.data;
+		this.data[0u].strong_count++;
 	}
 
 	operator =(this: &&SharedPtr!<T>, other: SharedPtr!<T>) -> void {
@@ -46,11 +55,7 @@ struct SharedPtr {
 	}
 
 	func new(value: T) -> SharedPtr!<T> {
-		var data = libc::stdlib::malloc(sizeOf!<refc!<T>>()) as vptr!<refc!<T>>;
-		data[0u].strong_count = 0;
-		data[0u].weak_count = 0;
-		data[0u].value.constructor(value);
-		return SharedPtr!<T>(data);
+		return SharedPtr!<T>(value);
 	}
 
 	operator unwrap(this: SharedPtr!<T>) -> T {
@@ -72,13 +77,6 @@ struct WeakPtr {
 
 	func constructor(this: &&WeakPtr!<T>) -> void = default;
 
-	func constructor(this: &&WeakPtr!<T>, data: vptr!<refc!<T>>) {
-		this.data := data;
-		if this.data != vptr::null() {
-			this.data[0u].weak_count++;
-		}
-	}
-
 	func constructor(this: &&WeakPtr!<T>, other: SharedPtr!<T>) {
 		this.data := other.data;
 		if this.data != vptr::null() {
@@ -94,12 +92,15 @@ struct WeakPtr {
 	}
 
 	func destructor(this: &&WeakPtr!<T>) {
-		if this.data != vptr::null() {
-			this.data[0u].weak_count--;
+		if this.data == vptr::null() {
+			return;
+		}
 
-			if this.data[0u].strong_count == 0 && this.data[0u].weak_count == 0 {
-				libc::stdlib::free(this.data as vptr);
-			}
+		assert(this.data[0u].weak_count > 0);
+
+		this.data[0u].weak_count--;
+		if this.data[0u].weak_count == 0 {
+			libc::stdlib::free(this.data as vptr);
 		}
 	}
 
@@ -125,7 +126,7 @@ struct WeakPtr {
 			return None;
 		}
 
-		return Some(SharedPtr!<T>(this.data));
+		return Some(SharedPtr!<T>(this));
 	}
 
 	operator <=>(this: WeakPtr!<T>, other: WeakPtr!<T>) -> int {
