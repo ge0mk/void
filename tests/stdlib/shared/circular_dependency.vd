@@ -1,0 +1,33 @@
+//> output "+=--"
+
+import std/core;
+import std/shared;
+import std/list;
+import std/string;
+import std/io;
+
+struct Foo {
+	var that: WeakPtr!<Foo>;
+
+	func constructor(this: &&Foo) -> void {
+		print("+");
+	}
+
+	func constructor(this: &&Foo, other: Foo) -> void {
+		print("=");
+	}
+
+	func destructor(this: &&Foo) -> void {
+		print("-");
+	}
+}
+
+func foo() {
+	var a = SharedPtr!<Foo>::new(Foo());
+	a.that = WeakPtr!<Foo>(a);
+}
+
+func main() {
+	foo();
+	println("");
+}
