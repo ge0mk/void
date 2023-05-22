@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <errno.h>
 
@@ -18,6 +19,7 @@ void error_panic(int error) {
 	fwrite(prefix, 1, strlen(prefix), stderr);
 	fwrite(msg, 1, strlen(msg), stderr);
 	fputc('\n', stderr);
+	abort();
 }
 
 int* get_errno() {
