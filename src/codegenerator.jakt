@@ -2301,7 +2301,7 @@ struct CodegenContext {
 			LLVMDIBuilderFinalize(.debug_info!.builder)
 		}
 
-		let file_name = options.build_dir + "/" + module.name.replace(replace: "/", with: "_") + match options.codegen_bitcode {
+		let file_name = options.build_dir + "/" + options.output_path + match options.codegen_bitcode {
 			true => ".bc"
 			else => ".ll"
 		}

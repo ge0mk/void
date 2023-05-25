@@ -6,6 +6,8 @@ class CompilerOptions {
 
 	public codegen_only_reachable: bool
 	public codegen_bitcode: bool
+	public stop_after_codegen: bool
+	public output_path: String
 
 	public optimize: bool
 	public link_static: bool
@@ -18,6 +20,8 @@ class CompilerOptions {
 	public symbol_type: SymbolType
 
 	public import_search_paths: [String]
+
+	public fn setOutputPath(mut this, path: String) -> void {}
 }
 
 enum SymbolType {
