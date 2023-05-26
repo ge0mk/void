@@ -44,9 +44,8 @@ def check_output(output, line):
 
 	return False
 
-def run_test(test, expected_result, compiler_args, memcheck, compiler = "./build/compiler"):
-	test_binary = "build/test"
-	compile_cmd = [compiler, test, "-o", test_binary] + compiler_args
+def run_test(test, expected_result, compiler_args, memcheck, compiler):
+	compile_cmd = [compiler, test, "-o", "test"] + compiler_args
 
 	for type, value in expected_result:
 		if type == "compiler-arg":
@@ -73,9 +72,9 @@ def run_test(test, expected_result, compiler_args, memcheck, compiler = "./build
 
 	test_cmd = []
 	if memcheck:
-		test_cmd = ["valgrind", "--leak-check=full", "--track-origins=yes", test_binary]
+		test_cmd = ["valgrind", "--leak-check=full", "--track-origins=yes", "build/test"]
 	else:
-		test_cmd = [test_binary]
+		test_cmd = ["build/test"]
 
 	for type, value in expected_result:
 		if type == "test-arg":
@@ -125,12 +124,13 @@ def main():
 	start_time = time.time()
 	args = []
 	compiler_args = []
+	compiler_path = sys.argv[1]
 
 	try:
-		args = sys.argv[1:sys.argv.index("--")]
-		compiler_args = sys.argv[sys.argv.index("--"):]
+		args = sys.argv[2:sys.argv.index("--")]
+		compiler_args = sys.argv[sys.argv.index("--") + 1:]
 	except IndexError:
-		args = sys.argv[1:]
+		args = sys.argv[2:]
 
 	tests = [test for test in find_tests()]
 	total = len(tests)
@@ -151,7 +151,7 @@ def main():
 			continue
 
 		print(format_test_stats(failed, skipped, successful, total, test), end="", flush=True)
-		result, output = run_test(test, expected_result, compiler_args=compiler_args, memcheck=("--memcheck" in args))
+		result, output = run_test(test, expected_result, compiler_args=compiler_args, memcheck=("--memcheck" in args), compiler=compiler_path)
 		print("", end="\r")
 		if result:
 			successful += 1
