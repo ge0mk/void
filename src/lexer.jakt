@@ -368,6 +368,7 @@ struct Lexer {
 				b',' => { return Token::Comma(span: .span(start, ++.index)) }
 				b';' => { return Token::Semicolon(span: .span(start, ++.index)) }
 				b'@' => { return Token::AtSign(span: .span(start, ++.index)) }
+				b'~' => { return Token::Not(span: .span(start, ++.index)) }
 				b'.' => { return .lexDot() }
 				b'?' => { return .lexQuestionmark() }
 				b':' => { return .lexColon() }
