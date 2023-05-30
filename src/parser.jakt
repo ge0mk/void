@@ -227,7 +227,7 @@ struct Parser {
 					template_parameters = parameters
 				}
 
-				yield ParsedType::Name(span: mergeSpans(start, end: .tokens[.index - 1].span), namespaces, name, template_parameters)
+				yield ParsedType::Name(span: mergeSpans(start, end: .tokens[.index - 1].span), namespaces, name: final_name, template_parameters)
 			}
 			else => ParsedType::Empty
 		}

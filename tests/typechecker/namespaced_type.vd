@@ -1,0 +1,9 @@
+//> test-ec "0"
+
+import std/core;
+
+func main() -> int {
+	var a: core::int;
+
+	return a;
+}
