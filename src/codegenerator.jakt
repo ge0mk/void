@@ -612,14 +612,14 @@ struct CodegenContext {
 			param_types.push(.getType(param_type))
 		}
 
-		let return_type = .getType(func_type.return_type)
+		mut return_type = .getType(func_type.return_type)
 
 		mut tmp = match param_types.size() {
 			0 => null<LLVMTypeRef>()
 			else => &raw param_types[0]
 		}
 
-		let name = match func.extern_name.has_value() {
+		mut name = match func.extern_name.has_value() {
 			true => func.extern_name!
 			else => match .options.symbol_type {
 				None => ""
@@ -627,6 +627,11 @@ struct CodegenContext {
 				Name => func.name
 				Signature => .program.formatFunctionSignature(func: Function(id: func.id))
 			}
+		}
+
+		if func.id == .program.main!.id {
+			name = "void_main"
+			return_type = .getType(.program.int_type)
 		}
 
 		let type = LLVMFunctionType(return_type, tmp, param_types.size() as! u32, false)
@@ -830,6 +835,8 @@ struct CodegenContext {
 				}
 				if built_value.has_value() {
 					LLVMBuildRet(builder, built_value!)
+				} else if llvm_func.id == .program.main!.id {
+					LLVMBuildRet(builder, LLVMConstInt(.getType(.program.int_type), 0, false))
 				} else {
 					LLVMBuildRetVoid(builder)
 				}
@@ -2173,105 +2180,9 @@ struct CodegenContext {
 		return LLVMBuildPtrToInt(builder, size, .types[.program.int_type.id], "".c_string())
 	}
 
-	fn codegenMainFunction(mut this, main: Function) throws -> void {
-		let isize_type = LLVMIntTypeInContext(.llvm_context, 64)
-
-		let parameter_types = [
-			LLVMIntTypeInContext(.llvm_context, 64)
-			LLVMPointerTypeInContext(.llvm_context, 0)
-		]
-
-		let c_main_type = LLVMFunctionType(isize_type, &raw parameter_types[0], parameter_types.size() as! u32, false)
-		let c_main = LLVMAddFunction(.llvm_module, "main".c_string(), c_main_type)
-
-		let argc = LLVMGetParam(c_main, 0)
-		let argv = LLVMGetParam(c_main, 1)
-
-		let entry_block = LLVMAppendBasicBlockInContext(.llvm_context, c_main, "entry".c_string())
-		let builder = LLVMCreateBuilderInContext(.llvm_context)
-		LLVMPositionBuilderAtEnd(builder, entry_block)
-
-		mut main_args: [LLVMValueRef] = []
-
-		if .program.functions[main.id].type.param_types.size() != 0 {
-			let strlen_parameter_types = [
-				LLVMPointerTypeInContext(.llvm_context, 0)
-			]
-
-			let strlen_type = LLVMFunctionType(isize_type, &raw strlen_parameter_types[0], strlen_parameter_types.size() as! u32, false)
-			let strlen = match LLVMHelper::LLVMHasNamedFunction(.llvm_module, "strlen") {
-				true => LLVMGetNamedFunction(.llvm_module, "strlen".c_string())
-				else => LLVMAddFunction(.llvm_module, "strlen".c_string(), strlen_type)
-			}
-
-			let arg_list_type_id = .program.functions[main.id].type.param_types[0].id
-			guard .program.types[arg_list_type_id].template_parameters[0] is Type(value) else {
-				panic("main has invalid arg type")
-			}
-			let arg_type_id = value!.id
-
-			let arg_list_type = .types[arg_list_type_id]
-			let stringview_type = .types[arg_type_id]
-
-			let loop_block = LLVMAppendBasicBlockInContext(.llvm_context, c_main, "loop".c_string())
-			let continue_block = LLVMAppendBasicBlockInContext(.llvm_context, c_main, "continue".c_string())
-
-			let args_data = LLVMBuildArrayAlloca(builder, stringview_type, argc, "".c_string())
-			LLVMBuildBr(builder, loop_block)
-			LLVMPositionBuilderAtEnd(builder, loop_block)
-
-			let index = LLVMBuildPhi(builder, isize_type, "".c_string())
-			let next_index = LLVMBuildAdd(builder, index, LLVMConstInt(isize_type, 1, false), "".c_string())
-
-			let incoming_values = [
-				LLVMConstInt(LLVMIntTypeInContext(.llvm_context, 64), 0, false)
-				next_index
-			]
-
-			let incoming_blocks = [
-				entry_block, loop_block
-			]
-
-			LLVMAddIncoming(index, &raw incoming_values[0], &raw incoming_blocks[0], incoming_values.size() as! u32)
-
-			let indices = [index]
-			let arg_c_string_addr = LLVMBuildGEP2(builder, LLVMPointerTypeInContext(.llvm_context, 0), argv, &raw indices[0], indices.size() as! u32, "".c_string())
-			let arg_dst = LLVMBuildGEP2(builder, stringview_type, args_data, &raw indices[0], indices.size() as! u32, "".c_string())
-			let arg_c_string = LLVMBuildLoad2(builder, LLVMPointerTypeInContext(.llvm_context, 0), arg_c_string_addr, "".c_string())
-
-			let strlen_args = [arg_c_string]
-			let arg_lenth = LLVMBuildCall2(builder, strlen_type, strlen, &raw strlen_args[0], strlen_args.size() as! u64, "".c_string())
-
-			mut arg = LLVMConstNull(stringview_type)
-			arg = LLVMBuildInsertValue(builder, arg, arg_c_string, 0, "".c_string())
-			arg = LLVMBuildInsertValue(builder, arg, arg_lenth, 1, "".c_string())
-			LLVMBuildStore(builder, arg, arg_dst)
-
-			LLVMBuildCondBr(builder,
-				LLVMBuildICmp(builder, _LLVMIntPredicate::LLVMIntSLT.v(), next_index, argc, "".c_string())
-				loop_block, continue_block
-			)
-
-			LLVMPositionBuilderAtEnd(builder, continue_block)
-			mut args = LLVMConstNull(arg_list_type)
-			args = LLVMBuildInsertValue(builder, args, args_data, 0, "".c_string())
-			args = LLVMBuildInsertValue(builder, args, argc, 1, "".c_string())
-			main_args.push(args)
-		}
-
-		let result = .codegenCall(builder, func: main, args: main_args)
-		if result.has_value() {
-			LLVMBuildRet(builder, result!)
-		} else {
-			LLVMBuildRet(builder, LLVMConstInt(LLVMIntTypeInContext(.llvm_context, 64), 0, false))
-		}
-
-		LLVMDisposeBuilder(builder)
-	}
-
 	fn finalize(mut this, options: CompilerOptions, mut module: Module) throws -> String {
 		if module.id == .program.functions[.program.main!.id].module!.id {
-			.codegenMainFunction(main: .program.main!)
+			//.codegenMainFunction(main: .program.main!)
 		}
 
 		for file in options.additional_llvm_ir_files {

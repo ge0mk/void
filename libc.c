@@ -1,4 +1,6 @@
+#include <stdbool.h>
 #include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
@@ -36,4 +38,33 @@ FILE* get_stdout() {
 
 FILE* get_stderr() {
 	return stderr;
+}
+
+typedef struct {
+	void *data;
+	uint64_t size;
+} Range;
+
+extern int64_t void_main(Range arg_range);
+
+int main(int argc, char *argv[]) {
+	struct {
+		char *data;
+		uint64_t size;
+		uint64_t capacity;
+		bool is_owner;
+	} args[argc];
+
+	for(int i = 0; i < argc; i++) {
+		args[i].data = argv[i];
+		args[i].size = strlen(argv[i]);
+		args[i].capacity = 0;
+		args[i].is_owner = false;
+	}
+
+	Range arg_range;
+	arg_range.data = &args;
+	arg_range.size = argc;
+
+	return void_main(arg_range);
 }
