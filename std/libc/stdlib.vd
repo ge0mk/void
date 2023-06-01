@@ -3,3 +3,4 @@ import std/core;
 func malloc(size: uint) -> vptr = extern;
 func realloc(data: vptr, size: uint) -> vptr = extern;
 func free(data: vptr) -> void = extern;
+func system(command: cptr!<byte>) -> i32 = extern;
