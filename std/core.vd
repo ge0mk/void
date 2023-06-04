@@ -151,17 +151,17 @@ variant Optional {
 		comptime if referenceKindOf!<T>() == ReferenceKind::Var {
 			match this {
 				case Some: &&value -> return &&value;
-				else -> abort();
+				else -> panic(Error::EOPTNONE);
 			}
 		} else if referenceKindOf!<T>() == ReferenceKind::Const {
 			match this {
 				case Some: &value -> return &value;
-				else -> abort();
+				else -> panic(Error::EOPTNONE);
 			}
 		} else {
 			match this {
 				case Some: value -> return value;
-				else -> abort();
+				else -> panic(Error::EOPTNONE);
 			}
 		}
 	}
@@ -345,7 +345,7 @@ enum Error: i32 {
 
 	case EOF = -1;
 
-	@[extern_name: "error_toString"]
+	@[extern_name: "error_toCString"]
 	func toCString(this: Error) -> cptr!<byte> = extern;
 
 	@[extern_name: "error_panic"]

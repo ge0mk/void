@@ -1,4 +1,4 @@
-//> output "(internal error) Invalid argument"
+//> output "PANIC: Invalid argument"
 //> test-crash
 
 import std/core;

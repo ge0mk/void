@@ -5,7 +5,7 @@
 #include <string.h>
 #include <errno.h>
 
-const char* error_toString(int error) {
+const char* error_toCString(int error) {
 	switch (error) {
 		case 0: return "Not an error";
 		case 256: return "Out of bounds array access";
@@ -16,8 +16,8 @@ const char* error_toString(int error) {
 }
 
 void error_panic(int error) {
-	const char *prefix = "(internal error) ";
-	const char *msg = error_toString(error);
+	const char *prefix = "PANIC: ";
+	const char *msg = error_toCString(error);
 	fwrite(prefix, 1, strlen(prefix), stderr);
 	fwrite(msg, 1, strlen(msg), stderr);
 	fputc('\n', stderr);
