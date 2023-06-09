@@ -1,5 +1,11 @@
 pragma generate_std_core_builtins;
 
+@[extern_name: "exit"]
+func exit(value: int) -> never = extern;
+
+@[extern_name: "abort"]
+func abort() -> never = extern;
+
 extend int {
 	operator ..(start: int, end: int) -> NumericRange!<int> {
 		return NumericRange!<int>(start, end, 1i);

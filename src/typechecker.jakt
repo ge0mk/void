@@ -4533,9 +4533,6 @@ fn initCoreModule(mut program: Program, mut module: Module) throws {
 
 	createReflectionFunctions(program, module)
 
-	module.createExternFunction(parent_type: None, "exit", [program.int_type], program.never_type, "exit")
-	module.createExternFunction(parent_type: None, "abort", [], program.never_type, "abort")
-
 	module.createBuiltinFunction(
 		parent_type: None,
 		name: "intCast",
