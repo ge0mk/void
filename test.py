@@ -6,6 +6,12 @@ import re
 import subprocess
 import sys
 
+def delete_file(path):
+    try:
+        os.remove(path)
+    except:
+        pass
+
 def find_tests():
 	for root, dirs, files in os.walk("tests"):
 		for file in files:
@@ -81,6 +87,12 @@ def run_test(test, expected_result, compiler_args, memcheck, compiler):
 			test_cmd += [value]
 
 	test_result = subprocess.run(test_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+
+	delete_file("build/test")
+	delete_file("build/test.ll")
+	delete_file("build/test.bc")
+
+
 	test_output = [line + "\n" for line in test_result.stdout.decode("utf-8").split("\n")]
 	test_error_is_success = False
 	for type, value in expected_result:
