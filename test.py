@@ -67,7 +67,7 @@ def run_test(test, expected_result, compiler_args, memcheck, compiler):
 				compile_error_is_success = True
 			case _:
 				pass
-	if compile_result.returncode != 0:
+	if compile_result.returncode != 0 or not os.path.exists("build/test"):
 		return compile_error_is_success, compile_result
 
 	test_cmd = []
