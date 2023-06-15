@@ -7,3 +7,22 @@ func strerror(error: Error) -> cptr!<byte> = extern;
 func memchr(s: cptr!<byte>, c: i32, n: uint) -> cptr!<byte> = extern;
 func memrchr(s: cptr!<byte>, c: i32, n: uint) -> cptr!<byte> = extern;
 func memmem(haystack: cptr!<byte>, haystack_len: uint, needle: cptr!<byte>, needle_len: uint) -> cptr!<byte> = extern;
+
+func memcpy(dest: vptr, src: cptr, n: uint) -> vptr = extern;
+func memmove(dest: vptr, src: cptr, n: uint) -> vptr = extern;
+func memset(data: vptr, c: i32, n: uint) -> vptr = extern;
+
+template <T: type>
+func memcpy(dest: vptr!<T>, src: cptr!<T>, n: uint) -> void {
+	discard memcpy(dest as vptr, src as cptr, n * sizeOf!<T>());
+}
+
+template <T: type>
+func memmove(dest: vptr!<T>, src: cptr!<T>, n: uint) -> void {
+	discard memmove(dest as vptr, src as cptr, n * sizeOf!<T>());
+}
+
+template <T: type>
+func memset(dest: vptr!<T>, val: byte, n: uint) -> void {
+	discard memset(dest as vptr, val as i32, n * sizeOf!<T>());
+}

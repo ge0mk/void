@@ -2,10 +2,7 @@ import std/core;
 import std/range;
 
 import std/libc/stdlib;
-
-import std/string;
-import std/io;
-import std/format;
+import std/libc/string;
 
 template <T: type>
 struct Set {

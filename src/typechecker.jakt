@@ -630,62 +630,6 @@ struct Typechecker {
 
 					yield instance
 				}
-				Memset => {
-					guard template_parameters.size() == 1 else { panic("invalid template parameters for memset") }
-					guard template_parameters[0] is Type(value) else { panic("invalid template parameters for memset") }
-
-					let ptr_type = .getType(namespaces: [], name: "vptr", template_parameters, template_parameters_to_search: [], error_span: Span::empty())
-					guard ptr_type.has_value() else {
-						panic("invalid template instantiation: memset: no ptr type found")
-					}
-
-					let instance = .module.createBuiltinFunction2(
-						parent_type: None,
-						"memset", [ptr_type!, .program.byte_type, .program.uint_type], .program.void_type,
-						InlineBuiltinFunction::Memset(value!),
-						template_parameters
-					)
-
-					yield instance
-				}
-				Memcpy => {
-					guard template_parameters.size() == 1 else { panic("invalid template parameters for memcpy") }
-					guard template_parameters[0] is Type(value) else { panic("invalid template parameters for memcpy") }
-
-					let cptr_type = .getType(namespaces: [], name: "cptr", template_parameters, template_parameters_to_search: [], error_span: Span::empty())
-					let vptr_type = .getType(namespaces: [], name: "vptr", template_parameters, template_parameters_to_search: [], error_span: Span::empty())
-					guard cptr_type.has_value() and vptr_type.has_value() else {
-						panic("invalid template instantiation: memcpy: no ptr type found")
-					}
-
-					let instance = .module.createBuiltinFunction2(
-						parent_type: None,
-						"memcpy", [vptr_type!, cptr_type!, .program.uint_type], .program.void_type,
-						InlineBuiltinFunction::Memcpy(value!),
-						template_parameters
-					)
-
-					yield instance
-				}
-				Memmove => {
-					guard template_parameters.size() == 1 else { panic("invalid template parameters for memmove") }
-					guard template_parameters[0] is Type(value) else { panic("invalid template parameters for memmove") }
-
-					let cptr_type = .getType(namespaces: [], name: "cptr", template_parameters, template_parameters_to_search: [], error_span: Span::empty())
-					let vptr_type = .getType(namespaces: [], name: "vptr", template_parameters, template_parameters_to_search: [], error_span: Span::empty())
-					guard cptr_type.has_value() and vptr_type.has_value() else {
-						panic("invalid template instantiation: memmove: no ptr type found")
-					}
-
-					let instance = .module.createBuiltinFunction2(
-						parent_type: None,
-						"memmove", [vptr_type!, cptr_type!, .program.uint_type], .program.void_type,
-						InlineBuiltinFunction::Memmove(value!),
-						template_parameters
-					)
-
-					yield instance
-				}
 				else => {
 					panic("builtin function is not a template")
 				}
@@ -4739,10 +4683,6 @@ fn createPtrTypes(mut program: Program, mut module: Module) throws {
 			TemplateParameter::Type(span: Span(start: 0, end: 0), name: "T", value: None)
 		]
 	)
-
-	module.createBuiltinFunction(None, "memset", [], program.void_type, InlineBuiltinFunction::Memset(None), template_parameters: [TemplateParameter::Type(span: Span::empty(), name: "T", value: None)])
-	module.createBuiltinFunction(None, "memcpy", [], program.void_type, InlineBuiltinFunction::Memcpy(None), template_parameters: [TemplateParameter::Type(span: Span::empty(), name: "T", value: None)])
-	module.createBuiltinFunction(None, "memmove", [], program.void_type, InlineBuiltinFunction::Memmove(None), template_parameters: [TemplateParameter::Type(span: Span::empty(), name: "T", value: None)])
 }
 
 fn createOpaquePtrType(mut program: Program, mut module: Module, is_const: bool) throws {

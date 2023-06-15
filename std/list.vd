@@ -2,6 +2,7 @@ import std/core;
 import std/range;
 
 import std/libc/stdlib;
+import std/libc/string;
 
 template <T: type>
 struct List {

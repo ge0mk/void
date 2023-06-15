@@ -1076,10 +1076,6 @@ enum InlineBuiltinFunction {
 	AlignmentOf(Type?)
 	ReferenceKindOf(Type?)
 
-	Memset(Type?)
-	Memcpy(Type?)
-	Memmove(Type?)
-
 	VariantOpIs(type: Type, id: i64)
 	VariantOpUnsafeAs(type: Type, id: i64)
 

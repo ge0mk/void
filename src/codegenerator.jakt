@@ -158,10 +158,6 @@ import llvm {
 	LLVMBuildMalloc
 	LLVMBuildArrayMalloc
 
-	LLVMBuildMemSet
-	LLVMBuildMemCpy
-	LLVMBuildMemMove
-
 	LLVMBuildAlloca
 	LLVMBuildArrayAlloca
 
@@ -1659,35 +1655,6 @@ struct CodegenContext {
 			Base => LLVMConstInt(.getType(.program.functions[func_id].type.return_type), 0, false)
 			ConstRef => LLVMConstInt(.getType(.program.functions[func_id].type.return_type), 1, false)
 			VarRef => LLVMConstInt(.getType(.program.functions[func_id].type.return_type), 2, false)
-		}
-		Memset(type) => {
-			let size = LLVMBuildMul(
-				builder, args[2],
-				.codegenSizeOf(builder, type: .types[type!.id]),
-				"".c_string()
-			)
-			LLVMBuildMemSet(builder, args[0], args[1], size, 0)
-			yield None
-		}
-		Memcpy(type) => {
-			let alignment = LLVMPreferredAlignmentOfType(.data_layout, .types[type!.id])
-			let size = LLVMBuildMul(
-				builder, args[2],
-				.codegenSizeOf(builder, type: .types[type!.id]),
-				"".c_string()
-			)
-			LLVMBuildMemCpy(builder, args[0], alignment, args[1], alignment, size)
-			yield None
-		}
-		Memmove(type) => {
-			let alignment = LLVMPreferredAlignmentOfType(.data_layout, .types[type!.id])
-			let size = LLVMBuildMul(
-				builder, args[2],
-				.codegenSizeOf(builder, type: .types[type!.id]),
-				"".c_string()
-			)
-			LLVMBuildMemMove(builder, args[0], alignment, args[1], alignment, size)
-			yield None
 		}
 		VariantOpIs(type, id) => {
 			let obj = args[0];

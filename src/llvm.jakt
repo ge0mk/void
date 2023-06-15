@@ -159,10 +159,6 @@ import extern c "llvm-c/Core.h" {
 	extern fn LLVMBuildMalloc(anon builder: LLVMBuilderRef, anon type: LLVMTypeRef, anon name: raw c_char) -> LLVMValueRef
 	extern fn LLVMBuildArrayMalloc(anon builder: LLVMBuilderRef, anon type: LLVMTypeRef, anon size: LLVMValueRef, anon name: raw c_char) -> LLVMValueRef
 
-	extern fn LLVMBuildMemSet(anon builder: LLVMBuilderRef, anon ptr: LLVMValueRef, anon val: LLVMValueRef, anon size: LLVMValueRef, anon align: u32) -> LLVMValueRef
-	extern fn LLVMBuildMemCpy(anon builder: LLVMBuilderRef, anon dst: LLVMValueRef, anon dstAlign: u32, anon src: LLVMValueRef, anon srcAlign: u32, anon size: LLVMValueRef) -> LLVMValueRef
-	extern fn LLVMBuildMemMove(anon builder: LLVMBuilderRef, anon dst: LLVMValueRef, anon dstAlign: u32, anon src: LLVMValueRef, anon srcAlign: u32, anon size: LLVMValueRef) -> LLVMValueRef
-
 	extern fn LLVMBuildAlloca(anon builder: LLVMBuilderRef, anon type: LLVMTypeRef, anon name: raw c_char) -> LLVMValueRef
 	extern fn LLVMBuildArrayAlloca(anon builder: LLVMBuilderRef, anon type: LLVMTypeRef, anon size: LLVMValueRef, anon name: raw c_char) -> LLVMValueRef
 
