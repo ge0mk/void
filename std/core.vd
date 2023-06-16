@@ -118,6 +118,16 @@ struct NumericIterator {
 
 		return Some(result);
 	}
+
+	func hasNext(this: &NumericIterator!<T>) -> bool {
+		return this.value < this.end;
+	}
+
+	func getNext(this: &&NumericIterator!<T>) -> T {
+		const result = this.value;
+		this.value += this.step;
+		return result;
+	}
 }
 
 func assert(cond: bool) -> void {

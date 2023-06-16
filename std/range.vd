@@ -100,6 +100,19 @@ struct RangeIterator {
 		this.current = this.current + 1;
 		return r;
 	}
+
+	func hasNext(this: &RangeIterator!<T>) -> bool {
+		return this.current < this.end;
+	}
+
+	func getNext(this: &&RangeIterator!<T>) -> &T {
+		if this.current >= this.end {
+			panic(Error::EINVAL);
+		}
+
+		this.current = this.current + 1;
+		return &this.current[-1];
+	}
 }
 
 template <T: type>
@@ -201,5 +214,18 @@ struct VRangeIterator {
 		const r = Optional!<&&T>::Some(&&this.current.value());
 		this.current = this.current + 1;
 		return r;
+	}
+
+	func hasNext(this: &VRangeIterator!<T>) -> bool {
+		return this.current < this.end;
+	}
+
+	func getNext(this: &&VRangeIterator!<T>) -> &&T {
+		if this.current >= this.end {
+			panic(Error::EINVAL);
+		}
+
+		this.current = this.current + 1;
+		return &&this.current[-1];
 	}
 }

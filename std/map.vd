@@ -49,6 +49,20 @@ struct MapIterator {
 		this.values = this.values + 1;
 		return Some(MapEntry!<Tkey, Tvalue>(key, value));
 	}
+
+	func hasNext(this: &MapIterator!<Tkey, Tvalue>) -> bool {
+		return this.keys < this.end;
+	}
+
+	func getNext(this: &&MapIterator!<Tkey, Tvalue>) -> MapEntry!<Tkey, Tvalue> {
+		if this.keys >= this.end {
+			panic(Error::EINVAL);
+		}
+
+		this.keys = this.keys + 1;
+		this.values = this.values + 1;
+		return MapEntry!<Tkey, Tvalue>(this.keys[-1], this.values[-1]);
+	}
 }
 
 template <Tkey: type, Tvalue: type>
