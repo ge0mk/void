@@ -636,12 +636,8 @@ func parseNumber(str: String, start: uint) -> Result!<ParsedNumber> {
 	}
 
 	if str.size() - index >= 2 {
-		if str[index] == '.'b {
+		if str[index] == '.'b && isDigit(str[index + 1], base) {
 			index++;
-
-			if !isDigit(str[index], base) {
-				throw Error::EINVAL;
-			}
 
 			while isDigit(str[index], base) {
 				const digit = parseDigit(str[index], base);
@@ -656,6 +652,12 @@ func parseNumber(str: String, start: uint) -> Result!<ParsedNumber> {
 		}
 	}
 
+	if negative {
+		significant *= -1;
+	}
+
+	const significant_end = index;
+
 	if str.size() - index >= 2 {
 		if str[index] == 'e'b || str[index] == 'E'b {
 			index++;
@@ -669,7 +671,7 @@ func parseNumber(str: String, start: uint) -> Result!<ParsedNumber> {
 			}
 
 			if !isDigit(str[index], base) {
-				throw Error::EINVAL;
+				return Ok(ParsedNumber(significant, base, exponent - offset, significant_end - start));
 			}
 
 			while isDigit(str[index], base) {
@@ -686,11 +688,5 @@ func parseNumber(str: String, start: uint) -> Result!<ParsedNumber> {
 		}
 	}
 
-	if negative {
-		significant *= -1;
-	}
-
-	exponent = exponent - offset;
-
-	return Ok(ParsedNumber(significant, base, exponent, index - start));
+	return Ok(ParsedNumber(significant, base, exponent - offset, index - start));
 }
