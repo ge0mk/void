@@ -589,7 +589,7 @@ func parseDigit(val: byte, base: int) -> int {
 	}
 }
 
-func parseNumber(str: String, start: uint) -> Result!<ParsedNumber> {
+func parseNumber(str: String, start: uint) -> ParsedNumber {
 	var index = start;
 	var negative = false;
 	var significant = 0;
@@ -609,20 +609,20 @@ func parseNumber(str: String, start: uint) -> Result!<ParsedNumber> {
 				case 'o'b -> base = 8;
 				case 'd'b -> base = 10;
 				case 'x'b -> base = 16;
-				else -> return Ok(ParsedNumber(0, 10, 0, 1u));
+				else -> return ParsedNumber(0, 10, 0, 1u);
 			}
 
 			if isDigit(str[index + 2], base) {
 				index += 2;
 			} else {
 				// 0x -> number 0 with postfix x
-				return Ok(ParsedNumber(0, 10, 0, 1u));
+				return ParsedNumber(0, 10, 0, 1u);
 			}
 		}
 	}
 
 	if !isDigit(str[index], base) {
-		throw Error::EINVAL;
+		return ParsedNumber(0, 0, 0, 0u);
 	}
 
 	while isDigit(str[index], base) {
@@ -671,7 +671,7 @@ func parseNumber(str: String, start: uint) -> Result!<ParsedNumber> {
 			}
 
 			if !isDigit(str[index], base) {
-				return Ok(ParsedNumber(significant, base, exponent - offset, significant_end - start));
+				return ParsedNumber(significant, base, exponent - offset, significant_end - start);
 			}
 
 			while isDigit(str[index], base) {
@@ -688,5 +688,5 @@ func parseNumber(str: String, start: uint) -> Result!<ParsedNumber> {
 		}
 	}
 
-	return Ok(ParsedNumber(significant, base, exponent - offset, index - start));
+	return ParsedNumber(significant, base, exponent - offset, index - start);
 }

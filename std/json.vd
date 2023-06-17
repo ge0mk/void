@@ -134,7 +134,11 @@ func parse(str: &String, index: &&uint) -> Result!<Value> {
 					throw Error::EINVAL;
 				}
 			} else {
-				var number = try parseNumber(str, index);
+				const number = parseNumber(str, index);
+				if number.length == 0 {
+					throw Error::EINVAL;
+				}
+
 				index += number.length;
 				return Ok(Value::Number(number.toInt()));
 			}
