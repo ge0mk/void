@@ -1,0 +1,11 @@
+//> test-ec "45"
+
+import std/core;
+
+func main() -> int {
+	var acc = 0;
+	for i in 0..10 {
+		acc += i;
+	}
+	return acc;
+}
