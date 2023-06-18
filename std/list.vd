@@ -88,15 +88,15 @@ struct List {
 		}
 	}
 
-	func size(this: List!<T>) -> uint {
+	func size(this: &List!<T>) -> uint {
 		return this.size;
 	}
 
-	func isEmpty(this: List!<T>) -> bool {
+	func isEmpty(this: &List!<T>) -> bool {
 		return this.size == 0u;
 	}
 
-	func data(this: List!<T>) -> cptr!<T> {
+	func data(this: &List!<T>) -> cptr!<T> {
 		return this.data as cptr!<T>;
 	}
 
@@ -106,14 +106,6 @@ struct List {
 		}
 
 		return Some(this.data[index]);
-	}
-
-	operator [](this: List!<T>, index: uint) -> T {
-		if index >= this.size() {
-			panic(Error::EBOUNDS);
-		}
-
-		return this.data[index];
 	}
 
 	operator [](this: &List!<T>, index: uint) -> &T {
@@ -156,7 +148,7 @@ struct List {
 		return VRange!<T>(this.data + range.start, range.end - range.start);
 	}
 
-	func first(this: List!<T>) -> Optional!<T> {
+	func first(this: &List!<T>) -> Optional!<T> {
 		if this.isEmpty() {
 			return None;
 		}
@@ -164,7 +156,7 @@ struct List {
 		return Some(this.data[0u]);
 	}
 
-	func last(this: List!<T>) -> Optional!<T> {
+	func last(this: &List!<T>) -> Optional!<T> {
 		if this.isEmpty() {
 			return None;
 		}
@@ -188,7 +180,7 @@ struct List {
 		return VRangeIterator!<T>(this.data, this.data + this.size);
 	}
 
-	func find(this: List!<T>, value: T) -> Optional!<uint> {
+	func find(this: &List!<T>, value: T) -> Optional!<uint> {
 		for index in 0u..this.size() {
 			if this.data[index] == value {
 				return Some(index);
@@ -198,11 +190,11 @@ struct List {
 		return None;
 	}
 
-	func contains(this: List!<T>, value: T) -> bool {
+	func contains(this: &List!<T>, value: T) -> bool {
 		return this.find(value) is Some;
 	}
 
-	func startsWith(this: List!<T>, values: Range!<T>) -> bool {
+	func startsWith(this: &List!<T>, values: Range!<T>) -> bool {
 		if values.size() > this.size {
 			return false;
 		}
@@ -216,7 +208,7 @@ struct List {
 		return true;
 	}
 
-	func endsWith(this: List!<T>, values: Range!<T>) -> bool {
+	func endsWith(this: &List!<T>, values: Range!<T>) -> bool {
 		if values.size() > this.size {
 			return false;
 		}

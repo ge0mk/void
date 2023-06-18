@@ -2,9 +2,11 @@ import std/core;
 import std/string;
 
 func main() {
-	assert("hello world".startsWith("hello"));
-	assert(!"hello world".startsWith("world"));
+	const str = "hello world";
 
-	assert("hello world".endsWith("world"));
-	assert(!"hello world".endsWith("hello"));
+	assert(str.startsWith("hello"));
+	assert(!str.startsWith("world"));
+
+	assert(str.endsWith("world"));
+	assert(!str.endsWith("hello"));
 }

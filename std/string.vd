@@ -58,28 +58,20 @@ struct String {
 		}
 	}
 
-	func data(this: String) -> cptr!<byte> {
+	func data(this: &String) -> cptr!<byte> {
 		return this.data as cptr!<byte>;
 	}
 
-	func size(this: String) -> uint {
+	func size(this: &String) -> uint {
 		return this.size;
 	}
 
-	func isEmpty(this: String) -> bool {
+	func isEmpty(this: &String) -> bool {
 		return this.size == 0u;
 	}
 
-	func bytes(this: String) -> Range!<byte> {
+	func bytes(this: &String) -> Range!<byte> {
 		return Range!<byte>(this.data as cptr!<byte>, this.size);
-	}
-
-	operator [](this: String, index: uint) -> byte {
-		if index >= this.size() {
-			panic(Error::EBOUNDS);
-		}
-
-		return this.data[index];
 	}
 
 	operator [](this: &String, index: uint) -> &byte {
@@ -98,7 +90,7 @@ struct String {
 		return &&this.data[index];
 	}
 
-	operator [](this: String, range: NumericRange!<uint>) -> Range!<byte> {
+	operator [](this: &String, range: NumericRange!<uint>) -> Range!<byte> {
 		if range.end > this.size() {
 			panic(Error::EBOUNDS);
 		}
@@ -110,11 +102,11 @@ struct String {
 		return Range!<byte>(this.data as cptr!<byte> + range.start, range.end - range.start);
 	}
 
-	func substring(this: String, range: NumericRange!<uint>) -> String {
+	func substring(this: &String, range: NumericRange!<uint>) -> String {
 		return String(this[range]);
 	}
 
-	func at(this: String, index: uint) -> Optional!<byte> {
+	func at(this: &String, index: uint) -> Optional!<byte> {
 		if index >= this.size() {
 			return None;
 		}
@@ -193,7 +185,7 @@ struct String {
 		memmove!<byte>(this.data + range.start, this.data as cptr!<byte> + range.end, this.size - range.start);
 	}
 
-	func find(this: String, start: uint, value: byte) -> Optional!<uint> {
+	func find(this: &String, start: uint, value: byte) -> Optional!<uint> {
 		if start >= this.size {
 			return None;
 		}
@@ -206,7 +198,7 @@ struct String {
 		return Some((pos - this.data as cptr!<byte>) as uint);
 	}
 
-	func find(this: String, value: byte) -> Optional!<uint> {
+	func find(this: &String, value: byte) -> Optional!<uint> {
 		const pos = libc::string::memchr(this.data as cptr!<byte>, value as i32, this.size);
 		if pos == cptr::null() {
 			return None;
@@ -215,7 +207,7 @@ struct String {
 		return Some((pos - this.data as cptr!<byte>) as uint);
 	}
 
-	func find(this: String, start: uint, needle: String) -> Optional!<uint> {
+	func find(this: &String, start: uint, needle: String) -> Optional!<uint> {
 		if start >= this.size {
 			return None;
 		}
@@ -228,7 +220,7 @@ struct String {
 		return Some((pos - this.data as cptr!<byte>) as uint);
 	}
 
-	func find(this: String, needle: String) -> Optional!<uint> {
+	func find(this: &String, needle: String) -> Optional!<uint> {
 		const pos = libc::string::memmem(this.data as cptr!<byte>, this.size, needle.data(), needle.size());
 		if pos == cptr::null() {
 			return None;
@@ -237,7 +229,7 @@ struct String {
 		return Some((pos - this.data as cptr!<byte>) as uint);
 	}
 
-	func rfind(this: String, end: uint, value: byte) -> Optional!<uint> {
+	func rfind(this: &String, end: uint, value: byte) -> Optional!<uint> {
 		if end >= this.size {
 			return None;
 		}
@@ -250,7 +242,7 @@ struct String {
 		return Some((pos - this.data as cptr!<byte>) as uint);
 	}
 
-	func rfind(this: String, value: byte) -> Optional!<uint> {
+	func rfind(this: &String, value: byte) -> Optional!<uint> {
 		const pos = libc::string::memrchr(this.data as cptr!<byte>, value as i32, this.size);
 		if pos == cptr::null() {
 			return None;
@@ -259,11 +251,11 @@ struct String {
 		return Some((pos - this.data as cptr!<byte>) as uint);
 	}
 
-	func contains(this: String, value: byte) -> bool {
+	func contains(this: &String, value: byte) -> bool {
 		return this.find(value) is Some;
 	}
 
-	func contains(this: String, needle: String) -> bool {
+	func contains(this: &String, needle: String) -> bool {
 		return this.find(needle) is Some;
 	}
 
@@ -316,7 +308,7 @@ struct String {
 		}
 	}
 
-	func split(this: String, separator: byte) -> List!<String> {
+	func split(this: &String, separator: byte) -> List!<String> {
 		var result = List!<String>();
 
 		var segment_start = 0u;
@@ -335,7 +327,7 @@ struct String {
 		return result;
 	}
 
-	func split(this: String, separator: String) -> List!<String> {
+	func split(this: &String, separator: String) -> List!<String> {
 		var result = List!<String>();
 
 		var segment_start = 0u;
@@ -365,7 +357,7 @@ struct String {
 		return result;
 	}
 
-	func startsWith(this: String, other: String) -> bool {
+	func startsWith(this: &String, other: String) -> bool {
 		if this.size < other.size {
 			return false;
 		}
@@ -379,7 +371,7 @@ struct String {
 		return true;
 	}
 
-	func endsWith(this: String, other: String) -> bool {
+	func endsWith(this: &String, other: String) -> bool {
 		if this.size < other.size {
 			return false;
 		}
@@ -505,7 +497,7 @@ struct ParsedNumber {
 		}
 	}
 
-	func toInt(this: ParsedNumber) -> int {
+	func toInt(this: &ParsedNumber) -> int {
 		const power = this.exponent if this.exponent > 0 else -this.exponent;
 		var result = this.significant;
 		var i = 0;
@@ -522,11 +514,11 @@ struct ParsedNumber {
 		return result;
 	}
 
-	func toFloat(this: ParsedNumber) -> f64 {
+	func toFloat(this: &ParsedNumber) -> f64 {
 		return this.significant as f64 * pow(this.base as f64, this.exponent as f64);
 	}
 
-	func isInteger(this: ParsedNumber) -> bool {
+	func isInteger(this: &ParsedNumber) -> bool {
 		if this.exponent >= 0 {
 			return true;
 		}

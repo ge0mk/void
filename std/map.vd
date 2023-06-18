@@ -110,23 +110,23 @@ struct Map {
 		this.size = other.size();
 	}
 
-	func size(this: Map!<Tkey, Tvalue>) -> uint {
+	func size(this: &Map!<Tkey, Tvalue>) -> uint {
 		return this.size;
 	}
 
-	func isEmpty(this: Map!<Tkey, Tvalue>) -> bool {
+	func isEmpty(this: &Map!<Tkey, Tvalue>) -> bool {
 		return this.size == 0u;
 	}
 
-	func keys(this: Map!<Tkey, Tvalue>) -> Range!<Tkey> {
+	func keys(this: &Map!<Tkey, Tvalue>) -> Range!<Tkey> {
 		return Range!<Tkey>(this.keys as cptr!<Tkey>, this.size);
 	}
 
-	func values(this: Map!<Tkey, Tvalue>) -> Range!<Tvalue> {
+	func values(this: &Map!<Tkey, Tvalue>) -> Range!<Tvalue> {
 		return Range!<Tvalue>(this.values as cptr!<Tvalue>, this.size);
 	}
 
-	func iterator(this: Map!<Tkey, Tvalue>) -> MapIterator!<Tkey, Tvalue> {
+	func iterator(this: &Map!<Tkey, Tvalue>) -> MapIterator!<Tkey, Tvalue> {
 		return MapIterator!<Tkey, Tvalue>(this.keys as cptr!<Tkey>, this.values as cptr!<Tvalue>, this.keys as cptr!<Tkey> + this.size());
 	}
 
@@ -148,7 +148,7 @@ struct Map {
 		return true;
 	}
 
-	func getInsertPos(this: Map!<Tkey, Tvalue>, key: Tkey) -> uint {
+	func getInsertPos(this: &Map!<Tkey, Tvalue>, key: Tkey) -> uint {
 		var min = 0u;
 		var max = this.size;
 		var index = this.size / 2u;
@@ -168,7 +168,7 @@ struct Map {
 		return index;
 	}
 
-	func contains(this: Map!<Tkey, Tvalue>, key: Tkey) -> bool {
+	func contains(this: &Map!<Tkey, Tvalue>, key: Tkey) -> bool {
 		const index = this.getInsertPos(key);
 		if index >= this.size {
 			return false;
@@ -196,7 +196,7 @@ struct Map {
 		this.size += 1u;
 	}
 
-	func get(this: Map!<Tkey, Tvalue>, key: Tkey) -> Optional!<Tvalue> {
+	func get(this: &Map!<Tkey, Tvalue>, key: Tkey) -> Optional!<Tvalue> {
 		const index = this.getInsertPos(key);
 		if index < this.size {
 			if this.keys[index] == key {

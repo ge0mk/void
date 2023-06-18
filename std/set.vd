@@ -53,27 +53,27 @@ struct Set {
 		}
 	}
 
-	func size(this: Set!<T>) -> uint {
+	func size(this: &Set!<T>) -> uint {
 		return this.size;
 	}
 
-	func isEmpty(this: Set!<T>) -> bool {
+	func isEmpty(this: &Set!<T>) -> bool {
 		return this.size == 0u;
 	}
 
-	func data(this: Set!<T>) -> cptr!<T> {
+	func data(this: &Set!<T>) -> cptr!<T> {
 		return this.data as cptr!<T>;
 	}
 
-	func range(this: Set!<T>) -> Range!<T> {
+	func range(this: &Set!<T>) -> Range!<T> {
 		return Range!<T>(this.data as cptr!<T>, this.size);
 	}
 
-	func iterator(this: Set!<T>) -> RangeIterator!<T> {
+	func iterator(this: &Set!<T>) -> RangeIterator!<T> {
 		return RangeIterator!<T>(this.data as cptr!<T>, this.data as cptr!<T> + this.size);
 	}
 
-	func getInsertPos(this: Set!<T>, value: T) -> uint {
+	func getInsertPos(this: &Set!<T>, value: T) -> uint {
 		var min = 0u;
 		var max = this.size;
 		var index = this.size / 2u;
@@ -93,7 +93,7 @@ struct Set {
 		return index;
 	}
 
-	func contains(this: Set!<T>, value: T) -> bool {
+	func contains(this: &Set!<T>, value: T) -> bool {
 		const index = this.getInsertPos(value);
 		if index >= this.size {
 			return false;
