@@ -9,7 +9,8 @@ struct Foo {
 		this.x := &&ref;
 	}
 
-	func destructor(this: &&Foo) -> void {}
+	func constructor(this: &&Foo, other: Foo) -> void = default;
+	func destructor(this: &&Foo) -> void = default;
 }
 
 func main() -> int {

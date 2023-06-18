@@ -10,6 +10,10 @@ struct Foo {
 		println("hello");
 	}
 
+	func constructor(this: &&Foo, other: Foo) -> void {
+		println("copy");
+	}
+
 	func destructor(this: &&Foo) -> void {
 		println("world");
 	}

@@ -9,7 +9,8 @@ struct MyInt {
 		this.value := value;
 	}
 
-	func destructor(this: &&MyInt) -> void {}
+	func constructor(this: &&MyInt, other: MyInt) -> void = default;
+	func destructor(this: &&MyInt) -> void = default;
 
 	operator +(this: MyInt, other: MyInt) -> MyInt {
 		return MyInt(this.value + other.value);
