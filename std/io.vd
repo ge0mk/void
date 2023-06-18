@@ -3,8 +3,7 @@ import std/libc/stdio;
 import std/string;
 
 func fprint(f: vptr!<FILE>, msg: String) -> void {
-	const bytes = msg.bytes();
-	discard libc::stdio::fwrite(bytes.data() as cptr, 1u, bytes.size(), f);
+	discard libc::stdio::fwrite(msg.data() as cptr, 1u, msg.size(), f);
 }
 
 func fprint(f: vptr!<FILE>, val: byte) -> void {
