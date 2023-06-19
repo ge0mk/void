@@ -7,8 +7,9 @@ import std/io;
 struct Foo {
 	var x: int;
 
-	func constructor(this: &&Foo) {}
-	func destructor(this: &&Foo) {}
+	func constructor(this: &&Foo) -> void = default;
+	func constructor(this: &&Foo, other: Foo) -> void = default;
+	func destructor(this: &&Foo) -> void = default;
 
 	func foo(this: &&Foo) {
 		println("var-ref");
@@ -24,6 +25,6 @@ struct Foo {
 }
 
 func main() {
-	var x: Foo;
+	var x = Foo();
 	x.foo();
 }

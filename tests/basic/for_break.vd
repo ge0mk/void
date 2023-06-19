@@ -1,12 +1,11 @@
-//> test-ec "5"
+//> test-ec "10"
 
 import std/core;
-import std/array;
 
 func main() -> int {
 	var acc = 0;
-	for x in [2, 3, 4, 5] {
-		if x == 4 {
+	for x in 0..10 {
+		if x == 5 {
 			break;
 		}
 
