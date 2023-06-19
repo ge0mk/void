@@ -89,7 +89,8 @@ struct RangeIterator {
 		this.end := end;
 	}
 
-	func destructor(this: &&RangeIterator!<T>) -> void {}
+	func constructor(this: &&RangeIterator!<T>, other: RangeIterator!<T>) -> void = default;
+	func destructor(this: &&RangeIterator!<T>) -> void = default;
 
 	func next(this: &&RangeIterator!<T>) -> Optional!<&T> {
 		if this.current >= this.end {
@@ -204,7 +205,8 @@ struct VRangeIterator {
 		this.end := end;
 	}
 
-	func destructor(this: &&VRangeIterator!<T>) -> void {}
+	func constructor(this: &&VRangeIterator!<T>, other: VRangeIterator!<T>) -> void = default;
+	func destructor(this: &&VRangeIterator!<T>) -> void = default;
 
 	func next(this: &&VRangeIterator!<T>) -> Optional!<&&T> {
 		if this.current >= this.end {

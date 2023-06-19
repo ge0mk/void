@@ -9,17 +9,13 @@ struct MapEntry {
 	var key: Tkey;
 	var value: Tvalue;
 
-	func constructor(this: &&MapEntry!<Tkey, Tvalue>, other: MapEntry!<Tkey, Tvalue>) {
-		this.key := other.key;
-		this.value := other.value;
-	}
-
 	func constructor(this: &&MapEntry!<Tkey, Tvalue>, key: Tkey, value: Tvalue) {
 		this.key := key;
 		this.value := value;
 	}
 
-	func destructor(this: &&MapEntry!<Tkey, Tvalue>) {}
+	func constructor(this: &&MapEntry!<Tkey, Tvalue>, other: MapEntry!<Tkey, Tvalue>) -> void = default;
+	func destructor(this: &&MapEntry!<Tkey, Tvalue>) -> void = default;
 
 	operator ==(this: MapEntry!<Tkey, Tvalue>, other: MapEntry!<Tkey, Tvalue>) -> bool = default;
 }
@@ -36,7 +32,8 @@ struct MapIterator {
 		this.end := end;
 	}
 
-	func destructor(this: &&MapIterator!<Tkey, Tvalue>) -> void {}
+	func constructor(this: &&MapIterator!<Tkey, Tvalue>, other: MapIterator!<Tkey, Tvalue>) -> void = default;
+	func destructor(this: &&MapIterator!<Tkey, Tvalue>) -> void = default;
 
 	func next(this: &&MapIterator!<Tkey, Tvalue>) -> Optional!<MapEntry!<Tkey, Tvalue>> {
 		if this.keys >= this.end {
