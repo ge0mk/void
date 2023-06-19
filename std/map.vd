@@ -35,18 +35,6 @@ struct MapIterator {
 	func constructor(this: &&MapIterator!<Tkey, Tvalue>, other: MapIterator!<Tkey, Tvalue>) -> void = default;
 	func destructor(this: &&MapIterator!<Tkey, Tvalue>) -> void = default;
 
-	func next(this: &&MapIterator!<Tkey, Tvalue>) -> Optional!<MapEntry!<Tkey, Tvalue>> {
-		if this.keys >= this.end {
-			return None;
-		}
-
-		const key = this.keys[0];
-		const value = this.values[0];
-		this.keys = this.keys + 1;
-		this.values = this.values + 1;
-		return Some(MapEntry!<Tkey, Tvalue>(key, value));
-	}
-
 	func hasNext(this: &MapIterator!<Tkey, Tvalue>) -> bool {
 		return this.keys < this.end;
 	}

@@ -109,17 +109,6 @@ struct NumericIterator {
 	func constructor(this: &&NumericIterator!<T>, other: NumericIterator!<T>) -> void = default;
 	func destructor(this: &&NumericIterator!<T>) -> void = default;
 
-	func next(this: &&NumericIterator!<T>) -> Optional!<T> {
-		if this.value >= this.end {
-			return None;
-		}
-
-		const result = this.value;
-		this.value += this.step;
-
-		return Some(result);
-	}
-
 	func hasNext(this: &NumericIterator!<T>) -> bool {
 		return this.value < this.end;
 	}

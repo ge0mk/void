@@ -2504,9 +2504,8 @@ struct Typechecker {
 		// {
 		//     var #range = range();
 		//     var #iterator = #range.iterator();
-		//     var #next = #iterator.next()
-		//     while #next.hasValue(); #next = #iterator.next() {
-		//         var value = (&&)#next.value();
+		//     while #iterator.hasNext() {
+		//         var value = (&&)#iterator.getNext();
 		//         ...
 		//     }
 		// }
@@ -2560,49 +2559,15 @@ struct Typechecker {
 		context.addVariable(var: iterator_var)
 		result.children.push(Stmt::VarDecl(span: range.span(), var: iterator_var))
 
-		result.children.push(.checkVarDeclStmt(
-			var: ParsedVarDecl(span: range.span(), is_const: false, name: "#next", type: None,
-				init: ParsedExpr::MemberCall(
-					span: range.span(),
-					object: ParsedExpr::Name(
-						span: range.span(), namespaces: [],
-						name: ParsedName(span: range.span(), name: "#iterator", template_parameters: [])
-					),
-					name: "next",
-					template_parameters: []
-					arguments: []
-				)
-			), context
-		))
-
 		let condition = .checkExpr(expr: ParsedExpr::MemberCall(
 			span: range.span(),
 			object: ParsedExpr::Name(
 				span: range.span(), namespaces: [],
-				name: ParsedName(span: range.span(), name: "#next", template_parameters: [])
+				name: ParsedName(span: range.span(), name: "#iterator", template_parameters: [])
 			),
-			name: "hasValue",
+			name: "hasNext",
 			template_parameters: []
 			arguments: []
-		), context)
-
-		let continue_expr = .checkExpr(expr: ParsedExpr::BinaryOp(
-			span: range.span(),
-			lhs: ParsedExpr::Name(
-				span: range.span(), namespaces: [],
-				name: ParsedName(span: range.span(), name: "#next", template_parameters: [])
-			),
-			op: ParsedBinaryOperator::Assign
-			rhs: ParsedExpr::MemberCall(
-				span: range.span(),
-				object: ParsedExpr::Name(
-					span: range.span(), namespaces: [],
-					name: ParsedName(span: range.span(), name: "#iterator", template_parameters: [])
-				),
-				name: "next",
-				template_parameters: []
-				arguments: []
-			)
 		), context)
 
 		guard body is Compound(children) else {
@@ -2615,9 +2580,9 @@ struct Typechecker {
 			span: range.span(),
 			object: ParsedExpr::Name(
 				span: range.span(), namespaces: [],
-				name: ParsedName(span: range.span(), name: "#next", template_parameters: [])
+				name: ParsedName(span: range.span(), name: "#iterator", template_parameters: [])
 			),
-			name: "value",
+			name: "getNext",
 			template_parameters: []
 			arguments: []
 		)
@@ -2642,7 +2607,7 @@ struct Typechecker {
 			context
 		)
 
-		result.children.push(Stmt::While(span, condition, body: checked_body, continue_expr))
+		result.children.push(Stmt::While(span, condition, body: checked_body, continue_expr: None))
 
 		return Stmt::Compound(span, result)
 	}

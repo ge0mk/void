@@ -92,16 +92,6 @@ struct RangeIterator {
 	func constructor(this: &&RangeIterator!<T>, other: RangeIterator!<T>) -> void = default;
 	func destructor(this: &&RangeIterator!<T>) -> void = default;
 
-	func next(this: &&RangeIterator!<T>) -> Optional!<&T> {
-		if this.current >= this.end {
-			return None;
-		}
-
-		const r = Optional!<&T>::Some(&this.current.value());
-		this.current = this.current + 1;
-		return r;
-	}
-
 	func hasNext(this: &RangeIterator!<T>) -> bool {
 		return this.current < this.end;
 	}
@@ -207,16 +197,6 @@ struct VRangeIterator {
 
 	func constructor(this: &&VRangeIterator!<T>, other: VRangeIterator!<T>) -> void = default;
 	func destructor(this: &&VRangeIterator!<T>) -> void = default;
-
-	func next(this: &&VRangeIterator!<T>) -> Optional!<&&T> {
-		if this.current >= this.end {
-			return None;
-		}
-
-		const r = Optional!<&&T>::Some(&&this.current.value());
-		this.current = this.current + 1;
-		return r;
-	}
 
 	func hasNext(this: &VRangeIterator!<T>) -> bool {
 		return this.current < this.end;
