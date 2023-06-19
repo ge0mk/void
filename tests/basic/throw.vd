@@ -1,0 +1,11 @@
+import std/core;
+
+func foo() -> Result!<void> {
+	throw Error::EINVAL;
+}
+
+func main() {
+	const r = foo();
+	assert(r is Error);
+	assert(r.error() == Error::EINVAL);
+}
