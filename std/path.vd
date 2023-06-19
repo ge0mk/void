@@ -1,5 +1,4 @@
 import std/core;
-import std/array;
 import std/libc/dirent;
 import std/libc/stdio;
 import std/libc/unistd;
@@ -189,10 +188,9 @@ struct Path {
 	}
 
 	func cwd() -> Path {
-		var buffer: [byte, 4096];
-		discard libc::unistd::getcwd(buffer.data(), buffer.size());
-		buffer[buffer.size() - 1] = '\0'b;
-		return Path(String::fromCString(buffer.data() as cptr!<byte>));
+		var buffer = String(4096u, '\0'b);
+		discard libc::unistd::getcwd(vptr!<byte>::addressOf(&&buffer[0u]), buffer.size() - 1);
+		return Path(String::fromCString(buffer.data()));
 	}
 
 	func range(this: Path) -> PathRange {
