@@ -3,6 +3,7 @@ import std/libc/errno;
 
 func strlen(str: cptr!<byte>) -> uint = extern;
 func strerror(error: Error) -> cptr!<byte> = extern;
+func strncmp(lhs: cptr!<byte>, rhs: cptr!<byte>, n: uint) -> i32 = extern;
 
 func memchr(s: cptr!<byte>, c: i32, n: uint) -> cptr!<byte> = extern;
 func memrchr(s: cptr!<byte>, c: i32, n: uint) -> cptr!<byte> = extern;

@@ -386,15 +386,21 @@ struct String {
 		return true;
 	}
 
-	operator <=>(this: String, other: String) -> int {
-		for index in 0u..min(this.size, other.size) {
-			const r = this.data[index] <=> other.data[index];
-			if r != 0 {
-				return r;
-			}
+	operator ==(this: String, other: String) -> bool {
+		if this.size != other.size {
+			return false;
 		}
 
-		return this.size <=> other.size;
+		return strncmp(this.data(), other.data(), this.size) == 0;
+	}
+
+	operator <=>(this: String, other: String) -> int {
+		const r = strncmp(this.data(), other.data(), min(this.size, other.size));
+		if r == 0 {
+			return this.size <=> other.size;
+		} else {
+			return r as int;
+		}
 	}
 
 	operator +(this: String, value: byte) -> String {
