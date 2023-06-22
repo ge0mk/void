@@ -1,33 +1,34 @@
-//> output "+=--"
+//> test-ec "0"
 
 import std/core;
 import std/shared;
-import std/list;
-import std/string;
-import std/io;
 
 struct Foo {
+	var counter: &&int;
 	var that: WeakPtr!<Foo>;
 
-	func constructor(this: &&Foo) -> void {
-		print("+");
+	func constructor(this: &&Foo, counter: &&int) -> void {
+		this.counter := &&counter;
+		this.counter++;
 	}
 
 	func constructor(this: &&Foo, other: Foo) -> void {
-		print("=");
+		this.counter := &&other.counter;
+		this.counter++;
 	}
 
 	func destructor(this: &&Foo) -> void {
-		print("-");
+		this.counter--;
 	}
 }
 
-func foo() {
-	var a = SharedPtr!<Foo>::new(Foo());
+func foo(counter: &&int) {
+	var a = SharedPtr!<Foo>::new(Foo(&&counter));
 	a.that = WeakPtr!<Foo>(a);
 }
 
 func main() {
-	foo();
-	println("");
+	var counter = 0;
+	foo(&&counter);
+	assert(counter == 0);
 }
