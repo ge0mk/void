@@ -24,6 +24,8 @@ struct Foo {
 	func destructor(this: &&Foo) {
 		println("-" + format(this.id));
 	}
+
+	operator ==(this: Foo, other: Foo) -> bool = default;
 }
 
 variant Bar {
