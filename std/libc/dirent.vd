@@ -20,7 +20,7 @@ struct dirent {
 	var d_off: i64;
 	var d_reclen: u16;
 	var d_type: DT;
-	var d_name: [byte, 256];
+	var d_name: Array!<byte, 256>;
 }
 
 func closedir(dir: vptr!<DIR>) -> i32 = extern;

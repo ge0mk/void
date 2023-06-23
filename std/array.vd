@@ -82,18 +82,4 @@ extend Array {
 	func contains(this: &Array!<T, Size>, value: T) -> bool {
 		return this.find(value) is Some;
 	}
-
-	operator ==(this: &Array!<T, Size>, other: Array!<T, Size>) -> bool {
-		if this.size() != other.size() {
-			return false;
-		}
-
-		for i in 0u..this.size() {
-			if this.data()[i] != other.data()[i] {
-				return false;
-			}
-		}
-
-		return true;
-	}
 }

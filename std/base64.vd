@@ -16,7 +16,7 @@ func encode(str: String) -> String {
 		const b = padded[i + 1] as uint;
 		const c = padded[i + 2] as uint;
 
-		const triple = a << 16 + b << 8 + c;
+		const triple = (a << 16) + (b << 8) + c;
 
 		const k = i / 3 * 4;
 		result[k + 0] = lut[triple >> 18 & 0x3F];
@@ -32,9 +32,9 @@ func encode(str: String) -> String {
 	return result;
 }
 
-func generateDecodeLUT() -> [uint, 256] {
+func generateDecodeLUT() -> Array!<uint, 256> {
 	const encode_lut = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-	var result: [uint, 256];
+	var result: Array!<uint, 256>;
 
 	for i in 0u..encode_lut.size() {
 		result[encode_lut[i] as uint] = i;
@@ -53,7 +53,7 @@ func decode(str: String) -> String {
 		const c = lut[str[i + 2] as uint];
 		const d = lut[str[i + 3] as uint];
 
-		const triple = a << 18 + b << 12 + c << 6 + d;
+		const triple = (a << 18) + (b << 12) + (c << 6) + d;
 
 		const k = i / 4 * 3;
 		result[k + 0] = ((triple >> 16) & 0xFF) as byte;
