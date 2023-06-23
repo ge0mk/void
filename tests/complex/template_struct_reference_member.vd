@@ -14,7 +14,8 @@ struct Foo {
 		}
 	}
 
-	func destructor(this: &&Foo!<T>) -> void {}
+	func constructor(this: &&Foo!<T>, other: Foo!<T>) -> void = default;
+	func destructor(this: &&Foo!<T>) -> void = default;
 }
 
 func main() -> int {

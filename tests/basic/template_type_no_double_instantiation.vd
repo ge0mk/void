@@ -4,8 +4,10 @@ template <T: int>
 struct Foo {
 	var x: int;
 
-	func constructor(this: &&Foo!<T>) {}
-	func destructor(this: &&Foo!<T>) {}
+	func constructor(this: &&Foo!<T>) -> void = default;
+	func constructor(this: &&Foo!<T>, other: Foo!<T>) -> void = default;
+	func destructor(this: &&Foo!<T>) -> void = default;
+
 	operator == (this: Foo!<T>, other: Foo!<T>) -> bool {
 		return true;
 	}
