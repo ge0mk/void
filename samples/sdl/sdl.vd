@@ -5,7 +5,7 @@ import sdl/window;
 import sdl/event;
 import sdl/renderer;
 
-enum SDL {
+enum SDLComponent {
 	case Timer          = 0x00000001;
 	case Audio          = 0x00000010;
 	case Video          = 0x00000020;  // implies Events
@@ -18,7 +18,7 @@ enum SDL {
 }
 
 @[extern_name: "SDL_Init"]
-func init(flags: SDL) -> i32 = extern;
+func init(flags: SDLComponent) -> i32 = extern;
 
 @[extern_name: "SDL_Quit"]
 func quit() -> void = extern;

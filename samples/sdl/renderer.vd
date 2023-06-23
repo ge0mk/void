@@ -43,7 +43,12 @@ struct Rect {
 		this.height := height;
 	}
 
-	func destructor(this: &&Rect) {}
+	func constructor(this: &&Rect) -> void = default;
+	func constructor(this: &&Rect, other: Rect) -> void = default;
+	func destructor(this: &&Rect) -> void = default;
+
+	operator =(this: &&Rect, other: Rect) -> void = default;
+	operator ==(this: Rect, other: Rect) -> bool = default;
 }
 
 extend Renderer {

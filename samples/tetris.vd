@@ -8,9 +8,9 @@ struct Application {
 	var window: vptr!<Window>;
 	var renderer: vptr!<Renderer>;
 
-	var tetrominos: [[bool, 16], 28];
-	var colors: [[int, 4], 8];
-	var field: [[int, 10], 20];
+	var tetrominos: Array!<Array!<bool, 16>, 28>;
+	var colors: Array!<Array!<int, 4>, 8>;
+	var field: Array!<Array!<int, 10>, 20>;
 
 	var quit: bool;
 	var rng: uint;
@@ -97,7 +97,7 @@ struct Application {
 	}
 
 	func run() {
-		var app = Application();
+		var app: Application;
 		while !app.quit {
 			app.update();
 			app.render();
@@ -276,7 +276,7 @@ struct Application {
 }
 
 func main() -> int {
-	if sdl::init(SDL::Video) != 0 {
+	if sdl::init(SDLComponent::Video) != 0 {
 		return 1;
 	}
 
