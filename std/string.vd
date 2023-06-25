@@ -474,12 +474,16 @@ struct ParsedNumber {
 	var base: int;
 	var exponent: int;
 	var length: uint;
+	var contains_decimal_point: bool;
+	var contains_exponent: bool;
 
-	func constructor(this: &&ParsedNumber, significant: int, base: int, exponent: int, length: uint) -> void {
+	func constructor(this: &&ParsedNumber, significant: int, base: int, exponent: int, length: uint, contains_decimal_point: bool, contains_exponent: bool) -> void {
 		this.significant := significant;
 		this.base := base;
 		this.exponent := exponent;
 		this.length := length;
+		this.contains_decimal_point := contains_decimal_point;
+		this.contains_exponent := contains_exponent;
 
 		this.normalize();
 	}
@@ -595,9 +599,16 @@ func parseNumber(str: String, start: uint) -> ParsedNumber {
 	var exponent = 0;
 	var offset = 0;
 
-	if str[index] == '-'b {
+	var contains_decimal_point = false;
+	var contains_exponent = false;
+
+	if str[index] == '-'b && str.size() - index >= 2 {
 		negative = true;
 		index++;
+	}
+
+	if !isDigit(str[index], base) {
+		return ParsedNumber(0, 0, 0, 0u, false, false);
 	}
 
 	if str.size() - index >= 3 {
@@ -607,20 +618,16 @@ func parseNumber(str: String, start: uint) -> ParsedNumber {
 				case 'o'b -> base = 8;
 				case 'd'b -> base = 10;
 				case 'x'b -> base = 16;
-				else -> return ParsedNumber(0, 10, 0, 1u);
+				else -> return ParsedNumber(0, 10, 0, 1u, false, false);
 			}
 
 			if isDigit(str[index + 2], base) {
 				index += 2;
 			} else {
 				// 0x -> number 0 with postfix x
-				return ParsedNumber(0, 10, 0, 1u);
+				return ParsedNumber(0, 10, 0, 1u, false, false);
 			}
 		}
-	}
-
-	if !isDigit(str[index], base) {
-		return ParsedNumber(0, 0, 0, 0u);
 	}
 
 	while isDigit(str[index], base) {
@@ -635,6 +642,7 @@ func parseNumber(str: String, start: uint) -> ParsedNumber {
 
 	if str.size() - index >= 2 {
 		if str[index] == '.'b && isDigit(str[index + 1], base) {
+			contains_decimal_point = true;
 			index++;
 
 			while isDigit(str[index], base) {
@@ -658,6 +666,7 @@ func parseNumber(str: String, start: uint) -> ParsedNumber {
 
 	if str.size() - index >= 2 {
 		if str[index] == 'e'b || str[index] == 'E'b {
+			contains_exponent = true;
 			index++;
 
 			var exponent_sign = 1;
@@ -669,7 +678,7 @@ func parseNumber(str: String, start: uint) -> ParsedNumber {
 			}
 
 			if !isDigit(str[index], base) {
-				return ParsedNumber(significant, base, exponent - offset, significant_end - start);
+				return ParsedNumber(significant, base, exponent - offset, significant_end - start, contains_decimal_point, false);
 			}
 
 			while isDigit(str[index], base) {
@@ -686,5 +695,5 @@ func parseNumber(str: String, start: uint) -> ParsedNumber {
 		}
 	}
 
-	return ParsedNumber(significant, base, exponent - offset, index - start);
+	return ParsedNumber(significant, base, exponent - offset, index - start, contains_decimal_point, contains_exponent);
 }
