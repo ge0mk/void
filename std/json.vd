@@ -69,9 +69,10 @@ func parse(str: &String, index: &&uint) -> Result!<Value> {
 					break;
 				}
 
-				var key = try parse(&str, &&index);
-				var name = key as String else {
-					throw Error::EINVAL;
+				var name = "";
+				match try parse(&str, &&index) {
+					case String: value -> name = value;
+					else -> throw Error::EINVAL;
 				}
 
 				skipWhitespace(&str, &&index);
