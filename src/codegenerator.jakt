@@ -13,16 +13,11 @@ import llvm {
 	LLVMDIBuilderRef
 	LLVMTargetDataRef
 
-	_LLVMModuleFlagBehavior
-	_LLVMIntPredicate
-	_LLVMRealPredicate
-	_LLVMVerifierFailureAction
-	_LLVMLinkage
-	_LLVMDWARFSourceLanguage
-	_LLVMDWARFEmissionKind
-	_LLVMDIFlags
-
+	LLVMModuleFlagBehavior
+	LLVMIntPredicate
+	LLVMRealPredicate
 	LLVMVerifierFailureAction
+	LLVMLinkage
 	LLVMDWARFSourceLanguage
 	LLVMDWARFEmissionKind
 	LLVMDIFlags
@@ -302,10 +297,10 @@ struct DebugInfo {
 	scope_stack: [LLVMMetadataRef]
 
 	fn create(options: CompilerOptions, program: Program, module: Module, llvm_context: LLVMContextRef, llvm_module: LLVMModuleRef) throws -> DebugInfo {
-		LLVMHelper::LLVMAddModuleFlag2(llvm_module, _LLVMModuleFlagBehavior::LLVMModuleFlagBehaviorMax, "Dwarf Version",
+		LLVMHelper::LLVMAddModuleFlag2(llvm_module, LLVMModuleFlagBehavior::LLVMModuleFlagBehaviorError, "Dwarf Version",
 			LLVMValueAsMetadata(LLVMConstInt(LLVMIntTypeInContext(llvm_context, 32), 4, false))
 		)
-		LLVMHelper::LLVMAddModuleFlag2(llvm_module, _LLVMModuleFlagBehavior::LLVMModuleFlagBehaviorWarning, "Debug Info Version",
+		LLVMHelper::LLVMAddModuleFlag2(llvm_module, LLVMModuleFlagBehavior::LLVMModuleFlagBehaviorWarning, "Debug Info Version",
 			LLVMValueAsMetadata(LLVMConstInt(LLVMIntTypeInContext(llvm_context, 32), 3, false))
 		)
 
@@ -333,14 +328,14 @@ struct DebugInfo {
 
 		let compile_unit = LLVMDIBuilderCreateCompileUnit(
 			builder,
-			_LLVMDWARFSourceLanguage::LLVMDWARFSourceLanguageC.v(),
+			LLVMDWARFSourceLanguage::LLVMDWARFSourceLanguageC,
 			files[module.id],
 			producer.c_string(), producer.length(),
 			false,
 			flags.c_string(), flags.length(),
 			0,
 			split_name.c_string(), split_name.length(),
-			_LLVMDWARFEmissionKind::LLVMDWARFEmissionFull.v(),
+			LLVMDWARFEmissionKind::LLVMDWARFEmissionFull,
 			0,
 			true,
 			true,
@@ -689,7 +684,7 @@ struct CodegenContext {
 			let di_type = LLVMDIBuilderCreateSubroutineType(
 				.debug_info!.builder, .debug_info!.files[.current_module],
 				di_param_types_ptr, di_param_types.size() as! u32,
-				_LLVMDIFlags::LLVMDIFlagZero.v()
+				LLVMDIFlags::LLVMDIFlagZero
 			)
 
 			let di_func = LLVMDIBuilderCreateFunction(
@@ -699,7 +694,7 @@ struct CodegenContext {
 				.debug_info!.files[.current_module], line,
 				di_type, false, true,
 				line,
-				_LLVMDIFlags::LLVMDIFlagZero.v(),
+				LLVMDIFlags::LLVMDIFlagZero,
 				false
 			)
 
@@ -1114,7 +1109,7 @@ struct CodegenContext {
 			LLVMSetInitializer(global, constStr)
 			LLVMSetGlobalConstant(global, true)
 			LLVMSetAlignment(global, 1)
-			LLVMSetLinkage(global, _LLVMLinkage::LLVMPrivateLinkage.v())
+			LLVMSetLinkage(global, LLVMLinkage::LLVMPrivateLinkage)
 
 			let str = LLVMBuildPointerCast(builder, global, ptrType, "".c_string())
 			let len = LLVMConstInt(isize_type, value.length() as! i64, false)
@@ -1376,8 +1371,8 @@ struct CodegenContext {
 		}
 		// do nothing
 		PrimitiveDestructor => None
-		BitOpEQ => LLVMBuildICmp(builder, _LLVMIntPredicate::LLVMIntEQ.v(), args[0], args[1], "".c_string())
-		BitOpNE => LLVMBuildICmp(builder, _LLVMIntPredicate::LLVMIntNE.v(), args[0], args[1], "".c_string())
+		BitOpEQ => LLVMBuildICmp(builder, LLVMIntPredicate::LLVMIntEQ, args[0], args[1], "".c_string())
+		BitOpNE => LLVMBuildICmp(builder, LLVMIntPredicate::LLVMIntNE, args[0], args[1], "".c_string())
 		BitOpAnd => LLVMBuildAnd(builder, args[0], args[1], "".c_string())
 		BitOpOr => LLVMBuildOr(builder, args[0], args[1], "".c_string())
 		BitOpXOr => LLVMBuildXor(builder, args[0], args[1], "".c_string())
@@ -1421,15 +1416,15 @@ struct CodegenContext {
 			LLVMBuildStore(builder, result, args[0])
 			yield None
 		}
-		SIntOpEQ => LLVMBuildICmp(builder, _LLVMIntPredicate::LLVMIntEQ.v(), args[0], args[1], "".c_string())
-		SIntOpNE => LLVMBuildICmp(builder, _LLVMIntPredicate::LLVMIntNE.v(), args[0], args[1], "".c_string())
-		SIntOpLT => LLVMBuildICmp(builder, _LLVMIntPredicate::LLVMIntSLT.v(), args[0], args[1], "".c_string())
-		SIntOpLE => LLVMBuildICmp(builder, _LLVMIntPredicate::LLVMIntSLE.v(), args[0], args[1], "".c_string())
-		SIntOpGT => LLVMBuildICmp(builder, _LLVMIntPredicate::LLVMIntSGT.v(), args[0], args[1], "".c_string())
-		SIntOpGE => LLVMBuildICmp(builder, _LLVMIntPredicate::LLVMIntSGE.v(), args[0], args[1], "".c_string())
+		SIntOpEQ => LLVMBuildICmp(builder, LLVMIntPredicate::LLVMIntEQ, args[0], args[1], "".c_string())
+		SIntOpNE => LLVMBuildICmp(builder, LLVMIntPredicate::LLVMIntNE, args[0], args[1], "".c_string())
+		SIntOpLT => LLVMBuildICmp(builder, LLVMIntPredicate::LLVMIntSLT, args[0], args[1], "".c_string())
+		SIntOpLE => LLVMBuildICmp(builder, LLVMIntPredicate::LLVMIntSLE, args[0], args[1], "".c_string())
+		SIntOpGT => LLVMBuildICmp(builder, LLVMIntPredicate::LLVMIntSGT, args[0], args[1], "".c_string())
+		SIntOpGE => LLVMBuildICmp(builder, LLVMIntPredicate::LLVMIntSGE, args[0], args[1], "".c_string())
 		SIntOpCmp => LLVMBuildSub(builder,
-			LLVMBuildZExt(builder, LLVMBuildICmp(builder, _LLVMIntPredicate::LLVMIntSGT.v(), args[0], args[1], "".c_string()), LLVMIntTypeInContext(.llvm_context, 64), "".c_string()),
-			LLVMBuildZExt(builder, LLVMBuildICmp(builder, _LLVMIntPredicate::LLVMIntSLT.v(), args[0], args[1], "".c_string()), LLVMIntTypeInContext(.llvm_context, 64), "".c_string()),
+			LLVMBuildZExt(builder, LLVMBuildICmp(builder, LLVMIntPredicate::LLVMIntSGT, args[0], args[1], "".c_string()), LLVMIntTypeInContext(.llvm_context, 64), "".c_string()),
+			LLVMBuildZExt(builder, LLVMBuildICmp(builder, LLVMIntPredicate::LLVMIntSLT, args[0], args[1], "".c_string()), LLVMIntTypeInContext(.llvm_context, 64), "".c_string()),
 			"".c_string()
 		)
 		SIntOpAdd => LLVMBuildAdd(builder, args[0], args[1], "".c_string())
@@ -1480,15 +1475,15 @@ struct CodegenContext {
 			LLVMBuildStore(builder, result, args[0])
 			yield None
 		}
-		UIntOpEQ => LLVMBuildICmp(builder, _LLVMIntPredicate::LLVMIntEQ.v(), args[0], args[1], "".c_string())
-		UIntOpNE => LLVMBuildICmp(builder, _LLVMIntPredicate::LLVMIntNE.v(), args[0], args[1], "".c_string())
-		UIntOpLT => LLVMBuildICmp(builder, _LLVMIntPredicate::LLVMIntULT.v(), args[0], args[1], "".c_string())
-		UIntOpLE => LLVMBuildICmp(builder, _LLVMIntPredicate::LLVMIntULE.v(), args[0], args[1], "".c_string())
-		UIntOpGT => LLVMBuildICmp(builder, _LLVMIntPredicate::LLVMIntUGT.v(), args[0], args[1], "".c_string())
-		UIntOpGE => LLVMBuildICmp(builder, _LLVMIntPredicate::LLVMIntUGE.v(), args[0], args[1], "".c_string())
+		UIntOpEQ => LLVMBuildICmp(builder, LLVMIntPredicate::LLVMIntEQ, args[0], args[1], "".c_string())
+		UIntOpNE => LLVMBuildICmp(builder, LLVMIntPredicate::LLVMIntNE, args[0], args[1], "".c_string())
+		UIntOpLT => LLVMBuildICmp(builder, LLVMIntPredicate::LLVMIntULT, args[0], args[1], "".c_string())
+		UIntOpLE => LLVMBuildICmp(builder, LLVMIntPredicate::LLVMIntULE, args[0], args[1], "".c_string())
+		UIntOpGT => LLVMBuildICmp(builder, LLVMIntPredicate::LLVMIntUGT, args[0], args[1], "".c_string())
+		UIntOpGE => LLVMBuildICmp(builder, LLVMIntPredicate::LLVMIntUGE, args[0], args[1], "".c_string())
 		UIntOpCmp => LLVMBuildSub(builder,
-			LLVMBuildZExt(builder, LLVMBuildICmp(builder, _LLVMIntPredicate::LLVMIntUGT.v(), args[0], args[1], "".c_string()), LLVMIntTypeInContext(.llvm_context, 64), "".c_string()),
-			LLVMBuildZExt(builder, LLVMBuildICmp(builder, _LLVMIntPredicate::LLVMIntULT.v(), args[0], args[1], "".c_string()), LLVMIntTypeInContext(.llvm_context, 64), "".c_string()),
+			LLVMBuildZExt(builder, LLVMBuildICmp(builder, LLVMIntPredicate::LLVMIntUGT, args[0], args[1], "".c_string()), LLVMIntTypeInContext(.llvm_context, 64), "".c_string()),
+			LLVMBuildZExt(builder, LLVMBuildICmp(builder, LLVMIntPredicate::LLVMIntULT, args[0], args[1], "".c_string()), LLVMIntTypeInContext(.llvm_context, 64), "".c_string()),
 			"".c_string()
 		)
 		UIntOpAdd => LLVMBuildAdd(builder, args[0], args[1], "".c_string())
@@ -1538,15 +1533,15 @@ struct CodegenContext {
 			LLVMBuildStore(builder, result, args[0])
 			yield None
 		}
-		FloatOpEQ => LLVMBuildFCmp(builder, _LLVMRealPredicate::LLVMRealOEQ.v(), args[0], args[1], "".c_string())
-		FloatOpNE => LLVMBuildFCmp(builder, _LLVMRealPredicate::LLVMRealONE.v(), args[0], args[1], "".c_string())
-		FloatOpLT => LLVMBuildFCmp(builder, _LLVMRealPredicate::LLVMRealOLT.v(), args[0], args[1], "".c_string())
-		FloatOpLE => LLVMBuildFCmp(builder, _LLVMRealPredicate::LLVMRealOLE.v(), args[0], args[1], "".c_string())
-		FloatOpGT => LLVMBuildFCmp(builder, _LLVMRealPredicate::LLVMRealOGT.v(), args[0], args[1], "".c_string())
-		FloatOpGE => LLVMBuildFCmp(builder, _LLVMRealPredicate::LLVMRealOGE.v(), args[0], args[1], "".c_string())
+		FloatOpEQ => LLVMBuildFCmp(builder, LLVMRealPredicate::LLVMRealOEQ, args[0], args[1], "".c_string())
+		FloatOpNE => LLVMBuildFCmp(builder, LLVMRealPredicate::LLVMRealONE, args[0], args[1], "".c_string())
+		FloatOpLT => LLVMBuildFCmp(builder, LLVMRealPredicate::LLVMRealOLT, args[0], args[1], "".c_string())
+		FloatOpLE => LLVMBuildFCmp(builder, LLVMRealPredicate::LLVMRealOLE, args[0], args[1], "".c_string())
+		FloatOpGT => LLVMBuildFCmp(builder, LLVMRealPredicate::LLVMRealOGT, args[0], args[1], "".c_string())
+		FloatOpGE => LLVMBuildFCmp(builder, LLVMRealPredicate::LLVMRealOGE, args[0], args[1], "".c_string())
 		FloatOpCmp => LLVMBuildSub(builder,
-			LLVMBuildZExt(builder, LLVMBuildFCmp(builder, _LLVMRealPredicate::LLVMRealOGT.v(), args[0], args[1], "".c_string()), LLVMIntTypeInContext(.llvm_context, 64), "".c_string()),
-			LLVMBuildZExt(builder, LLVMBuildFCmp(builder, _LLVMRealPredicate::LLVMRealOLT.v(), args[0], args[1], "".c_string()), LLVMIntTypeInContext(.llvm_context, 64), "".c_string()),
+			LLVMBuildZExt(builder, LLVMBuildFCmp(builder, LLVMRealPredicate::LLVMRealOGT, args[0], args[1], "".c_string()), LLVMIntTypeInContext(.llvm_context, 64), "".c_string()),
+			LLVMBuildZExt(builder, LLVMBuildFCmp(builder, LLVMRealPredicate::LLVMRealOLT, args[0], args[1], "".c_string()), LLVMIntTypeInContext(.llvm_context, 64), "".c_string()),
 			"".c_string()
 		)
 		FloatOpAdd => LLVMBuildFAdd(builder, args[0], args[1], "".c_string())
@@ -1585,15 +1580,15 @@ struct CodegenContext {
 			LLVMBuildStore(builder, result, args[0])
 			yield None
 		}
-		PointerOpEQ => LLVMBuildICmp(builder, _LLVMIntPredicate::LLVMIntEQ.v(), args[0], args[1], "".c_string())
-		PointerOpNE => LLVMBuildICmp(builder, _LLVMIntPredicate::LLVMIntNE.v(), args[0], args[1], "".c_string())
-		PointerOpLT => LLVMBuildICmp(builder, _LLVMIntPredicate::LLVMIntULT.v(), args[0], args[1], "".c_string())
-		PointerOpLE => LLVMBuildICmp(builder, _LLVMIntPredicate::LLVMIntULE.v(), args[0], args[1], "".c_string())
-		PointerOpGT => LLVMBuildICmp(builder, _LLVMIntPredicate::LLVMIntUGT.v(), args[0], args[1], "".c_string())
-		PointerOpGE => LLVMBuildICmp(builder, _LLVMIntPredicate::LLVMIntUGE.v(), args[0], args[1], "".c_string())
+		PointerOpEQ => LLVMBuildICmp(builder, LLVMIntPredicate::LLVMIntEQ, args[0], args[1], "".c_string())
+		PointerOpNE => LLVMBuildICmp(builder, LLVMIntPredicate::LLVMIntNE, args[0], args[1], "".c_string())
+		PointerOpLT => LLVMBuildICmp(builder, LLVMIntPredicate::LLVMIntULT, args[0], args[1], "".c_string())
+		PointerOpLE => LLVMBuildICmp(builder, LLVMIntPredicate::LLVMIntULE, args[0], args[1], "".c_string())
+		PointerOpGT => LLVMBuildICmp(builder, LLVMIntPredicate::LLVMIntUGT, args[0], args[1], "".c_string())
+		PointerOpGE => LLVMBuildICmp(builder, LLVMIntPredicate::LLVMIntUGE, args[0], args[1], "".c_string())
 		PointerOpCmp => LLVMBuildSub(builder,
-			LLVMBuildZExt(builder, LLVMBuildICmp(builder, _LLVMIntPredicate::LLVMIntUGT.v(), args[0], args[1], "".c_string()), LLVMIntTypeInContext(.llvm_context, 64), "".c_string()),
-			LLVMBuildZExt(builder, LLVMBuildICmp(builder, _LLVMIntPredicate::LLVMIntULT.v(), args[0], args[1], "".c_string()), LLVMIntTypeInContext(.llvm_context, 64), "".c_string()),
+			LLVMBuildZExt(builder, LLVMBuildICmp(builder, LLVMIntPredicate::LLVMIntUGT, args[0], args[1], "".c_string()), LLVMIntTypeInContext(.llvm_context, 64), "".c_string()),
+			LLVMBuildZExt(builder, LLVMBuildICmp(builder, LLVMIntPredicate::LLVMIntULT, args[0], args[1], "".c_string()), LLVMIntTypeInContext(.llvm_context, 64), "".c_string()),
 			"".c_string()
 		)
 		PointerGetNull => LLVMConstNull(LLVMPointerTypeInContext(.llvm_context, 0))
@@ -1659,7 +1654,7 @@ struct CodegenContext {
 		VariantOpIs(type, id) => {
 			let obj = args[0];
 			let obj_id = LLVMBuildExtractValue(builder, obj, 0, "".c_string())
-			yield LLVMBuildICmp(builder, _LLVMIntPredicate::LLVMIntEQ.v(), obj_id,
+			yield LLVMBuildICmp(builder, LLVMIntPredicate::LLVMIntEQ, obj_id,
 				LLVMConstInt(LLVMTypeOf(obj_id), id as! i64, false), "".c_string()
 			)
 		}
@@ -1746,7 +1741,7 @@ struct CodegenContext {
 					mut r = .codegenCall(builder, func: v.type_op_equal!, args: [this_member, other_member])!
 
 					if .program.functions[v.type_op_equal!.id].name == "operator <=>" {
-						r = LLVMBuildICmp(builder, _LLVMIntPredicate::LLVMIntEQ.v(), r, LLVMConstInt(LLVMTypeOf(r), 0, false), "".c_string())
+						r = LLVMBuildICmp(builder, LLVMIntPredicate::LLVMIntEQ, r, LLVMConstInt(LLVMTypeOf(r), 0, false), "".c_string())
 					}
 
 					acc = LLVMBuildAnd(builder, acc, r, "".c_string())
@@ -1958,7 +1953,7 @@ struct CodegenContext {
 				let id_ptr = LLVMBuildStructGEP2(builder, .types[type.id], obj_ptr, 0, "".c_string())
 				let id_val = LLVMBuildLoad2(builder, .types[id_type.id], id_ptr, "".c_string())
 
-				let same_id = LLVMBuildICmp(builder, _LLVMIntPredicate::LLVMIntEQ.v(), id_val, LLVMConstInt(.types[id_type.id], id, false), "".c_string())
+				let same_id = LLVMBuildICmp(builder, LLVMIntPredicate::LLVMIntEQ, id_val, LLVMConstInt(.types[id_type.id], id, false), "".c_string())
 				LLVMBuildCondBr(builder, same_id, some_branch, none_branch)
 
 				LLVMPositionBuilderAtEnd(builder, some_branch)
@@ -1997,7 +1992,7 @@ struct CodegenContext {
 				let check_member_variables_branch = LLVMAppendBasicBlockInContext(.llvm_context, llvm_func.impl, "check_member_variables".c_string())
 				let unequal_branch = LLVMAppendBasicBlockInContext(.llvm_context, llvm_func.impl, "unequal".c_string())
 
-				let equal_id = LLVMBuildICmp(builder, _LLVMIntPredicate::LLVMIntEQ.v(), this_id, other_id, "".c_string())
+				let equal_id = LLVMBuildICmp(builder, LLVMIntPredicate::LLVMIntEQ, this_id, other_id, "".c_string())
 				LLVMBuildCondBr(builder, equal_id, check_attached_value_branch, unequal_branch)
 
 				LLVMPositionBuilderAtEnd(builder, check_attached_value_branch)
@@ -2027,12 +2022,12 @@ struct CodegenContext {
 							])!
 
 							if .program.functions[c.type_op_equal!.id].name == "operator <=>" {
-								r = LLVMBuildICmp(builder, _LLVMIntPredicate::LLVMIntEQ.v(), r, LLVMConstInt(LLVMTypeOf(r), 0, false), "".c_string())
+								r = LLVMBuildICmp(builder, LLVMIntPredicate::LLVMIntEQ, r, LLVMConstInt(LLVMTypeOf(r), 0, false), "".c_string())
 							}
 
 							yield r
 						}
-						else => LLVMBuildICmp(builder, _LLVMIntPredicate::LLVMIntEQ.v(), this_value, other_value, "".c_string())
+						else => LLVMBuildICmp(builder, LLVMIntPredicate::LLVMIntEQ, this_value, other_value, "".c_string())
 					}
 
 					LLVMBuildCondBr(builder, equal_value, check_member_variables_branch, unequal_branch)
@@ -2046,7 +2041,7 @@ struct CodegenContext {
 					mut r = .codegenCall(builder, func: v.type_op_equal!, args: [this_member, other_member])!
 
 					if .program.functions[v.type_op_equal!.id].name == "operator <=>" {
-						r = LLVMBuildICmp(builder, _LLVMIntPredicate::LLVMIntEQ.v(), r, LLVMConstInt(LLVMTypeOf(r), 0, false), "".c_string())
+						r = LLVMBuildICmp(builder, LLVMIntPredicate::LLVMIntEQ, r, LLVMConstInt(LLVMTypeOf(r), 0, false), "".c_string())
 					}
 
 					acc = LLVMBuildAnd(builder, acc, r, "".c_string())
@@ -2186,7 +2181,7 @@ struct CodegenContext {
 
 		// verify
 		mut message = null<c_char>()
-		if LLVMVerifyModule(.llvm_module, _LLVMVerifierFailureAction::LLVMReturnStatusAction.v(), &raw message) {
+		if LLVMVerifyModule(.llvm_module, LLVMVerifierFailureAction::LLVMReturnStatusAction, &raw message) {
 			println("{}", file_name)
 			println("{}", message)
 			module.has_errors = true
