@@ -18,18 +18,18 @@ enum OpenMode {
 	func toStringForFOpen(this: OpenMode) -> Result!<String> {
 		var str: String;
 
-		if this & (OpenMode::read | OpenMode::write) == OpenMode::read {
+		if (this & (OpenMode::read | OpenMode::write)) == OpenMode::read {
 			str += 'r'b;
-		} else if this & (OpenMode::read | OpenMode::write) == OpenMode::write {
-			if this & OpenMode::append == OpenMode::append {
+		} else if (this & (OpenMode::read | OpenMode::write)) == OpenMode::write {
+			if (this & OpenMode::append) == OpenMode::append {
 				str += 'a'b;
 			} else {
 				str += 'w'b;
 			}
-		} else if this & (OpenMode::read | OpenMode::write) == (OpenMode::read | OpenMode::write) {
-			if this & OpenMode::trunc == OpenMode::trunc {
+		} else if (this & (OpenMode::read | OpenMode::write)) == (OpenMode::read | OpenMode::write) {
+			if (this & OpenMode::trunc) == OpenMode::trunc {
 				str += "w+";
-			} else if this & OpenMode::append == OpenMode::append {
+			} else if (this & OpenMode::append) == OpenMode::append {
 				str += "a+";
 			} else {
 				str += "r+";
@@ -54,21 +54,21 @@ enum OpenMode {
 		const O_NONBLOCK = 2048i32;
 
 		var flags = 0i32;
-		if this & (OpenMode::read | OpenMode::write) == OpenMode::read {
+		if (this & (OpenMode::read | OpenMode::write)) == OpenMode::read {
 			flags = O_RDONLY;
-		} else if this & (OpenMode::read | OpenMode::write) == OpenMode::write {
+		} else if (this & (OpenMode::read | OpenMode::write)) == OpenMode::write {
 			flags = O_WRONLY;
-		} else if this & (OpenMode::read | OpenMode::write) == (OpenMode::read | OpenMode::write) {
+		} else if (this & (OpenMode::read | OpenMode::write)) == (OpenMode::read | OpenMode::write) {
 			flags = O_RDWR;
 		} else {
 			throw Error::EINVAL;
 		}
 
-		if this & OpenMode::trunc == OpenMode::trunc {
+		if (this & OpenMode::trunc) == OpenMode::trunc {
 			flags |= O_TRUNC;
 		}
 
-		if this & OpenMode::append == OpenMode::append {
+		if (this & OpenMode::append) == OpenMode::append {
 			flags |= O_APPEND;
 		}
 
