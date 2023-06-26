@@ -54,6 +54,10 @@ struct SharedPtr {
 		return this.data == other.data;
 	}
 
+	operator <=>(this: SharedPtr!<T>, other: SharedPtr!<T>) -> int {
+		return this.data <=> other.data;
+	}
+
 	func new(value: T) -> SharedPtr!<T> {
 		return SharedPtr!<T>(value);
 	}
@@ -127,6 +131,10 @@ struct WeakPtr {
 		}
 
 		return Some(SharedPtr!<T>(this));
+	}
+
+	operator ==(this: WeakPtr!<T>, other: WeakPtr!<T>) -> bool {
+		return this.data == other.data;
 	}
 
 	operator <=>(this: WeakPtr!<T>, other: WeakPtr!<T>) -> int {
