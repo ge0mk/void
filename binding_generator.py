@@ -114,9 +114,17 @@ def main(args):
 			return type_aliases[t]
 		elif t[-1] == '*':
 			if t.startswith("const "):
-				return "cptr!<" + parse_type(t[6:-1]) + ">"
+				pointee = parse_type(t[6:-1])
+				if pointee == "void":
+					return "cptr"
+				else:
+					return "cptr!<" + pointee + ">"
 			else:
-				return "vptr!<" + parse_type(t[:-1]) + ">"
+				pointee = parse_type(t[:-1])
+				if pointee == "void":
+					return "vptr"
+				else:
+					return "vptr!<" + parse_type(t[:-1]) + ">"
 		elif t.endswith("*const"):
 			return "cptr!<" + parse_type(t[:-6]) + ">"
 		else:
