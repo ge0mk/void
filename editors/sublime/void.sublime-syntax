@@ -133,12 +133,12 @@ contexts:
       pop: true
 
   import:
-    - include: comments
-
-    - match: (\w+)(/(\w+))+
+    - match: (\w+)/
       captures:
         1: entity.name.namespace
-        3: entity.name.namespace
+
+    - match: \w+
+      scope: entity.name.namespace
       pop: true
 
   type_extension:
