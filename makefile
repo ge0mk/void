@@ -11,6 +11,9 @@ build/void: build/stage1
 
 stage0: build/stage0
 
+bootstrap.ll:
+	wget -O bootstrap.ll https://github.com/ge0mk/void/releases/download/selfhosted/bootstrap.ll
+
 build/stage0: bootstrap.ll
 	clang bootstrap.ll -o build/stage0 -lc -lm -lLLVM
 
