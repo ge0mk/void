@@ -26,6 +26,16 @@ planned features (wip / near future)
 - compiler: generate better llvm ir
 	- lifetime intrinsics
 	- function attributes (especially for allocators)
+- compiler: better debug info
+	- types
+	- variables
+- compiler: optimizations on ast-level:
+	- eliminate unnecessary copying
+	- for x in NumericRange -> builtin count-for-loop
+	- function inlining
+- stdlib: some clean-up:
+	- merge VRange & Range, make is_const a template parameter
+	- reduce duplicated code in Optional & Result with updated comptime if syntax
 - compiler: optional chaining `foo()?.bar()`
 	- `bar()` can be any operator, function call or member var access
 	- codegen to `foo().value().bar() if foo().hasValue() else None` (but only codegen `foo()` once)
@@ -55,12 +65,6 @@ planned features (wip / near future)
 - compiler: enums as template parameters
 - compiler: function references
 - compiler: anonymous functions
-- compiler: better debug info
-	- types
-	- variables
-- compiler: optimizations on ast-level:
-	- eliminate unnecessary copying
-	- function inlining
 - compiler: cashing of (partially) compiled modules (llvm-ir, output of typechecker ?)
 - stdlib:
 	- `format("{}", ...)` for text formatting, similar to https://github.com/fmtlib/fmt
