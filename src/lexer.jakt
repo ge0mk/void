@@ -612,9 +612,6 @@ struct Lexer {
 		if .source[.index] == b'\\' {
 			.index++
 			match .source[.index] {
-				b'\'' => { ch = b'\'' }
-				b'\"' => { ch = b'\"' }
-				b'\\' => { ch = b'\\' }
 				b'0' => { ch = b'\0' }
 				b'a' => { ch = b'\a' }
 				b'b' => { ch = b'\b' }
@@ -624,6 +621,10 @@ struct Lexer {
 				b'r' => { ch = b'\r' }
 				b't' => { ch = b'\t' }
 				b'v' => { ch = b'\v' }
+				b'\\' => { ch = b'\\' }
+				b'\'' => { ch = b'\'' }
+				b'\"' => { ch = b'\"' }
+				b'\?' => { ch = b'\?' }
 				else => {
 					.error("invalid escape sequence in char literal", Span(start: .index - 1, end: .index + 1))
 				}
@@ -659,9 +660,6 @@ struct Lexer {
 			if .source[.index] == b'\\' {
 				.index++
 				match .source[.index] {
-					b'\'' => string_builder.append(b'\'')
-					b'\"' => string_builder.append(b'\"')
-					b'\\' => string_builder.append(b'\\')
 					b'0' => string_builder.append(b'\0')
 					b'a' => string_builder.append(b'\a')
 					b'e' => string_builder.append(b'\e')
@@ -671,6 +669,10 @@ struct Lexer {
 					b'r' => string_builder.append(b'\r')
 					b't' => string_builder.append(b'\t')
 					b'v' => string_builder.append(b'\v')
+					b'\\' => string_builder.append(b'\\')
+					b'\'' => string_builder.append(b'\'')
+					b'\"' => string_builder.append(b'\"')
+					b'\?' => string_builder.append(b'\?')
 					else => {
 						.error("invalid escape sequence in string literal", Span(start: .index - 1, end: .index + 1))
 					}
