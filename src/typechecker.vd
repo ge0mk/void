@@ -3563,30 +3563,76 @@ struct TCContext {
 
 		result = addDereference(result);
 
-		if unwrapped_arguments.size() >= 1 {
-			if const member_var_invoke_expr = unwrapped_arguments[0u] as MemberVarInvoke {
-				if const object = member_var_invoke_expr.object.operator unwrap() as VarInvoke {
-					const object_decl = object.lock().value();
-					if object_decl.id == 0 { // this parameter
-						if function_name == "constructor" {
-							if this.active_member_variables.contains(member_var_invoke_expr.id) {
-								this.error("double initialization of member variable", span);
-							}
+		this.checkActiveMembersForCall(unwrapped_arguments, function_name, span);
 
-							this.active_member_variables.add(member_var_invoke_expr.id);
-						} else if function_name == "destructor" {
-							if !this.active_member_variables.contains(member_var_invoke_expr.id) {
-								this.error("double de-initialization of member variable", span);
-							}
+		return result;
+	}
 
-							this.active_member_variables.remove(member_var_invoke_expr.id);
+	func checkActiveMembersForCall(this: &&TCContext, arguments: List!<Expr>, function_name: String, span: Span) {
+		const parent_function_decl = this.current_function.lock() else {
+			return;
+		}
+
+		if arguments.isEmpty() || parent_function_decl.parameter_types.isEmpty() {
+			return;
+		}
+
+		if parent_function_decl.parameter_types[0u].base() != parent_function_decl.parent_type.base() {
+			return;
+		}
+
+		match arguments[0u] {
+			case MemberVarInvoke: member_var_invoke_expr -> {
+				const object = member_var_invoke_expr.object.operator unwrap() as VarInvoke else {
+					return;
+				}
+
+				const object_decl = object.lock().value();
+				if object_decl.id != 0 { // this parameter
+					return;
+				}
+
+				if function_name == "constructor" {
+					if this.active_member_variables.contains(member_var_invoke_expr.id) {
+						this.error("double initialization of member variable", span);
+					}
+
+					this.active_member_variables.add(member_var_invoke_expr.id);
+				} else if function_name == "destructor" {
+					if !this.active_member_variables.contains(member_var_invoke_expr.id) {
+						this.error("double de-initialization of member variable", span);
+					}
+
+					this.active_member_variables.remove(member_var_invoke_expr.id);
+				}
+			}
+			case VarInvoke: variable -> {
+				const object_decl = variable.lock().value();
+				if object_decl.id != 0 { // this parameter
+					return;
+				}
+
+				const object_type_decl = object_decl.type.lock().value();
+				if function_name == "constructor" {
+					for variable in object_type_decl.member_variables {
+						if this.active_member_variables.contains(variable.id) {
+							this.error("double initialization of member variable '" + variable.name + "'", span);
 						}
+
+						this.active_member_variables.add(variable.id);
+					}
+				} else if function_name == "destructor" {
+					for variable in object_type_decl.member_variables {
+						if !this.active_member_variables.contains(variable.id) {
+							this.error("double de-initialization of member variable '" + variable.name + "'", span);
+						}
+						
+						this.active_member_variables.remove(variable.id);
 					}
 				}
 			}
+			else -> {}
 		}
-
-		return result;
 	}
 
 	func checkExplicitMemberCall(this: &&TCContext, parent_type: TypeRef, name: String, parsed_template_parameters: List!<ParsedExpr>, parsed_arguments: List!<ParsedExpr>, span: Span) -> Expr {
