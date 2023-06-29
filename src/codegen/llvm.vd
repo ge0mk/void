@@ -822,7 +822,7 @@ struct CGContext {
 							parameters.append(rhs);
 
 							if case_type.op_equal.isUnknown() {
-								this.error(case_type.signature() + "::operator ==() is missing", case_type.span);
+								this.error(case_type.signature() + "::operator ==() is missing", case_type.name_span);
 								equal = this.bool_type.getUndef();
 							} else {
 								equal = this.codegenCall(case_type.op_equal, parameters, ReturnKind::Value, signature_span);
@@ -850,7 +850,7 @@ struct CGContext {
 						parameters.append(rhs);
 
 						if member_type.op_equal.isUnknown() {
-							this.error(member_type.signature() + "::operator ==() is missing", member_type.span);
+							this.error(member_type.signature() + "::operator ==() is missing", member_type.name_span);
 							equal = this.bool_type.getUndef();
 						} else {
 							equal = this.codegenCall(member_type.op_equal, parameters, ReturnKind::Value, signature_span);
@@ -888,7 +888,7 @@ struct CGContext {
 					if decl.member_variables[i].type.kind == ReferenceKind::None {
 						const member_type = decl.member_variables[i].type.lock().value();
 						if member_type.op_equal.isUnknown() {
-							this.error(member_type.signature() + "::operator <=>() is missing", member_type.span);
+							this.error(member_type.signature() + "::operator <=>() is missing", member_type.name_span);
 							sign = this.int_type.getUndef();
 						} else {
 							sign = this.codegenCall(member_type.op_compare, parameters, ReturnKind::Value, signature_span);
@@ -914,6 +914,7 @@ struct CGContext {
 				this.builder.buildRet(phi);
 			}
 			case ArrayDefaultConstructor -> {
+				// TODO: turn into a loop for better code size (llvm can unroll it for performance)
 				const array_type = (decl.body as Array).value();
 				const element_type = array_type.element_type;
 				const element_type_decl = element_type.lock().value();
@@ -932,6 +933,7 @@ struct CGContext {
 			case ArrayCopyConstructor
 			| ArrayDestructor
 			| ArrayOpAssign -> {
+				// TODO: turn into a loop for better code size (llvm can unroll it for performance)
 				const array_type = (decl.body as Array).value();
 				const element_type = array_type.element_type;
 				const element_type_decl = element_type.lock().value();
@@ -960,7 +962,42 @@ struct CGContext {
 				this.builder.buildRetVoid();
 			}
 			case ArrayOpEqual -> {
-				this.todo("implement codegen for builtin array operator ==", signature_span);
+				// TODO: turn into a loop for better code size (llvm can unroll it for performance)
+				const array_type = (decl.body as Array).value();
+				const element_type = array_type.element_type;
+				const element_type_decl = element_type.lock().value();
+
+				const uneq_block = this.llvm_context.appendBasicBlock(this.current_function, "uneq");
+
+				for i in 0u..array_type.size {
+					const lhs = this.builder.buildExtractValue(this.current_function.getParam(0u), i, "");
+					const rhs = this.builder.buildExtractValue(this.current_function.getParam(1u), i, "");
+
+					var equal = llvm::ValueRef();
+					if element_type.kind == ReferenceKind::None {
+						var parameters: List!<llvm::ValueRef>;
+						parameters.append(lhs);
+						parameters.append(rhs);
+
+						if element_type_decl.op_equal.isUnknown() {
+							this.error(element_type_decl.signature() + "::operator ==() is missing", element_type_decl.name_span);
+							equal = this.bool_type.getUndef();
+						} else {
+							equal = this.codegenCall(element_type_decl.op_equal, parameters, ReturnKind::Value, signature_span);
+						}
+					} else {
+						equal = this.builder.buildICmp(LLVMIntPredicate::LLVMIntEQ, lhs, rhs, "");
+					}
+
+					const next_block = this.llvm_context.appendBasicBlock(this.current_function, "next");
+
+					this.builder.buildCondBr(equal, next_block, uneq_block);
+					this.builder.positionAtEnd(next_block);
+				}
+
+				this.builder.buildRet(llvm::constInt(this.bool_type, 1, false));
+
+				this.builder.positionAtEnd(uneq_block);
 				this.builder.buildRet(llvm::constInt(this.bool_type, 0, false));
 			}
 		}
