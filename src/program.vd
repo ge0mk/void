@@ -74,13 +74,13 @@ struct Program {
 		}
 		last_line = min(last_line + 1, module.line_spans.size());
 
-		const last_line_number = format(last_line - 1);
+		const last_line_number = format(last_line);
 		const max_line_number_width = last_line_number.size();
 
 		for line in first_line..last_line {
 			const line_span = module.line_spans[line];
 
-			const line_number_str = format(line);
+			const line_number_str = format(line + 1);
 			print(String(max_line_number_width - line_number_str.size() + 1, ' 'b) + line_number_str + " | ");
 
 			const error_start = max(line_span.start, min(span.start, line_span.end));
