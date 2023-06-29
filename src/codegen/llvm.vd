@@ -1139,10 +1139,10 @@ struct CGContext {
 				return llvm::ValueRef();
 			}
 
-			case UIntOpLT -> return this.builder.buildICmp(LLVMIntPredicate::LLVMIntSLT, parameters[0u], parameters[1u], "");
-			case UIntOpLE -> return this.builder.buildICmp(LLVMIntPredicate::LLVMIntSLE, parameters[0u], parameters[1u], "");
-			case UIntOpGT -> return this.builder.buildICmp(LLVMIntPredicate::LLVMIntSGT, parameters[0u], parameters[1u], "");
-			case UIntOpGE -> return this.builder.buildICmp(LLVMIntPredicate::LLVMIntSGE, parameters[0u], parameters[1u], "");
+			case UIntOpLT -> return this.builder.buildICmp(LLVMIntPredicate::LLVMIntULT, parameters[0u], parameters[1u], "");
+			case UIntOpLE -> return this.builder.buildICmp(LLVMIntPredicate::LLVMIntULE, parameters[0u], parameters[1u], "");
+			case UIntOpGT -> return this.builder.buildICmp(LLVMIntPredicate::LLVMIntUGT, parameters[0u], parameters[1u], "");
+			case UIntOpGE -> return this.builder.buildICmp(LLVMIntPredicate::LLVMIntUGE, parameters[0u], parameters[1u], "");
 			case UIntOpCmp -> return this.builder.buildSub(
 				this.builder.buildZExt(this.builder.buildICmp(LLVMIntPredicate::LLVMIntUGT, parameters[0u], parameters[1u], ""), this.int_type, ""),
 				this.builder.buildZExt(this.builder.buildICmp(LLVMIntPredicate::LLVMIntULT, parameters[0u], parameters[1u], ""), this.int_type, ""), ""
