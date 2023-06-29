@@ -384,8 +384,15 @@ struct TCContext {
 		return Ok(id);
 	}
 
-	func checkImport(this: &&TCContext, name: String) -> void {
-		for path_and_name in this.program.options.getImportPaths(name) {
+	func checkImport(this: &&TCContext, name: String, span: Span) -> void {
+		const imported_modules = this.program.options.getImportPaths(name);
+
+		if imported_modules.isEmpty() {
+			this.error("no matching module found", span);
+			return;
+		}
+
+		for path_and_name in imported_modules {
 			const path = path_and_name.path;
 			const module_name = path_and_name.name;
 
@@ -401,16 +408,17 @@ struct TCContext {
 				continue;
 			}
 
-			var id = this.program.loadModule(path, module_name) else: error {
-				eprintln("couldn't load module " + path + ": " + String::fromErrorCode(error));
+			const id = this.program.loadModule(path, module_name) else: error {
+				this.error("couldn't load module " + path + ": " + String::fromErrorCode(error), span);
 				continue;
 			}
 
 			this.module.imports.append(id);
 
-			var other = this.program.modules[id];
-			this.contexts.append(SharedPtr!<TCContext>::new(TCContext(&&this.program, &&other.operator unwrap(), &&this.interpreter, &&this.contexts)));
-			this.contexts[id].check();
+			var imported_module = this.program.modules[id];
+			var ctx = SharedPtr!<TCContext>::new(TCContext(&&this.program, &&imported_module.operator unwrap(), &&this.interpreter, &&this.contexts));
+			this.contexts.append(ctx);
+			ctx.check();
 		}
 	}
 
@@ -1611,7 +1619,7 @@ struct TCContext {
 				if !this.current_type.isUnknown() || !this.current_function.isUnknown() {
 					this.error("imports are only allowed at root scope", parsed_stmt.span);
 				} else {
-					this.checkImport(name);
+					this.checkImport(name, parsed_stmt.span);
 				}
 			}
 			case TypeDecl: decl -> {
