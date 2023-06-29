@@ -15,10 +15,10 @@ bootstrap.ll:
 	wget -O bootstrap.ll https://github.com/ge0mk/void/releases/download/selfhosted/bootstrap.ll
 
 build/stage0: bootstrap.ll
-	clang bootstrap.ll -o build/stage0 -lc -lm -lLLVM
+	clang bootstrap.ll -o build/stage0 -O3 -march=native -lc -lm -lLLVM
 
 test-stage0: build/stage0
-	python3 test.py build/stage0 -q -- -r -bc -s
+	python3 test.py build/stage0 -q -- -m -b -s
 
 stage1: build/stage1
 
@@ -50,9 +50,9 @@ libc.ll: libc.c
 
 generate-bootstrap-files: build/stage2
 	build/stage2 src/main.vd -o bootstrap -c -m
-	build/stage2 src/main.vd -o bootstrap-bc -c -m -b
+	build/stage2 src/main.vd -o bootstrap -c -m -b
 	build/stage2 src/main.vd -o bootstrap-stripped -c -m -s
-	build/stage2 src/main.vd -o bootstrap-stripped-bc -c -m -s -b
+	build/stage2 src/main.vd -o bootstrap-stripped -c -m -s -b
 
 	-@cp -f build/bootstrap* bootstrap/
 
