@@ -1,4 +1,5 @@
 import std/core;
+import std/libc/math;
 import std/box;
 import std/file;
 import std/format;
@@ -3021,7 +3022,60 @@ struct TCContext {
 			result_type = this.program.never_type;
 		}
 
-		// TODO: make sure all cases are covered
+		var covered_cases: Set!<int>;
+		for case_stmt in match_expr.cases {
+			for pattern in case_stmt.patterns {
+				match pattern {
+					case Integer: value -> {
+						if covered_cases.contains(value) {
+							this.error("duplicated match pattern", pattern.span);
+						} else {
+							covered_cases.add(value);
+						}
+					}
+					else -> {
+						this.todo("check match completeness for non-int expressions", pattern.span);
+					}
+				}
+			}
+		}
+
+		var number_of_possible_cases = 0u;
+		match value_type_decl.body {
+			case Bool -> number_of_possible_cases = 2;
+			case Byte -> number_of_possible_cases = 256;
+			case Int: size -> {
+				if size == 0 {
+					number_of_possible_cases = -1 as uint; // ptr sized max int
+				} else {
+					number_of_possible_cases = pow(2.0, size as f64) as uint;
+				}
+			}
+			case UInt: size -> {
+				if size == 0 {
+					number_of_possible_cases = -1 as uint; // ptr sized max int
+				} else {
+					number_of_possible_cases = pow(2.0, size as f64) as uint;
+				}
+			}
+			case Enum -> {
+				var unique_cases: Set!<int>;
+				for c in value_type_decl.enum_cases {
+					unique_cases.add(c.id);
+				}
+				number_of_possible_cases = unique_cases.size();
+			}
+			case Variant -> {
+				number_of_possible_cases = value_type_decl.variant_cases.size();
+			}
+			else -> {}
+		}
+
+		if covered_cases.size() < number_of_possible_cases && !match_expr.else_case.hasValue() {
+			this.error("match stmt doesn't cover all possible cases", this.match_value.span);
+		} else if covered_cases.size() == number_of_possible_cases && match_expr.else_case.hasValue() {
+			this.error("else branch is unreachable", match_expr.else_case.value().span);
+		}
 
 		match_expr.yield_var = this.yield_var;
 		const result = Expr::Match(match_expr, span, result_type);
