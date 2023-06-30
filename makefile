@@ -49,10 +49,10 @@ libc.ll: libc.c
 	clang libc.c -S -emit-llvm -O3 -o libc.ll
 
 generate-bootstrap-files: build/stage2
-	build/stage2 src/main.vd -o bootstrap -c -m
-	build/stage2 src/main.vd -o bootstrap -c -m -b
-	build/stage2 src/main.vd -o bootstrap-stripped -c -m -s
-	build/stage2 src/main.vd -o bootstrap-stripped -c -m -s -b
+	build/stage2 src/main.vd -o bootstrap -c -m -O
+	build/stage2 src/main.vd -o bootstrap -c -m -O -b
+	build/stage2 src/main.vd -o bootstrap-stripped -c -m -O -s
+	build/stage2 src/main.vd -o bootstrap-stripped -c -m -O -s -b
 
 	-@cp -f build/bootstrap* bootstrap/
 

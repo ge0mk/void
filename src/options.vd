@@ -53,6 +53,7 @@ struct CompilerOptions {
 	var output_type: OutputType;
 	var generate_debug_info: bool;
 	var dont_codegen_builtins: bool;
+	var optimized_build: bool;
 
 	var interpret: bool;
 

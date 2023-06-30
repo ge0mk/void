@@ -1621,6 +1621,7 @@ struct VarDecl {
 
 	var is_const: bool;
 	var is_parameter: bool;
+	var is_unused: bool;
 
 	var constructor_call: Expr;
 	var destructor_call: Expr;
@@ -2294,6 +2295,7 @@ enum ReturnKind {
 	case Value;		// most basic, no memory management
 	case Variable;	// result gets stored in variable allocated by caller
 	case Parameter;	// callee initializes variable allocated by caller, passed by reference as first parameter
+	case VariableButYieldNone;	// same as variable, but result gets discarded. Used when initializing a variable with the result of a call (optimized)
 
 	func toString(this: ReturnKind) -> String {
 		match this {
@@ -2301,6 +2303,7 @@ enum ReturnKind {
 			case Value -> return "Value";
 			case Variable -> return "Variable";
 			case Parameter -> return "Parameter";
+			case VariableButYieldNone -> return "VariableButYieldNone";
 		}
 	}
 }
@@ -2310,12 +2313,14 @@ struct CallExpr {
 	var parameters: List!<Expr>;
 	var result_var: WeakPtr!<VarDecl>;
 	var return_kind: ReturnKind;
+	var is_copy_constructor_call: bool;
 
-	func constructor(this: &&CallExpr, function: FunctionRef, parameters: List!<Expr>, result_var: WeakPtr!<VarDecl>, return_kind: ReturnKind) -> void {
+	func constructor(this: &&CallExpr, function: FunctionRef, parameters: List!<Expr>, result_var: WeakPtr!<VarDecl>, return_kind: ReturnKind, is_copy_constructor_call: bool) -> void {
 		this.function := function;
 		this.parameters := parameters;
 		this.result_var := result_var;
 		this.return_kind := return_kind;
+		this.is_copy_constructor_call := is_copy_constructor_call;
 	}
 
 	func constructor(this: &&CallExpr, other: CallExpr) -> void = default;

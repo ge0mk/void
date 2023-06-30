@@ -199,7 +199,7 @@ struct CGContext {
 			LLVMDWARFSourceLanguage::LLVMDWARFSourceLanguageC,
 			this.di_files[0u],
 			"",			// producer
-			false,		// is optimized
+			this.program.options.optimized_build,
 			"",			// flags
 			0u,			// runtime version
 			"",			// split name
@@ -459,7 +459,7 @@ struct CGContext {
 				true,		// is definition
 				decl.signature_span.line as uint + 1,
 				LLVMDIFlags::LLVMDIFlagZero,
-				false		// is optimized
+				this.program.options.optimized_build
 			);
 
 			this.di_functions.set(function, di_function);
@@ -1612,6 +1612,11 @@ struct CGContext {
 						return result_var;
 					}
 					case Parameter -> return this.getVariable(result_var);
+					case VariableButYieldNone -> {
+						const result_var = this.getVariable(result_var);
+						this.builder.buildStore(result, result_var);
+						return llvm::ValueRef();
+					}
 				}
 			}
 		}

@@ -33,6 +33,7 @@ func parseArguments(arguments: Range!<String>, options: &&CompilerOptions) -> bo
 	options.codegen_only = args_parser.flag("codegen-only", "c", "don't compile output code to a binary") ?? false;
 	options.generate_debug_info = args_parser.flag("generate-debug-info", "g", "generate debug information") ?? false;
 	options.dont_codegen_builtins = args_parser.flag("cg-no-builtins", "m", "don't codegen inlinable builtin functions") ?? false;
+	options.optimized_build = args_parser.flag("optimize", "O", "enable optimizations") ?? false;
 
 	if args_parser.flag("strip-symbols", "s", "strip symbols") ?? false {
 		options.symbol_type = None;
@@ -154,6 +155,10 @@ func main(args: Range!<String>) -> int {
 
 		if options.generate_debug_info {
 			clang_command += " -g";
+		}
+
+		if options.optimized_build {
+			clang_command += " -O3";
 		}
 
 		clang_command += "\0";

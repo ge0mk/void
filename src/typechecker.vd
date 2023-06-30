@@ -16,6 +16,7 @@ import interpreter;
 import lexer;
 import options;
 import parser;
+import optimizations;
 import program;
 import span;
 import syntax_tree;
@@ -1596,7 +1597,13 @@ struct TCContext {
 
 		this.popScope();
 
-		decl.body = FunctionBody::Stmt(Stmt::Compound(body, body.span));
+		var result = Stmt::Compound(body, body.span);
+
+		if this.program.options.optimized_build {
+			result.eliminateCallResultCopies();
+		}
+
+		decl.body = FunctionBody::Stmt(result);
 	}
 
 	func checkStmt(this: &&TCContext, parsed_stmt: ParsedStmt) -> Stmt {
@@ -3553,7 +3560,7 @@ struct TCContext {
 			}
 
 			arguments[i] = Expr::Call(
-				CallExpr(unwrap_function, unwrap_arguments, result_var, ReturnKind::Value),
+				CallExpr(unwrap_function, unwrap_arguments, result_var, ReturnKind::Value, false),
 				arguments[i].span, unwrap_decl.return_type
 			);
 
@@ -3612,7 +3619,12 @@ struct TCContext {
 			}
 		}
 
-		var result = Expr::Call(CallExpr(function, unwrapped_arguments, result_var, return_kind), span, result_type);
+		var is_copy_constructor_call = false;
+		if const parent_type = decl.parent_type.lock() {
+			is_copy_constructor_call = function == parent_type.copy_constructor;
+		}
+
+		var result = Expr::Call(CallExpr(function, unwrapped_arguments, result_var, return_kind, is_copy_constructor_call), span, result_type);
 
 		if test_spaceship_operator_result {
 			var arguments: List!<Expr>;
@@ -3793,8 +3805,14 @@ struct TCContext {
 				return Expr::Empty(span, TypeRef::unknown());
 			}
 
+			const decl = function.lock().value();
+			var is_copy_constructor_call = false;
+			if const parent_type = decl.parent_type.lock() {
+				is_copy_constructor_call = function == parent_type.copy_constructor;
+			}
+
 			return Expr::Dereference(
-				Box!<Expr>(Expr::Call(CallExpr(function, unwrapped_arguments, variable, ReturnKind::Parameter), span, type.constRef())),
+				Box!<Expr>(Expr::Call(CallExpr(function, unwrapped_arguments, variable, ReturnKind::Parameter, is_copy_constructor_call), span, type.constRef())),
 				span, type
 			);
 		} else {

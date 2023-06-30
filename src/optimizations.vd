@@ -1,0 +1,122 @@
+import std/core;
+import std/io;
+import std/format;
+import std/string;
+
+import program;
+
+func eliminateCallResultCopies(stmt: &&Stmt) -> void {
+	match stmt {
+		case Empty -> {}
+		case Compound: &&compound_stmt -> {
+			var children = &&compound_stmt.children.operator unwrap();
+			for i in 0u..children.size() {
+				children[i].eliminateCallResultCopies();
+			}
+		}
+		case Expr: &&expr -> expr.eliminateCallResultCopies();
+		case If: &&if_stmt -> {
+			if_stmt.condition.eliminateCallResultCopies();
+			if_stmt.then_branch.eliminateCallResultCopies();
+			if_stmt.else_branch.eliminateCallResultCopies();
+		}
+		case While: &&while_stmt -> {
+			while_stmt.condition.eliminateCallResultCopies();
+			while_stmt.body.eliminateCallResultCopies();
+		}
+		case Case -> {}
+		case ElseCase -> {}
+		case Break -> {}
+		case Continue -> {}
+		case Yield -> {}
+		case Return: &&expr -> expr.eliminateCallResultCopies();
+		case LifeTimeStart: variable -> {
+			var var_decl = variable.lock().value();
+			var_decl.constructor_call.eliminateCallResultCopies();
+		}
+		case LifeTimeEnd -> {}
+	}
+}
+
+// if expr is copy constructor call
+//     and lhs is variable and removeDereference(rhs) is call
+//     and !removeDereference(rhs).type.isPrimitive()
+// -> replace result var of rhs with lhs and replace expr with rhs
+func eliminateCallResultCopies(expr: &&Expr) -> void {
+	match expr {
+		case Empty -> {}
+		case Integer -> {}
+		case Float -> {}
+		case String -> {}
+		case Array: &&elements -> {
+			for i in 0u..elements.size() {
+				elements[i].eliminateCallResultCopies();
+			}
+		}
+		case Call: &&call_expr -> {
+			for i in 0u..call_expr.parameters.size() {
+				call_expr.parameters[i].eliminateCallResultCopies();
+			}
+		}
+		case Match: &&match_expr -> {
+			match_expr.value.eliminateCallResultCopies();
+			for i in 0u..match_expr.cases.size() {
+				match_expr.cases[i].body.eliminateCallResultCopies();
+			}
+			match match_expr.else_case {
+				case Some: &&else_case -> else_case.eliminateCallResultCopies();
+				else -> {}
+			}
+		}
+		case VarInvoke -> {}
+		case MemberVarInvoke: &&member_var_invoke_expr -> {
+			member_var_invoke_expr.object.eliminateCallResultCopies();
+		}
+		case Dereference: &&base -> {
+			base.eliminateCallResultCopies();
+		}
+		case ShallowCopy: &&shalow_copy_expr -> {
+			shalow_copy_expr.value.eliminateCallResultCopies();
+		}
+	}
+
+	const call = expr as Call else {
+		return;
+	}
+
+	if !call.is_copy_constructor_call {
+		return;
+	}
+
+	const lhs = call.parameters[0u];
+	const rhs = removeDereference(call.parameters[1u]);
+	var rhs_call = rhs as Call else {
+		return;
+	}
+
+	const result_var = lhs as VarInvoke else {
+		return;
+	}
+
+	var old_result_var = rhs_call.result_var.lock() else {
+		return;
+	}
+
+	old_result_var.destructor_call = Expr::Empty(old_result_var.destructor_call.span, TypeRef::unknown());
+	old_result_var.is_unused = true;
+
+	rhs_call.result_var = result_var;
+
+	if rhs_call.return_kind == Variable {
+		rhs_call.return_kind = VariableButYieldNone;
+	} else if rhs_call.return_kind == Parameter {
+		rhs_call.return_kind = None;
+		rhs_call.parameters[0u] = lhs;
+	} else if rhs_call.return_kind == VariableButYieldNone {
+		// don't change it
+	} else {
+		panic("invalid call");
+	}
+
+	expr = Expr::Call(rhs_call, expr.span, expr.type);
+}
