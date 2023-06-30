@@ -603,7 +603,7 @@ struct TypeDecl {
 		return this.id == other.id;
 	}
 
-	func getHandle(this: TypeDecl) -> SharedPtr!<TypeDecl> {
+	func getHandle(this: &TypeDecl) -> SharedPtr!<TypeDecl> {
 		const module = this.module.lock().value();
 		return module.types[this.id];
 	}
@@ -954,7 +954,7 @@ struct TypeRef {
 	}
 
 	operator ==(this: TypeRef, other: TypeRef) -> bool {
-		if this.decl != other.decl {
+		if this.decl.data != other.decl.data {
 			return false;
 		} else {
 			return this.kind == other.kind;
@@ -962,49 +962,49 @@ struct TypeRef {
 	}
 
 	operator <=>(this: TypeRef, other: TypeRef) -> int {
-		if this.decl != other.decl {
-			return this.decl <=> other.decl;
+		if this.decl.data != other.decl.data {
+			return this.decl.data <=> other.decl.data;
 		} else {
 			return this.kind <=> other.kind;
 		}
 	}
 
-	func hasSameBaseTypeAs(this: TypeRef, other: TypeRef) -> bool {
+	func hasSameBaseTypeAs(this: &TypeRef, other: TypeRef) -> bool {
 		return this.decl == other.decl;
 	}
 
-	func isUnknown(this: TypeRef) -> bool {
+	func isUnknown(this: &TypeRef) -> bool {
 		return this.decl.data == vptr::null();
 	}
 
-	func isAlive(this: TypeRef) -> bool {
+	func isAlive(this: &TypeRef) -> bool {
 		return this.decl.isAlive();
 	}
 
-	func lock(this: TypeRef) -> Optional!<SharedPtr!<TypeDecl>> {
+	func lock(this: &TypeRef) -> Optional!<SharedPtr!<TypeDecl>> {
 		return this.decl.lock();
 	}
 
-	func signature(this: TypeRef) -> String {
+	func signature(this: &TypeRef) -> String {
 		match this.decl.lock() {
 			case Some: decl -> return this.kind.toString() + decl.signature();
 			case None -> return "unknown";
 		}
 	}
 
-	func base(this: TypeRef) -> TypeRef {
+	func base(this: &TypeRef) -> TypeRef {
 		return TypeRef(this.decl, ReferenceKind::None);
 	}
 
-	func constRef(this: TypeRef) -> TypeRef {
+	func constRef(this: &TypeRef) -> TypeRef {
 		return TypeRef(this.decl, ReferenceKind::Const);
 	}
 
-	func varRef(this: TypeRef) -> TypeRef {
+	func varRef(this: &TypeRef) -> TypeRef {
 		return TypeRef(this.decl, ReferenceKind::Var);
 	}
 
-	func isIncompleteTemplate(this: TypeRef) -> bool {
+	func isIncompleteTemplate(this: &TypeRef) -> bool {
 		const decl = this.lock() else {
 			return false;
 		}
@@ -1012,7 +1012,7 @@ struct TypeRef {
 		return decl.isIncompleteTemplate();
 	}
 
-	func isIntType(this: TypeRef) -> bool {
+	func isIntType(this: &TypeRef) -> bool {
 		const decl = this.lock() else {
 			return false;
 		}
@@ -1027,7 +1027,7 @@ struct TypeRef {
 		}
 	}
 
-	func isSigned(this: TypeRef) -> bool {
+	func isSigned(this: &TypeRef) -> bool {
 		const decl = this.lock() else {
 			return false;
 		}
@@ -1039,7 +1039,7 @@ struct TypeRef {
 		}
 	}
 
-	func isFloatType(this: TypeRef) -> bool {
+	func isFloatType(this: &TypeRef) -> bool {
 		const decl = this.lock() else {
 			return false;
 		}
@@ -1050,7 +1050,7 @@ struct TypeRef {
 		}
 	}
 
-	func isPtrType(this: TypeRef) -> bool {
+	func isPtrType(this: &TypeRef) -> bool {
 		const decl = this.lock() else {
 			return false;
 		}
@@ -1061,7 +1061,7 @@ struct TypeRef {
 		}
 	}
 
-	func isConstPtrType(this: TypeRef) -> bool {
+	func isConstPtrType(this: &TypeRef) -> bool {
 		const decl = this.lock() else {
 			return false;
 		}
@@ -1072,7 +1072,7 @@ struct TypeRef {
 		}
 	}
 
-	func isPrimitive(this: TypeRef) -> bool {
+	func isPrimitive(this: &TypeRef) -> bool {
 		const decl = this.lock() else {
 			return false;
 		}
@@ -1094,7 +1094,7 @@ struct TypeRef {
 		}
 	}
 
-	func isVariant(this: TypeRef) -> bool {
+	func isVariant(this: &TypeRef) -> bool {
 		const decl = this.lock() else {
 			return false;
 		}
@@ -1105,7 +1105,7 @@ struct TypeRef {
 		}
 	}
 
-	func getMemberFunctionsByName(this: TypeRef, name: String) -> List!<FunctionRef> {
+	func getMemberFunctionsByName(this: &TypeRef, name: String) -> List!<FunctionRef> {
 		var result: List!<FunctionRef>;
 
 		const decl = this.lock() else {
@@ -1162,25 +1162,25 @@ struct FunctionDecl {
 		return this.id == other.id;
 	}
 
-	func getHandle(this: FunctionDecl) -> SharedPtr!<FunctionDecl> {
+	func getHandle(this: &FunctionDecl) -> SharedPtr!<FunctionDecl> {
 		const module = this.module.lock().value();
 		return module.functions[this.id];
 	}
 
-	func getWeakHandle(this: FunctionDecl) -> WeakPtr!<FunctionDecl> {
+	func getWeakHandle(this: &FunctionDecl) -> WeakPtr!<FunctionDecl> {
 		return WeakPtr!<FunctionDecl>(this.getHandle());
 	}
 
-	func getRef(this: FunctionDecl) -> FunctionRef {
+	func getRef(this: &FunctionDecl) -> FunctionRef {
 		return FunctionRef(this.getWeakHandle());
 	}
 
-	func getModuleRef(this: FunctionDecl) -> &&Module {
+	func getModuleRef(this: &FunctionDecl) -> &&Module {
 		var module = this.module.lock().value();
 		return &&module.operator unwrap();
 	}
 
-	func getProgramRef(this: FunctionDecl) -> &&Program {
+	func getProgramRef(this: &FunctionDecl) -> &&Program {
 		return &&this.getModuleRef().program;
 	}
 
@@ -1375,33 +1375,33 @@ struct FunctionRef {
 	}
 
 	operator ==(this: FunctionRef, other: FunctionRef) -> bool {
-		return this.decl == other.decl;
+		return this.decl.data == other.decl.data;
 	}
 
 	operator <=>(this: FunctionRef, other: FunctionRef) -> int {
-		return this.decl <=> other.decl;
+		return this.decl.data <=> other.decl.data;
 	}
 
-	func isUnknown(this: FunctionRef) -> bool {
+	func isUnknown(this: &FunctionRef) -> bool {
 		return this.decl.data == vptr::null();
 	}
 
-	func isAlive(this: FunctionRef) -> bool {
+	func isAlive(this: &FunctionRef) -> bool {
 		return this.decl.isAlive();
 	}
 
-	func lock(this: FunctionRef) -> Optional!<SharedPtr!<FunctionDecl>> {
+	func lock(this: &FunctionRef) -> Optional!<SharedPtr!<FunctionDecl>> {
 		return this.decl.lock();
 	}
 
-	func signature(this: FunctionRef) -> String {
+	func signature(this: &FunctionRef) -> String {
 		match this.decl.lock() {
 			case Some: decl -> return decl.signature();
 			case None -> return "unknown()";
 		}
 	}
 
-	func isIncompleteTemplate(this: FunctionRef) -> bool {
+	func isIncompleteTemplate(this: &FunctionRef) -> bool {
 		const decl = this.lock() else {
 			return false;
 		}
@@ -1780,7 +1780,7 @@ variant InlineBuiltinFunction {
 
 	operator ==(this: InlineBuiltinFunction, other: InlineBuiltinFunction) -> bool = default;
 
-	func name(this: InlineBuiltinFunction) -> String {
+	func name(this: &InlineBuiltinFunction) -> String {
 		match this {
 			case NoOp -> return "NoOp";
 			case BitStoreNull -> return "BitStoreNull";
@@ -2183,7 +2183,7 @@ variant Expr {
 		}
 	}
 
-	func getTypes(expressions: List!<Expr>) -> List!<TypeRef> {
+	func getTypes(expressions: &List!<Expr>) -> List!<TypeRef> {
 		var types: List!<TypeRef>;
 		for expr in expressions {
 			types.append(expr.type);
