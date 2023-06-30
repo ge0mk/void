@@ -63,7 +63,6 @@ struct RecursivePathIterator {
 
 	func constructor(this: &&RecursivePathIterator, other: RecursivePathIterator) -> void {
 		this.constructor(other.path);
-		this.next_element = this.next();
 	}
 
 	func destructor(this: &&RecursivePathIterator) -> void {
