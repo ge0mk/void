@@ -462,11 +462,31 @@ struct TCContext {
 
 	func checkFunctionDecl(this: &&TCContext, parsed_decl: ParsedFunctionDecl, template_parameters: List!<TemplateParameterDecl>) -> FunctionRef {
 		var function: FunctionRef;
+		var siblings_with_same_name: List!<FunctionRef>;
+
 		if this.current_type.isUnknown() {
 			function = this.module.createFunction(parsed_decl.signature.name);
+			siblings_with_same_name = this.module.functions_by_name[parsed_decl.signature.name];
 		} else {
 			var decl = this.current_type.lock().value();
 			function = decl.createMemberFunction(parsed_decl.signature.name);
+			siblings_with_same_name = decl.member_functions_by_name[parsed_decl.signature.name];
+		}
+
+		for sibling in siblings_with_same_name {
+			if sibling == function {
+				continue;
+			}
+
+			if template_parameters.isEmpty() {
+				continue;
+			}
+
+			const sibling_decl = sibling.lock().value();
+			if sibling_decl.template_parameters == template_parameters {
+				this.error("function redeclared with identical template parameters", parsed_decl.signature.span);
+				this.info("previously declared here: ", sibling_decl.signature_span);
+			}
 		}
 
 		this.unchecked_functions.append(function);
@@ -682,6 +702,30 @@ struct TCContext {
 
 			decl.parameter_types.append(parameter_type);
 			decl.createParameter(param.span, param.name, parameter_type);
+		}
+
+		var siblings_with_same_name: List!<FunctionRef>;
+		if this.current_type.isUnknown() {
+			siblings_with_same_name = this.module.functions_by_name[decl.name];
+		} else {
+			var parent_type = this.current_type.lock().value();
+			siblings_with_same_name = parent_type.member_functions_by_name[decl.name];
+		}
+
+		for sibling in siblings_with_same_name {
+			if sibling == function {
+				continue;
+			}
+
+			const sibling_decl = sibling.lock().value();
+			if sibling_decl.template_parameters != decl.template_parameters {
+				continue;
+			}
+
+			if sibling_decl.parameter_types == decl.parameter_types {
+				this.error("function redeclared with identical parameter types", decl.signature_span);
+				this.info("previously declared here: ", sibling_decl.signature_span);
+			}
 		}
 
 		if var parent_type = this.current_type.lock() {

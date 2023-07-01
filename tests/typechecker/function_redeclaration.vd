@@ -1,4 +1,4 @@
-//> error "function redeclared with equal parameter types"
+//> error "function redeclared with identical parameter types"
 
 import std/core;
 

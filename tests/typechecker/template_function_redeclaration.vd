@@ -1,4 +1,4 @@
-//> error "function redeclared with equal template parameters"
+//> error "function redeclared with identical template parameters"
 
 import std/core;
 

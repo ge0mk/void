@@ -6,8 +6,6 @@ variant Foo {
 	case A;
 	case B: bool;
 	case C: byte;
-
-	operator ==(this: Foo, other: Foo) -> bool = default;
 }
 
 func main() {
