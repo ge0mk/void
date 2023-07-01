@@ -1776,6 +1776,14 @@ struct TCContext {
 			this.error("cannot store const reference in non-const variable", span);
 		}
 
+		if !name.startsWith("#") {
+			if const variable = this.getVariableByName(name) {
+				const prev_decl = variable.lock().value();
+				this.error("redefinition of variable '" + name + "'", span);
+				this.info("previously declared here:", prev_decl.span);
+			}
+		}
+
 		var function = this.current_function.lock().value();
 		const variable = function.createVariable(span, name, type, is_const);
 

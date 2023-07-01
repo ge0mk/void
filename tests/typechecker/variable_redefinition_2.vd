@@ -1,4 +1,4 @@
-//> output "5"
+//> error "redefinition of variable 'foo'"
 
 import std/core;
 import std/format;
