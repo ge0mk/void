@@ -1017,7 +1017,7 @@ struct Parser {
 			discard this.expect(TokenId::RParen);
 		} else if op == Index {
 			discard this.expect(TokenId::RSquare);
-		} else if op as int > Operator::VarRef as int {
+		} else if op == VarRef || op >= Try {
 			this.error("invalid operator name \"" + op.toString() + "\"", start..this.previous().span);
 		}
 
