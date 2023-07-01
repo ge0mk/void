@@ -89,6 +89,7 @@ struct RecursivePathIterator {
 		const current_dir = this.dir_stack.last().value();
 		const entry = readdir(current_dir);
 		if entry == vptr::null() {
+			discard closedir(current_dir);
 			this.dir_stack.removeLast();
 			this.current_path.removeLast();
 			return this.next();
