@@ -380,37 +380,11 @@ struct Module {
 				continue;
 			}
 
-			if type.template_parameters.size() != template_parameters.size() {
+			if type.template_parameters != template_parameters {
 				continue;
 			}
 
-			var equal_template_parameters = true;
-
-			for i in 0u..template_parameters.size() {
-				if type.template_parameters[i].name != template_parameters[i].name {
-					equal_template_parameters = false;
-					break;
-				}
-
-				if type.template_parameters[i].concept != template_parameters[i].concept {
-					equal_template_parameters = false;
-					break;
-				}
-
-				if type.template_parameters[i].is_variadic != template_parameters[i].is_variadic {
-					equal_template_parameters = false;
-					break;
-				}
-
-				if type.template_parameters[i].value != template_parameters[i].value {
-					equal_template_parameters = false;
-					break;
-				}
-			}
-
-			if equal_template_parameters {
-				return Some(type);
-			}
+			return Some(type);
 		}
 
 		return None;
