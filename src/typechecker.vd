@@ -1347,8 +1347,8 @@ struct TCContext {
 					}
 
 					const instance = parent_module.createFunction(name, parameter_types, return_type, FunctionBody::InlineBuiltin(body));
-					var decl = instance.lock().value();
-					decl.template_parameters.append(TemplateParameterDecl("Type", this.program.any_concept, false, template_parameters[0u]));
+					var instance_decl = instance.lock().value();
+					instance_decl.template_parameters.append(TemplateParameterDecl("Type", this.program.any_concept, false, template_parameters[0u]));
 
 					return instance;
 				}
@@ -3596,8 +3596,8 @@ struct TCContext {
 
 			var result_var: WeakPtr!<VarDecl>;
 			if !unwrap_decl.return_type.isPrimitive() {
-				var function = this.current_function.lock().value();
-				result_var = function.createVariable(arguments[i].span, "#result", unwrap_decl.return_type, true);
+				var current_function_decl = this.current_function.lock().value();
+				result_var = current_function_decl.createVariable(arguments[i].span, "#result", unwrap_decl.return_type, true);
 				// no constructor call needed, the callee does that
 				this.createDestructorCall(result_var);
 				this.addVariableToCurrentScope(result_var);
@@ -3634,27 +3634,27 @@ struct TCContext {
 		negate_result: bool,
 		test_spaceship_operator_result: bool
 	) -> Expr {
-		const decl = function.lock().value();
+		const callee_decl = function.lock().value();
 		const unwrapped_arguments = this.unwrapFunctionArguments(function, checked_arguments, function_name == "constructor" || function_name == "destructor");
 		if unwrapped_arguments.size() != checked_arguments.size() {
 			return Expr::Empty(span, TypeRef::unknown());
 		}
 
 		var result_var: WeakPtr!<VarDecl>;
-		var result_type = decl.return_type;
+		var result_type = callee_decl.return_type;
 		var return_kind = ReturnKind::None;
 
-		if decl.return_type != this.program.void_type && decl.return_type != this.program.never_type {
+		if callee_decl.return_type != this.program.void_type && callee_decl.return_type != this.program.never_type {
 			return_kind = ReturnKind::Value;
 		}
 
-		if !decl.return_type.isPrimitive() {
+		if !callee_decl.return_type.isPrimitive() {
 			if !this.current_function.isUnknown() {
 				return_kind = ReturnKind::Variable;
 
-				var function = this.current_function.lock().value();
-				result_var = function.createVariable(span, "#result", decl.return_type, true);
-				result_type = decl.return_type.constRef();
+				var current_function_decl = this.current_function.lock().value();
+				result_var = current_function_decl.createVariable(span, "#result", callee_decl.return_type, true);
+				result_type = callee_decl.return_type.constRef();
 				// no constructor call needed, the callee does that
 				this.createDestructorCall(result_var);
 				this.addVariableToCurrentScope(result_var);
@@ -3664,8 +3664,8 @@ struct TCContext {
 		}
 
 		var is_copy_constructor_call = false;
-		if const parent_type = decl.parent_type.lock() {
-			is_copy_constructor_call = function == parent_type.copy_constructor;
+		if const callee_parent_type_decl = callee_decl.parent_type.lock() {
+			is_copy_constructor_call = function == callee_parent_type_decl.copy_constructor;
 		}
 
 		var result = Expr::Call(CallExpr(function, unwrapped_arguments, result_var, return_kind, is_copy_constructor_call), span, result_type);
@@ -3818,8 +3818,8 @@ struct TCContext {
 	}
 
 	func checkTemporaryVariable(this: &&TCContext, type: TypeRef, template_parameters: List!<TemplateParameter>, checked_arguments: List!<Expr>, span: Span) -> Expr {
-		var function = this.current_function.lock().value();
-		const variable = function.createVariable(span, "#tmp", type, true);
+		var current_function_decl = this.current_function.lock().value();
+		const variable = current_function_decl.createVariable(span, "#tmp", type, true);
 
 		this.createDestructorCall(variable);
 		this.addVariableToCurrentScope(variable);
@@ -3849,9 +3849,9 @@ struct TCContext {
 				return Expr::Empty(span, TypeRef::unknown());
 			}
 
-			const decl = function.lock().value();
+			const callee_decl = function.lock().value();
 			var is_copy_constructor_call = false;
-			if const parent_type = decl.parent_type.lock() {
+			if const parent_type = callee_decl.parent_type.lock() {
 				is_copy_constructor_call = function == parent_type.copy_constructor;
 			}
 

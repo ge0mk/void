@@ -595,8 +595,8 @@ struct Parser {
 		var parameters: List!<ParsedParameterDecl>;
 		var error = false;
 		while !this.accept(TokenId::RParen) {
-			const start = this.current().span;
-			const name = this.expectIdentifier() else {
+			const parameter_start = this.current().span;
+			const parameter_name = this.expectIdentifier() else {
 				error = true;
 				break;
 			}
@@ -612,8 +612,12 @@ struct Parser {
 				initializer = Some(this.parseExpr());
 			}
 
-			const end = this.previous().span;
-			parameters.append(ParsedParameterDecl(start..end, name, param_type, initializer));
+			parameters.append(ParsedParameterDecl(
+				parameter_start..this.previous().span,
+				parameter_name,
+				param_type,
+				initializer
+			));
 
 			if !(this.current() is RParen) {
 				if !this.expect(TokenId::Comma) {

@@ -1364,9 +1364,9 @@ struct CGContext {
 					this.setCurrentDebugLocation(stmt.span);
 					this.builder.buildRet(llvm::constInt(this.int_type, 0, false));
 				} else {
-					const value = this.codegenExpr(value);
+					const built_value = this.codegenExpr(value);
 					this.setCurrentDebugLocation(stmt.span);
-					this.builder.buildRet(value);
+					this.builder.buildRet(built_value);
 				}
 			}
 			case LifeTimeStart: variable -> discard this.codegenExpr(variable.lock().value().constructor_call);
@@ -1608,14 +1608,14 @@ struct CGContext {
 					case None -> return llvm::ValueRef();
 					case Value -> return result;
 					case Variable -> {
-						const result_var = this.getVariable(result_var);
-						this.builder.buildStore(result, result_var);
-						return result_var;
+						const built_result_var = this.getVariable(result_var);
+						this.builder.buildStore(result, built_result_var);
+						return built_result_var;
 					}
 					case Parameter -> return this.getVariable(result_var);
 					case VariableButYieldNone -> {
-						const result_var = this.getVariable(result_var);
-						this.builder.buildStore(result, result_var);
+						const built_result_var = this.getVariable(result_var);
+						this.builder.buildStore(result, built_result_var);
 						return llvm::ValueRef();
 					}
 				}
