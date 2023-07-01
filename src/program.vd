@@ -422,8 +422,6 @@ variant TemplateParameter {
 	case Integer: int;
 	case Garbage;
 
-	operator ==(this: TemplateParameter, other: TemplateParameter) -> bool = default;
-
 	func toString(this: TemplateParameter) -> String {
 		match this {
 			case Type: t -> return t.signature();
@@ -438,8 +436,6 @@ variant Concept {
 
 	case Any;
 	case IntLiteral: TypeRef; // for template parameters, that accept int literals
-
-	operator ==(this: Concept, other: Concept) -> bool = default;
 
 	func dump(this: &Concept, out: &&TreeFormatter, is_last: bool) -> void {
 		out.push("Concept", is_last);
@@ -1778,8 +1774,6 @@ variant InlineBuiltinFunction {
 	case ArrayGetSize;
 	case ArrayGetDataPointer;
 
-	operator ==(this: InlineBuiltinFunction, other: InlineBuiltinFunction) -> bool = default;
-
 	func name(this: &InlineBuiltinFunction) -> String {
 		match this {
 			case NoOp -> return "NoOp";
@@ -1904,8 +1898,6 @@ variant BuiltinFunction {
 	case ArrayOpAssign;
 	case ArrayOpEqual;
 
-	operator ==(this: BuiltinFunction, other: BuiltinFunction) -> bool = default;
-
 	func dump(this: &BuiltinFunction, out: &&TreeFormatter) -> void {}
 }
 
@@ -1932,8 +1924,6 @@ variant Stmt {
 
 	case LifeTimeStart: WeakPtr!<VarDecl>;
 	case LifeTimeEnd: WeakPtr!<VarDecl>;
-
-	operator ==(this: Stmt, other: Stmt) -> bool = default;
 
 	func dump(this: &Stmt, out: &&TreeFormatter, is_last: bool) -> void {
 		match this {
@@ -2166,8 +2156,6 @@ variant Expr {
 	case Dereference: Box!<Expr>;
 
 	case ShallowCopy: ShallowCopyExpr;
-
-	operator ==(this: Expr, other: Expr) -> bool = default;
 
 	func addDereference(this: Expr) -> Expr {
 		match this.type.kind {

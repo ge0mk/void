@@ -15,8 +15,6 @@ variant Value {
 	func constructor(this: &&Value) {
 		this.constructor!<0>();
 	}
-
-	operator ==(this: Value, other: Value) -> bool = default;
 }
 
 func skipWhitespace(str: &String, index: &&uint) {

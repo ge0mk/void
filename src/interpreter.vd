@@ -26,8 +26,6 @@ variant Value {
 
 	case Undefined; // error
 
-	operator ==(this: Value, other: Value) -> bool = default;
-
 	func toInt(this: Value) -> int {
 		match this {
 			case Integer: value -> return value;

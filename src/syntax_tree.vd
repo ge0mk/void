@@ -48,8 +48,6 @@ variant ParsedAnnotation {
 	case String: String;
 	case Number: NumberLiteral;
 
-	operator ==(this: ParsedAnnotation, other: ParsedAnnotation) -> bool = default;
-
 	func dump(this: &ParsedAnnotation, out: &&TreeFormatter, is_last: bool) -> void {
 		out.push("Annotation", is_last);
 		out.attribute(this.name);
@@ -334,8 +332,6 @@ variant ParsedFunctionBody {
 	func constructor(this: &&ParsedFunctionBody) -> void {
 		this.constructor!<0>();
 	}
-
-	operator ==(this: ParsedFunctionBody, other: ParsedFunctionBody) -> bool = default;
 }
 
 struct ParsedParameterDecl {
@@ -383,8 +379,6 @@ variant ParsedType {
 	case Array: ParsedArrayType;
 	case Dict: ParsedDictType;
 	case Garbage;
-
-	operator ==(this: ParsedType, other: ParsedType) -> bool = default;
 
 	func dump(this: &ParsedType, out: &&TreeFormatter, is_last: bool) -> void {
 		match this {
@@ -538,8 +532,6 @@ variant ParsedStmt {
 	case Expr: ParsedExpr;
 
 	case Garbage;
-
-	operator ==(this: ParsedStmt, other: ParsedStmt) -> bool = default;
 
 	func dump(this: &ParsedStmt, out: &&TreeFormatter, is_last: bool) -> void {
 		match this {
@@ -877,8 +869,6 @@ variant ParsedExpr {
 	case Match: ParsedMatchExpr;
 
 	case Garbage;
-
-	operator ==(this: ParsedExpr, other: ParsedExpr) -> bool = default;
 
 	func dump(this: &ParsedExpr, out: &&TreeFormatter, is_last: bool) -> void {
 		match this {

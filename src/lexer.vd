@@ -382,8 +382,6 @@ variant Token {
 	case Unknown: byte;
 	case EndOfFile;
 
-	operator ==(this: Token, other: Token) -> bool = default;
-
 	operator ==(this: Token, other: TokenId) -> bool {
 		match this {
 			case Identifier -> return other == Identifier;

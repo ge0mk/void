@@ -134,10 +134,6 @@ enum ReferenceKind {
 	func constructor(this: &&ReferenceKind) -> void {
 		this.constructor(ReferenceKind::None);
 	}
-
-	operator <=>(this: ReferenceKind, other: ReferenceKind) -> int {
-		return this as int <=> other as int;
-	}
 }
 
 template <T: type>
@@ -195,16 +191,6 @@ variant Optional {
 		match this {
 			case Some -> return this;
 			else -> return other;
-		}
-	}
-
-	operator ==(this: Optional!<T>, other: Optional!<T>) -> bool {
-		match this {
-			case Some: a -> match other {
-				case Some: b -> return a == b;
-				else -> return false;
-			}
-			case None -> return other is None;
 		}
 	}
 }
@@ -415,19 +401,6 @@ variant Result {
 			}
 		}
 	}
-
-	operator ==(this: Result!<Tok, Terr>, other: Result!<Tok, Terr>) -> bool {
-		match this {
-			case Ok: a -> match other {
-				case Ok: b -> return a == b;
-				else -> return false;
-			}
-			case Error: a -> match other {
-				case Error: b -> return a == b;
-				else -> return false;
-			}
-		}
-	}
 }
 
 template <Tok: type = void, Terr: type>
@@ -449,16 +422,6 @@ variant Result {
 		match this {
 			case Error: error -> return error;
 			else -> abort();
-		}
-	}
-
-	operator ==(this: Result!<Tok, Terr>, other: Result!<Tok, Terr>) -> bool {
-		match this {
-			case Ok -> return other is Ok;
-			case Error: a -> match other {
-				case Error: b -> return a == b;
-				else -> return false;
-			}
 		}
 	}
 }
@@ -520,19 +483,6 @@ variant Result {
 			}
 		}
 	}
-
-	operator ==(this: Result!<Tok>, other: Result!<Tok>) -> bool {
-		match this {
-			case Ok: a -> match other {
-				case Ok: b -> return a == b;
-				else -> return false;
-			}
-			case Error: a -> match other {
-				case Error: b -> return a == b;
-				else -> return false;
-			}
-		}
-	}
 }
 
 template <Tok: type = void>
@@ -554,16 +504,6 @@ variant Result {
 		match this {
 			case Error: error -> return error;
 			else -> abort();
-		}
-	}
-
-	operator ==(this: Result!<Tok>, other: Result!<Tok>) -> bool {
-		match this {
-			case Ok -> return other is Ok;
-			case Error: a -> match other {
-				case Error: b -> return a == b;
-				else -> return false;
-			}
 		}
 	}
 }
