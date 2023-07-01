@@ -529,6 +529,7 @@ struct CGContext {
 		const decl = function.base_type.lock().value();
 
 		const param0 = this.current_function.getParam(0u);
+		const param1 = this.current_function.getParam(1u);
 
 		match function {
 			case StructDefaultConstructor -> {
@@ -550,7 +551,7 @@ struct CGContext {
 			case StructCopyConstructor -> {
 				for i in 0u..decl.member_variables.size() {
 					const member_ptr = this.builder.buildStructGEP2(type, param0, i, "");
-					const initializer = this.builder.buildExtractValue(this.current_function.getParam(1u), i, "");
+					const initializer = this.builder.buildExtractValue(param1, i, "");
 
 					if decl.member_variables[i].type.kind == ReferenceKind::None {
 						const member_type = decl.member_variables[i].type.lock().value();
@@ -586,7 +587,7 @@ struct CGContext {
 			case StructOpAssign -> {
 				for i in 0u..decl.member_variables.size() {
 					const member_ptr = this.builder.buildStructGEP2(type, param0, i, "");
-					const initializer = this.builder.buildExtractValue(this.current_function.getParam(1u), i, "");
+					const initializer = this.builder.buildExtractValue(param1, i, "");
 
 					if decl.member_variables[i].type.kind == ReferenceKind::None {
 						const member_type = decl.member_variables[i].type.lock().value();
@@ -615,7 +616,7 @@ struct CGContext {
 					member_var_param_offset += 1;	// payload is passed before member variables
 
 					const this_payload_ptr = this.builder.buildStructGEP2(type, param0, 1u, "");
-					const initializer = this.current_function.getParam(1u);
+					const initializer = param1;
 
 					if case_decl.type.kind == ReferenceKind::None {
 						const payload_type = case_decl.type.lock().value();
@@ -705,11 +706,11 @@ struct CGContext {
 
 				if function is VariantOpAssign || function is VariantCopyConstructor {
 					const other_ptr = this.builder.buildAlloca(type, "");
-					this.builder.buildStore(this.current_function.getParam(1u), other_ptr);
+					this.builder.buildStore(param1, other_ptr);
 					const other_payload_ptr = this.builder.buildStructGEP2(type, other_ptr, 1u, "");
 
 					// codegen copy constructor
-					const other_id = this.builder.buildExtractValue(this.current_function.getParam(1u), 0u, "");
+					const other_id = this.builder.buildExtractValue(param1, 0u, "");
 					this.builder.buildStore(other_id, id_ptr);
 
 					var case_blocks: List!<llvm::BasicBlockRef>;
@@ -750,7 +751,7 @@ struct CGContext {
 
 					for i in 0u..decl.member_variables.size() {
 						const this_member_ptr = this.builder.buildStructGEP2(type, param0, i + 2, "");
-						const other_member = this.builder.buildExtractValue(this.current_function.getParam(1u), i + 2, "");
+						const other_member = this.builder.buildExtractValue(param1, i + 2, "");
 
 						if decl.member_variables[i].type.kind == ReferenceKind::None {
 							const member_type = decl.member_variables[i].type.lock().value();
@@ -777,14 +778,14 @@ struct CGContext {
 					const data_block = this.llvm_context.appendBasicBlock(this.current_function, "data");
 
 					// store lhs & rhs on stack to access the payload in a safe way
-					const lhs_id = this.builder.buildExtractValue(this.current_function.getParam(0u), 0u, "");
+					const lhs_id = this.builder.buildExtractValue(param0, 0u, "");
 					const lhs_data = this.builder.buildAlloca(type, "");
-					this.builder.buildStore(this.current_function.getParam(0u), lhs_data);
+					this.builder.buildStore(param0, lhs_data);
 					const lhs_payload_ptr = this.builder.buildStructGEP2(type, lhs_data, 1u, "");
 
-					const rhs_id = this.builder.buildExtractValue(this.current_function.getParam(0u), 0u, "");
+					const rhs_id = this.builder.buildExtractValue(param1, 0u, "");
 					const rhs_data = this.builder.buildAlloca(type, "");
-					this.builder.buildStore(this.current_function.getParam(1u), rhs_data);
+					this.builder.buildStore(param1, rhs_data);
 					const rhs_payload_ptr = this.builder.buildStructGEP2(type, rhs_data, 1u, "");
 
 					const same_id = this.builder.buildICmp(LLVMIntPredicate::LLVMIntEQ, lhs_id, rhs_id, "");
@@ -839,8 +840,8 @@ struct CGContext {
 
 				const member_var_offset = 2u if function is VariantOpEqual else 0u;
 				for i in 0u..decl.member_variables.size() {
-					const lhs = this.builder.buildExtractValue(this.current_function.getParam(0u), i + member_var_offset, "");
-					const rhs = this.builder.buildExtractValue(this.current_function.getParam(1u), i + member_var_offset, "");
+					const lhs = this.builder.buildExtractValue(param0, i + member_var_offset, "");
+					const rhs = this.builder.buildExtractValue(param1, i + member_var_offset, "");
 
 					var equal = llvm::ValueRef();
 					if decl.member_variables[i].type.kind == ReferenceKind::None {
@@ -878,8 +879,8 @@ struct CGContext {
 				var cmp_blocks: List!<llvm::BasicBlockRef>;
 
 				for i in 0u..decl.member_variables.size() {
-					const lhs = this.builder.buildExtractValue(this.current_function.getParam(0u), i, "");
-					const rhs = this.builder.buildExtractValue(this.current_function.getParam(1u), i, "");
+					const lhs = this.builder.buildExtractValue(param0, i, "");
+					const rhs = this.builder.buildExtractValue(param1, i, "");
 					var parameters: List!<llvm::ValueRef>;
 					parameters.append(lhs);
 					parameters.append(rhs);
@@ -923,7 +924,7 @@ struct CGContext {
 					var indices: List!<llvm::ValueRef>;
 					indices.append(llvm::constInt(this.int_type, 0, false));
 					indices.append(llvm::constInt(this.int_type, i as int, false));
-					const element_ptr = this.builder.buildGEP2(type, this.current_function.getParam(0u), indices, "");
+					const element_ptr = this.builder.buildGEP2(type, param0, indices, "");
 
 					discard this.codegenCall(element_type_decl.default_constructor, List!<llvm::ValueRef>(1u, element_ptr), ReturnKind::None, signature_span);
 				}
@@ -942,14 +943,14 @@ struct CGContext {
 					var indices: List!<llvm::ValueRef>;
 					indices.append(llvm::constInt(this.int_type, 0, false));
 					indices.append(llvm::constInt(this.int_type, i as int, false));
-					const element_ptr = this.builder.buildGEP2(type, this.current_function.getParam(0u), indices, "");
+					const element_ptr = this.builder.buildGEP2(type, param0, indices, "");
 
 					if !(function is ArrayCopyConstructor) {
 						discard this.codegenCall(element_type_decl.destructor, List!<llvm::ValueRef>(1u, element_ptr), ReturnKind::None, signature_span);
 					}
 
 					if !(function is ArrayDestructor) {
-						const other_element = this.builder.buildExtractValue(this.current_function.getParam(1u), i, "");
+						const other_element = this.builder.buildExtractValue(param1, i, "");
 
 						var parameters: List!<llvm::ValueRef>;
 						parameters.append(element_ptr);
@@ -970,8 +971,8 @@ struct CGContext {
 				const uneq_block = this.llvm_context.appendBasicBlock(this.current_function, "uneq");
 
 				for i in 0u..array_type.size {
-					const lhs = this.builder.buildExtractValue(this.current_function.getParam(0u), i, "");
-					const rhs = this.builder.buildExtractValue(this.current_function.getParam(1u), i, "");
+					const lhs = this.builder.buildExtractValue(param0, i, "");
+					const rhs = this.builder.buildExtractValue(param1, i, "");
 
 					var equal = llvm::ValueRef();
 					if element_type.kind == ReferenceKind::None {
