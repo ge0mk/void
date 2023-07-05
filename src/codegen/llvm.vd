@@ -343,7 +343,7 @@ struct CGContext {
 				var max_alignment = this.data_layout.getPreferredAlignmentOfType(max_alignment_type);
 
 				for case_decl in decl.variant_cases {
-					if case_decl.type.isUnknown() || case_decl.type == this.program.void_type {
+					if case_decl.type == this.program.void_type {
 						continue;
 					}
 
@@ -612,7 +612,7 @@ struct CGContext {
 				var member_var_param_offset = 1u;	// first param is this
 
 				const case_decl = decl.getVariantCase(case_id).value();
-				if !case_decl.type.isUnknown() {
+				if case_decl.type != this.program.void_type {
 					member_var_param_offset += 1;	// payload is passed before member variables
 
 					const this_payload_ptr = this.builder.buildStructGEP2(type, param0, 1u, "");
@@ -675,15 +675,18 @@ struct CGContext {
 					var switch_instr = this.builder.buildSwitch(id_val, cont_block, case_blocks.size());
 
 					for i in 0u..decl.variant_cases.size() {
-						const case_decl = decl.variant_cases[i];
-
-						switch_instr.addCase(llvm::constInt(id_type, case_decl.id, false), case_blocks[i]);
 						this.builder.positionAtEnd(case_blocks[i]);
 
-						if !case_decl.type.isUnknown() && case_decl.type.kind == ReferenceKind::None {
-							const payload_type = case_decl.type.lock().value();
-							discard this.codegenCall(payload_type.destructor, case_destructor_args, ReturnKind::None, signature_span);
+						const case_decl = decl.variant_cases[i];
+						if case_decl.type == this.program.void_type || case_decl.type.kind != ReferenceKind::None {
+							this.builder.buildUnreachable();
+							continue;
 						}
+
+						switch_instr.addCase(llvm::constInt(id_type, case_decl.id, false), case_blocks[i]);
+
+						const payload_type = case_decl.type.lock().value();
+						discard this.codegenCall(payload_type.destructor, case_destructor_args, ReturnKind::None, signature_span);
 
 						this.builder.buildBr(cont_block);
 					}
@@ -725,7 +728,7 @@ struct CGContext {
 						this.builder.positionAtEnd(case_blocks[i]);
 
 						const case_decl = decl.variant_cases[i];
-						if case_decl.type.isUnknown() {
+						if case_decl.type == this.program.void_type {
 							this.builder.buildUnreachable();
 							continue;
 						}
@@ -805,7 +808,7 @@ struct CGContext {
 						this.builder.positionAtEnd(case_blocks[i]);
 
 						const case_decl = decl.variant_cases[i];
-						if case_decl.type.isUnknown() {
+						if case_decl.type == this.program.void_type {
 							this.builder.buildUnreachable();
 							continue;
 						}

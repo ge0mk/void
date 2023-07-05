@@ -637,7 +637,7 @@ struct TCContext {
 			}
 		}
 
-		var payload_type = TypeRef::unknown();
+		var payload_type = this.program.void_type;
 		if parsed_decl.payload.hasValue() {
 			match this.checkTypeUsage(parsed_decl.payload.value()) {
 				case Ok: type -> payload_type = type;
@@ -649,10 +649,12 @@ struct TCContext {
 			type_decl.createEnumCase(parsed_decl.span, id, name);
 		} else {
 			type_decl.createVariantCase(parsed_decl.span, id, name, payload_type);
-			type_decl.addContainedType(payload_type);
 
-			type_decl.createVariantOpUnsafeAs(this.current_type.constRef(), id);
-			type_decl.createVariantOpUnsafeAs(this.current_type.varRef(), id);
+			if payload_type != this.program.void_type {
+				type_decl.addContainedType(payload_type);
+				type_decl.createVariantOpUnsafeAs(this.current_type.constRef(), id);
+				type_decl.createVariantOpUnsafeAs(this.current_type.varRef(), id);
+			}
 
 			var operator_is_parameter_types: List!<TypeRef>;
 			operator_is_parameter_types.append(this.current_type.base());
@@ -3287,7 +3289,7 @@ struct TCContext {
 		const type_decl = value.type.lock().value();
 		const case_decl = type_decl.getVariantCase(case_name).value();
 
-		if case_decl.type.isUnknown() {
+		if case_decl.type == this.program.void_type {
 			this.error("invalid variant cast: no type attached to this case", span);
 			return Expr::Empty(span, TypeRef::unknown());
 		}
@@ -3366,13 +3368,9 @@ struct TCContext {
 			return Expr::Empty(span, TypeRef::unknown());
 		}
 
-		var yield_type = ok_case_decl.type;
-		if ok_case_decl.type.isUnknown() {
-			yield_type = this.program.void_type;
-		}
-
 		var cases: List!<ParsedStmt>;
 
+		var yield_type = ok_case_decl.type;
 		if yield_type == this.program.void_type {
 			// case Ok -> yield
 			cases.append(ParsedStmt::Case(ParsedCaseStmt(
