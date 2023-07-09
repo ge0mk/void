@@ -26,13 +26,23 @@ func main() {
 
 planned features (wip / near future)
 --
+- compiler: namespaces
+	- every module & type has a namespace
+	- functions & types are inside of namespaces (not module / parent-type)
+	- -> faster symbol lookup
+	- public / private namespaces, types & functions
+- typechecker: track member (de)initialization through if & match stmts
 - codegen: generate better llvm ir
 	- function attributes (especially for allocators)
 - codegen: better debug info
 - typechecker: high-level optimizations:
 	- for x in NumericRange -> builtin count-for-loop
 	- function inlining
-- compiler: performance optimizations (do less unneccessary stuff)
+- typechecker+parser: function references
+- typechecker+parser: anonymous functions
+- compiler: performance optimizations
+	- do less unneccessary stuff
+	- multithreading (at least typechecking of function bodies)
 - compiler: builtin vector types for faster math
 - meta:
 	- lsp interface
@@ -56,9 +66,7 @@ planned features (wip / near future)
 - typechecker: tuples
 - typechecker: tuple unpacking / destructuring assignments
 - typechecker: match strings
-- typechecker: track member (de)initialization through if & match stmts
 - typechecker: unsafe functions, which can only be called in unsafe blocks
-- typechecker: public / private functions (module scope) & member variables
 - typechecker: type aliases
 - typechecker: pick const / non-const functions depending on the usage of the result value
 - typechecker: defer statements
@@ -66,9 +74,7 @@ planned features (wip / near future)
 	"no matching function found" -> "can't call mutating function on const object"
 - typechecker: arithmetic expressions as template parameters
 - typechecker: enums as template parameters
-- typechecker: function references
-- compiler: anonymous functions
-- compiler: cashing of (partially) compiled modules (llvm-ir, output of typechecker ?)
+- compiler: incremental builds / cashing of (partially) compiled modules (llvm-ir, output of typechecker ?)
 - stdlib:
 	- `format("{}", ...)` for text formatting, similar to https://github.com/fmtlib/fmt
 		- requires variadic templates, better comptime code execution & traits
