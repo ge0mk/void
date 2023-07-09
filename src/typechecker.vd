@@ -936,7 +936,7 @@ struct TCContext {
 		for type in types_with_matching_name {
 			const decl = type.forceLock();
 			const matching_template_parameters = this.getMatchingTemplateParameterCount(
-				decl.template_parameters, template_parameters
+				&decl.template_parameters, &template_parameters
 			);
 
 			if matching_template_parameters > most_matching_template_parameters {
@@ -1129,9 +1129,9 @@ struct TCContext {
 		error_span: Span
 	) -> FunctionLookupResult {
 		return this.selectFunction(
-			this.module.getFunctionsByName(namespaces, name, parent_type),
-			template_parameters,
-			parameter_types,
+			&this.module.getFunctionsByName(namespaces, name, parent_type),
+			&template_parameters,
+			&parameter_types,
 			first_arg_max_ref_kind,
 			allow_unwrapping,
 			error_span
@@ -1148,9 +1148,9 @@ struct TCContext {
 		error_span: Span
 	) -> FunctionLookupResult {
 		return this.selectFunction(
-			parent_type.getMemberFunctionsByName(name),
-			template_parameters,
-			parameter_types,
+			&parent_type.getMemberFunctionsByName(name),
+			&template_parameters,
+			&parameter_types,
 			first_arg_max_ref_kind,
 			allow_unwrapping,
 			error_span
@@ -1158,9 +1158,9 @@ struct TCContext {
 	}
 
 	func selectFunction(this: &&TCContext,
-		functions_with_matching_name: List!<FunctionRef>,
-		template_parameters: List!<TemplateParameter>,
-		parameter_types: List!<TypeRef>,
+		functions_with_matching_name: &List!<FunctionRef>,
+		template_parameters: &List!<TemplateParameter>,
+		parameter_types: &List!<TypeRef>,
 		first_arg_max_ref_kind: ReferenceKind,
 		allow_unwrapping: bool,
 		error_span: Span
@@ -1180,7 +1180,7 @@ struct TCContext {
 		for function in functions_with_matching_name {
 			const decl = function.forceLock();
 			const matching_template_parameters = this.getMatchingTemplateParameterCount(
-				decl.template_parameters, template_parameters
+				&decl.template_parameters, &template_parameters
 			);
 
 			if matching_template_parameters > most_matching_template_parameters {
@@ -1228,7 +1228,7 @@ struct TCContext {
 
 		var most_matching_parameters = 0;
 		for function in function_instances_with_matching_template_parameters {
-			const matching_parameters = function.getMatchingParameterCount(parameter_types, first_arg_max_ref_kind, allow_unwrapping);
+			const matching_parameters = function.getMatchingParameterCount(&parameter_types, first_arg_max_ref_kind, allow_unwrapping);
 
 			if matching_parameters > most_matching_parameters {
 				result.functions.clear();
@@ -1381,7 +1381,7 @@ struct TCContext {
 		}
 	}
 
-	func getMatchingTemplateParameterCount(this: &&TCContext, template_decls: List!<TemplateParameterDecl>, template_parameters: List!<TemplateParameter>) -> int {
+	func getMatchingTemplateParameterCount(this: &&TCContext, template_decls: &List!<TemplateParameterDecl>, template_parameters: &List!<TemplateParameter>) -> int {
 		if template_parameters.size() < template_decls.size() {
 			return -1;
 		}
@@ -1411,7 +1411,7 @@ struct TCContext {
 		return count;
 	}
 
-	func getMatchingParameterCount(function: FunctionRef, parameter_types: List!<TypeRef>, first_arg_max_ref_kind: ReferenceKind, allow_unwrapping: bool) -> int {
+	func getMatchingParameterCount(function: &FunctionRef, parameter_types: &List!<TypeRef>, first_arg_max_ref_kind: ReferenceKind, allow_unwrapping: bool) -> int {
 		const decl = function.forceLock();
 
 		if decl.parameter_types.size() != parameter_types.size() {
