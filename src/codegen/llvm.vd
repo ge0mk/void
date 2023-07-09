@@ -370,8 +370,7 @@ struct CGContext {
 				element_types.append(this.getType(decl.id_type));
 
 				var max_size = 0u;
-				var max_alignment_type = this.byte_type;
-				var max_alignment = this.data_layout.getPreferredAlignmentOfType(max_alignment_type);
+				var max_alignment = 1u;
 
 				for case_decl in decl.variant_cases {
 					if case_decl.type == this.program.void_type {
@@ -388,18 +387,11 @@ struct CGContext {
 					const current_alignment = this.data_layout.getPreferredAlignmentOfType(payload_type);
 					if current_alignment > max_alignment {
 						max_alignment = current_alignment;
-						max_alignment_type = payload_type;
 					}
 				}
 
-				// TODO: fix alignment issues
-				// this uses an array of the type with the biggest alignment (but doesn't work for unknown reasons):
-				// const max_alignment_type_size = this.data_layout.getStoreSizeOfType(max_alignment_type);
-				// const count = max_size / max_alignment_type_size + (max_size % max_alignment_type_size != 0) as uint;
-				// element_types.append(this.llvm_context.getArrayType(max_alignment_type, count));
-
-				// this just uses an array of bytes, but may not be correctly aligned (but works good enough for now):
-				element_types.append(this.llvm_context.getArrayType(this.byte_type, max_size));
+				const max_alignment_type = this.llvm_context.getIntType(max_alignment * 8);
+				element_types.append(this.llvm_context.getArrayType(max_alignment_type, max_size / max_alignment));
 
 				for member_variable in decl.member_variables {
 					element_types.append(this.getType(member_variable.type));
