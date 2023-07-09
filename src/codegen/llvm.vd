@@ -11,6 +11,7 @@ import std/string;
 import error;
 import llvm/llvm;
 import llvm/llvm_c;
+import llvm/dwarf;
 import options;
 import program;
 import span;
@@ -68,6 +69,8 @@ struct CGContext {
 	var di_compile_unit: llvm::MetaDataRef;
 	var di_files: Map!<uint, llvm::MetaDataRef>;
 	var di_modules: Map!<uint, llvm::MetaDataRef>;
+	var di_module_namespaces: Map!<uint, llvm::MetaDataRef>;
+	var di_type_namespaces: Map!<program::TypeRef, llvm::MetaDataRef>;
 	var di_types: Map!<program::TypeRef, llvm::MetaDataRef>;
 	var di_functions: Map!<program::FunctionRef, llvm::MetaDataRef>;
 	var di_scope_stack: List!<llvm::MetaDataRef>;
@@ -138,6 +141,18 @@ struct CGContext {
 		}
 	}
 
+	func getDIType(this: &&CGContext, type: program::TypeRef) -> llvm::MetaDataRef {
+		const base_type = this.di_types.get(type.base()) else {
+			panic("invalid debug info for type '" + type.base().signature() + "'");
+		}
+
+		if type.kind == ReferenceKind::None {
+			return base_type;
+		} else {
+			return this.di_builder.createReferenceType(dwarf::Tag::Reference_type, base_type);
+		}
+	}
+
 	func getVariable(this: &CGContext, variable: WeakPtr!<VarDecl>) -> llvm::ValueRef {
 		const impl = this.variables.get(variable) else {
 			panic("invalid codegen for variable '" + variable.lock().value().name + "'");
@@ -180,7 +195,7 @@ struct CGContext {
 	}
 
 	func initDIBuilder(this: &&CGContext) -> void {
-		this.llvm_module.addFlag(LLVMModuleFlagBehavior::LLVMModuleFlagBehaviorError, "Dwarf Version", llvm::constInt(this.int_type, 4, false).asMetadata());
+		this.llvm_module.addFlag(LLVMModuleFlagBehavior::LLVMModuleFlagBehaviorError, "Dwarf Version", llvm::constInt(this.int_type, 5, false).asMetadata());
 		this.llvm_module.addFlag(LLVMModuleFlagBehavior::LLVMModuleFlagBehaviorWarning, "Debug Info Version", llvm::constInt(this.int_type, 3, false).asMetadata());
 
 		this.di_builder = this.llvm_module.createDIBuilder();
@@ -219,12 +234,9 @@ struct CGContext {
 				"",		// include path
 				"", 	// api notes file
 			);
+
+			this.di_module_namespaces[module.id] = this.di_builder.createNameSpace(this.di_modules[module.id], "::".join(module.namespace), true)
 		}
-
-		this.di_scope_stack.append(this.di_modules[0u]);
-
-		// TODO: replace with per module / type namespaces
-		// this.di_scope_stack.append(this.di_builder.createNameSpace(this.di_modules[0u], "root", true));
 	}
 
 	func deinitDIBuilder(this: &&CGContext) -> void {
@@ -243,7 +255,8 @@ struct CGContext {
 	}
 
 	func codegenTypes(this: &&CGContext) -> void {
-		var incomplete_types = this.program.collectTypes();
+		var all_types = this.program.collectTypes();
+		var incomplete_types = all_types;
 		var complete_types: Set!<program::TypeRef>;
 
 		while !incomplete_types.isEmpty() {
@@ -279,6 +292,29 @@ struct CGContext {
 				complete_types.add(type);
 			}
 		}
+
+		if this.program.options.generate_debug_info {
+			for type in all_types {
+				this.codegenTypeDI(type, true);
+			}
+
+			for type in all_types {
+				this.codegenTypeDI(type, false);
+			}
+		}
+	}
+
+	func getTypeName(this: &CGContext, type: program::TypeRef) -> String {
+		const decl = type.lock().value();
+
+		var name = "";
+		match this.program.options.symbol_type {
+			case None -> {}
+			case Name -> name = decl.name;
+			case Full -> name = decl.signature();
+		}
+
+		return name;
 	}
 
 	func codegenType(this: &&CGContext, type: program::TypeRef) -> void {
@@ -290,12 +326,7 @@ struct CGContext {
 			return;
 		}
 
-		var name = "";
-		match this.program.options.symbol_type {
-			case None -> {}
-			case Name -> name = decl.name;
-			case Full -> name = decl.signature();
-		}
+		const name = this.getTypeName(type);
 
 		match decl.body {
 			case Empty -> this.types.set(type, this.void_type);
@@ -382,6 +413,172 @@ struct CGContext {
 		}
 	}
 
+	// first pass: generate full di for primitive types & temporary di for composites
+	// second pass: finish di for composite types & replace temporaries
+	func codegenTypeDI(this: &&CGContext, type: program::TypeRef, first_pass: bool) -> void {
+		const decl = type.lock().value();
+		const module = decl.module.lock().value();
+		const line = decl.name_span.line as uint;
+		const di_file = this.di_files[module.id];
+		const parent_namespace = this.di_module_namespaces[module.id];
+
+		const llvm_type = this.getType(type);
+		var size_in_bits = 0u;
+		if llvm_type != this.void_type {
+			size_in_bits = this.data_layout.getStoreSizeOfType(llvm_type) * 8;
+		}
+		var alignment_in_bits = 0u;
+		if llvm_type != this.void_type {
+			alignment_in_bits = this.data_layout.getPreferredAlignmentOfType(llvm_type) * 8;
+		}
+
+		var di_name = decl.name;
+		if !decl.template_parameters.isEmpty() {
+			di_name += decl.template_parameters.format();
+		}
+
+		var di_type: llvm::MetaDataRef;
+		if first_pass {
+			match decl.body {
+				case Empty | Unchecked -> di_type = this.di_builder.createUnspecifiedType(di_name);
+				case Void -> di_type = this.di_builder.createBasicType(di_name, size_in_bits, 0 as dwarf::TypeEncoding, LLVMDIFlags::LLVMDIFlagZero);
+				case Bool -> di_type = this.di_builder.createBasicType(di_name, size_in_bits, dwarf::TypeEncoding::Boolean, LLVMDIFlags::LLVMDIFlagZero);
+				case Byte -> di_type = this.di_builder.createBasicType(di_name, size_in_bits, dwarf::TypeEncoding::Unsigned_char, LLVMDIFlags::LLVMDIFlagZero);
+				case Int -> di_type = this.di_builder.createBasicType(di_name, size_in_bits, dwarf::TypeEncoding::Signed, LLVMDIFlags::LLVMDIFlagZero);
+				case UInt -> di_type = this.di_builder.createBasicType(di_name, size_in_bits, dwarf::TypeEncoding::Unsigned, LLVMDIFlags::LLVMDIFlagZero);
+				case Float -> di_type = this.di_builder.createBasicType(di_name, size_in_bits, dwarf::TypeEncoding::Float, LLVMDIFlags::LLVMDIFlagZero);
+				else -> di_type = this.di_builder.createReplaceableCompositeType(dwarf::Tag::Unspecified_type, di_name, parent_namespace, di_file, line, 0u32, size_in_bits, alignment_in_bits, LLVMDIFlags::LLVMDIFlagZero, decl.signature());
+				//this.llvm_context.createTemporaryMDNode();
+				//this.di_builder.createForwardDecl(DwarfTag::Unspecified_type, di_name, parent_namespace, di_file, line, 0u32, size_in_bits, alignment_in_bits, decl.signature());
+			}
+
+			this.di_type_namespaces.set(type, this.di_builder.createNameSpace(parent_namespace, di_name, true));
+		} else {
+			const type_scope = this.di_type_namespaces.get(type).value();
+			match decl.body {
+				case Pointer: pointer_type -> {
+					if pointer_type.base_type.isUnknown() {
+						di_type = this.di_builder.createPointerType(this.getDIType(this.program.void_type), size_in_bits, alignment_in_bits, 0u, di_name);
+					} else {
+						di_type = this.di_builder.createPointerType(this.getDIType(pointer_type.base_type), size_in_bits, alignment_in_bits, 0u, di_name);
+					}
+				}
+				case Array: array_type -> di_type = this.di_builder.createArrayType(array_type.size, alignment_in_bits, this.getDIType(array_type.element_type), List!<llvm::MetaDataRef>());
+				case Struct | Variant -> {
+					var members: List!<llvm::MetaDataRef>;
+
+					if decl.body is Variant {
+						var cases: List!<llvm::MetaDataRef>;
+						var payload_members: List!<llvm::MetaDataRef>;
+						for c in decl.variant_cases {
+							cases.append(this.di_builder.createEnumerator(c.name, c.id, true));
+
+							if c.type == this.program.void_type {
+								continue;
+							}
+
+							payload_members.append(this.di_builder.createMemberType(
+								type_scope,
+								c.name,
+								di_file,
+								c.span.line as uint,
+								this.data_layout.getStoreSizeOfType(this.getType(c.type)) * 8,
+								this.data_layout.getPreferredAlignmentOfType(this.getType(c.type)) * 8,
+								0u,
+								LLVMDIFlags::LLVMDIFlagZero,
+								this.getDIType(c.type)
+							));
+						}
+
+						const id_size_in_bits = this.data_layout.getStoreSizeOfType(this.getType(decl.id_type)) * 8;
+						const id_alignment_in_bits = this.data_layout.getPreferredAlignmentOfType(this.getType(decl.id_type)) * 8;
+						const id_type = this.di_builder.createEnumerationType(parent_namespace, di_name + "::Id", di_file, line, id_size_in_bits, id_alignment_in_bits, cases, this.getDIType(decl.id_type));
+						members.append(this.di_builder.createMemberType(
+							type_scope,
+							"#id",
+							di_file,
+							line,
+							id_size_in_bits,
+							id_alignment_in_bits,
+							0u,
+							LLVMDIFlags::LLVMDIFlagZero,
+							id_type
+						));
+
+						const payload_size_in_bits = 0u;
+						const payload_alignment_in_bits = 0u;
+						const payload_type = this.di_builder.createUnionType(type_scope, di_name + "::Payload", di_file, line, payload_size_in_bits, payload_alignment_in_bits, LLVMDIFlags::LLVMDIFlagZero, payload_members, 0u32, decl.signature() + "::Payload");
+						members.append(this.di_builder.createMemberType(
+							type_scope,
+							"#payload",
+							di_file,
+							line,
+							payload_size_in_bits,
+							payload_alignment_in_bits,
+							0u,
+							LLVMDIFlags::LLVMDIFlagZero,
+							payload_type
+						));
+					}
+
+					for member_variable in decl.member_variables {
+						const member_type = this.getType(member_variable.type);
+						if member_type == this.void_type {
+							continue;
+						}
+
+						const member_di_type = this.getDIType(member_variable.type);
+
+						const member_size_in_bits = this.data_layout.getStoreSizeOfType(llvm_type) * 8;
+						const member_alignment_in_bits = this.data_layout.getPreferredAlignmentOfType(llvm_type) * 8;
+						const member_offset_in_bits = 0u;
+
+						members.append(this.di_builder.createMemberType(
+							type_scope,
+							member_variable.name,
+							di_file,
+							member_variable.span.line as uint,
+							member_size_in_bits,
+							member_alignment_in_bits,
+							member_offset_in_bits,
+							LLVMDIFlags::LLVMDIFlagZero,
+							member_di_type
+						));
+					}
+
+					di_type = this.di_builder.createStructType(
+						parent_namespace,
+						di_name,
+						di_file,
+						line,
+						size_in_bits,
+						alignment_in_bits,
+						LLVMDIFlags::LLVMDIFlagZero,
+						llvm::MetaDataRef(),
+						members,
+						0u32,
+						MetaDataRef(),
+						decl.signature()
+					);
+				}
+				case Enum -> {
+					var cases: List!<llvm::MetaDataRef>;
+					for c in decl.enum_cases {
+						cases.append(this.di_builder.createEnumerator(c.name, c.id, true));
+					}
+
+					di_type = this.di_builder.createEnumerationType(parent_namespace, di_name, di_file, line, size_in_bits, alignment_in_bits, cases, this.getDIType(decl.id_type));
+				}
+				else -> return;
+			}
+
+			const temp_di_type = this.di_types.get(type).value();
+			temp_di_type.replaceAllUsesWith(di_type);
+		}
+
+		this.di_types.set(type, di_type);
+	}
+
 	func codegenFunctionDecl(this: &&CGContext, function: program::FunctionRef) -> void {
 		const decl = function.lock().value();
 
@@ -423,38 +620,57 @@ struct CGContext {
 
 	func codegenFunctionImpl(this: &&CGContext, function: program::FunctionRef) -> void {
 		const decl = function.lock().value();
-		if decl.body is Empty || decl.body is Extern || decl.body is Unchecked {
-			return;
-		}
 
-		if decl.body is InlineBuiltin && this.program.options.dont_codegen_builtins {
-			return;
+		match decl.body {
+			case Empty | Extern | Unchecked -> return;
+			case InlineBuiltin -> {
+				if this.program.options.dont_codegen_builtins {
+					return;
+				}
+			}
+			else -> {}
 		}
 
 		const parent_module = decl.module.lock().value();
 
 		this.variables.clear();
-
 		this.current_function = this.functions.get(function).value();
 
-		this.builder = this.llvm_context.createBuilder();
-		this.builder.positionAtEnd(this.llvm_context.appendBasicBlock(this.current_function, "entry"));
-
 		// setup debug info for the function
+		var di_function: llvm::MetaDataRef;
 		if this.program.options.generate_debug_info {
-			const di_type = this.di_builder.createSubroutineType(
+			var di_return_and_parameter_types: List!<llvm::MetaDataRef>;
+
+			di_return_and_parameter_types.append(this.getDIType(decl.return_type));
+			for parameter_type in decl.parameter_types {
+				di_return_and_parameter_types.append(this.getDIType(parameter_type));
+			}
+
+			const di_function_type = this.di_builder.createSubroutineType(
 				this.di_files[parent_module.id],
-				List!<llvm::MetaDataRef>(),
+				di_return_and_parameter_types,
 				LLVMDIFlags::LLVMDIFlagZero
 			);
 
-			const di_function = this.di_builder.createFunction(
-				this.di_scope_stack.last().value(),
-				decl.name,
-				"",			// linkage name
+			var di_namespace: llvm::MetaDataRef;
+			if decl.parent_type.isUnknown() {
+				di_namespace = this.di_module_namespaces[parent_module.id];
+			} else {
+				di_namespace = this.di_type_namespaces[decl.parent_type];
+			}
+
+			var di_name = decl.name;
+			if !decl.template_parameters.isEmpty() {
+				di_name += decl.template_parameters.format();
+			}
+
+			di_function = this.di_builder.createFunction(
+				di_namespace,
+				di_name,
+				decl.extern_name,
 				this.di_files[parent_module.id],
 				decl.signature_span.line as uint + 1,
-				di_type,
+				di_function_type,
 				false, 		// is local to unit
 				true,		// is definition
 				decl.signature_span.line as uint + 1,
@@ -466,6 +682,10 @@ struct CGContext {
 			this.di_scope_stack.append(di_function);
 			this.current_function.setSubprogram(di_function);
 		}
+
+		this.builder = this.llvm_context.createBuilder();
+		const entry_block = this.llvm_context.appendBasicBlock(this.current_function, "");
+		this.builder.positionAtEnd(entry_block);
 
 		// initialize function parameters & variables
 		for variable in decl.variables {
@@ -481,14 +701,59 @@ struct CGContext {
 					args = this.builder.buildInsertValue(args, this.current_function.getParam(1u), 1u, "");
 					this.variables.set(WeakPtr!<VarDecl>(variable), args);
 				} else {
-					this.variables.set(WeakPtr!<VarDecl>(variable), this.current_function.getParam(variable.id));
+					const parameter = this.current_function.getParam(variable.id);
+					this.variables.set(WeakPtr!<VarDecl>(variable), parameter);
+
+					if this.program.options.generate_debug_info {
+						const di_variable = this.di_builder.createParameterVariable(
+							this.di_scope_stack.last().value(),
+							variable.name,
+							variable.id + 1, // ArgNo starts counting at 1
+							this.di_files[parent_module.id],
+							variable.span.line as uint,
+							this.getDIType(variable.type),
+							false,
+							LLVMDIFlags::LLVMDIFlagZero
+						);
+
+						this.di_builder.insertDeclareAtEnd(
+							parameter,
+							di_variable,
+							this.di_builder.createExpression(vptr!<u64>::null(), 0u),
+							this.getDebugLocation(variable.span),
+							entry_block
+						);
+					}
 				}
 			} else {
 				this.setCurrentDebugLocation(variable.span);
-				this.variables.set(
-					WeakPtr!<VarDecl>(variable),
-					this.builder.buildAlloca(this.getType(variable.type), variable.name)
-				);
+				const address = this.builder.buildAlloca(this.getType(variable.type), variable.name);
+				this.variables.set(WeakPtr!<VarDecl>(variable), address);
+
+				if this.program.options.generate_debug_info {
+					var alignment_in_bits = this.data_layout.getPreferredAlignmentOfType(this.getType(variable.type));
+
+					const di_variable = this.di_builder.createAutoVariable(
+						this.di_scope_stack.last().value(),
+						variable.name,
+						this.di_files[parent_module.id],
+						variable.span.line as uint,
+						this.getDIType(variable.type),
+						false,
+						LLVMDIFlags::LLVMDIFlagZero,
+						alignment_in_bits
+					);
+
+					this.di_builder.insertDeclareAtEnd(
+						address,
+						di_variable,
+						this.di_builder.createExpression(vptr!<u64>::null(), 0u),
+						this.getDebugLocation(variable.span),
+						entry_block
+					);
+				}
+
+				this.builder.setCurrentDebugLocation2(MetaDataRef());
 			}
 		}
 
@@ -518,6 +783,7 @@ struct CGContext {
 		}
 
 		if this.program.options.generate_debug_info {
+			this.di_builder.finalizeSubprogram(di_function);
 			this.di_scope_stack.removeLast();
 		}
 
