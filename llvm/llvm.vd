@@ -7,6 +7,10 @@ import std/io;
 import llvm/llvm_c;
 import llvm/dwarf;
 
+func lookupIntrinsicID(name: String) -> u32{
+	return LLVMLookupIntrinsicID(name.data(), name.size());
+}
+
 struct Context {
 	var handle: vptr!<LLVMOpaqueContext>;
 
@@ -129,6 +133,15 @@ struct Context {
 		return ValueRef(LLVMConstStringInContext(this.handle, value.data(), value.size() as u32, dont_null_terminate as i32));
 	}
 
+	func getIntrinsicType(this: Context, id: u32, parameter_types: List!<TypeRef>) -> TypeRef {
+		var raw_parameter_types: List!<vptr!<LLVMOpaqueType>>;
+		for type in parameter_types {
+			raw_parameter_types.append(type.handle);
+		}
+
+		return TypeRef(LLVMIntrinsicGetType(this.handle, id, raw_parameter_types.data, parameter_types.size()));
+	}
+
 	func createDebugLocation(this: Context, line: uint, column: uint, scope: MetaDataRef) -> MetaDataRef {
 		return MetaDataRef(LLVMDIBuilderCreateDebugLocation(this.handle, line as u32, column as u32, scope.handle, vptr::null() as vptr!<LLVMOpaqueMetadata>));
 	}
@@ -242,6 +255,15 @@ struct Module {
 		LLVMDisposeMessage(message);
 
 		return result;
+	}
+
+	func getIntrinsicDeclaration(this: Module, id: u32, parameter_types: List!<TypeRef>) -> ValueRef {
+		var raw_parameter_types: List!<vptr!<LLVMOpaqueType>>;
+		for type in parameter_types {
+			raw_parameter_types.append(type.handle);
+		}
+
+		return ValueRef(LLVMGetIntrinsicDeclaration(this.handle, id, raw_parameter_types.data, parameter_types.size()));
 	}
 
 	func createDIBuilder(this: Module) -> DIBuilderRef {

@@ -1630,8 +1630,20 @@ struct CGContext {
 					this.builder.buildRet(built_value);
 				}
 			}
-			case LifeTimeStart: variable -> discard this.codegenExpr(variable.lock().value().constructor_call);
-			case LifeTimeEnd: variable -> discard this.codegenExpr(variable.lock().value().destructor_call);
+			case LifeTimeStart: variable -> {
+				const var_decl = variable.lock().value();
+				if !(var_decl.destructor_call is Empty) {
+					this.codegenLifeTimeStart(this.getVariable(variable));
+				}
+				discard this.codegenExpr(var_decl.constructor_call);
+			}
+			case LifeTimeEnd: variable -> {
+				const var_decl = variable.lock().value();
+				discard this.codegenExpr(var_decl.destructor_call);
+				if !(var_decl.destructor_call is Empty) {
+					this.codegenLifeTimeEnd(this.getVariable(variable));
+				}
+			}
 			case Empty -> {}
 			else -> this.todo("finish codegen of statements", stmt.span);
 		}
@@ -1861,6 +1873,10 @@ struct CGContext {
 		match decl.body {
 			case InlineBuiltin: function -> return this.codegenInlineBuiltinFunctionCall(function, parameters);
 			else -> {
+				if return_kind is Parameter {
+					this.codegenLifeTimeStart(this.getVariable(result_var));
+				}
+
 				const function_impl = this.functions.get(function).value();
 				const function_type = this.function_types.get(function).value();
 				const result = this.builder.buildCall2(function_type, function_impl, parameters, "");
@@ -1948,5 +1964,27 @@ struct CGContext {
 		this.yield_target = prev_yield_target;
 
 		return this.variables.get(match_expr.yield_var) ?? llvm::ValueRef();
+	}
+
+	func codegenIntrinsicCall(this: &&CGContext, intrinsic_name: String, parameter_types: List!<llvm::TypeRef>, parameters: List!<llvm::ValueRef>) -> llvm::ValueRef {
+		const id = llvm::lookupIntrinsicID(intrinsic_name);
+		const type = this.llvm_context.getIntrinsicType(id, parameter_types);
+		const declaration = this.llvm_module.getIntrinsicDeclaration(id, parameter_types);
+
+		return this.builder.buildCall2(type, declaration, parameters, "");
+	}
+
+	func codegenLifeTimeStart(this: &&CGContext, address: llvm::ValueRef) -> void {
+		var parameters: List!<llvm::ValueRef>;
+		parameters.append(constInt(this.int_type, 1, false));
+		parameters.append(address);
+		discard this.codegenIntrinsicCall("llvm.lifetime.start", List!<llvm::TypeRef>(1u, this.ptr_type), parameters);
+	}
+
+	func codegenLifeTimeEnd(this: &&CGContext, address: llvm::ValueRef) -> void {
+		var parameters: List!<llvm::ValueRef>;
+		parameters.append(constInt(this.int_type, 1, false));
+		parameters.append(address);
+		discard this.codegenIntrinsicCall("llvm.lifetime.end", List!<llvm::TypeRef>(1u, this.ptr_type), parameters);
 	}
 }
