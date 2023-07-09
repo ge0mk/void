@@ -27,13 +27,9 @@ func main() {
 planned features (wip / near future)
 --
 - codegen: generate better llvm ir
-	- lifetime intrinsics
 	- function attributes (especially for allocators)
 - codegen: better debug info
-	- types
-	- variables
 - typechecker: high-level optimizations:
-	- eliminate unnecessary copying
 	- for x in NumericRange -> builtin count-for-loop
 	- function inlining
 - compiler: performance optimizations (do less unneccessary stuff)
