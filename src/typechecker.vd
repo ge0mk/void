@@ -54,7 +54,7 @@ struct FunctionLookupResult {
 		var max_ref_kind = ReferenceKind::None;
 
 		for function in this.functions {
-			const decl = function.lock().value();
+			const decl = function.forceLock();
 			if decl.parameter_types.size() < 1 {
 				continue;
 			}
@@ -220,7 +220,7 @@ struct TCContext {
 	func addVariableToCurrentScope(this: &&TCContext, variable: WeakPtr!<VarDecl>) -> void {
 		this.scope_stack[this.scope_stack.size() - 1].variables.append(variable);
 
-		const name = variable.lock().value().name;
+		const name = variable.forceLock().name;
 		if name != ""{
 			this.scope_stack[this.scope_stack.size() - 1].variables_by_name[name] = variable;
 		}
@@ -290,7 +290,7 @@ struct TCContext {
 		const variables = this.scope_stack[this.scope_stack.size() - 1].variables;
 		for i in 0u..variables.size() {
 			const variable = variables[variables.size() - i - 1];
-			const decl = variable.lock().value();
+			const decl = variable.forceLock();
 			if decl.type.kind == ReferenceKind::None {
 				result.append(Stmt::LifeTimeEnd(variable, Span(0u16)));
 			}
@@ -447,7 +447,7 @@ struct TCContext {
 			const type = this.module.createType(parsed_decl.name, TypeBody::Unchecked(parsed_decl));
 			this.unchecked_types.append(type);
 
-			var decl = type.lock().value();
+			var decl = type.forceLock();
 			decl.template_parameters = template_parameters;
 			decl.span = parsed_decl.span;
 			decl.name_span = parsed_decl.name_span;
@@ -468,7 +468,7 @@ struct TCContext {
 			function = this.module.createFunction(parsed_decl.signature.name);
 			siblings_with_same_name = this.module.functions_by_name[parsed_decl.signature.name];
 		} else {
-			var decl = this.current_type.lock().value();
+			var decl = this.current_type.forceLock();
 			function = decl.createMemberFunction(parsed_decl.signature.name);
 			siblings_with_same_name = decl.member_functions_by_name[parsed_decl.signature.name];
 		}
@@ -482,7 +482,7 @@ struct TCContext {
 				continue;
 			}
 
-			const sibling_decl = sibling.lock().value();
+			const sibling_decl = sibling.forceLock();
 			if sibling_decl.template_parameters == template_parameters {
 				this.error("function redeclared with identical template parameters", parsed_decl.signature.span);
 				this.info("previously declared here: ", sibling_decl.signature_span);
@@ -491,7 +491,7 @@ struct TCContext {
 
 		this.unchecked_functions.append(function);
 
-		var decl = function.lock().value();
+		var decl = function.forceLock();
 		decl.template_parameters = template_parameters;
 		decl.body = FunctionBody::Unchecked(parsed_decl);
 		decl.span = parsed_decl.span;
@@ -499,7 +499,7 @@ struct TCContext {
 
 		if this.module.id == 0 && decl.name == "main" {
 			if !this.program.main_function.isUnknown() {
-				const prev_decl = this.program.main_function.lock().value();
+				const prev_decl = this.program.main_function.forceLock();
 				this.error("re-declaration of main function", decl.signature_span);
 				this.hint("main was already declared here:", prev_decl.signature_span);
 			} else {
@@ -522,7 +522,7 @@ struct TCContext {
 	}
 
 	func checkTypeBody(this: &&TCContext, type: TypeRef) -> void {
-		var decl = type.lock().value();
+		var decl = type.forceLock();
 
 		if decl.isIncompleteTemplate() {
 			return;
@@ -582,7 +582,7 @@ struct TCContext {
 	}
 
 	func checkMemberVarDecl(this: &&TCContext, parsed_decl: ParsedVarDecl) -> void {
-		var type_decl = this.current_type.lock().value();
+		var type_decl = this.current_type.forceLock();
 
 		var member_var_type = TypeRef::unknown();
 		if parsed_decl.type.hasValue() {
@@ -617,7 +617,7 @@ struct TCContext {
 	}
 
 	func checkCaseDecl(this: &&TCContext, parsed_decl: ParsedCaseDecl) -> void {
-		var type_decl = this.current_type.lock().value();
+		var type_decl = this.current_type.forceLock();
 		if !(type_decl.body is Enum) && !(type_decl.body is Variant) {
 			this.error("case declarations are only allowed inside enum or variant types", parsed_decl.span);
 			return;
@@ -664,7 +664,7 @@ struct TCContext {
 				operator_is_parameter_types,
 				this.program.bool_type,
 				FunctionBody::InlineBuiltin(InlineBuiltinFunction::VariantOpIs(id, this.current_type))
-			).lock().value();
+			).forceLock();
 
 			operator_is.template_parameters.append(
 				TemplateParameterDecl("Id", this.program.int_concept, false, TemplateParameter::Integer(id))
@@ -673,7 +673,7 @@ struct TCContext {
 	}
 
 	func checkFunctionSignature(this: &&TCContext, function: FunctionRef) -> void {
-		var decl = function.lock().value();
+		var decl = function.forceLock();
 
 		if decl.isIncompleteTemplate() {
 			return;
@@ -710,7 +710,7 @@ struct TCContext {
 		if this.current_type.isUnknown() {
 			siblings_with_same_name = this.module.functions_by_name[decl.name];
 		} else {
-			var parent_type = this.current_type.lock().value();
+			var parent_type = this.current_type.forceLock();
 			siblings_with_same_name = parent_type.member_functions_by_name[decl.name];
 		}
 
@@ -719,7 +719,7 @@ struct TCContext {
 				continue;
 			}
 
-			const sibling_decl = sibling.lock().value();
+			const sibling_decl = sibling.forceLock();
 			if sibling_decl.template_parameters != decl.template_parameters {
 				continue;
 			}
@@ -777,7 +777,7 @@ struct TCContext {
 	}
 
 	func checkFunctionBody(this: &&TCContext, function: FunctionRef) -> void {
-		var decl = function.lock().value();
+		var decl = function.forceLock();
 
 		if !decl.parent_type.isUnknown() {
 			this.current_type = decl.parent_type;
@@ -934,7 +934,7 @@ struct TCContext {
 		var most_matching_template_parameters = 0;
 		var types_with_matching_template_parameters: List!<TypeRef>;
 		for type in types_with_matching_name {
-			const decl = type.lock().value();
+			const decl = type.forceLock();
 			const matching_template_parameters = this.getMatchingTemplateParameterCount(
 				decl.template_parameters, template_parameters
 			);
@@ -1005,9 +1005,9 @@ struct TCContext {
 	}
 
 	func createTemplateTypeInstance(this: &&TCContext, type: TypeRef, template_parameters: List!<TemplateParameter>, error_span: Span) -> TypeRef {
-		const decl = type.lock().value();
+		const decl = type.forceLock();
 
-		var parent_module = decl.module.lock().value();
+		var parent_module = decl.module.forceLock();
 
 		match decl.body {
 			case Int | UInt | Float -> {
@@ -1028,7 +1028,7 @@ struct TCContext {
 					else -> panic("unreachable");
 				}
 
-				var instance_decl = instance.lock().value();
+				var instance_decl = instance.forceLock();
 				instance_decl.extensions = decl.extensions;
 
 				var tc_context = this.getContextForModule(parent_module.id);
@@ -1051,7 +1051,7 @@ struct TCContext {
 
 				const instance = parent_module.createPtrTypeInstance(pointer_type.is_const, base_type);
 
-				var instance_decl = instance.lock().value();
+				var instance_decl = instance.forceLock();
 				instance_decl.extensions = decl.extensions;
 
 				var tc_context = this.getContextForModule(parent_module.id);
@@ -1087,7 +1087,7 @@ struct TCContext {
 
 				const instance = parent_module.createArrayTypeInstance(element_type, size as uint, element_cptr_type, element_vptr_type);
 
-				var instance_decl = instance.lock().value();
+				var instance_decl = instance.forceLock();
 				instance_decl.extensions = decl.extensions;
 
 				tc_context.checkTypeBody(instance);
@@ -1178,7 +1178,7 @@ struct TCContext {
 		var most_matching_template_parameters = 0;
 		var functions_with_matching_template_parameters: List!<FunctionRef>;
 		for function in functions_with_matching_name {
-			const decl = function.lock().value();
+			const decl = function.forceLock();
 			const matching_template_parameters = this.getMatchingTemplateParameterCount(
 				decl.template_parameters, template_parameters
 			);
@@ -1281,9 +1281,9 @@ struct TCContext {
 	}
 
 	func createTemplateFunctionInstance(this: &&TCContext, function: FunctionRef, template_parameters: List!<TemplateParameter>, error_span: Span) -> FunctionRef {
-		const decl = function.lock().value();
+		const decl = function.forceLock();
 
-		var parent_module = decl.module.lock().value();
+		var parent_module = decl.module.forceLock();
 		var tc_context = this.getContextForModule(parent_module.id);
 
 		match decl.body {
@@ -1349,7 +1349,7 @@ struct TCContext {
 					}
 
 					const instance = parent_module.createFunction(name, parameter_types, return_type, FunctionBody::InlineBuiltin(body));
-					var instance_decl = instance.lock().value();
+					var instance_decl = instance.forceLock();
 					instance_decl.template_parameters.append(TemplateParameterDecl("Type", this.program.any_concept, false, template_parameters[0u]));
 
 					return instance;
@@ -1412,7 +1412,7 @@ struct TCContext {
 	}
 
 	func getMatchingParameterCount(function: FunctionRef, parameter_types: List!<TypeRef>, first_arg_max_ref_kind: ReferenceKind, allow_unwrapping: bool) -> int {
-		const decl = function.lock().value();
+		const decl = function.forceLock();
 
 		if decl.parameter_types.size() != parameter_types.size() {
 			return -1;
@@ -1420,7 +1420,7 @@ struct TCContext {
 
 		var count = 0;
 		for i in 0u..parameter_types.size() {
-			const parameter_type_decl = parameter_types[i].lock().value();
+			const parameter_type_decl = parameter_types[i].forceLock();
 			if !(parameter_types[i].hasSameBaseTypeAs(decl.parameter_types[i]) || parameter_type_decl.unwrapped_type.hasSameBaseTypeAs(decl.parameter_types[i])) {
 				return -1;
 			}
@@ -1459,7 +1459,7 @@ struct TCContext {
 	}
 
 	func doesConceptAcceptTemplateParameter(this: &&TCContext, concept_ref: WeakPtr!<Concept>, parameter: TemplateParameter) -> bool {
-		const concept_decl = concept_ref.lock().value();
+		const concept_decl = concept_ref.forceLock();
 		const concept = &concept_decl.operator unwrap();
 
 		if concept is IntLiteral && parameter is Integer {
@@ -1553,7 +1553,7 @@ struct TCContext {
 				if decl.isCopyConstructor() {
 					// the "other" parameter in copy a constructor can't be deep copied (would result in recursion),
 					// but it can safely be shallow copied because no other parameters can reference the same object
-					var var_decl = copy.lock().value();
+					var var_decl = copy.forceLock();
 					var_decl.constructor_call = Expr::ShallowCopy(ShallowCopyExpr(
 						Expr::VarInvoke(copy, decl.signature_span, var_decl.type.varRef()),
 						parameter_expr,
@@ -1586,7 +1586,7 @@ struct TCContext {
 					this.error("not all member variables de-initialized", decl.signature_span);
 				}
 			} else {
-				const parent_type = decl.parent_type.lock().value();
+				const parent_type = decl.parent_type.forceLock();
 				var unhandled_member_variables: List!<uint>;
 				if decl.name == "constructor" {
 					for id in required_member_variables - this.active_member_variables {
@@ -1780,13 +1780,13 @@ struct TCContext {
 
 		if !name.startsWith("#") {
 			if const variable = this.getVariableByName(name) {
-				const prev_decl = variable.lock().value();
+				const prev_decl = variable.forceLock();
 				this.error("redefinition of variable '" + name + "'", span);
 				this.info("previously declared here:", prev_decl.span);
 			}
 		}
 
-		var function = this.current_function.lock().value();
+		var function = this.current_function.forceLock();
 		const variable = function.createVariable(span, name, type, is_const);
 
 		this.addVariableToCurrentScope(variable);
@@ -1803,7 +1803,7 @@ struct TCContext {
 	}
 
 	func createConstructorCall(this: &&TCContext, variable: WeakPtr!<VarDecl>, initializer: List!<Expr>) -> void {
-		var decl = variable.lock().value();
+		var decl = variable.forceLock();
 
 		if decl.type.kind == ReferenceKind::None {
 			var parameters: List!<Expr>;
@@ -1834,7 +1834,7 @@ struct TCContext {
 	}
 
 	func createDestructorCall(this: &&TCContext, variable: WeakPtr!<VarDecl>) -> void {
-		var decl = variable.lock().value();
+		var decl = variable.forceLock();
 
 		if decl.type.kind == ReferenceKind::None {
 			var parameters: List!<Expr>;
@@ -1943,7 +1943,7 @@ struct TCContext {
 			return result;
 		}
 
-		const value_type_decl = value.type.lock().value();
+		const value_type_decl = value.type.forceLock();
 
 		var ok_case_name = "";
 		if value_type_decl.getVariantCase("Ok").hasValue() {
@@ -2008,7 +2008,7 @@ struct TCContext {
 			return List!<Stmt>();
 		}
 
-		const value_type_decl = value.type.lock().value();
+		const value_type_decl = value.type.forceLock();
 
 		var ok_case_name = "";
 		var error_case_name = "";
@@ -2123,7 +2123,7 @@ struct TCContext {
 		result.children.append(Stmt::Expr(get_iterator_call, get_iterator_call.span));
 
 		const iterator_var = (removeDereference(get_iterator_call) as Call).value().result_var;
-		const iterator_var_decl = iterator_var.lock().value();
+		const iterator_var_decl = iterator_var.forceLock();
 		const iterator_var_expr = Expr::Dereference(
 			Box!<Expr>(Expr::VarInvoke(iterator_var, parsed_stmt.range.span, iterator_var_decl.type.varRef())),
 			parsed_stmt.range.span, iterator_var_decl.type
@@ -2160,7 +2160,7 @@ struct TCContext {
 		}
 
 		initializer.append(next_value);
-		var function = this.current_function.lock().value();
+		var function = this.current_function.forceLock();
 		const variable = function.createVariable(parsed_stmt.capture_span, parsed_stmt.capture_name, next_value.type, next_value.type.kind != ReferenceKind::Var);
 
 		this.addVariableToCurrentScope(variable);
@@ -2191,7 +2191,7 @@ struct TCContext {
 			return Stmt::Empty(span);
 		}
 
-		const match_type_decl = this.match_type.lock().value();
+		const match_type_decl = this.match_type.forceLock();
 
 		var patterns: List!<Expr>;
 		for parsed_pattern in parsed_stmt.patterns {
@@ -2270,7 +2270,7 @@ struct TCContext {
 				capture_init = capture_init.removeDereference();
 			}
 
-			var function = this.current_function.lock().value();
+			var function = this.current_function.forceLock();
 			const variable = function.createVariable(span, parsed_stmt.capture_name.value(), capture_type, capture_type.kind != ReferenceKind::Var);
 
 			this.addVariableToCurrentScope(variable);
@@ -2329,7 +2329,7 @@ struct TCContext {
 	}
 
 	func checkThrowStmt(this: &&TCContext, parsed_value: ParsedExpr, span: Span) -> List!<Stmt> {
-		const return_type_decl = this.current_return_type.lock().value();
+		const return_type_decl = this.current_return_type.forceLock();
 		const c = return_type_decl.getVariantCase("Error") else {
 			this.error("invalid return type for throw: expected std::core::Result or similar, but got " + this.current_return_type.signature(), span);
 			return List!<Stmt>();
@@ -2457,7 +2457,7 @@ struct TCContext {
 			}
 
 			if !this.yield_var.isAlive() {
-				var func_decl = this.current_function.lock().value();
+				var func_decl = this.current_function.forceLock();
 				this.yield_var = func_decl.createVariable(Span(0u16), "#yield_var", checked_value.type, checked_value.type.kind != ReferenceKind::Var);
 				this.createDestructorCall(this.yield_var);
 			}
@@ -2632,7 +2632,7 @@ struct TCContext {
 	}
 
 	func checkVarInvokeExpr(this: &&TCContext, variable: WeakPtr!<VarDecl>, span: Span) -> Expr {
-		const decl = variable.lock().value();
+		const decl = variable.forceLock();
 
 		var result = Expr::Empty(Span(0u16), TypeRef::unknown());
 
@@ -2693,7 +2693,7 @@ struct TCContext {
 			return Expr::Empty(name.span, TypeRef::unknown());
 		}
 
-		const decl = parent_type.lock().value();
+		const decl = parent_type.forceLock();
 		if const c = decl.getEnumCase(name.name) {
 			return Expr::Integer(c.id, span, parent_type);
 		}
@@ -2733,7 +2733,7 @@ struct TCContext {
 					return Expr::Empty(span, TypeRef::unknown());
 				}
 
-				const type_decl = member_var_invoke_expr.object.type.lock().value();
+				const type_decl = member_var_invoke_expr.object.type.forceLock();
 
 				const member_variable = type_decl.member_variables[member_var_invoke_expr.id];
 				if member_variable.type.kind == ReferenceKind::None {
@@ -2777,7 +2777,7 @@ struct TCContext {
 						}
 
 						if name.namespaces.isEmpty() && name.template_parameters.isEmpty() && !expected_type.isUnknown() {
-							const expected_type_decl = expected_type.lock().value();
+							const expected_type_decl = expected_type.forceLock();
 							if const c = expected_type_decl.getVariantCase(name.name) {
 								var template_parameters: List!<TemplateParameter>;
 								template_parameters.append(TemplateParameter::Integer(c.id));
@@ -2887,9 +2887,9 @@ struct TCContext {
 					return Expr::Empty(span, TypeRef::unknown());
 				}
 
-				var type_decl = object.type.lock().value();
+				var type_decl = object.type.forceLock();
 				if type_decl.getMemberVariable(member_name.name) is None && !type_decl.unwrapped_type.isUnknown() {
-					const unwrapped_decl = type_decl.unwrapped_type.lock().value();
+					const unwrapped_decl = type_decl.unwrapped_type.forceLock();
 					if unwrapped_decl.getMemberVariable(member_name.name) is Some {
 						object = removeDereference(this.checkCall(
 							List!<String>(), "operator unwrap", List!<TemplateParameter>(),
@@ -2995,7 +2995,7 @@ struct TCContext {
 
 		this.match_value = checked_value;
 
-		const value_type_decl = this.match_value.type.lock().value();
+		const value_type_decl = this.match_value.type.forceLock();
 		if !((value_type_decl.body is Variant) || this.match_value.type.isIntType()) {
 			this.error("value in match statement has invalid type: expected integral type or variant but got '" + this.match_value.type.signature() + "'", this.match_value.span);
 		}
@@ -3159,7 +3159,7 @@ struct TCContext {
 			return Expr::Empty(span, TypeRef::unknown());
 		}
 
-		const lhs_type_decl = lhs.type.lock().value();
+		const lhs_type_decl = lhs.type.forceLock();
 
 		if lhs_type_decl.body is Enum {
 			const rhs = this.checkExpr(parsed_rhs, lhs.type.base());
@@ -3214,7 +3214,7 @@ struct TCContext {
 			return Expr::Empty(span, TypeRef::unknown());
 		}
 
-		const lhs_type_decl = lhs.type.lock().value();
+		const lhs_type_decl = lhs.type.forceLock();
 
 		if lhs_type_decl.body is Variant && parsed_rhs is Name {
 			const parsed_name = (parsed_rhs as Name).value();
@@ -3286,7 +3286,7 @@ struct TCContext {
 		//     else -> yield None;
 		// }
 
-		const type_decl = value.type.lock().value();
+		const type_decl = value.type.forceLock();
 		const case_decl = type_decl.getVariantCase(case_name).value();
 
 		if case_decl.type == this.program.void_type {
@@ -3356,7 +3356,7 @@ struct TCContext {
 			return Expr::Empty(span, TypeRef::unknown());
 		}
 
-		const type_decl = value.type.lock().value();
+		const type_decl = value.type.forceLock();
 
 		const ok_case_decl = type_decl.getVariantCase("Ok") else {
 			this.error("value has invalid type: expected std::core::Result or similar, but got " + value.type.signature(), span);
@@ -3559,7 +3559,7 @@ struct TCContext {
 	}
 
 	func unwrapFunctionArguments(this: &&TCContext, function: FunctionRef, checked_arguments: List!<Expr>, dont_unwrap_this: bool) -> List!<Expr> {
-		const decl = function.lock().value();
+		const decl = function.forceLock();
 		var arguments = checked_arguments;
 		var invalid_parameter_types = false;
 
@@ -3590,7 +3590,7 @@ struct TCContext {
 			}
 
 			const unwrap_function = unwrap_function_result.getFunctionWithHighestRefKind();
-			const unwrap_decl = unwrap_function.lock().value();
+			const unwrap_decl = unwrap_function.forceLock();
 
 			var unwrap_arguments: List!<Expr>;
 			if unwrap_decl.parameter_types[0u].kind != ReferenceKind::None && arguments[i].type.kind == ReferenceKind::None {
@@ -3602,7 +3602,7 @@ struct TCContext {
 
 			var result_var: WeakPtr!<VarDecl>;
 			if !unwrap_decl.return_type.isPrimitive() {
-				var current_function_decl = this.current_function.lock().value();
+				var current_function_decl = this.current_function.forceLock();
 				result_var = current_function_decl.createVariable(arguments[i].span, "#result", unwrap_decl.return_type, true);
 				// no constructor call needed, the callee does that
 				this.createDestructorCall(result_var);
@@ -3640,7 +3640,7 @@ struct TCContext {
 		negate_result: bool,
 		test_spaceship_operator_result: bool
 	) -> Expr {
-		const callee_decl = function.lock().value();
+		const callee_decl = function.forceLock();
 		const unwrapped_arguments = this.unwrapFunctionArguments(function, checked_arguments, function_name == "constructor" || function_name == "destructor");
 		if unwrapped_arguments.size() != checked_arguments.size() {
 			return Expr::Empty(span, TypeRef::unknown());
@@ -3658,7 +3658,7 @@ struct TCContext {
 			if !this.current_function.isUnknown() {
 				return_kind = ReturnKind::Variable;
 
-				var current_function_decl = this.current_function.lock().value();
+				var current_function_decl = this.current_function.forceLock();
 				result_var = current_function_decl.createVariable(span, "#result", callee_decl.return_type, true);
 				result_type = callee_decl.return_type.constRef();
 				// no constructor call needed, the callee does that
@@ -3711,7 +3711,7 @@ struct TCContext {
 					return;
 				}
 
-				const object_decl = object.lock().value();
+				const object_decl = object.forceLock();
 				if object_decl.id != 0 { // this parameter
 					return;
 				}
@@ -3731,12 +3731,12 @@ struct TCContext {
 				}
 			}
 			case VarInvoke: variable -> {
-				const object_decl = variable.lock().value();
+				const object_decl = variable.forceLock();
 				if object_decl.id != 0 { // this parameter
 					return;
 				}
 
-				const object_type_decl = object_decl.type.lock().value();
+				const object_type_decl = object_decl.type.forceLock();
 				if function_name == "constructor" {
 					for variable in object_type_decl.member_variables {
 						if this.active_member_variables.contains(variable.id) {
@@ -3767,7 +3767,7 @@ struct TCContext {
 		}
 
 		if template_parameters.isEmpty() {
-			const parent_type_decl = parent_type.lock().value();
+			const parent_type_decl = parent_type.forceLock();
 			if const c = parent_type_decl.getVariantCase(name) {
 				template_parameters.append(TemplateParameter::Integer(c.id));
 				return this.checkTemporaryVariable(parent_type, template_parameters, parsed_arguments, span);
@@ -3824,7 +3824,7 @@ struct TCContext {
 	}
 
 	func checkTemporaryVariable(this: &&TCContext, type: TypeRef, template_parameters: List!<TemplateParameter>, checked_arguments: List!<Expr>, span: Span) -> Expr {
-		var current_function_decl = this.current_function.lock().value();
+		var current_function_decl = this.current_function.forceLock();
 		const variable = current_function_decl.createVariable(span, "#tmp", type, true);
 
 		this.createDestructorCall(variable);
@@ -3855,7 +3855,7 @@ struct TCContext {
 				return Expr::Empty(span, TypeRef::unknown());
 			}
 
-			const callee_decl = function.lock().value();
+			const callee_decl = function.forceLock();
 			var is_copy_constructor_call = false;
 			if const parent_type = callee_decl.parent_type.lock() {
 				is_copy_constructor_call = function == parent_type.copy_constructor;

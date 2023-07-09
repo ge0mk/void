@@ -133,6 +133,18 @@ struct WeakPtr {
 		return Some(SharedPtr!<T>(this));
 	}
 
+	func forceLock(this: &WeakPtr!<T>) -> SharedPtr!<T> {
+		if this.data == vptr::null() {
+			panic(Error::EOPTNONE);
+		}
+
+		if this.data[0u].strong_count <= 0 {
+			panic(Error::EOPTNONE);
+		}
+
+		return SharedPtr!<T>(this);
+	}
+
 	operator ==(this: WeakPtr!<T>, other: WeakPtr!<T>) -> bool {
 		return this.data == other.data;
 	}

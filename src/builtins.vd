@@ -23,22 +23,22 @@ func createCoreDecls(module: &&Module) -> void {
 	const any_concept = module.program.any_concept;
 
 	var int_cast_func = module.createFunction("intCast", empty_parameter_types, TypeRef::unknown(), InlineBuiltinFunction::IntCast(TypeRef::unknown(), TypeRef::unknown()));
-	var int_cast_func_decl = int_cast_func.lock().value();
+	var int_cast_func_decl = int_cast_func.forceLock();
 	int_cast_func_decl.template_parameters.append(TemplateParameterDecl("Source", any_concept, false));
 	int_cast_func_decl.template_parameters.append(TemplateParameterDecl("Target", any_concept, false));
 
 	var float_cast_func = module.createFunction("floatCast", empty_parameter_types, TypeRef::unknown(), InlineBuiltinFunction::FloatCast(TypeRef::unknown(), TypeRef::unknown()));
-	var float_cast_func_decl = float_cast_func.lock().value();
+	var float_cast_func_decl = float_cast_func.forceLock();
 	float_cast_func_decl.template_parameters.append(TemplateParameterDecl("Source", any_concept, false));
 	float_cast_func_decl.template_parameters.append(TemplateParameterDecl("Target", any_concept, false));
 
 	var int_to_float = module.createFunction("intToFloat", empty_parameter_types, TypeRef::unknown(), InlineBuiltinFunction::IntToFloat(TypeRef::unknown(), TypeRef::unknown()));
-	var int_to_float_decl = int_to_float.lock().value();
+	var int_to_float_decl = int_to_float.forceLock();
 	int_to_float_decl.template_parameters.append(TemplateParameterDecl("Source", any_concept, false));
 	int_to_float_decl.template_parameters.append(TemplateParameterDecl("Target", any_concept, false));
 
 	var float_to_int = module.createFunction("floatToInt", empty_parameter_types, TypeRef::unknown(), InlineBuiltinFunction::FloatToInt(TypeRef::unknown(), TypeRef::unknown()));
-	var float_to_int_decl = float_to_int.lock().value();
+	var float_to_int_decl = float_to_int.forceLock();
 	float_to_int_decl.template_parameters.append(TemplateParameterDecl("Source", any_concept, false));
 	float_to_int_decl.template_parameters.append(TemplateParameterDecl("Target", any_concept, false));
 }
@@ -60,7 +60,7 @@ func createIntTypes(module: &&Module) -> void {
 
 func createNumericCastInstance(module: &&Module, name: String, source: TypeRef, target: TypeRef) -> FunctionRef {
 	var function = module.createFunction(name);
-	var decl = function.lock().value();
+	var decl = function.forceLock();
 
 	decl.template_parameters.append(TemplateParameterDecl("Source", module.program.any_concept, false, TemplateParameter::Type(source)));
 	decl.template_parameters.append(TemplateParameterDecl("Target", module.program.any_concept, false, TemplateParameter::Type(target)));
@@ -236,7 +236,7 @@ func createArithmeticOperators(decl: &&TypeDecl, type: TypeRef, is_signed: bool)
 
 func createBoolType(module: &&Module) -> void {
 	var type = module.createType("bool", TypeBody::Bool);
-	var decl = type.lock().value();
+	var decl = type.forceLock();
 
 	module.program.bool_type = type;
 
@@ -256,7 +256,7 @@ func createBoolType(module: &&Module) -> void {
 
 func createPtrSizedIntType(module: &&Module, is_signed: bool) -> void {
 	var type = module.createType("int" if is_signed else "uint", TypeBody::Int(0u) if is_signed else TypeBody::UInt(0u));
-	var decl = type.lock().value();
+	var decl = type.forceLock();
 
 	if is_signed {
 		module.program.int_type = type;
@@ -280,14 +280,14 @@ func createPtrSizedIntType(module: &&Module, is_signed: bool) -> void {
 
 func createIntTypeTemplate(module: &&Module, is_signed: bool) -> void {
 	const type = module.createType("int" if is_signed else "uint", TypeBody::Int(0u) if is_signed else TypeBody::UInt(0u));
-	var decl = type.lock().value();
+	var decl = type.forceLock();
 	const uint_literal_concept = module.program.getConcept("uint").value();
 	decl.template_parameters.append(TemplateParameterDecl("Size", uint_literal_concept, false));
 }
 
 func createIntTypeInstance(module: &&Module, is_signed: bool, size: int) -> TypeRef {
 	const type = module.createType("int" if is_signed else "uint", TypeBody::Int(size as uint) if is_signed else TypeBody::UInt(size as uint));
-	var decl = type.lock().value();
+	var decl = type.forceLock();
 
 	const uint_literal_concept = module.program.getConcept("uint").value();
 	decl.template_parameters.append(TemplateParameterDecl("Size", uint_literal_concept, false, TemplateParameter::Integer(size)));
@@ -308,7 +308,7 @@ func createIntTypeInstance(module: &&Module, is_signed: bool, size: int) -> Type
 
 func createByteType(module: &&Module) -> void {
 	const type = module.createType("byte", TypeBody::Byte);
-	var decl = type.lock().value();
+	var decl = type.forceLock();
 
 	module.program.byte_type = type;
 
@@ -328,14 +328,14 @@ func createPtrTypes(module: &&Module) -> void {
 	const any_concept = module.program.any_concept;
 
 	var ptr_cast_func = module.createFunction("ptrCast", empty_parameter_types, TypeRef::unknown(), InlineBuiltinFunction::PointerCast(TypeRef::unknown()));
-	var ptr_cast_func_decl = ptr_cast_func.lock().value();
+	var ptr_cast_func_decl = ptr_cast_func.forceLock();
 	ptr_cast_func_decl.template_parameters.append(TemplateParameterDecl("Target", any_concept, false));	// replace concept with one that only accepts pointer types
 	ptr_cast_func_decl.template_parameters.append(TemplateParameterDecl("Source", any_concept, false));	// replace concept with one that only accepts pointer types
 }
 
 func createPtrCastInstance(module: &&Module, source: TypeRef, target: TypeRef) -> FunctionRef {
 	const ptr_cast_func = module.createFunction("ptrCast");
-	var ptr_cast_func_decl = ptr_cast_func.lock().value();
+	var ptr_cast_func_decl = ptr_cast_func.forceLock();
 	ptr_cast_func_decl.template_parameters.append(TemplateParameterDecl("Source", module.program.any_concept, false, TemplateParameter::Type(source)));
 	ptr_cast_func_decl.template_parameters.append(TemplateParameterDecl("Target", module.program.any_concept, false, TemplateParameter::Type(target)));
 
@@ -349,7 +349,7 @@ func createPtrCastInstance(module: &&Module, source: TypeRef, target: TypeRef) -
 
 func createOpaquePtrType(module: &&Module, is_const: bool) -> void {
 	const type = module.createType("cptr" if is_const else "vptr", TypeBody::Pointer(PointerType(is_const)));
-	var decl = type.lock().value();
+	var decl = type.forceLock();
 
 	if is_const {
 		module.program.cptr_type = type;
@@ -366,13 +366,13 @@ func createOpaquePtrType(module: &&Module, is_const: bool) -> void {
 
 func createPtrTypeTemplate(module: &&Module, is_const: bool) -> void {
 	var type = module.createType("cptr" if is_const else "vptr", TypeBody::Pointer(PointerType(is_const)));
-	var decl = type.lock().value();
+	var decl = type.forceLock();
 	decl.template_parameters.append(TemplateParameterDecl("Base", module.program.any_concept, false));
 }
 
 func createPtrTypeInstance(module: &&Module, is_const: bool, base_type: TypeRef) -> TypeRef {
 	const type = module.createType("cptr" if is_const else "vptr", TypeBody::Pointer(PointerType(base_type, is_const)));
-	var decl = type.lock().value();
+	var decl = type.forceLock();
 
 	decl.template_parameters.append(TemplateParameterDecl("Base", module.program.any_concept, false, TemplateParameter::Type(base_type)));
 
@@ -414,28 +414,28 @@ func createCoreReflectionFunctions(module: &&Module) -> void {
 	const empty_parameter_types = List!<TypeRef>();
 
 	const size_of_func = module.createFunction("sizeOf", empty_parameter_types, TypeRef::unknown(), InlineBuiltinFunction::SizeOf(TypeRef::unknown()));
-	var size_of_decl = size_of_func.lock().value();
+	var size_of_decl = size_of_func.forceLock();
 	size_of_decl.template_parameters.append(TemplateParameterDecl("Type", module.program.any_concept, false));
 
 	const alignment_of_func = module.createFunction("alignmentOf", empty_parameter_types, TypeRef::unknown(), InlineBuiltinFunction::AlignmentOf(TypeRef::unknown()));
-	var alignment_of_decl = alignment_of_func.lock().value();
+	var alignment_of_decl = alignment_of_func.forceLock();
 	alignment_of_decl.template_parameters.append(TemplateParameterDecl("Type", module.program.any_concept, false));
 
 	const ref_kind_of_func = module.createFunction("referenceKindOf", empty_parameter_types, TypeRef::unknown(), InlineBuiltinFunction::ReferenceKindOf(TypeRef::unknown()));
-	var ref_kind_of_decl = ref_kind_of_func.lock().value();
+	var ref_kind_of_decl = ref_kind_of_func.forceLock();
 	ref_kind_of_decl.template_parameters.append(TemplateParameterDecl("Type", module.program.any_concept, false));
 }
 
 func createFloatTypeTemplate(module: &&Module) -> void {
 	const type = module.createType("float", TypeBody::Float(0u));
-	var decl = type.lock().value();
+	var decl = type.forceLock();
 	const uint_literal_concept = module.program.getConcept("uint").value();
 	decl.template_parameters.append(TemplateParameterDecl("Size", uint_literal_concept, false));
 }
 
 func createFloatTypeInstance(module: &&Module, size: int) -> TypeRef {
 	const type = module.createType("float", TypeBody::Float(size as uint));
-	var decl = type.lock().value();
+	var decl = type.forceLock();
 
 	const uint_literal_concept = module.program.getConcept("uint").value();
 	decl.template_parameters.append(TemplateParameterDecl("Size", uint_literal_concept, false, TemplateParameter::Integer(size)));
@@ -471,7 +471,7 @@ func createFloatTypeInstance(module: &&Module, size: int) -> TypeRef {
 
 func createArrayTypeDecl(module: &&Module) -> void {
 	var type = module.createType("Array", TypeBody::Array(ArrayType(TypeRef::unknown(), 0u)));
-	var decl = type.lock().value();
+	var decl = type.forceLock();
 
 	decl.template_parameters.append(TemplateParameterDecl("T", module.program.any_concept, false));
 	decl.template_parameters.append(TemplateParameterDecl("Size", module.program.uint_concept, false));
@@ -479,7 +479,7 @@ func createArrayTypeDecl(module: &&Module) -> void {
 
 func createArrayTypeInstance(module: &&Module, element_type: TypeRef, size: uint, element_cptr_type: TypeRef, element_vptr_type: TypeRef) -> TypeRef {
 	var type = module.createType("Array", TypeBody::Array(ArrayType(element_type, size)));
-	var decl = type.lock().value();
+	var decl = type.forceLock();
 
 	decl.addContainedType(element_type);
 

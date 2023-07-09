@@ -158,12 +158,12 @@ struct Interpreter {
 				throw ControlFlow::Return;
 			}
 			case LifeTimeStart: variable -> {
-				const decl = variable.lock().value();
+				const decl = variable.forceLock();
 				discard try this.interpret(decl.constructor_call);
 				return Ok;
 			}
 			case LifeTimeEnd: variable -> {
-				const decl = variable.lock().value();
+				const decl = variable.forceLock();
 				discard try this.interpret(decl.destructor_call);
 				return Ok;
 			}
@@ -204,7 +204,7 @@ struct Interpreter {
 				return Ok(this.interpret(call.function, parameters, expr.span));
 			}
 			case VarInvoke: variable -> {
-				const decl = variable.lock().value();
+				const decl = variable.forceLock();
 				var instance = this.getVariable(decl.id);
 				if decl.is_parameter {
 					return Ok(instance.operator unwrap());
@@ -213,7 +213,7 @@ struct Interpreter {
 				}
 			}
 			case Dereference: base -> match try this.interpret(base) {
-				case Reference: target -> return Ok(target.lock().value());
+				case Reference: target -> return Ok(target.forceLock());
 				else -> return Ok(Value::Undefined);
 			}
 			else -> {
@@ -224,7 +224,7 @@ struct Interpreter {
 	}
 
 	func interpret(this: &&Interpreter, function: FunctionRef, args: List!<Value>, error_span: Span) -> Value {
-		const decl = function.decl.lock().value();
+		const decl = function.decl.forceLock();
 		match decl.body {
 			case Extern -> {
 				this.todo("interpret calls to extern functions", error_span);

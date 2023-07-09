@@ -31,7 +31,7 @@ func eliminateCallResultCopies(stmt: &&Stmt) -> void {
 		case Yield -> {}
 		case Return: &&expr -> expr.eliminateCallResultCopies();
 		case LifeTimeStart: variable -> {
-			var var_decl = variable.lock().value();
+			var var_decl = variable.forceLock();
 			var_decl.constructor_call.eliminateCallResultCopies();
 		}
 		case LifeTimeEnd -> {}

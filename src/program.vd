@@ -353,7 +353,7 @@ struct Module {
 			}
 
 			for function in module.functions_by_name[name] {
-				const function_decl = function.lock().value();
+				const function_decl = function.forceLock();
 				if function_decl.namespace.endsWith(namespace.range()) {
 					result.append(function);
 				}
@@ -363,7 +363,7 @@ struct Module {
 		if var type = parent_type.lock() {
 			if type.member_functions_by_name.contains(name) {
 				for function in type.member_functions_by_name[name] {
-					const function_decl = function.lock().value();
+					const function_decl = function.forceLock();
 					if function_decl.namespace.endsWith(namespace.range()) && !result.contains(function) {
 						result.append(function);
 					}
@@ -455,7 +455,7 @@ struct TemplateParameterDecl {
 
 	func signature(this: &TemplateParameterDecl) -> String {
 		var result = this.name + ": ";
-		result += ("..." if this.is_variadic else "") + this.concept.lock().value().name;
+		result += ("..." if this.is_variadic else "") + this.concept.forceLock().name;
 		if const value = this.value {
 			result += " = " + value.toString();
 		}
@@ -466,7 +466,7 @@ struct TemplateParameterDecl {
 		out.push("TemplateParameterDecl", is_last);
 		out.attribute(this.name);
 		out.text(":");
-		out.attribute(this.concept.lock().value().name);
+		out.attribute(this.concept.forceLock().name);
 
 		if const value = this.value {
 			out.text(" =");
@@ -574,7 +574,7 @@ struct TypeDecl {
 	}
 
 	func getHandle(this: &TypeDecl) -> SharedPtr!<TypeDecl> {
-		const module = this.module.lock().value();
+		const module = this.module.forceLock();
 		return module.types[this.id];
 	}
 
@@ -587,7 +587,7 @@ struct TypeDecl {
 	}
 
 	func getModuleRef(this: &TypeDecl) -> &&Module {
-		var module = this.module.lock().value();
+		var module = this.module.forceLock();
 		return &&module.operator unwrap();
 	}
 
@@ -661,7 +661,7 @@ struct TypeDecl {
 	}
 
 	func createMemberFunction(this: &&TypeDecl, name: String) -> FunctionRef {
-		var module = this.module.lock().value();
+		var module = this.module.forceLock();
 
 		const id = module.functions.size();
 		var decl = SharedPtr!<FunctionDecl>::new(FunctionDecl(Span(this.span.module), id, name, module.getWeakHandle()));
@@ -793,7 +793,7 @@ struct TypeDecl {
 	}
 
 	func createDefaultFunctions(this: &&TypeDecl) {
-		const module = this.module.lock().value();
+		const module = this.module.forceLock();
 		const type = this.getRef();
 
 		if this.body is Enum || this.body is Variant {
@@ -803,7 +803,7 @@ struct TypeDecl {
 				parameter_types.append(type);
 
 				this.copy_constructor = this.createMemberFunction("constructor", parameter_types, module.program.void_type);
-				var func_decl = this.copy_constructor.lock().value();
+				var func_decl = this.copy_constructor.forceLock();
 				func_decl.signature_span = this.name_span;
 				func_decl.body = func_decl.getDefaultFunctionBody();
 			}
@@ -813,7 +813,7 @@ struct TypeDecl {
 				parameter_types.append(type.varRef());
 
 				this.destructor = this.createMemberFunction("destructor", parameter_types, module.program.void_type);
-				var func_decl = this.destructor.lock().value();
+				var func_decl = this.destructor.forceLock();
 				func_decl.signature_span = this.name_span;
 				func_decl.body = func_decl.getDefaultFunctionBody();
 			}
@@ -824,7 +824,7 @@ struct TypeDecl {
 				parameter_types.append(type);
 
 				this.op_assign = this.createMemberFunction("operator =", parameter_types, module.program.void_type);
-				var func_decl = this.op_assign.lock().value();
+				var func_decl = this.op_assign.forceLock();
 				func_decl.signature_span = this.name_span;
 				func_decl.body = func_decl.getDefaultFunctionBody();
 			}
@@ -835,7 +835,7 @@ struct TypeDecl {
 				parameter_types.append(type);
 
 				this.op_equal = this.createMemberFunction("operator ==", parameter_types, module.program.bool_type);
-				var func_decl = this.op_equal.lock().value();
+				var func_decl = this.op_equal.forceLock();
 				func_decl.signature_span = this.name_span;
 				func_decl.body = func_decl.getDefaultFunctionBody();
 			}
@@ -847,7 +847,7 @@ struct TypeDecl {
 			parameter_types.append(type);
 
 			this.op_compare = this.createMemberFunction("operator <=>", parameter_types, module.program.int_type);
-			var func_decl = this.op_compare.lock().value();
+			var func_decl = this.op_compare.forceLock();
 			func_decl.signature_span = this.name_span;
 			func_decl.body = func_decl.getDefaultFunctionBody();
 		}
@@ -857,7 +857,7 @@ struct TypeDecl {
 		var parameter_types: List!<TypeRef>;
 		parameter_types.append(this.getRef().varRef());
 
-		var module = this.module.lock().value();
+		var module = this.module.forceLock();
 
 		if !payload.isUnknown() && payload != module.program.void_type {
 			parameter_types.append(payload);
@@ -872,7 +872,7 @@ struct TypeDecl {
 			parameter_types,
 			module.program.void_type,
 			FunctionBody::Builtin(BuiltinFunction::VariantCaseConstructor(case_id, this.getRef()))
-		).lock().value();
+		).forceLock();
 
 		constructor.template_parameters.append(
 			TemplateParameterDecl("Id", module.program.int_concept, false, TemplateParameter::Integer(case_id))
@@ -894,9 +894,9 @@ struct TypeDecl {
 			operator_as_parameter_types,
 			result_type,
 			FunctionBody::InlineBuiltin(InlineBuiltinFunction::VariantOpUnsafeAs(case_id, this.getRef()))
-		).lock().value();
+		).forceLock();
 
-		var module = this.module.lock().value();
+		var module = this.module.forceLock();
 
 		operator_as.template_parameters.append(
 			TemplateParameterDecl("Id", module.program.int_concept, false, TemplateParameter::Integer(case_id))
@@ -953,6 +953,10 @@ struct TypeRef {
 
 	func lock(this: &TypeRef) -> Optional!<SharedPtr!<TypeDecl>> {
 		return this.decl.lock();
+	}
+
+	func forceLock(this: &TypeRef) -> SharedPtr!<TypeDecl> {
+		return this.decl.forceLock();
 	}
 
 	func signature(this: &TypeRef) -> String {
@@ -1133,7 +1137,7 @@ struct FunctionDecl {
 	}
 
 	func getHandle(this: &FunctionDecl) -> SharedPtr!<FunctionDecl> {
-		const module = this.module.lock().value();
+		const module = this.module.forceLock();
 		return module.functions[this.id];
 	}
 
@@ -1146,7 +1150,7 @@ struct FunctionDecl {
 	}
 
 	func getModuleRef(this: &FunctionDecl) -> &&Module {
-		var module = this.module.lock().value();
+		var module = this.module.forceLock();
 		return &&module.operator unwrap();
 	}
 
@@ -1362,6 +1366,10 @@ struct FunctionRef {
 
 	func lock(this: &FunctionRef) -> Optional!<SharedPtr!<FunctionDecl>> {
 		return this.decl.lock();
+	}
+
+	func forceLock(this: &FunctionRef) -> SharedPtr!<FunctionDecl> {
+		return this.decl.forceLock();
 	}
 
 	func signature(this: &FunctionRef) -> String {
@@ -1958,12 +1966,12 @@ variant Stmt {
 				out.pop();
 			}
 			case LifeTimeStart: variable -> {
-				const decl = variable.lock().value();
+				const decl = variable.forceLock();
 				decl.dump(&&out, is_last);
 			}
 			case LifeTimeEnd: variable -> {
 				out.push("LifeTimeEnd", is_last);
-				const decl = variable.lock().value();
+				const decl = variable.forceLock();
 				out.value(decl.name);
 				out.span(decl.span);
 				out.pop();
@@ -2220,7 +2228,7 @@ variant Expr {
 			}
 			case VarInvoke: variable -> {
 				out.push("VarInvokeExpr", is_last);
-				const decl = variable.lock().value();
+				const decl = variable.forceLock();
 				out.value(("#" if decl.is_parameter else "") + decl.name);
 				out.attribute(this.type.signature());
 				out.span(this.span);
