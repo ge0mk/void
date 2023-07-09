@@ -3,14 +3,14 @@ main: stage1
 test: test-stage1
 
 clean:
-	-@rm -rf build/*
-	-@rm -rf bootstrap/*
+	-@rm -rf build
+	-@rm -rf bootstrap
 	-@rm -f libc.ll
 	-@rm -f llvm/llvm_c.vd
 
 clean-but-keep-stage0:
 	-@find build ! -name 'stage0*' -type f -exec rm -rf {} +
-	-@rm -rf bootstrap/*
+	-@rm -rf bootstrap
 
 stage0: build/stage0
 
@@ -18,6 +18,7 @@ build/stage0: build/stage0.ll
 	clang build/stage0.ll -o build/stage0 -O3 -march=native -lc -lm -lLLVM
 
 build/stage0.ll:
+	-@mkdir build -p
 	wget -O build/stage0.ll https://github.com/ge0mk/void/releases/latest/download/bootstrap.ll
 
 test-stage0: build/stage0
@@ -57,6 +58,7 @@ generate-bootstrap-files: build/stage2
 	build/stage2 src/main.vd -o bootstrap-stripped -c -m -O -s
 	build/stage2 src/main.vd -o bootstrap-stripped -c -m -O -s -b
 
+	-@mkdir bootstrap -p
 	-@cp -f build/bootstrap* bootstrap/
 
 # llvm libraries:
