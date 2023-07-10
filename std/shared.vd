@@ -50,13 +50,8 @@ struct SharedPtr {
 		this.constructor(other);
 	}
 
-	operator ==(this: SharedPtr!<T>, other: SharedPtr!<T>) -> bool {
-		return this.data == other.data;
-	}
-
-	operator <=>(this: SharedPtr!<T>, other: SharedPtr!<T>) -> int {
-		return this.data <=> other.data;
-	}
+	operator ==(this: SharedPtr!<T>, other: SharedPtr!<T>) -> bool = default;
+	operator <=>(this: SharedPtr!<T>, other: SharedPtr!<T>) -> int = default;
 
 	func new(value: T) -> SharedPtr!<T> {
 		return SharedPtr!<T>(value);
@@ -113,7 +108,7 @@ struct WeakPtr {
 		this.constructor(other);
 	}
 
-	func isAlive(this: WeakPtr!<T>) -> bool {
+	func isAlive(this: &WeakPtr!<T>) -> bool {
 		if this.data == vptr::null() {
 			return false;
 		}
@@ -145,11 +140,6 @@ struct WeakPtr {
 		return SharedPtr!<T>(this);
 	}
 
-	operator ==(this: WeakPtr!<T>, other: WeakPtr!<T>) -> bool {
-		return this.data == other.data;
-	}
-
-	operator <=>(this: WeakPtr!<T>, other: WeakPtr!<T>) -> int {
-		return this.data <=> other.data;
-	}
+	operator ==(this: WeakPtr!<T>, other: WeakPtr!<T>) -> bool = default;
+	operator <=>(this: WeakPtr!<T>, other: WeakPtr!<T>) -> int = default;
 }

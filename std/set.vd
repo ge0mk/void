@@ -73,7 +73,7 @@ struct Set {
 		return RangeIterator!<T>(this.data as cptr!<T>, this.data as cptr!<T> + this.size);
 	}
 
-	func getInsertPos(this: &Set!<T>, value: T) -> uint {
+	func getInsertPos(this: &Set!<T>, value: T, exact_match: &&bool) -> uint {
 		var min = 0u;
 		var max = this.size;
 		var index = this.size / 2u;
@@ -85,7 +85,8 @@ struct Set {
 			} else if order > 0 {
 				min = index + 1u;
 			} else {
-				break;
+				exact_match = true;
+				return index;
 			}
 			index = (min + max) / 2u;
 		}
@@ -94,20 +95,16 @@ struct Set {
 	}
 
 	func contains(this: &Set!<T>, value: T) -> bool {
-		const index = this.getInsertPos(value);
-		if index >= this.size {
-			return false;
-		} else {
-			return this.data[index] == value;
-		}
+		var exact_match = false;
+		discard this.getInsertPos(value, &&exact_match);
+		return exact_match;
 	}
 
 	func add(this: &&Set!<T>, value: T) -> void {
-		const index = this.getInsertPos(value);
-		if index < this.size {
-			if this.data[index] == value {
-				return;
-			}
+		var exact_match = false;
+		const index = this.getInsertPos(value, &&exact_match);
+		if exact_match {
+			return;
 		}
 
 		this.grow();
@@ -131,12 +128,9 @@ struct Set {
 	}
 
 	func remove(this: &&Set!<T>, value: T) -> void {
-		const index = this.getInsertPos(value);
-		if index >= this.size {
-			return;
-		}
-
-		if this.data[index] != value {
+		var exact_match = false;
+		const index = this.getInsertPos(value, &&exact_match);
+		if !exact_match {
 			return;
 		}
 

@@ -912,27 +912,29 @@ struct TCContext {
 			}
 		}
 
-		var errors: List!<CompilationError>;
-
 		var types_with_matching_name = this.module.getTypeByName(namespaces, name);
-		var types_from_template_parameters: List!<TypeRef>;
+
+		var types_with_matching_template_parameters: List!<TypeRef>;
+		// Allocate some memory upfront.
+		types_with_matching_template_parameters.grow(types_with_matching_name.size());
+
 		if namespaces.isEmpty() {
 			if const current_type = this.current_type.lock() {
-				types_from_template_parameters.append(getTypeFromTemplateParameters(current_type.template_parameters, name));
+				types_with_matching_template_parameters.append(getTypeFromTemplateParameters(current_type.template_parameters, name));
 			}
 
 			if const current_function = this.current_function.lock() {
-				types_from_template_parameters.append(getTypeFromTemplateParameters(current_function.template_parameters, name));
+				types_with_matching_template_parameters.append(getTypeFromTemplateParameters(current_function.template_parameters, name));
 			}
 		}
 
-		if types_with_matching_name.isEmpty() && types_from_template_parameters.isEmpty() {
+		var errors: List!<CompilationError>;
+		if types_with_matching_name.isEmpty() && types_with_matching_template_parameters.isEmpty() {
 			errors.append(CompilationError("no type with matching name found", ErrorType::Error, ErrorStage::Typechecker, error_span));
 			throw errors;
 		}
 
 		var most_matching_template_parameters = 0;
-		var types_with_matching_template_parameters: List!<TypeRef>;
 		for type in types_with_matching_name {
 			const decl = type.forceLock();
 			const matching_template_parameters = this.getMatchingTemplateParameterCount(
@@ -947,10 +949,6 @@ struct TCContext {
 			if matching_template_parameters == most_matching_template_parameters {
 				types_with_matching_template_parameters.append(type);
 			}
-		}
-
-		if template_parameters.isEmpty() {
-			types_with_matching_template_parameters.append(types_from_template_parameters);
 		}
 
 		if types_with_matching_template_parameters.isEmpty() {
@@ -1175,8 +1173,11 @@ struct TCContext {
 			return result;
 		}
 
+		var functions_with_matching_template_parameters: List!<SharedPtr!<FunctionDecl>>;
+		// Allocate some memory upfront. Generally most of the functions have no template parameters and thus are matching.
+		functions_with_matching_template_parameters.grow(functions_with_matching_name.size());
+
 		var most_matching_template_parameters = 0;
-		var functions_with_matching_template_parameters: List!<FunctionRef>;
 		for function in functions_with_matching_name {
 			const decl = function.forceLock();
 			const matching_template_parameters = this.getMatchingTemplateParameterCount(
@@ -1189,7 +1190,7 @@ struct TCContext {
 			}
 
 			if matching_template_parameters == most_matching_template_parameters {
-				functions_with_matching_template_parameters.append(function);
+				functions_with_matching_template_parameters.append(decl);
 			}
 		}
 
@@ -1210,24 +1211,29 @@ struct TCContext {
 			return result;
 		}
 
-		var function_instances_with_matching_template_parameters: Set!<FunctionRef>;
-
 		for i in 0u..functions_with_matching_template_parameters.size() {
-			if functions_with_matching_template_parameters[i].isIncompleteTemplate() {
-				const instance = this.createTemplateFunctionInstance(
-					functions_with_matching_template_parameters[i],
-					template_parameters,
-					error_span
-				);
-
-				function_instances_with_matching_template_parameters.add(instance);
-			} else {
-				function_instances_with_matching_template_parameters.add(functions_with_matching_template_parameters[i]);
+			if !functions_with_matching_template_parameters[i].isIncompleteTemplate() {
+				continue;
 			}
+
+			const instance = this.createTemplateFunctionInstance(
+				&functions_with_matching_template_parameters[i].operator unwrap(),
+				&template_parameters,
+				error_span
+			);
+
+			if instance.isUnknown() {
+				continue;
+			}
+
+			functions_with_matching_template_parameters[i] = instance.forceLock();
 		}
 
+		// Allocate some memory for the result. Generally 1-3 matching functions are found.
+		result.functions.grow(4u);
+
 		var most_matching_parameters = 0;
-		for function in function_instances_with_matching_template_parameters {
+		for function in functions_with_matching_template_parameters {
 			const matching_parameters = function.getMatchingParameterCount(&parameter_types, first_arg_max_ref_kind, allow_unwrapping);
 
 			if matching_parameters > most_matching_parameters {
@@ -1236,7 +1242,7 @@ struct TCContext {
 			}
 
 			if matching_parameters == most_matching_parameters {
-				result.functions.append(function);
+				result.functions.append(function.getRef());
 			}
 		}
 
@@ -1258,10 +1264,10 @@ struct TCContext {
 
 			result.errors.append(CompilationError("candidates are: ", ErrorType::Info, ErrorStage::Typechecker, Span(0u16)));
 			var i = 0u;
-			for function in function_instances_with_matching_template_parameters {
-				if i == 3 && function_instances_with_matching_template_parameters.size() > 4 {
+			for function in functions_with_matching_template_parameters {
+				if i == 3 && functions_with_matching_template_parameters.size() > 4 {
 					result.errors.append(CompilationError(
-						"        and " + format(function_instances_with_matching_template_parameters.size() - 3) + " more",
+						"        and " + format(functions_with_matching_template_parameters.size() - 3) + " more",
 						ErrorType::Info, ErrorStage::Typechecker, Span(0u16)
 					));
 
@@ -1280,13 +1286,11 @@ struct TCContext {
 		return result;
 	}
 
-	func createTemplateFunctionInstance(this: &&TCContext, function: FunctionRef, template_parameters: List!<TemplateParameter>, error_span: Span) -> FunctionRef {
-		const decl = function.forceLock();
-
-		var parent_module = decl.module.forceLock();
+	func createTemplateFunctionInstance(this: &&TCContext, function: &FunctionDecl, template_parameters: &List!<TemplateParameter>, error_span: Span) -> FunctionRef {
+		var parent_module = function.module.forceLock();
 		var tc_context = this.getContextForModule(parent_module.id);
 
-		match decl.body {
+		match function.body {
 			case InlineBuiltin: builtin_function -> match builtin_function {
 				case PointerCast -> {
 					const source = (template_parameters[0u] as Type).value();
@@ -1355,12 +1359,12 @@ struct TCContext {
 					return instance;
 				}
 				else -> {
-					this.error("cannot create template instance of builtin function " + function.signature(), decl.span);
+					this.error("cannot create template instance of builtin function " + function.signature(), function.span);
 					return FunctionRef::unknown();
 				}
 			}
 			case Unchecked: parsed_function -> {
-				var template_parameter_decls = decl.template_parameters;
+				var template_parameter_decls = function.template_parameters;
 				for i in 0u..template_parameter_decls.size() {
 					template_parameter_decls[i].value = Some(template_parameters[i]);
 				}
@@ -1375,13 +1379,17 @@ struct TCContext {
 				return instance;
 			}
 			else -> {
-				this.error("cannot create template instance of this function", decl.span);
+				this.error("cannot create template instance of this function", function.span);
 				return FunctionRef::unknown();
 			}
 		}
 	}
 
 	func getMatchingTemplateParameterCount(this: &&TCContext, template_decls: &List!<TemplateParameterDecl>, template_parameters: &List!<TemplateParameter>) -> int {
+		if template_decls.size() == 0 && template_parameters.size() == 0 {
+			return 0;
+		}
+
 		if template_parameters.size() < template_decls.size() {
 			return -1;
 		}
@@ -1391,16 +1399,16 @@ struct TCContext {
 		}
 
 		var count = 0;
-
 		for i in 0u..template_parameters.size() {
-			var k = min(i, template_decls.size() - 1);
+			const template_parameter = template_parameters[i];
+			const template_parameter_decl = template_decls[min(i, template_decls.size() - 1)];
 
-			if !this.doesConceptAcceptTemplateParameter(template_decls[k].concept, template_parameters[i]) {
+			if !this.doesConceptAcceptTemplateParameter(template_parameter_decl.concept, template_parameter) {
 				return -1;
 			}
 
-			if const value = template_decls[k].value {
-				if value != template_parameters[i] {
+			if const value = template_parameter_decl.value {
+				if value != template_parameter {
 					return -1;
 				} else {
 					count += 1;
@@ -1411,32 +1419,33 @@ struct TCContext {
 		return count;
 	}
 
-	func getMatchingParameterCount(function: &FunctionRef, parameter_types: &List!<TypeRef>, first_arg_max_ref_kind: ReferenceKind, allow_unwrapping: bool) -> int {
-		const decl = function.forceLock();
-
-		if decl.parameter_types.size() != parameter_types.size() {
+	func getMatchingParameterCount(function: &FunctionDecl, parameter_types: &List!<TypeRef>, first_arg_max_ref_kind: ReferenceKind, allow_unwrapping: bool) -> int {
+		if function.parameter_types.size() != parameter_types.size() {
 			return -1;
 		}
 
 		var count = 0;
 		for i in 0u..parameter_types.size() {
-			const parameter_type_decl = parameter_types[i].forceLock();
-			if !(parameter_types[i].hasSameBaseTypeAs(decl.parameter_types[i]) || parameter_type_decl.unwrapped_type.hasSameBaseTypeAs(decl.parameter_types[i])) {
-				return -1;
-			}
+			const required_parameter_type = parameter_types[i];
+			const function_parameter_type = function.parameter_types[i];
 
 			if i == 0 {
-				if decl.parameter_types[i].kind > first_arg_max_ref_kind || decl.parameter_types[i].kind < parameter_types[i].kind {
+				if function_parameter_type.kind > first_arg_max_ref_kind || function_parameter_type.kind < required_parameter_type.kind {
 					return -1;
 				}
 			} else {
-				if parameter_types[i].kind != decl.parameter_types[i].kind {
+				if required_parameter_type.kind != function_parameter_type.kind {
 					return -1;
 				}
 			}
 
-			if parameter_types[i].hasSameBaseTypeAs(decl.parameter_types[i]) {
+			if required_parameter_type.hasSameBaseTypeAs(function_parameter_type) {
 				count++;
+			} else {
+				const parameter_type_decl = required_parameter_type.forceLock();
+				if !parameter_type_decl.unwrapped_type.hasSameBaseTypeAs(function_parameter_type) {
+					return -1;
+				}
 			}
 		}
 

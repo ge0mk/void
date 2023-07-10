@@ -136,7 +136,7 @@ struct Map {
 		return true;
 	}
 
-	func getInsertPos(this: &Map!<Tkey, Tvalue>, key: Tkey) -> uint {
+	func getInsertPos(this: &Map!<Tkey, Tvalue>, key: Tkey, exact_match: &&bool) -> uint {
 		var min = 0u;
 		var max = this.size;
 		var index = this.size / 2u;
@@ -148,7 +148,8 @@ struct Map {
 			} else if order > 0 {
 				min = index + 1u;
 			} else {
-				break;
+				exact_match = true;
+				return index;
 			}
 			index = (min + max) / 2u;
 		}
@@ -157,21 +158,17 @@ struct Map {
 	}
 
 	func contains(this: &Map!<Tkey, Tvalue>, key: Tkey) -> bool {
-		const index = this.getInsertPos(key);
-		if index >= this.size {
-			return false;
-		} else {
-			return this.keys[index] == key;
-		}
+		var exact_match = false;
+		discard this.getInsertPos(key, &&exact_match);
+		return exact_match;
 	}
 
 	func set(this: &&Map!<Tkey, Tvalue>, key: Tkey, value: Tvalue) -> void {
-		const index = this.getInsertPos(key);
-		if index < this.size {
-			if this.keys[index] == key {
-				this.values[index] = value;
-				return;
-			}
+		var exact_match = false;
+		const index = this.getInsertPos(key, &&exact_match);
+		if exact_match {
+			this.values[index] = value;
+			return;
 		}
 
 		this.grow();
@@ -185,23 +182,19 @@ struct Map {
 	}
 
 	func get(this: &Map!<Tkey, Tvalue>, key: Tkey) -> Optional!<Tvalue> {
-		const index = this.getInsertPos(key);
-		if index < this.size {
-			if this.keys[index] == key {
-				return Some(this.values[index]);
-			}
+		var exact_match = false;
+		const index = this.getInsertPos(key, &&exact_match);
+		if exact_match {
+			return Some(this.values[index]);
 		}
 
 		return None;
 	}
 
 	func remove(this: &&Map!<Tkey, Tvalue>, key: Tkey) -> void {
-		const index = this.getInsertPos(key);
-		if index >= this.size {
-			return;
-		}
-
-		if this.keys[index] != key {
+		var exact_match = false;
+		const index = this.getInsertPos(key, &&exact_match);
+		if !exact_match {
 			return;
 		}
 
@@ -214,11 +207,10 @@ struct Map {
 	}
 
 	operator [](this: &&Map!<Tkey, Tvalue>, key: Tkey) -> &&Tvalue {
-		const index = this.getInsertPos(key);
-		if index < this.size {
-			if this.keys[index] == key {
-				return &&this.values[index];
-			}
+		var exact_match = false;
+		const index = this.getInsertPos(key, &&exact_match);
+		if exact_match {
+			return &&this.values[index];
 		}
 
 		this.grow();

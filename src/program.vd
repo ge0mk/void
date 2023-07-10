@@ -346,6 +346,25 @@ struct Module {
 	func getFunctionsByName(this: &&Module, namespace: List!<String>, name: String, parent_type: TypeRef) -> List!<FunctionRef> {
 		var result: List!<FunctionRef>;
 
+		if namespace.isEmpty() {
+			for id in this.imports + this.id {
+				var module = this.program.modules[id];
+				if !module.functions_by_name.contains(name) {
+					continue;
+				}
+
+				result.append(module.functions_by_name[name]);
+			}
+
+			if var parent_type_decl = parent_type.lock() {
+				if parent_type_decl.member_functions_by_name.contains(name) {
+					result.append(parent_type_decl.member_functions_by_name[name]);
+				}
+			}
+
+			return result;
+		}
+
 		for id in this.imports + this.id {
 			var module = this.program.modules[id];
 			if !module.functions_by_name.contains(name) {
@@ -360,13 +379,16 @@ struct Module {
 			}
 		}
 
-		if var type = parent_type.lock() {
-			if type.member_functions_by_name.contains(name) {
-				for function in type.member_functions_by_name[name] {
-					const function_decl = function.forceLock();
-					if function_decl.namespace.endsWith(namespace.range()) && !result.contains(function) {
-						result.append(function);
-					}
+		if parent_type.isUnknown() {
+			return result;
+		}
+
+		var parent_type_decl = parent_type.forceLock();
+		if parent_type_decl.member_functions_by_name.contains(name) {
+			for function in parent_type_decl.member_functions_by_name[name] {
+				const function_decl = function.forceLock();
+				if function_decl.namespace.endsWith(namespace.range()) && !result.contains(function) {
+					result.append(function);
 				}
 			}
 		}
@@ -568,10 +590,6 @@ struct TypeDecl {
 	func destructor(this: &&TypeDecl) -> void = default;
 
 	operator =(this: &&TypeDecl, other: TypeDecl) -> void = default;
-
-	operator ==(this: TypeDecl, other: TypeDecl) -> bool {
-		return this.id == other.id;
-	}
 
 	func getHandle(this: &TypeDecl) -> SharedPtr!<TypeDecl> {
 		const module = this.module.forceLock();
@@ -919,24 +937,11 @@ struct TypeRef {
 
 	operator =(this: &&TypeRef, other: TypeRef) -> void = default;
 
+	operator ==(this: TypeRef, other: TypeRef) -> bool = default;
+	operator <=>(this: TypeRef, other: TypeRef) -> int = default;
+
 	func unknown() -> TypeRef {
 		return TypeRef(WeakPtr!<TypeDecl>(), ReferenceKind::None);
-	}
-
-	operator ==(this: TypeRef, other: TypeRef) -> bool {
-		if this.decl.data != other.decl.data {
-			return false;
-		} else {
-			return this.kind == other.kind;
-		}
-	}
-
-	operator <=>(this: TypeRef, other: TypeRef) -> int {
-		if this.decl.data != other.decl.data {
-			return this.decl.data <=> other.decl.data;
-		} else {
-			return this.kind <=> other.kind;
-		}
 	}
 
 	func hasSameBaseTypeAs(this: &TypeRef, other: TypeRef) -> bool {
@@ -1080,19 +1085,11 @@ struct TypeRef {
 	}
 
 	func getMemberFunctionsByName(this: &TypeRef, name: String) -> List!<FunctionRef> {
-		var result: List!<FunctionRef>;
-
-		const decl = this.lock() else {
-			return result;
+		var decl = this.lock() else {
+			return List!<FunctionRef>();
 		}
 
-		for function in decl.member_functions {
-			if function.name == name {
-				result.append(function.getRef());
-			}
-		}
-
-		return result;
+		return decl.member_functions_by_name[name];
 	}
 }
 
@@ -1131,10 +1128,6 @@ struct FunctionDecl {
 	func destructor(this: &&FunctionDecl) -> void = default;
 
 	operator =(this: &&FunctionDecl, other: FunctionDecl) -> void = default;
-
-	operator ==(this: FunctionDecl, other: FunctionDecl) -> bool {
-		return this.id == other.id;
-	}
 
 	func getHandle(this: &FunctionDecl) -> SharedPtr!<FunctionDecl> {
 		const module = this.module.forceLock();
@@ -1344,16 +1337,11 @@ struct FunctionRef {
 
 	operator =(this: &&FunctionRef, other: FunctionRef) -> void = default;
 
+	operator ==(this: FunctionRef, other: FunctionRef) -> bool = default;
+	operator <=>(this: FunctionRef, other: FunctionRef) -> int = default;
+
 	func unknown() -> FunctionRef {
 		return FunctionRef(WeakPtr!<FunctionDecl>());
-	}
-
-	operator ==(this: FunctionRef, other: FunctionRef) -> bool {
-		return this.decl.data == other.decl.data;
-	}
-
-	operator <=>(this: FunctionRef, other: FunctionRef) -> int {
-		return this.decl.data <=> other.decl.data;
 	}
 
 	func isUnknown(this: &FunctionRef) -> bool {
