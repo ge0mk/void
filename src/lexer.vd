@@ -68,7 +68,7 @@ struct NumberLiteral {
 }
 
 
-enum TokenId {
+enum TokenType {
 	case Identifier;
 
 	// literals
@@ -175,12 +175,12 @@ enum TokenId {
 	case Unknown;
 	case EndOfFile;
 
-	func toString(this: TokenId) -> String {
+	func toString(this: TokenType) -> String {
 		match this {
-			case Identifier -> return "identifier";
-			case CharLiteral -> return "char literal";
-			case StringLiteral -> return "string literal";
-			case NumberLiteral -> return "number literal";
+			case Identifier -> return "<identifier>";
+			case CharLiteral -> return "<char literal>";
+			case StringLiteral -> return "<string literal>";
+			case NumberLiteral -> return "<number literal>";
 			case LParen -> return "<token> (";
 			case RParen -> return "<token> )";
 			case LSquare -> return "<token> [";
@@ -267,313 +267,69 @@ enum TokenId {
 			case KeywordVariant -> return "<keyword> variant";
 			case KeywordWhile -> return "<kewyord> while";
 			case KeywordYield -> return "<kewyord> yield";
-			else -> return "";
+			case Unknown -> return "<unknown>";
+			case EndOfFile -> return "<eof>";
 		}
 	}
 }
 
-variant Token {
-	var span: Span;
-
+variant TokenData {
+	case None;
 	case Identifier: String;
-
-	// literals
 	case CharLiteral: CharLiteral;
 	case StringLiteral: StringLiteral;
 	case NumberLiteral: NumberLiteral;
-
-	// structural tokens
-	case LParen;					// (
-	case RParen;					// )
-	case LSquare;					// [
-	case RSquare;					// ]
-	case LCurly;					// {
-	case RCurly;					// }
-
-	case Comma;						// ,
-	case Semicolon;					// ;
-	case Dot;						// .
-	case QuestionMark;				// ?
-	case Colon;						// :
-	case DoubleColon;				// ::
-	case AtSign;					// @
-
-	// operators
-	case Assign;					// =
-	case Plus;						// +
-	case Minus;						// -
-	case Asterisk;					// *
-	case Slash;						// /
-	case Percent;					// %
-	case Ampersand;					// &
-	case Pipe;						// |
-	case Caret;						// ^
-	case Tilde;						// ~
-	case ExclamationMark;			// !
-	case Arrow;						// ->
-	case DoubleDot;					// ..
-	case DoubleQuestionMark;		// ??
-	case DoublePlus;				// ++
-	case DoubleMinus;				// --
-	case DoubleAmpersand;			// &&
-	case DoublePipe;				// ||
-
-	// comparison operators
-	case Equal;						// ==
-	case NotEqual;					// !=
-	case LessThan;					// <
-	case LessEqual;					// <=
-	case GreaterThan;				// >
-	case GreaterEqual;				// >=
-	case Spaceship;					// <=>
-
-	// assignment operators
-	case ColonAssign;				// :=
-	case PlusAssign;				// +=
-	case MinusAssign;				// -=
-	case AsteriskAssign;			// *=
-	case SlashAssign;				// /=
-	case PercentAssign;				// %=
-	case AmpersandAssign;			// &=
-	case PipeAssign;				// |=
-	case CaretAssign;				// ^=
-	case DoubleQuestionMarkAssign;	// ??=
-
-	// keywords
-	case KeywordAs;
-	case KeywordBreak;
-	case KeywordCase;
-	case KeywordComptime;
-	case KeywordConst;
-	case KeywordContinue;
-	case KeywordDefault;
-	case KeywordDiscard;
-	case KeywordDo;
-	case KeywordElse;
-	case KeywordEnum;
-	case KeywordExtend;
-	case KeywordExtern;
-	case KeywordFalse;
-	case KeywordFor;
-	case KeywordFunc;
-	case KeywordIf;
-	case KeywordImport;
-	case KeywordIn;
-	case KeywordIs;
-	case KeywordMatch;
-	case KeywordMust;
-	case KeywordOperator;
-	case KeywordPragma;
-	case KeywordPrivate;
-	case KeywordPublic;
-	case KeywordReturn;
-	case KeywordStruct;
-	case KeywordTemplate;
-	case KeywordThrow;
-	case KeywordTrue;
-	case KeywordTry;
-	case KeywordUnsafe;
-	case KeywordUnwrap;
-	case KeywordVar;
-	case KeywordVariant;
-	case KeywordWhile;
-	case KeywordYield;
-
 	case Unknown: byte;
-	case EndOfFile;
 
-	operator ==(this: Token, other: TokenId) -> bool {
+	func toString(this: &TokenData) -> String {
 		match this {
-			case Identifier -> return other == Identifier;
-			case CharLiteral -> return other == CharLiteral;
-			case StringLiteral -> return other == StringLiteral;
-			case NumberLiteral -> return other == NumberLiteral;
-			case LParen -> return other == LParen;
-			case RParen -> return other == RParen;
-			case LSquare -> return other == LSquare;
-			case RSquare -> return other == RSquare;
-			case LCurly -> return other == LCurly;
-			case RCurly -> return other == RCurly;
-			case Comma -> return other == Comma;
-			case Semicolon -> return other == Semicolon;
-			case Dot -> return other == Dot;
-			case QuestionMark -> return other == QuestionMark;
-			case Colon -> return other == Colon;
-			case DoubleColon -> return other == DoubleColon;
-			case AtSign -> return other == AtSign;
-			case Assign -> return other == Assign;
-			case Plus -> return other == Plus;
-			case Minus -> return other == Minus;
-			case Asterisk -> return other == Asterisk;
-			case Slash -> return other == Slash;
-			case Percent -> return other == Percent;
-			case Ampersand -> return other == Ampersand;
-			case Pipe -> return other == Pipe;
-			case Caret -> return other == Caret;
-			case Tilde -> return other == Tilde;
-			case ExclamationMark -> return other == ExclamationMark;
-			case Arrow -> return other == Arrow;
-			case DoubleDot -> return other == DoubleDot;
-			case DoubleQuestionMark -> return other == DoubleQuestionMark;
-			case DoublePlus -> return other == DoublePlus;
-			case DoubleMinus -> return other == DoubleMinus;
-			case DoubleAmpersand -> return other == DoubleAmpersand;
-			case DoublePipe -> return other == DoublePipe;
-			case Equal -> return other == Equal;
-			case NotEqual -> return other == NotEqual;
-			case LessThan -> return other == LessThan;
-			case LessEqual -> return other == LessEqual;
-			case GreaterThan -> return other == GreaterThan;
-			case GreaterEqual -> return other == GreaterEqual;
-			case Spaceship -> return other == Spaceship;
-			case ColonAssign -> return other == ColonAssign;
-			case PlusAssign -> return other == PlusAssign;
-			case MinusAssign -> return other == MinusAssign;
-			case AsteriskAssign -> return other == AsteriskAssign;
-			case SlashAssign -> return other == SlashAssign;
-			case PercentAssign -> return other == PercentAssign;
-			case AmpersandAssign -> return other == AmpersandAssign;
-			case PipeAssign -> return other == PipeAssign;
-			case CaretAssign -> return other == CaretAssign;
-			case DoubleQuestionMarkAssign -> return other == DoubleQuestionMarkAssign;
-			case KeywordAs -> return other == KeywordAs;
-			case KeywordBreak -> return other == KeywordBreak;
-			case KeywordCase -> return other == KeywordCase;
-			case KeywordComptime -> return other == KeywordComptime;
-			case KeywordConst -> return other == KeywordConst;
-			case KeywordContinue -> return other == KeywordContinue;
-			case KeywordDefault -> return other == KeywordDefault;
-			case KeywordDiscard -> return other == KeywordDiscard;
-			case KeywordDo -> return other == KeywordDo;
-			case KeywordElse -> return other == KeywordElse;
-			case KeywordEnum -> return other == KeywordEnum;
-			case KeywordExtend -> return other == KeywordExtend;
-			case KeywordExtern -> return other == KeywordExtern;
-			case KeywordFalse -> return other == KeywordFalse;
-			case KeywordFor -> return other == KeywordFor;
-			case KeywordFunc -> return other == KeywordFunc;
-			case KeywordIf -> return other == KeywordIf;
-			case KeywordImport -> return other == KeywordImport;
-			case KeywordIn -> return other == KeywordIn;
-			case KeywordIs -> return other == KeywordIs;
-			case KeywordMatch -> return other == KeywordMatch;
-			case KeywordMust -> return other == KeywordMust;
-			case KeywordOperator -> return other == KeywordOperator;
-			case KeywordPragma -> return other == KeywordPragma;
-			case KeywordPrivate -> return other == KeywordPrivate;
-			case KeywordPublic -> return other == KeywordPublic;
-			case KeywordReturn -> return other == KeywordReturn;
-			case KeywordStruct -> return other == KeywordStruct;
-			case KeywordTemplate -> return other == KeywordTemplate;
-			case KeywordThrow -> return other == KeywordThrow;
-			case KeywordTrue -> return other == KeywordTrue;
-			case KeywordTry -> return other == KeywordTry;
-			case KeywordUnsafe -> return other == KeywordUnsafe;
-			case KeywordUnwrap -> return other == KeywordUnwrap;
-			case KeywordVar -> return other == KeywordVar;
-			case KeywordVariant -> return other == KeywordVariant;
-			case KeywordWhile -> return other == KeywordWhile;
-			case KeywordYield -> return other == KeywordYield;
-			case Unknown -> return other == Unknown;
-			case EndOfFile -> return other == EndOfFile;
+			case None -> return "";
+			case Identifier: name -> return name;
+			case CharLiteral: char -> return "\'" + char.value + "\'" + char.postfix;
+			case StringLiteral: str -> return "\"" + str.value + "\"" + str.postfix;
+			case NumberLiteral: number -> return format(number.value.toInt()) + number.postfix;
+			case Unknown: byte -> return String(1u, byte);
 		}
 	}
+}
+
+struct Token {
+	var type: TokenType;
+	var data: TokenData;
+	var span: Span;
+
+	func constructor(this: &&Token, type: TokenType, span: Span) -> void {
+		this.type := type;
+		this.data := None;
+		this.span := span;
+	}
+
+	func constructor(this: &&Token, type: TokenType, data: TokenData, span: Span) -> void {
+		this.type := type;
+		this.data := data;
+		this.span := span;
+	}
+
+	func constructor(this: &&Token, other: Token) -> void = default;
+	func destructor(this: &&Token) -> void = default;
+
+	operator =(this: &&Token, other: Token) -> void = default;
+	operator ==(this: Token, other: Token) -> bool = default;
 
 	func toString(this: &Token) -> String {
-		match this {
-			case Identifier: name -> return "<identifier> " + name;
-			case CharLiteral: char -> return "<char> '" + char.value + "'" + char.postfix;
-			case StringLiteral: str -> return "<str> \"" + str.value + "\"" + str.postfix;
-			case NumberLiteral: number -> return "<number> " + format(number.value.toInt()) + number.postfix;
-			case LParen -> return "<token> (";
-			case RParen -> return "<token> )";
-			case LSquare -> return "<token> [";
-			case RSquare -> return "<token> ]";
-			case LCurly -> return "<token> {";
-			case RCurly -> return "<token> }";
-			case Comma -> return "<token> ,";
-			case Semicolon -> return "<token> ;";
-			case Dot -> return "<token> .";
-			case QuestionMark -> return "<token> ?";
-			case Colon -> return "<token> :";
-			case DoubleColon -> return "<token> ::";
-			case AtSign -> return "<token> @";
-			case Assign -> return "<token> =";
-			case Plus -> return "<token> +";
-			case Minus -> return "<token> -";
-			case Asterisk -> return "<token> *";
-			case Slash -> return "<token> /";
-			case Percent -> return "<token> %";
-			case Ampersand -> return "<token> &";
-			case Pipe -> return "<token> |";
-			case Caret -> return "<token> ^";
-			case Tilde -> return "<token> ~";
-			case ExclamationMark -> return "<token> !";
-			case Arrow -> return "<token> ->";
-			case DoubleDot -> return "<token> ..";
-			case DoubleQuestionMark -> return "<token> ??";
-			case DoublePlus -> return "<token> ++";
-			case DoubleMinus -> return "<token> --";
-			case DoubleAmpersand -> return "<token> &&";
-			case DoublePipe -> return "<token> ||";
-			case Equal -> return "<token> ==";
-			case NotEqual -> return "<token> !=";
-			case LessThan -> return "<token> <";
-			case LessEqual -> return "<token> <=";
-			case GreaterThan -> return "<token> >";
-			case GreaterEqual -> return "<token> >=";
-			case Spaceship -> return "<token> <=>";
-			case ColonAssign -> return "<token> :=";
-			case PlusAssign -> return "<token> +=";
-			case MinusAssign -> return "<token> -=";
-			case AsteriskAssign -> return "<token> *=";
-			case SlashAssign -> return "<token> /=";
-			case PercentAssign -> return "<token> %=";
-			case AmpersandAssign -> return "<token> &=";
-			case PipeAssign -> return "<token> |=";
-			case CaretAssign -> return "<token> ^=";
-			case DoubleQuestionMarkAssign -> return "<token> ??=";
-			case KeywordAs -> return "<keyword> as";
-			case KeywordBreak -> return "<keyword> break";
-			case KeywordCase -> return "<keyword> case";
-			case KeywordComptime -> return "<keyword> comptime";
-			case KeywordConst -> return "<keyword> const";
-			case KeywordContinue -> return "<keyword> continue";
-			case KeywordDefault -> return "<keyword> default";
-			case KeywordDiscard -> return "<keyword> discard";
-			case KeywordDo -> return "<keyword> do";
-			case KeywordElse -> return "<keyword> else";
-			case KeywordEnum -> return "<keyword> enum";
-			case KeywordExtend -> return "<keyword> extend";
-			case KeywordExtern -> return "<keyword> extern";
-			case KeywordFalse -> return "<keyword> false";
-			case KeywordFor -> return "<keyword> for";
-			case KeywordFunc -> return "<keyword> func";
-			case KeywordIf -> return "<keyword> if";
-			case KeywordImport -> return "<keyword> import";
-			case KeywordIn -> return "<keyword> in";
-			case KeywordIs -> return "<keyword> is";
-			case KeywordMatch -> return "<keyword> match";
-			case KeywordMust -> return "<keyword> must";
-			case KeywordOperator -> return "<keyword> operator";
-			case KeywordPragma -> return "<keyword> pragma";
-			case KeywordPrivate -> return "<keyword> private";
-			case KeywordPublic -> return "<keyword> public";
-			case KeywordReturn -> return "<keyword> return";
-			case KeywordStruct -> return "<keyword> struct";
-			case KeywordTemplate -> return "<keyword> template";
-			case KeywordThrow -> return "<keyword> throw";
-			case KeywordTrue -> return "<keyword> true";
-			case KeywordTry -> return "<keyword> try";
-			case KeywordUnsafe -> return "<keyword> unsafe";
-			case KeywordUnwrap -> return "<keyword> unwrap";
-			case KeywordVar -> return "<keyword> var";
-			case KeywordVariant -> return "<keyword> variant";
-			case KeywordWhile -> return "<kewyord> while";
-			case KeywordYield -> return "<kewyord> yield";
-			case Unknown: byte -> return "<unknown> " + byte;
-			case EndOfFile -> return "<eof>";
+		var result = this.type.toString();
+		if !(this.data is None) {
+			result += " " + this.data.toString();
 		}
+		return result;
+	}
+
+	func dump(this: &Token) -> String {
+		var result = "\e[32m" + this.type.toString();
+		if !(this.data is None) {
+			result += "\e[0m \e[34m" + this.data.toString();
+		}
+		return result + "\e[0m - " + this.span.dump() + "\n";
 	}
 }
 
@@ -581,13 +337,7 @@ func dump(tokens: &List!<Token>) -> String {
 	var result = "";
 
 	for tok in tokens {
-		var tmp = tok.toString();
-		match tmp.find(" ") {
-			case Some: first_index -> tmp.replace(first_index..(first_index + 1), "\e[0m \e[34m");
-			else -> {}
-		}
-
-		result += "\e[32m" + tmp + "\e[0m - " + tok.span.dump() + "\n";
+		result += tok.dump();
 	}
 
 	return result;
@@ -699,43 +449,43 @@ struct Lexer {
 		match this.src[this.index] {
 			case '('b -> {
 				this.index++;
-				return Some(Token::LParen(this.span(start, this.index)));
+				return Some(Token(TokenType::LParen, this.span(start, this.index)));
 			}
 			case ')'b -> {
 				this.index++;
-				return Some(Token::RParen(this.span(start, this.index)));
+				return Some(Token(TokenType::RParen, this.span(start, this.index)));
 			}
 			case '['b -> {
 				this.index++;
-				return Some(Token::LSquare(this.span(start, this.index)));
+				return Some(Token(TokenType::LSquare, this.span(start, this.index)));
 			}
 			case ']'b -> {
 				this.index++;
-				return Some(Token::RSquare(this.span(start, this.index)));
+				return Some(Token(TokenType::RSquare, this.span(start, this.index)));
 			}
 			case '{'b -> {
 				this.index++;
-				return Some(Token::LCurly(this.span(start, this.index)));
+				return Some(Token(TokenType::LCurly, this.span(start, this.index)));
 			}
 			case '}'b -> {
 				this.index++;
-				return Some(Token::RCurly(this.span(start, this.index)));
+				return Some(Token(TokenType::RCurly, this.span(start, this.index)));
 			}
 			case ','b -> {
 				this.index++;
-				return Some(Token::Comma(this.span(start, this.index)));
+				return Some(Token(TokenType::Comma, this.span(start, this.index)));
 			}
 			case ';'b -> {
 				this.index++;
-				return Some(Token::Semicolon(this.span(start, this.index)));
+				return Some(Token(TokenType::Semicolon, this.span(start, this.index)));
 			}
 			case '@'b -> {
 				this.index++;
-				return Some(Token::AtSign(this.span(start, this.index)));
+				return Some(Token(TokenType::AtSign, this.span(start, this.index)));
 			}
 			case '~'b -> {
 				this.index++;
-				return Some(Token::Tilde(this.span(start, this.index)));
+				return Some(Token(TokenType::Tilde, this.span(start, this.index)));
 			}
 			case '.'b -> return Some(this.lexDot());
 			case '?'b -> return Some(this.lexQuestionmark());
@@ -760,7 +510,7 @@ struct Lexer {
 				return Some(this.lexName());
 			} else {
 				this.index++;
-				return Some(Token::Unknown(this.src[this.index], this.span(start, this.index)));
+				return Some(Token(TokenType::Unknown, TokenData::Unknown(this.src[this.index]), this.span(start, this.index)));
 			}
 		}
 	}
@@ -768,10 +518,10 @@ struct Lexer {
 	func lexDot(this: &&Lexer) -> Token {
 		if this.src.at(this.index + 1) ?? '\0'b == '.'b {
 			this.index += 2;
-			return Token::DoubleDot(this.span(this.index - 2, this.index));
+			return Token(TokenType::DoubleDot, this.span(this.index - 2, this.index));
 		} else {
 			this.index += 1;
-			return Token::Dot(this.span(this.index - 1, this.index));
+			return Token(TokenType::Dot, this.span(this.index - 1, this.index));
 		}
 	}
 
@@ -779,132 +529,132 @@ struct Lexer {
 		if this.src.at(this.index + 1) ?? '\0'b == '?'b {
 			if this.src.at(this.index + 2) ?? '\0'b == '='b {
 				this.index += 3;
-				return Token::DoubleQuestionMarkAssign(this.span(this.index - 3, this.index));
+				return Token(TokenType::DoubleQuestionMarkAssign, this.span(this.index - 3, this.index));
 			} else {
 				this.index += 2;
-				return Token::DoubleQuestionMark(this.span(this.index - 2, this.index));
+				return Token(TokenType::DoubleQuestionMark, this.span(this.index - 2, this.index));
 			}
 		} else {
 			this.index += 1;
-			return Token::QuestionMark(this.span(this.index - 1, this.index));
+			return Token(TokenType::QuestionMark, this.span(this.index - 1, this.index));
 		}
 	}
 
 	func lexColon(this: &&Lexer) -> Token {
 		if this.src.at(this.index + 1) ?? '\0'b == ':'b {
 			this.index += 2;
-			return Token::DoubleColon(this.span(this.index - 2, this.index));
+			return Token(TokenType::DoubleColon, this.span(this.index - 2, this.index));
 		} else if this.src.at(this.index + 1) ?? '\0'b == '='b {
 			this.index += 2;
-			return Token::ColonAssign(this.span(this.index - 2, this.index));
+			return Token(TokenType::ColonAssign, this.span(this.index - 2, this.index));
 		} else {
 			this.index += 1;
-			return Token::Colon(this.span(this.index - 1, this.index));
+			return Token(TokenType::Colon, this.span(this.index - 1, this.index));
 		}
 	}
 
 	func lexEqual(this: &&Lexer) -> Token {
 		if this.src.at(this.index + 1) ?? '\0'b == '='b {
 			this.index += 2;
-			return Token::Equal(this.span(this.index - 2, this.index));
+			return Token(TokenType::Equal, this.span(this.index - 2, this.index));
 		} else {
 			this.index += 1;
-			return Token::Assign(this.span(this.index - 1, this.index));
+			return Token(TokenType::Assign, this.span(this.index - 1, this.index));
 		}
 	}
 
 	func lexPlus(this: &&Lexer) -> Token {
 		if this.src.at(this.index + 1) ?? '\0'b == '+'b {
 			this.index += 2;
-			return Token::DoublePlus(this.span(this.index - 2, this.index));
+			return Token(TokenType::DoublePlus, this.span(this.index - 2, this.index));
 		} else if this.src.at(this.index + 1) ?? '\0'b == '='b {
 			this.index += 2;
-			return Token::PlusAssign(this.span(this.index - 2, this.index));
+			return Token(TokenType::PlusAssign, this.span(this.index - 2, this.index));
 		} else {
 			this.index += 1;
-			return Token::Plus(this.span(this.index - 1, this.index));
+			return Token(TokenType::Plus, this.span(this.index - 1, this.index));
 		}
 	}
 
 	func lexMinus(this: &&Lexer) -> Token {
 		if this.src.at(this.index + 1) ?? '\0'b == '-'b {
 			this.index += 2;
-			return Token::DoubleMinus(this.span(this.index - 2, this.index));
+			return Token(TokenType::DoubleMinus, this.span(this.index - 2, this.index));
 		} else if this.src.at(this.index + 1) ?? '\0'b == '='b {
 			this.index += 2;
-			return Token::MinusAssign(this.span(this.index - 2, this.index));
+			return Token(TokenType::MinusAssign, this.span(this.index - 2, this.index));
 		} else if this.src.at(this.index + 1) ?? '\0'b == '>'b {
 			this.index += 2;
-			return Token::Arrow(this.span(this.index - 2, this.index));
+			return Token(TokenType::Arrow, this.span(this.index - 2, this.index));
 		} else {
 			this.index += 1;
-			return Token::Minus(this.span(this.index - 1, this.index));
+			return Token(TokenType::Minus, this.span(this.index - 1, this.index));
 		}
 	}
 
 	func lexAsterisk(this: &&Lexer) -> Token {
 		if this.src.at(this.index + 1) ?? '\0'b == '='b {
 			this.index += 2;
-			return Token::AsteriskAssign(this.span(this.index - 2, this.index));
+			return Token(TokenType::AsteriskAssign, this.span(this.index - 2, this.index));
 		} else {
 			this.index += 1;
-			return Token::Asterisk(this.span(this.index - 1, this.index));
+			return Token(TokenType::Asterisk, this.span(this.index - 1, this.index));
 		}
 	}
 
 	func lexSlash(this: &&Lexer) -> Token {
 		if this.src.at(this.index + 1) ?? '\0'b == '='b {
 			this.index += 2;
-			return Token::SlashAssign(this.span(this.index - 2, this.index));
+			return Token(TokenType::SlashAssign, this.span(this.index - 2, this.index));
 		} else {
 			this.index += 1;
-			return Token::Slash(this.span(this.index - 1, this.index));
+			return Token(TokenType::Slash, this.span(this.index - 1, this.index));
 		}
 	}
 
 	func lexPercent(this: &&Lexer) -> Token {
 		if this.src.at(this.index + 1) ?? '\0'b == '='b {
 			this.index += 2;
-			return Token::PercentAssign(this.span(this.index - 2, this.index));
+			return Token(TokenType::PercentAssign, this.span(this.index - 2, this.index));
 		} else {
 			this.index += 1;
-			return Token::Percent(this.span(this.index - 1, this.index));
+			return Token(TokenType::Percent, this.span(this.index - 1, this.index));
 		}
 	}
 
 	func lexAmpersand(this: &&Lexer) -> Token {
 		if this.src.at(this.index + 1) ?? '\0'b == '&'b {
 			this.index += 2;
-			return Token::DoubleAmpersand(this.span(this.index - 2, this.index));
+			return Token(TokenType::DoubleAmpersand, this.span(this.index - 2, this.index));
 		} else if this.src.at(this.index + 1) ?? '\0'b == '='b {
 			this.index += 2;
-			return Token::AmpersandAssign(this.span(this.index - 2, this.index));
+			return Token(TokenType::AmpersandAssign, this.span(this.index - 2, this.index));
 		} else {
 			this.index += 1;
-			return Token::Ampersand(this.span(this.index - 1, this.index));
+			return Token(TokenType::Ampersand, this.span(this.index - 1, this.index));
 		}
 	}
 
 	func lexPipe(this: &&Lexer) -> Token {
 		if this.src.at(this.index + 1) ?? '\0'b == '|'b {
 			this.index += 2;
-			return Token::DoublePipe(this.span(this.index - 2, this.index));
+			return Token(TokenType::DoublePipe, this.span(this.index - 2, this.index));
 		} else if this.src.at(this.index + 1) ?? '\0'b == '='b {
 			this.index += 2;
-			return Token::PipeAssign(this.span(this.index - 2, this.index));
+			return Token(TokenType::PipeAssign, this.span(this.index - 2, this.index));
 		} else {
 			this.index += 1;
-			return Token::Pipe(this.span(this.index - 1, this.index));
+			return Token(TokenType::Pipe, this.span(this.index - 1, this.index));
 		}
 	}
 
 	func lexCaret(this: &&Lexer) -> Token {
 		if this.src.at(this.index + 1) ?? '\0'b == '='b {
 			this.index += 2;
-			return Token::CaretAssign(this.span(this.index - 2, this.index));
+			return Token(TokenType::CaretAssign, this.span(this.index - 2, this.index));
 		} else {
 			this.index += 1;
-			return Token::Caret(this.span(this.index - 1, this.index));
+			return Token(TokenType::Caret, this.span(this.index - 1, this.index));
 		}
 	}
 
@@ -912,34 +662,34 @@ struct Lexer {
 		if this.src.at(this.index + 1) ?? '\0'b == '='b {
 			if this.src.at(this.index + 2) ?? '\0'b == '>'b {
 				this.index += 3;
-				return Token::Spaceship(this.span(this.index - 3, this.index));
+				return Token(TokenType::Spaceship, this.span(this.index - 3, this.index));
 			} else {
 				this.index += 2;
-				return Token::LessEqual(this.span(this.index - 2, this.index));
+				return Token(TokenType::LessEqual, this.span(this.index - 2, this.index));
 			}
 		} else {
 			this.index += 1;
-			return Token::LessThan(this.span(this.index - 1, this.index));
+			return Token(TokenType::LessThan, this.span(this.index - 1, this.index));
 		}
 	}
 
 	func lexGreater(this: &&Lexer) -> Token {
 		if this.src.at(this.index + 1) ?? '\0'b == '='b {
 			this.index += 2;
-			return Token::GreaterEqual(this.span(this.index - 2, this.index));
+			return Token(TokenType::GreaterEqual, this.span(this.index - 2, this.index));
 		} else {
 			this.index += 1;
-			return Token::GreaterThan(this.span(this.index - 1, this.index));
+			return Token(TokenType::GreaterThan, this.span(this.index - 1, this.index));
 		}
 	}
 
 	func lexExclamationMark(this: &&Lexer) -> Token {
 		if this.src.at(this.index + 1) ?? '\0'b == '='b {
 			this.index += 2;
-			return Token::NotEqual(this.span(this.index - 2, this.index));
+			return Token(TokenType::NotEqual, this.span(this.index - 2, this.index));
 		} else {
 			this.index += 1;
-			return Token::ExclamationMark(this.span(this.index - 1, this.index));
+			return Token(TokenType::ExclamationMark, this.span(this.index - 1, this.index));
 		}
 	}
 
@@ -1006,8 +756,9 @@ struct Lexer {
 
 		const postfix = this.lexPostfix();
 		const span = this.span(start, this.index);
+		const literal = CharLiteral(str[0u], postfix);
 
-		return Token::CharLiteral(CharLiteral(str[0u], postfix), span);
+		return Token(TokenType::CharLiteral, TokenData::CharLiteral(literal), span);
 	}
 
 	func lexStringLiteral(this: &&Lexer) -> Token {
@@ -1019,8 +770,9 @@ struct Lexer {
 
 		const postfix = this.lexPostfix();
 		const span = this.span(start, this.index);
+		const literal = StringLiteral(str, postfix);
 
-		return Token::StringLiteral(StringLiteral(str, postfix), span);
+		return Token(TokenType::StringLiteral, TokenData::StringLiteral(literal), span);
 	}
 
 	func lexNumber(this: &&Lexer) -> Token {
@@ -1032,8 +784,9 @@ struct Lexer {
 
 		const postfix = this.lexPostfix();
 		const span = this.span(start, this.index);
+		const literal = NumberLiteral(parsed_number, postfix);
 
-		return Token::NumberLiteral(NumberLiteral(parsed_number, postfix), span);
+		return Token(TokenType::NumberLiteral, TokenData::NumberLiteral(literal), span);
 	}
 
 	func lexName(this: &&Lexer) -> Token {
@@ -1051,83 +804,83 @@ struct Lexer {
 		const span = this.span(start, this.index);
 
 		if name == "as" {
-			return Token::KeywordAs(span);
+			return Token(TokenType::KeywordAs, span);
 		} else if name == "break" {
-			return Token::KeywordBreak(span);
+			return Token(TokenType::KeywordBreak, span);
 		} else if name == "case" {
-			return Token::KeywordCase(span);
+			return Token(TokenType::KeywordCase, span);
 		} else if name == "comptime" {
-			return Token::KeywordComptime(span);
+			return Token(TokenType::KeywordComptime, span);
 		} else if name == "const" {
-			return Token::KeywordConst(span);
+			return Token(TokenType::KeywordConst, span);
 		} else if name == "continue" {
-			return Token::KeywordContinue(span);
+			return Token(TokenType::KeywordContinue, span);
 		} else if name == "default" {
-			return Token::KeywordDefault(span);
+			return Token(TokenType::KeywordDefault, span);
 		} else if name == "discard" {
-			return Token::KeywordDiscard(span);
+			return Token(TokenType::KeywordDiscard, span);
 		} else if name == "do" {
-			return Token::KeywordDo(span);
+			return Token(TokenType::KeywordDo, span);
 		} else if name == "else" {
-			return Token::KeywordElse(span);
+			return Token(TokenType::KeywordElse, span);
 		} else if name == "enum" {
-			return Token::KeywordEnum(span);
+			return Token(TokenType::KeywordEnum, span);
 		} else if name == "extend" {
-			return Token::KeywordExtend(span);
+			return Token(TokenType::KeywordExtend, span);
 		} else if name == "extern" {
-			return Token::KeywordExtern(span);
+			return Token(TokenType::KeywordExtern, span);
 		} else if name == "false" {
-			return Token::KeywordFalse(span);
+			return Token(TokenType::KeywordFalse, span);
 		} else if name == "for" {
-			return Token::KeywordFor(span);
+			return Token(TokenType::KeywordFor, span);
 		} else if name == "func" {
-			return Token::KeywordFunc(span);
+			return Token(TokenType::KeywordFunc, span);
 		} else if name == "if" {
-			return Token::KeywordIf(span);
+			return Token(TokenType::KeywordIf, span);
 		} else if name == "import" {
-			return Token::KeywordImport(span);
+			return Token(TokenType::KeywordImport, span);
 		} else if name == "in" {
-			return Token::KeywordIn(span);
+			return Token(TokenType::KeywordIn, span);
 		} else if name == "is" {
-			return Token::KeywordIs(span);
+			return Token(TokenType::KeywordIs, span);
 		} else if name == "match" {
-			return Token::KeywordMatch(span);
+			return Token(TokenType::KeywordMatch, span);
 		} else if name == "must" {
-			return Token::KeywordMust(span);
+			return Token(TokenType::KeywordMust, span);
 		} else if name == "operator" {
-			return Token::KeywordOperator(span);
+			return Token(TokenType::KeywordOperator, span);
 		} else if name == "pragma" {
-			return Token::KeywordPragma(span);
+			return Token(TokenType::KeywordPragma, span);
 		} else if name == "private" {
-			return Token::KeywordPrivate(span);
+			return Token(TokenType::KeywordPrivate, span);
 		} else if name == "public" {
-			return Token::KeywordPublic(span);
+			return Token(TokenType::KeywordPublic, span);
 		} else if name == "return" {
-			return Token::KeywordReturn(span);
+			return Token(TokenType::KeywordReturn, span);
 		} else if name == "struct" {
-			return Token::KeywordStruct(span);
+			return Token(TokenType::KeywordStruct, span);
 		} else if name == "template" {
-			return Token::KeywordTemplate(span);
+			return Token(TokenType::KeywordTemplate, span);
 		} else if name == "throw" {
-			return Token::KeywordThrow(span);
+			return Token(TokenType::KeywordThrow, span);
 		} else if name == "true" {
-			return Token::KeywordTrue(span);
+			return Token(TokenType::KeywordTrue, span);
 		} else if name == "try" {
-			return Token::KeywordTry(span);
+			return Token(TokenType::KeywordTry, span);
 		} else if name == "unsafe" {
-			return Token::KeywordUnsafe(span);
+			return Token(TokenType::KeywordUnsafe, span);
 		} else if name == "unwrap" {
-			return Token::KeywordUnwrap(span);
+			return Token(TokenType::KeywordUnwrap, span);
 		} else if name == "var" {
-			return Token::KeywordVar(span);
+			return Token(TokenType::KeywordVar, span);
 		} else if name == "variant" {
-			return Token::KeywordVariant(span);
+			return Token(TokenType::KeywordVariant, span);
 		} else if name == "while" {
-			return Token::KeywordWhile(span);
+			return Token(TokenType::KeywordWhile, span);
 		} else if name == "yield" {
-			return Token::KeywordYield(span);
+			return Token(TokenType::KeywordYield, span);
 		} else {
-			return Token::Identifier(name, span);
+			return Token(TokenType::Identifier, TokenData::Identifier(name), span);
 		}
 	}
 
