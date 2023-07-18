@@ -428,17 +428,25 @@ struct TargetDataRef {
 	func getStoreSizeOfType(this: TargetDataRef, type: TypeRef) -> uint {
 		return LLVMStoreSizeOfType(this.handle, type.handle) as uint;
 	}
+
 	func getABISizeOfType(this: TargetDataRef, type: TypeRef) -> uint {
 		return LLVMABISizeOfType(this.handle, type.handle) as uint;
 	}
+
 	func getABIAlignmentOfType(this: TargetDataRef, type: TypeRef) -> uint {
 		return LLVMABIAlignmentOfType(this.handle, type.handle) as uint;
 	}
+
 	func getCallFrameAlignmentOfType(this: TargetDataRef, type: TypeRef) -> uint {
 		return LLVMCallFrameAlignmentOfType(this.handle, type.handle) as uint;
 	}
+
 	func getPreferredAlignmentOfType(this: TargetDataRef, type: TypeRef) -> uint {
 		return LLVMPreferredAlignmentOfType(this.handle, type.handle) as uint;
+	}
+
+	func getOffsetOfElement(this: TargetDataRef, type: TypeRef, index: uint) -> uint {
+		return LLVMOffsetOfElement(this.handle, type.handle,index as u32) as uint;
 	}
 }
 

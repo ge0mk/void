@@ -484,6 +484,7 @@ struct CGContext {
 
 						const id_size_in_bits = this.data_layout.getStoreSizeOfType(this.getType(decl.id_type)) * 8;
 						const id_alignment_in_bits = this.data_layout.getPreferredAlignmentOfType(this.getType(decl.id_type)) * 8;
+						const id_offset_in_bits = this.data_layout.getOffsetOfElement(llvm_type, 0u) * 8;
 						const id_type = this.di_builder.createEnumerationType(parent_namespace, di_name + "::Id", di_file, line, id_size_in_bits, id_alignment_in_bits, cases, this.getDIType(decl.id_type));
 						members.append(this.di_builder.createMemberType(
 							type_scope,
@@ -492,13 +493,15 @@ struct CGContext {
 							line,
 							id_size_in_bits,
 							id_alignment_in_bits,
-							0u,
+							id_offset_in_bits,
 							LLVMDIFlags::LLVMDIFlagZero,
 							id_type
 						));
 
-						const payload_size_in_bits = 0u;
-						const payload_alignment_in_bits = 0u;
+						const payload_type_impl = llvm_type.structGetTypeAtIndex(1u);
+						const payload_size_in_bits = this.data_layout.getStoreSizeOfType(payload_type_impl) * 8;
+						const payload_alignment_in_bits = this.data_layout.getPreferredAlignmentOfType(payload_type_impl) * 8;
+						const payload_offset_in_bits = this.data_layout.getOffsetOfElement(llvm_type, 1u) * 8;
 						const payload_type = this.di_builder.createUnionType(type_scope, di_name + "::Payload", di_file, line, payload_size_in_bits, payload_alignment_in_bits, LLVMDIFlags::LLVMDIFlagZero, payload_members, 0u32, decl.signature() + "::Payload");
 						members.append(this.di_builder.createMemberType(
 							type_scope,
@@ -507,13 +510,14 @@ struct CGContext {
 							line,
 							payload_size_in_bits,
 							payload_alignment_in_bits,
-							0u,
+							payload_offset_in_bits,
 							LLVMDIFlags::LLVMDIFlagZero,
 							payload_type
 						));
 					}
 
-					for member_variable in decl.member_variables {
+					for i in 0u..decl.member_variables.size() {
+						const member_variable = decl.member_variables[i];
 						const member_type = this.getType(member_variable.type);
 						if member_type == this.void_type {
 							continue;
@@ -523,7 +527,7 @@ struct CGContext {
 
 						const member_size_in_bits = this.data_layout.getStoreSizeOfType(llvm_type) * 8;
 						const member_alignment_in_bits = this.data_layout.getPreferredAlignmentOfType(llvm_type) * 8;
-						const member_offset_in_bits = 0u;
+						const member_offset_in_bits = this.data_layout.getOffsetOfElement(llvm_type, i + (2u if decl.body is Variant else 0u)) * 8;
 
 						members.append(this.di_builder.createMemberType(
 							type_scope,
