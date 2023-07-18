@@ -377,14 +377,14 @@ struct CGContext {
 						continue;
 					}
 
-					var payload_type = this.getType(case_decl.type);
+					var case_type = this.getType(case_decl.type);
 
-					const current_size = this.data_layout.getStoreSizeOfType(payload_type);
+					const current_size = this.data_layout.getStoreSizeOfType(case_type);
 					if current_size > max_size {
 						max_size = current_size;
 					}
 
-					const current_alignment = this.data_layout.getPreferredAlignmentOfType(payload_type);
+					const current_alignment = this.data_layout.getPreferredAlignmentOfType(case_type);
 					if current_alignment > max_alignment {
 						max_alignment = current_alignment;
 					}
@@ -877,13 +877,13 @@ struct CGContext {
 					const initializer = param1;
 
 					if case_decl.type.kind == ReferenceKind::None {
-						const payload_type = case_decl.type.forceLock();
+						const case_type = case_decl.type.forceLock();
 
 						var parameters: List!<llvm::ValueRef>;
 						parameters.append(this_payload_ptr);
 						parameters.append(initializer);
 
-						discard this.codegenCall(payload_type.copy_constructor, parameters, ReturnKind::None, signature_span);
+						discard this.codegenCall(case_type.copy_constructor, parameters, ReturnKind::None, signature_span);
 					} else {
 						this.builder.buildStore(initializer, this_payload_ptr);
 					}
@@ -907,124 +907,232 @@ struct CGContext {
 
 				this.builder.buildRetVoid();
 			}
-			case VariantCopyConstructor
-			| VariantDestructor
-			| VariantOpAssign -> {
-				// assignment operator = destructor + copy constructor
-				//     -> codegen both destructor and then copy constructor
-
+			case VariantCopyConstructor -> {
 				const id_type = this.getType(decl.id_type);
 				const id_ptr = this.builder.buildStructGEP2(type, param0, 0u, "");
 				const this_payload_ptr = this.builder.buildStructGEP2(type, param0, 1u, "");
 
-				if function is VariantOpAssign || function is VariantDestructor {
-					// codegen destructor
+				const other_payload_ptr = this.builder.buildAlloca(type.structGetTypeAtIndex(1u), "");
+				this.builder.buildStore(this.builder.buildExtractValue(param1, 1u, ""), other_payload_ptr);
 
-					var case_destructor_args: List!<llvm::ValueRef>;
-					case_destructor_args.append(this_payload_ptr);
+				const other_id = this.builder.buildExtractValue(param1, 0u, "");
+				this.builder.buildStore(other_id, id_ptr);
 
-					var case_blocks: List!<llvm::BasicBlockRef>;
-					for case_decl in decl.variant_cases {
-						case_blocks.append(this.llvm_context.appendBasicBlock(this.current_function, "case"));
-					}
-					const cont_block = this.llvm_context.appendBasicBlock(this.current_function, "cont");
+				const cont_block = this.llvm_context.appendBasicBlock(this.current_function, "cont");
 
-					const id_val = this.builder.buildLoad2(id_type, id_ptr, "");
-					var switch_instr = this.builder.buildSwitch(id_val, cont_block, case_blocks.size());
-
-					for i in 0u..decl.variant_cases.size() {
-						this.builder.positionAtEnd(case_blocks[i]);
-
-						const case_decl = decl.variant_cases[i];
-						if case_decl.type == this.program.void_type || case_decl.type.kind != ReferenceKind::None {
-							this.builder.buildUnreachable();
-							continue;
-						}
-
-						switch_instr.addCase(llvm::constInt(id_type, case_decl.id, false), case_blocks[i]);
-
-						const payload_type = case_decl.type.forceLock();
-						discard this.codegenCall(payload_type.destructor, case_destructor_args, ReturnKind::None, signature_span);
-
-						this.builder.buildBr(cont_block);
-					}
-
-					this.builder.positionAtEnd(cont_block);
-
-					for i in 0u..decl.member_variables.size() {
-						if decl.member_variables[i].type.kind != ReferenceKind::None {
-							continue;
-						}
-
-						const member_type = decl.member_variables[i].type.forceLock();
-
-						var parameters: List!<llvm::ValueRef>;
-						parameters.append(this.builder.buildStructGEP2(type, param0, i + 2, ""));
-
-						discard this.codegenCall(member_type.destructor, parameters, ReturnKind::None, signature_span);
+				var case_count = 0u;
+				for case_decl in decl.variant_cases {
+					if case_decl.type != this.program.void_type {
+						case_count++;
 					}
 				}
 
-				if function is VariantOpAssign || function is VariantCopyConstructor {
-					const other_ptr = this.builder.buildAlloca(type, "");
-					this.builder.buildStore(param1, other_ptr);
-					const other_payload_ptr = this.builder.buildStructGEP2(type, other_ptr, 1u, "");
+				var switch_instr = this.builder.buildSwitch(other_id, cont_block, case_count);
 
-					// codegen copy constructor
-					const other_id = this.builder.buildExtractValue(param1, 0u, "");
-					this.builder.buildStore(other_id, id_ptr);
-
-					var case_blocks: List!<llvm::BasicBlockRef>;
-					for case_decl in decl.variant_cases {
-						case_blocks.append(this.llvm_context.appendBasicBlock(this.current_function, "case"));
+				for case_decl in decl.variant_cases {
+					if case_decl.type == this.program.void_type {
+						continue;
 					}
-					const cont_block = this.llvm_context.appendBasicBlock(this.current_function, "cont");
 
-					var switch_instr = this.builder.buildSwitch(other_id, cont_block, case_blocks.size());
+					const case_block = this.llvm_context.appendBasicBlock(this.current_function, "case");
+					switch_instr.addCase(llvm::constInt(id_type, case_decl.id, false), case_block);
+					this.builder.positionAtEnd(case_block);
 
-					for i in 0u..decl.variant_cases.size() {
-						this.builder.positionAtEnd(case_blocks[i]);
+					const other_payload = this.builder.buildLoad2(this.getType(case_decl.type), other_payload_ptr, "");
 
-						const case_decl = decl.variant_cases[i];
-						if case_decl.type == this.program.void_type {
-							this.builder.buildUnreachable();
+					if case_decl.type.kind == ReferenceKind::None {
+						const case_type = case_decl.type.forceLock();
+						var parameters: List!<llvm::ValueRef>;
+						parameters.append(this_payload_ptr);
+						parameters.append(other_payload);
+						discard this.codegenCall(case_type.copy_constructor, parameters, ReturnKind::None, signature_span);
+					} else {
+						this.builder.buildStore(other_payload, this_payload_ptr);
+					}
+
+					this.builder.buildBr(cont_block);
+				}
+
+				this.builder.positionAtEnd(cont_block);
+
+				for i in 0u..decl.member_variables.size() {
+					const this_member_ptr = this.builder.buildStructGEP2(type, param0, i + 2, "");
+					const other_member = this.builder.buildExtractValue(param1, i + 2, "");
+
+					if decl.member_variables[i].type.kind == ReferenceKind::None {
+						const member_type = decl.member_variables[i].type.forceLock();
+
+						var parameters: List!<llvm::ValueRef>;
+						parameters.append(this_member_ptr);
+						parameters.append(other_member);
+
+						discard this.codegenCall(member_type.copy_constructor, parameters, ReturnKind::None, signature_span);
+					} else {
+						this.builder.buildStore(other_member, this_member_ptr);
+					}
+				}
+
+				this.builder.buildRetVoid();
+			}
+			case VariantDestructor -> {
+				const id_type = this.getType(decl.id_type);
+				const id_ptr = this.builder.buildStructGEP2(type, param0, 0u, "");
+				const this_id = this.builder.buildLoad2(id_type, id_ptr, "");
+				const this_payload_ptr = this.builder.buildStructGEP2(type, param0, 1u, "");
+
+				var case_destructor_args: List!<llvm::ValueRef>;
+				case_destructor_args.append(this_payload_ptr);
+
+				const cont_block = this.llvm_context.appendBasicBlock(this.current_function, "cont");
+
+				var case_count = 0u;
+				for case_decl in decl.variant_cases {
+					if case_decl.type != this.program.void_type && case_decl.type.kind == ReferenceKind::None {
+						case_count++;
+					}
+				}
+				var switch_instr = this.builder.buildSwitch(this_id, cont_block, case_count);
+
+				for case_decl in decl.variant_cases {
+					if case_decl.type == this.program.void_type || case_decl.type.kind != ReferenceKind::None {
+						continue;
+					}
+
+					const case_block = this.llvm_context.appendBasicBlock(this.current_function, "case");
+					switch_instr.addCase(llvm::constInt(id_type, case_decl.id, false), case_block);
+					this.builder.positionAtEnd(case_block);
+
+					const case_type = case_decl.type.forceLock();
+					discard this.codegenCall(case_type.destructor, case_destructor_args, ReturnKind::None, signature_span);
+
+					this.builder.buildBr(cont_block);
+				}
+
+				this.builder.positionAtEnd(cont_block);
+
+				for i in 0u..decl.member_variables.size() {
+					if decl.member_variables[i].type.kind != ReferenceKind::None {
+						continue;
+					}
+
+					const member_type = decl.member_variables[i].type.forceLock();
+
+					var parameters: List!<llvm::ValueRef>;
+					parameters.append(this.builder.buildStructGEP2(type, param0, i + 2, ""));
+
+					discard this.codegenCall(member_type.destructor, parameters, ReturnKind::None, signature_span);
+				}
+
+				this.builder.buildRetVoid();
+			}
+			case VariantOpAssign -> {
+				const id_type = this.getType(decl.id_type);
+				const payload_type = type.structGetTypeAtIndex(1u);
+
+				const id_ptr = this.builder.buildStructGEP2(type, param0, 0u, "");
+				const this_id = this.builder.buildLoad2(id_type, id_ptr, "");
+				const this_payload_ptr = this.builder.buildStructGEP2(type, param0, 1u, "");
+
+				const other_payload_ptr = this.builder.buildAlloca(payload_type, "");
+				this.builder.buildStore(this.builder.buildExtractValue(param1, 1u, ""), other_payload_ptr);
+				const other_id = this.builder.buildExtractValue(param1, 0u, "");
+
+				const payload_copy_ptr = this.builder.buildAlloca(type.structGetTypeAtIndex(1u), "");
+
+				var copy_case_count = 0u;
+				var dest_case_count = 0u;
+				for case_decl in decl.variant_cases {
+					if case_decl.type != this.program.void_type {
+						copy_case_count++;
+
+						if case_decl.type.kind == ReferenceKind::None {
+							dest_case_count++;
+						}
+					}
+				}
+
+				// copy payload to temporary
+				const dest_block = this.llvm_context.appendBasicBlock(this.current_function, "cont");
+
+				var copy_switch_instr = this.builder.buildSwitch(other_id, dest_block, copy_case_count);
+
+				for case_decl in decl.variant_cases {
+					if case_decl.type == this.program.void_type {
+						continue;
+					}
+
+					const case_block = this.llvm_context.appendBasicBlock(this.current_function, "case");
+					copy_switch_instr.addCase(llvm::constInt(id_type, case_decl.id, false), case_block);
+					this.builder.positionAtEnd(case_block);
+
+					const other_payload = this.builder.buildLoad2(this.getType(case_decl.type), other_payload_ptr, "");
+
+					if case_decl.type.kind == ReferenceKind::None {
+						const case_type = case_decl.type.forceLock();
+						var parameters: List!<llvm::ValueRef>;
+						parameters.append(payload_copy_ptr);
+						parameters.append(other_payload);
+						discard this.codegenCall(case_type.copy_constructor, parameters, ReturnKind::None, signature_span);
+					} else {
+						this.builder.buildStore(other_payload, payload_copy_ptr);
+					}
+
+					this.builder.buildBr(dest_block);
+				}
+
+				this.builder.positionAtEnd(dest_block);
+
+				// destruct old payload
+				var case_destructor_args: List!<llvm::ValueRef>;
+				case_destructor_args.append(this_payload_ptr);
+
+				const cont_block = this.llvm_context.appendBasicBlock(this.current_function, "cont");
+
+				var switch_instr = this.builder.buildSwitch(this_id, cont_block, dest_case_count);
+
+				for case_decl in decl.variant_cases {
+					if case_decl.type == this.program.void_type || case_decl.type.kind != ReferenceKind::None {
+						continue;
+					}
+
+					const case_block = this.llvm_context.appendBasicBlock(this.current_function, "case");
+					switch_instr.addCase(llvm::constInt(id_type, case_decl.id, false), case_block);
+					this.builder.positionAtEnd(case_block);
+
+					const case_type = case_decl.type.forceLock();
+					discard this.codegenCall(case_type.destructor, case_destructor_args, ReturnKind::None, signature_span);
+
+					this.builder.buildBr(cont_block);
+				}
+
+				this.builder.positionAtEnd(cont_block);
+
+				// move temporary payload to this
+				this.builder.buildStore(
+					this.builder.buildLoad2(payload_type, payload_copy_ptr, ""),
+					this_payload_ptr
+				);
+				this.builder.buildStore(other_id, id_ptr);
+
+				// assign member variables
+				for i in 0u..decl.member_variables.size() {
+					const member_ptr = this.builder.buildStructGEP2(type, param0, i + 2, "");
+					const initializer = this.builder.buildExtractValue(param1, i + 2, "");
+
+					if decl.member_variables[i].type.kind == ReferenceKind::None {
+						const member_type = decl.member_variables[i].type.forceLock();
+						if member_type.op_assign.isUnknown() {
+							this.error(member_type.signature() + "::operator =() is missing", member_type.name_span);
 							continue;
 						}
 
-						switch_instr.addCase(llvm::constInt(id_type, case_decl.id, false), case_blocks[i]);
+						var parameters: List!<llvm::ValueRef>;
+						parameters.append(member_ptr);
+						parameters.append(initializer);
 
-						const other_payload = this.builder.buildLoad2(this.getType(case_decl.type), other_payload_ptr, "");
-
-						if case_decl.type.kind == ReferenceKind::None {
-							const payload_type = case_decl.type.forceLock();
-							var parameters: List!<llvm::ValueRef>;
-							parameters.append(this_payload_ptr);
-							parameters.append(other_payload);
-							discard this.codegenCall(payload_type.copy_constructor, parameters, ReturnKind::None, signature_span);
-						} else {
-							this.builder.buildStore(other_payload, this_payload_ptr);
-						}
-
-						this.builder.buildBr(cont_block);
-					}
-
-					this.builder.positionAtEnd(cont_block);
-
-					for i in 0u..decl.member_variables.size() {
-						const this_member_ptr = this.builder.buildStructGEP2(type, param0, i + 2, "");
-						const other_member = this.builder.buildExtractValue(param1, i + 2, "");
-
-						if decl.member_variables[i].type.kind == ReferenceKind::None {
-							const member_type = decl.member_variables[i].type.forceLock();
-
-							var parameters: List!<llvm::ValueRef>;
-							parameters.append(this_member_ptr);
-							parameters.append(other_member);
-
-							discard this.codegenCall(member_type.copy_constructor, parameters, ReturnKind::None, signature_span);
-						} else {
-							this.builder.buildStore(other_member, this_member_ptr);
-						}
+						discard this.codegenCall(member_type.op_assign, parameters, ReturnKind::None, signature_span);
+					} else {
+						this.builder.buildStore(initializer, member_ptr);
 					}
 				}
 
@@ -1054,24 +1162,24 @@ struct CGContext {
 
 					this.builder.positionAtEnd(data_block);
 
-					var case_blocks: List!<llvm::BasicBlockRef>;
-					for case_decl in decl.variant_cases {
-						case_blocks.append(this.llvm_context.appendBasicBlock(this.current_function, "case"));
-					}
 					const cont_block = this.llvm_context.appendBasicBlock(this.current_function, "cont");
 
-					var switch_instr = this.builder.buildSwitch(lhs_id, cont_block, case_blocks.size());
+					var case_count = 0u;
+					for case_decl in decl.variant_cases {
+						if case_decl.type != this.program.void_type {
+							case_count++;
+						}
+					}
+					var switch_instr = this.builder.buildSwitch(lhs_id, cont_block, case_count);
 
-					for i in 0u..decl.variant_cases.size() {
-						this.builder.positionAtEnd(case_blocks[i]);
-
-						const case_decl = decl.variant_cases[i];
+					for case_decl in decl.variant_cases {
 						if case_decl.type == this.program.void_type {
-							this.builder.buildUnreachable();
 							continue;
 						}
 
-						switch_instr.addCase(llvm::constInt(id_type, case_decl.id, false), case_blocks[i]);
+						const case_block = this.llvm_context.appendBasicBlock(this.current_function, "case")
+						switch_instr.addCase(llvm::constInt(id_type, case_decl.id, false), case_block);
+						this.builder.positionAtEnd(case_block);
 
 						const lhs = this.builder.buildLoad2(this.getType(case_decl.type), lhs_payload_ptr, "");
 						const rhs = this.builder.buildLoad2(this.getType(case_decl.type), rhs_payload_ptr, "");

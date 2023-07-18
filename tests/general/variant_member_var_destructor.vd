@@ -25,6 +25,7 @@ struct Foo {
 		println("-" + format(this.id));
 	}
 
+	operator =(this: &&Foo, other: Foo) -> void = default;
 	operator ==(this: Foo, other: Foo) -> bool = default;
 }
 

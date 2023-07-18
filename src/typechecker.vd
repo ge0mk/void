@@ -1829,7 +1829,7 @@ struct TCContext {
 				return;
 			}
 
-			if initializer[0u].type != decl.type {
+			if initializer[0u].type.base() != decl.type.base() || initializer[0u].type.kind < decl.type.kind {
 				this.error("initializer has invalid type: expected " + decl.type.signature() + " but got " + initializer[0u].type.signature(), decl.span);
 				return;
 			}

@@ -1,0 +1,15 @@
+import std/core;
+import std/string;
+
+variant Foo {
+	case A: String;
+}
+
+func main() {
+	var a = Foo::A("Hello");
+	a = a;
+
+	match a {
+		case A: &str -> assert(str == "Hello");
+	}
+}

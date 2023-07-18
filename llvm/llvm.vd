@@ -310,6 +310,10 @@ struct TypeRef {
 
 		LLVMStructSetBody(this.handle, raw_element_types.data, raw_element_types.size() as u32, is_packed as i32);
 	}
+
+	func structGetTypeAtIndex(this: TypeRef, index: uint) -> TypeRef {
+		return TypeRef(LLVMStructGetTypeAtIndex(this.handle, index as u32));
+	}
 }
 
 struct ValueRef {
