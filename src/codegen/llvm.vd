@@ -804,7 +804,12 @@ struct CGContext {
 						var parameters: List!<llvm::ValueRef>;
 						parameters.append(member_ptr);
 
-						discard this.codegenCall(member_type.default_constructor, parameters, ReturnKind::None, signature_span);
+						if member_type.default_constructor.isUnknown() {
+							this.error(member_type.signature() + " doesn't have a default constructor", member_type.name_span);
+							this.info("which is required by", signature_span);
+						} else {
+							discard this.codegenCall(member_type.default_constructor, parameters, ReturnKind::None, signature_span);
+						}
 					}
 				}
 
@@ -822,7 +827,12 @@ struct CGContext {
 						parameters.append(member_ptr);
 						parameters.append(initializer);
 
-						discard this.codegenCall(member_type.copy_constructor, parameters, ReturnKind::None, signature_span);
+						if member_type.copy_constructor.isUnknown() {
+							this.error(member_type.signature() + " doesn't have a copy constructor", member_type.name_span);
+							this.info("which is required by", signature_span);
+						} else {
+							discard this.codegenCall(member_type.copy_constructor, parameters, ReturnKind::None, signature_span);
+						}
 					} else {
 						this.builder.buildStore(initializer, member_ptr);
 					}
@@ -840,7 +850,12 @@ struct CGContext {
 						var parameters: List!<llvm::ValueRef>;
 						parameters.append(member_ptr);
 
-						discard this.codegenCall(member_type.destructor, parameters, ReturnKind::None, signature_span);
+						if member_type.destructor.isUnknown() {
+							this.error(member_type.signature() + " doesn't have a destructor", member_type.name_span);
+							this.info("which is required by", signature_span);
+						} else {
+							discard this.codegenCall(member_type.destructor, parameters, ReturnKind::None, signature_span);
+						}
 					}
 				}
 
@@ -858,7 +873,12 @@ struct CGContext {
 						parameters.append(member_ptr);
 						parameters.append(initializer);
 
-						discard this.codegenCall(member_type.op_assign, parameters, ReturnKind::None, signature_span);
+						if member_type.op_assign.isUnknown() {
+							this.error(member_type.signature() + " doesn't have an assignment operator", member_type.name_span);
+							this.info("which is required by", signature_span);
+						} else {
+							discard this.codegenCall(member_type.op_assign, parameters, ReturnKind::None, signature_span);
+						}
 					} else {
 						this.builder.buildStore(initializer, member_ptr);
 					}
@@ -887,7 +907,12 @@ struct CGContext {
 						parameters.append(this_payload_ptr);
 						parameters.append(initializer);
 
-						discard this.codegenCall(case_type.copy_constructor, parameters, ReturnKind::None, signature_span);
+						if case_type.copy_constructor.isUnknown() {
+							this.error(case_type.signature() + " doesn't have a copy constructor operator", case_type.name_span);
+							this.info("which is required by", signature_span);
+						} else {
+							discard this.codegenCall(case_type.copy_constructor, parameters, ReturnKind::None, signature_span);
+						}
 					} else {
 						this.builder.buildStore(initializer, this_payload_ptr);
 					}
@@ -903,7 +928,13 @@ struct CGContext {
 						parameters.append(initializer);
 
 						const member_type = decl.member_variables[i].type.forceLock();
-						discard this.codegenCall(member_type.copy_constructor, parameters, ReturnKind::None, signature_span);
+
+						if member_type.copy_constructor.isUnknown() {
+							this.error(member_type.signature() + " doesn't have a copy constructor", member_type.name_span);
+							this.info("which is required by", signature_span);
+						} else {
+							discard this.codegenCall(member_type.copy_constructor, parameters, ReturnKind::None, signature_span);
+						}
 					} else {
 						this.builder.buildStore(initializer, this_member_ptr);
 					}
@@ -949,7 +980,13 @@ struct CGContext {
 						var parameters: List!<llvm::ValueRef>;
 						parameters.append(this_payload_ptr);
 						parameters.append(other_payload);
-						discard this.codegenCall(case_type.copy_constructor, parameters, ReturnKind::None, signature_span);
+
+						if case_type.copy_constructor.isUnknown() {
+							this.error(case_type.signature() + " doesn't have a copy constructor", case_type.name_span);
+							this.info("which is required by", signature_span);
+						} else {
+							discard this.codegenCall(case_type.copy_constructor, parameters, ReturnKind::None, signature_span);
+						}
 					} else {
 						this.builder.buildStore(other_payload, this_payload_ptr);
 					}
@@ -970,7 +1007,12 @@ struct CGContext {
 						parameters.append(this_member_ptr);
 						parameters.append(other_member);
 
-						discard this.codegenCall(member_type.copy_constructor, parameters, ReturnKind::None, signature_span);
+						if member_type.copy_constructor.isUnknown() {
+							this.error(member_type.signature() + " doesn't have a copy constructor", member_type.name_span);
+							this.info("which is required by", signature_span);
+						} else {
+							discard this.codegenCall(member_type.copy_constructor, parameters, ReturnKind::None, signature_span);
+						}
 					} else {
 						this.builder.buildStore(other_member, this_member_ptr);
 					}
@@ -1007,7 +1049,13 @@ struct CGContext {
 					this.builder.positionAtEnd(case_block);
 
 					const case_type = case_decl.type.forceLock();
-					discard this.codegenCall(case_type.destructor, case_destructor_args, ReturnKind::None, signature_span);
+
+					if case_type.destructor.isUnknown() {
+						this.error(case_type.signature() + " doesn't have a destructor", case_type.name_span);
+						this.info("which is required by", signature_span);
+					} else {
+						discard this.codegenCall(case_type.destructor, case_destructor_args, ReturnKind::None, signature_span);
+					}
 
 					this.builder.buildBr(cont_block);
 				}
@@ -1024,7 +1072,12 @@ struct CGContext {
 					var parameters: List!<llvm::ValueRef>;
 					parameters.append(this.builder.buildStructGEP2(type, param0, i + 2, ""));
 
-					discard this.codegenCall(member_type.destructor, parameters, ReturnKind::None, signature_span);
+					if member_type.destructor.isUnknown() {
+						this.error(member_type.signature() + " doesn't have a destructor", member_type.name_span);
+						this.info("which is required by", signature_span);
+					} else {
+						discard this.codegenCall(member_type.destructor, parameters, ReturnKind::None, signature_span);
+					}
 				}
 
 				this.builder.buildRetVoid();
@@ -1076,7 +1129,13 @@ struct CGContext {
 						var parameters: List!<llvm::ValueRef>;
 						parameters.append(payload_copy_ptr);
 						parameters.append(other_payload);
-						discard this.codegenCall(case_type.copy_constructor, parameters, ReturnKind::None, signature_span);
+
+						if case_type.copy_constructor.isUnknown() {
+							this.error(case_type.signature() + " doesn't have a copy constructor", case_type.name_span);
+							this.info("which is required by", signature_span);
+						} else {
+							discard this.codegenCall(case_type.copy_constructor, parameters, ReturnKind::None, signature_span);
+						}
 					} else {
 						this.builder.buildStore(other_payload, payload_copy_ptr);
 					}
@@ -1099,12 +1158,18 @@ struct CGContext {
 						continue;
 					}
 
+					const case_type = case_decl.type.forceLock();
+
 					const case_block = this.llvm_context.appendBasicBlock(this.current_function, "case");
 					switch_instr.addCase(llvm::constInt(id_type, case_decl.id, false), case_block);
 					this.builder.positionAtEnd(case_block);
 
-					const case_type = case_decl.type.forceLock();
-					discard this.codegenCall(case_type.destructor, case_destructor_args, ReturnKind::None, signature_span);
+					if case_type.destructor.isUnknown() {
+						this.error(case_type.signature() + " doesn't have a destructor", case_type.name_span);
+						this.info("which is required by", signature_span);
+					} else {
+						discard this.codegenCall(case_type.destructor, case_destructor_args, ReturnKind::None, signature_span);
+					}
 
 					this.builder.buildBr(cont_block);
 				}
@@ -1125,16 +1190,17 @@ struct CGContext {
 
 					if decl.member_variables[i].type.kind == ReferenceKind::None {
 						const member_type = decl.member_variables[i].type.forceLock();
-						if member_type.op_assign.isUnknown() {
-							this.error(member_type.signature() + "::operator =() is missing", member_type.name_span);
-							continue;
-						}
 
 						var parameters: List!<llvm::ValueRef>;
 						parameters.append(member_ptr);
 						parameters.append(initializer);
 
-						discard this.codegenCall(member_type.op_assign, parameters, ReturnKind::None, signature_span);
+						if member_type.op_assign.isUnknown() {
+							this.error(member_type.signature() + " doesn't have an assignment operator", member_type.name_span);
+							this.info("which is required by", signature_span);
+						} else {
+							discard this.codegenCall(member_type.op_assign, parameters, ReturnKind::None, signature_span);
+						}
 					} else {
 						this.builder.buildStore(initializer, member_ptr);
 					}
@@ -1196,7 +1262,8 @@ struct CGContext {
 							parameters.append(rhs);
 
 							if case_type.op_equal.isUnknown() {
-								this.error(case_type.signature() + "::operator ==() is missing", case_type.name_span);
+								this.error(case_type.signature() + " doesn't have an equal operator", case_type.name_span);
+								this.info("which is required by", signature_span);
 								equal = this.bool_type.getUndef();
 							} else {
 								equal = this.codegenCall(case_type.op_equal, parameters, ReturnKind::Value, signature_span);
@@ -1224,7 +1291,8 @@ struct CGContext {
 						parameters.append(rhs);
 
 						if member_type.op_equal.isUnknown() {
-							this.error(member_type.signature() + "::operator ==() is missing", member_type.name_span);
+							this.error(member_type.signature() + " doesn't have an equal operator", member_type.name_span);
+							this.info("which is required by", signature_span);
 							equal = this.bool_type.getUndef();
 						} else {
 							equal = this.codegenCall(member_type.op_equal, parameters, ReturnKind::Value, signature_span);
@@ -1262,7 +1330,8 @@ struct CGContext {
 					if decl.member_variables[i].type.kind == ReferenceKind::None {
 						const member_type = decl.member_variables[i].type.forceLock();
 						if member_type.op_equal.isUnknown() {
-							this.error(member_type.signature() + "::operator <=>() is missing", member_type.name_span);
+							this.error(member_type.signature() + " doesn't have a comparison operator", member_type.name_span);
+							this.info("which is required by", signature_span);
 							sign = this.int_type.getUndef();
 						} else {
 							sign = this.codegenCall(member_type.op_compare, parameters, ReturnKind::Value, signature_span);
@@ -1299,7 +1368,12 @@ struct CGContext {
 					indices.append(llvm::constInt(this.int_type, i as int, false));
 					const element_ptr = this.builder.buildGEP2(type, param0, indices, "");
 
-					discard this.codegenCall(element_type_decl.default_constructor, List!<llvm::ValueRef>(1u, element_ptr), ReturnKind::None, signature_span);
+					if element_type_decl.default_constructor.isUnknown() {
+						this.error(element_type_decl.signature() + " doesn't have a default constructor", element_type_decl.name_span);
+						this.info("which is required by", signature_span);
+					} else {
+						discard this.codegenCall(element_type_decl.default_constructor, List!<llvm::ValueRef>(1u, element_ptr), ReturnKind::None, signature_span);
+					}
 				}
 
 				this.builder.buildRetVoid();
@@ -1319,7 +1393,12 @@ struct CGContext {
 					const element_ptr = this.builder.buildGEP2(type, param0, indices, "");
 
 					if !(function is ArrayCopyConstructor) {
-						discard this.codegenCall(element_type_decl.destructor, List!<llvm::ValueRef>(1u, element_ptr), ReturnKind::None, signature_span);
+						if element_type_decl.destructor.isUnknown() {
+							this.error(element_type_decl.signature() + " doesn't have a destructor", element_type_decl.name_span);
+							this.info("which is required by", signature_span);
+						} else {
+							discard this.codegenCall(element_type_decl.destructor, List!<llvm::ValueRef>(1u, element_ptr), ReturnKind::None, signature_span);
+						}
 					}
 
 					if !(function is ArrayDestructor) {
@@ -1329,7 +1408,12 @@ struct CGContext {
 						parameters.append(element_ptr);
 						parameters.append(other_element);
 
-						discard this.codegenCall(element_type_decl.copy_constructor, parameters, ReturnKind::None, signature_span);
+						if element_type_decl.destructor.isUnknown() {
+							this.error(element_type_decl.signature() + " doesn't have a copy constructor", element_type_decl.name_span);
+							this.info("which is required by", signature_span);
+						} else {
+							discard this.codegenCall(element_type_decl.copy_constructor, parameters, ReturnKind::None, signature_span);
+						}
 					}
 				}
 
@@ -1354,7 +1438,8 @@ struct CGContext {
 						parameters.append(rhs);
 
 						if element_type_decl.op_equal.isUnknown() {
-							this.error(element_type_decl.signature() + "::operator ==() is missing", element_type_decl.name_span);
+							this.error(element_type_decl.signature() + " doesn't have an equal operator", element_type_decl.name_span);
+							this.info("which is required by", signature_span);
 							equal = this.bool_type.getUndef();
 						} else {
 							equal = this.codegenCall(element_type_decl.op_equal, parameters, ReturnKind::Value, signature_span);
