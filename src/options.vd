@@ -16,27 +16,28 @@ enum OutputType {
 	case Bitcode;
 }
 
-struct ModulePathAndName {
+struct ImportedModule {
+	var group: uint;
 	var path: String;
 	var name: String;
 
-	func constructor(this: &&ModulePathAndName, path: String, name: String) -> void {
+	func constructor(this: &&ImportedModule, group: uint, path: String, name: String) -> void {
+		this.group := group;
 		this.path := path;
 		this.name := name;
 	}
 
-	func constructor(this: &&ModulePathAndName, other: ModulePathAndName) -> void = default;
-	func destructor(this: &&ModulePathAndName) -> void = default;
+	func constructor(this: &&ImportedModule, other: ImportedModule) -> void = default;
+	func destructor(this: &&ImportedModule) -> void = default;
 
-	operator =(this: &&ModulePathAndName, other: ModulePathAndName) -> void = default;
-	operator ==(this: ModulePathAndName, other: ModulePathAndName) -> bool = default;
+	operator =(this: &&ImportedModule, other: ImportedModule) -> void = default;
+	operator ==(this: ImportedModule, other: ImportedModule) -> bool = default;
 }
 
 struct CompilerOptions {
 	var dump_tokens: bool;
 	var dump_ast: bool;
 	var dump_program: bool;
-	var dump_import_tree: bool;
 
 	var hide_errors: bool;
 
@@ -69,22 +70,17 @@ struct CompilerOptions {
 
 	operator =(this: &&CompilerOptions, other: CompilerOptions) -> void = default;
 
-	func getImportPaths(this: CompilerOptions, module: String) -> List!<ModulePathAndName> {
-		var result: List!<ModulePathAndName>;
+	func getImportPaths(this: CompilerOptions, module: String) -> List!<ImportedModule> {
+		var result: List!<ImportedModule>;
 
 		for i in 0u..this.import_search_paths.size() {
 			const path = this.import_search_paths[i];
-			const prefix = "{" + format(i) + "}";
 
 			const file_path = (path / (module + ".vd"));
 			const dir_path = (path / module);
 
 			if file_path.isFile() {
-				result.append(ModulePathAndName(
-					file_path.toString(),
-					prefix + "/" + module
-				));
-
+				result.append(ImportedModule(i, file_path.toString(), module));
 				break;
 			} else if dir_path.isDirectory() {
 				for file in dir_path.recursiveRange() {
@@ -95,10 +91,7 @@ struct CompilerOptions {
 					const relative_path = Path(List!<String>(file.segments[path.segments.size()..file.segments.size()]));
 					var name = "{" + format(i) + "}/" + relative_path.toString();
 					name = name.substring(0u..(name.size() - 3));
-					result.append(ModulePathAndName(
-						file.toString(),
-						name
-					));
+					result.append(ImportedModule(i, file.toString(), name));
 				}
 				break;
 			}

@@ -395,7 +395,7 @@ struct String {
 	}
 
 	operator <=>(this: String, other: String) -> int {
-		const r = strncmp(this.data(), other.data(), min(this.size, other.size));
+		const r = strncmp(this.data(), other.data(), uint::min(this.size, other.size));
 		if r == 0 {
 			return this.size <=> other.size;
 		} else {

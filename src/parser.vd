@@ -13,6 +13,7 @@ import syntax_tree;
 
 enum ParserScope {
 	case Root;
+	case Namespace;
 	case TypeDecl;
 	case FunctionDecl;
 	case CompoundStmt;
@@ -26,22 +27,17 @@ enum ParserScope {
 	case CaseStmt;
 }
 
-func parse(tokens: List!<Token>, out_module: &&ParsedModule, program: &&Program) -> Result!<void> {
-	var parser = Parser(tokens, &&out_module, &&program);
-	return parser.parseModule();
-}
-
 struct Parser {
-	var tokens: List!<Token>;
-	var index: uint;
-	var module: &&ParsedModule;
 	var program: &&Program;
+
+	var tokens: &List!<Token>;
+	var index: uint;
+
 	var scope_stack: List!<ParserScope>;
 
-	func constructor(this: &&Parser, tokens: List!<Token>, out_module: &&ParsedModule, program: &&Program) -> void {
-		this.tokens := tokens;
-		this.module := &&out_module;
+	func constructor(this: &&Parser, program: &&Program, tokens: &List!<Token>) -> void {
 		this.program := &&program;
+		this.tokens := &tokens;
 	}
 
 	func constructor(this: &&Parser, other: Parser) -> void = default;
@@ -90,11 +86,11 @@ struct Parser {
 				last.span.end,
 				last.span.line,
 				(last.span.column as uint + last.span.end - last.span.start) as u16,
-				last.span.module
+				last.span.file
 			);
 		}
 
-		return Span(0u16);
+		return Span();
 	}
 
 	func current(this: &Parser) -> TokenType {
@@ -181,30 +177,16 @@ struct Parser {
 		this.index++;
 	}
 
-	func parseModule(this: &&Parser) -> Result!<void> {
-		this.pushScope(ParserScope::Root);
-
-		while !this.eof() {
-			const stmt = this.parseStmt();
-			if !(stmt is Garbage) {
-				this.module.children.append(stmt);
-			}
-		}
-
-		this.popScope();
-		return Ok;
-	}
-
 	func parseStmt(this: &&Parser) -> ParsedStmt {
 		match this.current() {
 			case KeywordPragma -> return this.parsePragma();
 			case KeywordImport -> return this.parseImport();
 			case KeywordFunc
 			| KeywordOperator
+			| KeywordNamespace
 			| KeywordStruct
 			| KeywordEnum
 			| KeywordVariant
-			| KeywordExtend
 			| KeywordTemplate
 			| AtSign -> return this.parseDecl();
 			case LCurly -> {
@@ -377,18 +359,13 @@ struct Parser {
 
 		var result = ParsedStmt::Garbage(start..this.currentSpan(), false);
 		match this.current() {
+			case KeywordNamespace -> result = this.parseNamespace(start, annotations, template_parameters);
 			case KeywordStruct
 			| KeywordEnum
-			| KeywordVariant
-			| KeywordExtend -> {
-				var decl = this.parseTypeDecl(start, annotations, template_parameters);
-				result = ParsedStmt::TypeDecl(decl, decl.span, false);
-			}
+			| KeywordVariant -> result = this.parseTypeDecl(start, annotations, template_parameters);
 			case KeywordFunc
 			| KeywordOperator
-			| KeywordComptime -> {
-				result = this.parseFunctionDecl(start, annotations, template_parameters);
-			}
+			| KeywordComptime -> result = this.parseFunctionDecl(start, annotations, template_parameters);
 			else -> {}
 		}
 
@@ -508,8 +485,39 @@ struct Parser {
 		return template_parameters;
 	}
 
-	func parseTypeDecl(this: &&Parser, start: Span, annotations: List!<ParsedAnnotation>, template_parameters: List!<ParsedTemplateParameterDecl>) -> ParsedTypeDecl {
-		var decl = ParsedTypeDecl(start, annotations, template_parameters);
+	func parseNamespace(this: &&Parser, start: Span, annotations: List!<ParsedAnnotation>, template_parameters: List!<ParsedTemplateParameterDecl>) -> ParsedStmt {
+		if !this.expect(TokenType::KeywordNamespace) {
+			return ParsedStmt::Garbage(start..this.previousSpan(), false);
+		}
+
+		const name = this.expectIdentifier() else {
+			return ParsedStmt::Garbage(start..this.previousSpan(), false);
+		}
+
+		var decl = ParsedNamespace(annotations, template_parameters, name);
+		decl.name_span = this.previousSpan();
+
+		if !this.expect(TokenType::LCurly) {
+			return ParsedStmt::Garbage(start..this.previousSpan(), false);
+		}
+
+		this.pushScope(ParserScope::Namespace);
+
+		while !this.accept(TokenType::RCurly) {
+			const child = this.parseStmt();
+			if !(child is Garbage) {
+				decl.children.append(child);
+			}
+		}
+
+		this.popScope();
+
+		decl.span = start..this.previousSpan();
+		return ParsedStmt::Namespace(decl, decl.span, false);
+	}
+
+	func parseTypeDecl(this: &&Parser, start: Span, annotations: List!<ParsedAnnotation>, template_parameters: List!<ParsedTemplateParameterDecl>) -> ParsedStmt {
+		var decl = ParsedTypeDecl(annotations, template_parameters);
 		match this.current() {
 			case KeywordStruct -> {
 				decl.kind = Struct;
@@ -523,27 +531,25 @@ struct Parser {
 				decl.kind = Variant;
 				this.next();
 			}
-			case KeywordExtend -> {
-				decl.kind = Extension;
-				this.next();
-			}
 			else -> {
-				return decl;
+				return ParsedStmt::Garbage(start..this.previousSpan(), false);
 			}
 		}
 
 		var name = this.expectIdentifier() else {
-			return decl;
+			return ParsedStmt::Garbage(start..this.previousSpan(), false);
 		}
 		decl.name = name;
 		decl.name_span = this.previousSpan();
 
-		if this.accept(TokenType::Colon) {
-			decl.base_type = Some(this.parseType());
+		if decl.kind == Enum || decl.kind == Variant {
+			if this.accept(TokenType::Colon) {
+				decl.id_type = Some(this.parseType());
+			}
 		}
 
 		if !this.expect(TokenType::LCurly) {
-			return decl;
+			return ParsedStmt::Garbage(start..this.previousSpan(), false);
 		}
 
 		this.pushScope(ParserScope::TypeDecl);
@@ -557,8 +563,8 @@ struct Parser {
 
 		this.popScope();
 
-		decl.span = decl.span..this.previousSpan();
-		return decl;
+		decl.span = start..this.previousSpan();
+		return ParsedStmt::TypeDecl(decl, decl.span, false);
 	}
 
 	func parseFunctionDecl(this: &&Parser, start: Span, annotations: List!<ParsedAnnotation>, template_parameters: List!<ParsedTemplateParameterDecl>) -> ParsedStmt {
@@ -568,7 +574,7 @@ struct Parser {
 			return ParsedStmt::Garbage(this.currentSpan(), false);
 		}
 
-		var decl = ParsedFunctionDecl(start..this.previousSpan(), annotations, template_parameters, is_comptime, signature);
+		var decl = ParsedFunctionDecl(annotations, template_parameters, is_comptime, signature);
 		if this.accept(TokenType::Assign) {
 			if this.accept(TokenType::KeywordExtern) {
 				decl.body = ParsedFunctionBody::Extern;
@@ -582,7 +588,7 @@ struct Parser {
 			decl.body = ParsedFunctionBody::Compound(this.parseCompoundStmt());
 			this.popScope();
 		}
-		decl.span = decl.span..this.previousSpan();
+		decl.span = start..this.previousSpan();
 
 		return ParsedStmt::FunctionDecl(decl, decl.span, true);
 	}
@@ -984,37 +990,40 @@ struct Parser {
 	func parseName(this: &&Parser) -> ParsedName {
 		const start = this.currentSpan();
 
-		var namespaces: List!<String>;
-		var template_parameters: List!<ParsedExpr>;
+		var segments: List!<ParsedNameSegment>;
 
-		var name = this.parseSingleName() else {
-			return ParsedName(start, namespaces, "", template_parameters);
+		match this.parseNameSegment() {
+			case Some: segment -> segments.append(segment);
+			else -> return ParsedName(start, segments);
 		}
 
-		while this.current() is DoubleColon && !name.startsWith("operator ") {
+		while this.current() is DoubleColon {
 			this.next();
-			const current = this.parseSingleName() else {
-				break;
+			match this.parseNameSegment() {
+				case Some: segment -> segments.append(segment);
+				else -> break;
 			}
-
-			namespaces.append(name);
-			name = current;
-		}
-
-		if this.current() is ExclamationMark {
-			template_parameters = this.parseTemplateParameters();
 		}
 
 		const span = start..this.previousSpan();
-		return ParsedName(span, namespaces, name, template_parameters);
+		return ParsedName(span, segments);
 	}
 
-	func parseSingleName(this: &&Parser) -> Optional!<String> {
+	func parseNameSegment(this: &&Parser) -> Optional!<ParsedNameSegment> {
+		const start = this.currentSpan();
+		var name = "";
 		if this.current() is KeywordOperator {
-			return Some(this.parseOperatorName());
+			name = this.parseOperatorName();
 		} else {
-			return this.expectIdentifier();
+			match this.expectIdentifier() {
+				case Some: id -> name = id;
+				else -> return None;
+			}
 		}
+
+		const template_parameters = this.parseTemplateParameters();
+
+		return Some(ParsedNameSegment(start..this.previousSpan(), name, template_parameters));
 	}
 
 	func parseOperatorName(this: &&Parser) -> String {
@@ -1046,7 +1055,7 @@ struct Parser {
 	func parseTemplateParameters(this: &&Parser) -> List!<ParsedExpr> {
 		var template_parameters: List!<ParsedExpr>;
 
-		if !this.expect(TokenType::ExclamationMark) {
+		if !this.accept(TokenType::ExclamationMark) {
 			return template_parameters;
 		}
 
@@ -1543,22 +1552,8 @@ struct Parser {
 		match this.current() {
 			case Identifier
 			| KeywordOperator -> {
-				var name = this.parseName();
-				if this.current() is DoubleColon {
-					this.next();
-					const member_name = this.parseSingleName() else {
-						return ParsedExpr::Garbage(name.span);
-					}
-
-					var template_parameters: List!<ParsedExpr>;
-					if this.current() is ExclamationMark {
-						template_parameters = this.parseTemplateParameters();
-					}
-
-					return ParsedExpr::MemberName(ParsedMemberName(name, member_name, template_parameters), start..this.previousSpan());
-				} else {
-					return ParsedExpr::Name(name, name.span);
-				}
+				const name = this.parseName();
+				return ParsedExpr::Name(name, name.span)
 			}
 			case CharLiteral
 			| StringLiteral

@@ -1,4 +1,4 @@
-//> error "variable 'foo' not found"
+//> error "no matching symbol found"
 
 import std/core;
 

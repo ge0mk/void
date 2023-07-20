@@ -13,11 +13,11 @@ func main(args: Range!<String>) -> int {
 		return 1;
 	}
 
-	var file = open(path, OpenMode::read) else {
+	var file = File::open(path, OpenMode::read) else {
 		eprintln("couldn't open file " + path);
 		return 1;
 	}
-	var stdout = stdout();
+	var stdout = File::stdout();
 
 	while !file.eof() {
 		const buffer = file.readString(100u) else {

@@ -10,64 +10,11 @@ import options;
 import program;
 import span;
 
-variant Value {
-	case Void;
-	case Integer: int;
-	case Float: f64;
-	case String: String;
-
-	case Pointer: vptr;
-	case Reference: WeakPtr!<Value>;
-
-	case Type: program::TypeRef;
-	case Function: program::FunctionRef;
-
-	case Composite: List!<SharedPtr!<Value>>;
-
-	case Undefined; // error
-
-	func toInt(this: Value) -> int {
-		match this {
-			case Integer: value -> return value;
-			else -> return 0;
-		}
-	}
-
-	func toUInt(this: Value) -> uint {
-		match this {
-			case Integer: value -> return value as uint;
-			else -> return 0u;
-		}
-	}
-
-	func toFloat(this: Value) -> f64 {
-		match this {
-			case Float: value -> return value;
-			else -> return 0.0;
-		}
-	}
-
-	func toReference(this: Value) -> Optional!<SharedPtr!<Value>> {
-		match this {
-			case Reference: target -> return target.lock();
-			else -> return None;
-		}
-	}
-}
-
 struct StackFrame {
-	var variables: List!<SharedPtr!<Value>>;
-	var return_value: SharedPtr!<Value>;
+	var variables: Map!<WeakPtr!<VarDecl>, Expr>;
+	var return_variable: WeakPtr!<VarDecl>;
 
-	func constructor(this: &&StackFrame, size: uint) -> void {
-		this.variables := ();
-		for i in 0u..size {
-			this.variables.append(SharedPtr!<Value>::new(Value::Void));
-		}
-
-		this.return_value := SharedPtr!<Value>::new(Value::Void);
-	}
-
+	func constructor(this: &&StackFrame) -> void = default;
 	func constructor(this: &&StackFrame, other: StackFrame) -> void = default;
 	func destructor(this: &&StackFrame) -> void = default;
 
@@ -97,22 +44,25 @@ struct Interpreter {
 		this.program.printError(CompilationError(message, ErrorType::Todo, ErrorStage::Interpreter, span));
 	}
 
-	func pushStackFrame(this: &&Interpreter, size: uint) -> void {
-		this.stack.append(StackFrame(size));
+	func pushStackFrame(this: &&Interpreter) -> void {
+		this.stack.append(StackFrame());
 	}
 
-	func popStackFrame(this: &&Interpreter) -> SharedPtr!<Value> {
-		const return_value = this.stack[this.stack.size() - 1].return_value;
+	func popStackFrame(this: &&Interpreter) -> Expr {
+		const last_stack_frame = this.stack.last() else {
+			return Expr::Undefined(Span(), Type::unknown());
+		}
+
 		this.stack.removeLast();
-		return return_value;
+		return last_stack_frame.variables.get(last_stack_frame.return_variable) ?? Expr::Void(Span(), this.program.void_type);
 	}
 
-	func setVariable(this: &&Interpreter, index: uint, value: Value) -> void {
-		this.stack[this.stack.size() - 1].variables[index] = value;
+	func setVariable(this: &&Interpreter, variable: WeakPtr!<VarDecl>, value: Expr) -> void {
+		this.stack[this.stack.size() - 1].variables[variable] = value;
 	}
 
-	func getVariable(this: &&Interpreter, index: uint) -> SharedPtr!<Value> {
-		return this.stack[this.stack.size() - 1].variables[index];
+	func getVariable(this: &&Interpreter, variable: WeakPtr!<VarDecl>) -> Expr {
+		return this.stack[this.stack.size() - 1].variables[variable];
 	}
 
 	func interpret(this: &&Interpreter, stmt: Stmt) -> Result!<void, ControlFlow> {
@@ -128,7 +78,7 @@ struct Interpreter {
 					return Ok;
 				}
 
-				if condition.toInt() != 0 {
+				if condition.toBool() {
 					return this.interpret(if_stmt.then_branch);
 				} else {
 					return this.interpret(if_stmt.else_branch);
@@ -138,23 +88,23 @@ struct Interpreter {
 				if while_stmt.kind == While {
 					var condition = try this.interpret(while_stmt.condition);
 
-					while !(condition is Undefined) && condition.toInt() != 0 {
+					while condition.toBool() {
 						try this.interpret(while_stmt.body);
 						condition = try this.interpret(while_stmt.condition);
 					}
 				} else if while_stmt.kind == DoWhile {
-					var condition = Value::Undefined;
+					var condition = Expr::Undefined(Span(), Type::unknown());
 
 					do {
 						try this.interpret(while_stmt.body);
 						condition = try this.interpret(while_stmt.condition);
-					} while !(condition is Undefined) && condition.toInt() != 0;
+					} while condition.toBool();
 				}
 
 				return Ok;
 			}
 			case Return: value -> {
-				this.stack[this.stack.size() - 1].return_value = try this.interpret(value);
+				this.setVariable(this.stack[this.stack.size() - 1].return_variable, try this.interpret(value));
 				throw ControlFlow::Return;
 			}
 			case LifeTimeStart: variable -> {
@@ -183,60 +133,46 @@ struct Interpreter {
 		return Ok;
 	}
 
-	func interpret(this: &&Interpreter, expr: Expr) -> Result!<Value, ControlFlow> {
+	func interpret(this: &&Interpreter, expr: Expr) -> Result!<Expr, ControlFlow> {
 		match expr {
-			case Empty -> return Ok(Value::Void);
-			case Integer: value -> return Ok(Value::Integer(value));
-			case Float: value -> return Ok(Value::Float(value));
-			case String: value -> return Ok(Value::String(value));
+			case Undefined | Void | Integer | Float | String | ConstAggregate | VarInvoke -> return Ok(expr);
 			case Call: call -> {
-				var parameters: List!<Value>;
+				var parameters: List!<Expr>;
 				for param in call.parameters {
 					const value = try this.interpret(param);
-
 					if value is Undefined {
-						return Ok(Value::Undefined);
+						return Ok(Expr::Undefined(Span(), Type::unknown()));
 					}
-
 					parameters.append(value);
 				}
 
 				return Ok(this.interpret(call.function, parameters, expr.span));
 			}
-			case VarInvoke: variable -> {
-				const decl = variable.forceLock();
-				var instance = this.getVariable(decl.id);
-				if decl.is_parameter {
-					return Ok(instance.operator unwrap());
-				} else {
-					return Ok(Value::Reference(WeakPtr!<Value>(instance)));
-				}
-			}
 			case Dereference: base -> match try this.interpret(base) {
-				case Reference: target -> return Ok(target.forceLock());
-				else -> return Ok(Value::Undefined);
+				case VarInvoke: variable -> return Ok(this.getVariable(variable));
+				else -> return Ok(Expr::Undefined(Span(), Type::unknown()));
 			}
 			else -> {
 				this.todo("implement interpretation of expressions", expr.span);
-				return Ok(Value::Undefined);
+				return Ok(Expr::Undefined(Span(), Type::unknown()));
 			}
 		}
 	}
 
-	func interpret(this: &&Interpreter, function: FunctionRef, args: List!<Value>, error_span: Span) -> Value {
-		const decl = function.decl.forceLock();
+	func interpret(this: &&Interpreter, function: WeakPtr!<FunctionDecl>, args: List!<Expr>, error_span: Span) -> Expr {
+		const decl = function.forceLock();
 		match decl.body {
 			case Extern -> {
 				this.todo("interpret calls to extern functions", error_span);
-				return Value::Undefined;
+				return Expr::Undefined(Span(), Type::unknown());
 			}
-			case InlineBuiltin: builtin_funcion -> return this.interpret(builtin_funcion, args, error_span);
-			case Builtin: builtin_funcion -> return this.interpret(builtin_funcion, args, error_span);
+			case InlineBuiltin: builtin_funcion -> return this.interpret(builtin_funcion, decl.return_type, args, error_span);
+			case Builtin: builtin_funcion -> return this.interpret(builtin_funcion, decl.return_type, args, error_span);
 			case Stmt: stmt -> {
-				this.pushStackFrame(decl.variables.size());
+				this.pushStackFrame();
 
 				for i in 0u..args.size() {
-					this.setVariable(i, args[i]);
+					this.setVariable(WeakPtr!<VarDecl>(decl.variables[i]), args[i]);
 				}
 
 				discard this.interpret(stmt);
@@ -244,176 +180,176 @@ struct Interpreter {
 				return this.popStackFrame();
 			}
 			else -> {
-				this.error("function can't be interpreted: " + function.signature(), error_span);
-				return Value::Undefined;
+				this.error("function can't be interpreted: " + decl.signature(), error_span);
+				return Expr::Undefined(Span(), Type::unknown());
 			}
 		}
 	}
 
-	func interpret(this: &&Interpreter, function: InlineBuiltinFunction, args: List!<Value>, error_span: Span) -> Value {
+	func interpret(this: &&Interpreter, function: InlineBuiltinFunction, return_type: Type, args: List!<Expr>, span: Span) -> Expr {
 		match function {
 			case NoOp -> {}
 			case BitStoreNull -> {
-				var variable = args[0u].toReference() else { return Value::Undefined; }
-				variable = Value::Integer(0);
+				var variable = args[0u] as VarInvoke else { return Expr::Undefined(span, Type::unknown()); }
+				this.setVariable(variable, Expr::Integer(0, span, function.base_type));
 			}
 			case BitStoreValue -> {
-				var variable = args[0u].toReference() else { return Value::Undefined; }
-				variable = args[1u];
+				var variable = args[0u] as VarInvoke else { return Expr::Undefined(span, Type::unknown()); }
+				this.setVariable(variable, args[1u]);
 			}
 			// bitwise comparison
-			case BitOpEQ -> return Value::Integer((args[0u].toUInt() == args[1u].toUInt()) as int);
-			case BitOpNE -> return Value::Integer((args[0u].toUInt() != args[1u].toUInt()) as int);
+			case BitOpEQ -> return Expr::Integer((args[0u].toUInt() == args[1u].toUInt()) as int, span, return_type);
+			case BitOpNE -> return Expr::Integer((args[0u].toUInt() != args[1u].toUInt()) as int, span, return_type);
 			// bitwise arithmetic operators
-			case BitOpAnd -> return Value::Integer((args[0u].toUInt() & args[1u].toUInt()) as int);
-			case BitOpOr -> return Value::Integer((args[0u].toUInt() | args[1u].toUInt()) as int);
-			case BitOpXOr -> return Value::Integer((args[0u].toUInt() ^ args[1u].toUInt()) as int);
-			case BitOpNot -> return Value::Integer((~args[0u].toUInt()) as int);
-			case BitOpShl -> return Value::Integer((args[0u].toUInt() << args[1u].toUInt()) as int);
-			case BitOpLShr -> return Value::Integer((args[0u].toUInt() >> args[1u].toUInt()) as int);
-			case BitOpAShr -> return Value::Integer((args[0u].toUInt() >> args[1u].toUInt()) as int);
+			case BitOpAnd -> return Expr::Integer((args[0u].toUInt() & args[1u].toUInt()) as int, span, function.base_type);
+			case BitOpOr -> return Expr::Integer((args[0u].toUInt() | args[1u].toUInt()) as int, span, function.base_type);
+			case BitOpXOr -> return Expr::Integer((args[0u].toUInt() ^ args[1u].toUInt()) as int, span, function.base_type);
+			case BitOpNot -> return Expr::Integer((~args[0u].toUInt()) as int, span, function.base_type);
+			case BitOpShl -> return Expr::Integer((args[0u].toUInt() << args[1u].toUInt()) as int, span, function.base_type);
+			case BitOpLShr -> return Expr::Integer((args[0u].toUInt() >> args[1u].toUInt()) as int, span, function.base_type);
+			case BitOpAShr -> return Expr::Integer((args[0u].toUInt() >> args[1u].toUInt()) as int, span, function.base_type);
 			// bitwise arithmetic assignment operators
 			case BitOpAndAssign -> {
-				var variable = args[0u].toReference() else { return Value::Undefined; }
-				variable = Value::Integer(variable.toInt() & args[1u].toInt());
+				const variable = args[0u] as VarInvoke else { return Expr::Undefined(Span(), Type::unknown()); }
+				this.setVariable(variable, Expr::Integer(this.getVariable(variable).toInt() & args[1u].toInt(), span, function.base_type));
 			}
 			case BitOpOrAssign -> {
-				var variable = args[0u].toReference() else { return Value::Undefined; }
-				variable = Value::Integer(variable.toInt() | args[1u].toInt());
+				const variable = args[0u] as VarInvoke else { return Expr::Undefined(Span(), Type::unknown()); }
+				this.setVariable(variable, Expr::Integer(this.getVariable(variable).toInt() | args[1u].toInt(), span, function.base_type));
 			}
 			case BitOpXOrAssign -> {
-				var variable = args[0u].toReference() else { return Value::Undefined; }
-				variable = Value::Integer(variable.toInt() ^ args[1u].toInt());
+				const variable = args[0u] as VarInvoke else { return Expr::Undefined(Span(), Type::unknown()); }
+				this.setVariable(variable, Expr::Integer(this.getVariable(variable).toInt() ^ args[1u].toInt(), span, function.base_type));
 			}
 			case BitOpShlAssign -> {
-				var variable = args[0u].toReference() else { return Value::Undefined; }
-				variable = Value::Integer(variable.toInt() << args[1u].toInt());
+				const variable = args[0u] as VarInvoke else { return Expr::Undefined(Span(), Type::unknown()); }
+				this.setVariable(variable, Expr::Integer(this.getVariable(variable).toInt() << args[1u].toInt(), span, function.base_type));
 			}
 			case BitOpLShrAssign -> {
-				var variable = args[0u].toReference() else { return Value::Undefined; }
-				variable = Value::Integer((variable.toUInt() >> args[1u].toUInt()) as int);
+				const variable = args[0u] as VarInvoke else { return Expr::Undefined(Span(), Type::unknown()); }
+				this.setVariable(variable, Expr::Integer((this.getVariable(variable).toUInt() >> args[1u].toUInt()) as int, span, function.base_type));
 			}
 			case BitOpAShrAssign -> {
-				var variable = args[0u].toReference() else { return Value::Undefined; }
-				variable = Value::Integer(variable.toInt() >> args[1u].toInt());
+				const variable = args[0u] as VarInvoke else { return Expr::Undefined(Span(), Type::unknown()); }
+				this.setVariable(variable, Expr::Integer(this.getVariable(variable).toInt() >> args[1u].toInt(), span, function.base_type));
 			}
 			// sign-independent integer arithmetic operators
-			case IntOpAdd -> return Value::Integer(args[0u].toInt() + args[1u].toInt());
-			case IntOpSub -> return Value::Integer(args[0u].toInt() - args[1u].toInt());
-			case IntOpMul -> return Value::Integer(args[0u].toInt() * args[1u].toInt());
-			case IntOpNeg -> return Value::Integer(-args[0u].toInt());
+			case IntOpAdd -> return Expr::Integer(args[0u].toInt() + args[1u].toInt(), span, return_type);
+			case IntOpSub -> return Expr::Integer(args[0u].toInt() - args[1u].toInt(), span, return_type);
+			case IntOpMul -> return Expr::Integer(args[0u].toInt() * args[1u].toInt(), span, return_type);
+			case IntOpNeg -> return Expr::Integer(-args[0u].toInt(), span, return_type);
 			// sign-independent integer arithmetic assignment operators
 			case IntOpInc -> {
-				var variable = args[0u].toReference() else { return Value::Undefined; }
-				variable = Value::Integer(variable.toInt() + 1);
+				const variable = args[0u] as VarInvoke else { return Expr::Undefined(span, Type::unknown()); }
+				this.setVariable(variable, Expr::Integer(this.getVariable(variable).toInt() + 1, span, function.base_type));
 			}
 			case IntOpDec -> {
-				var variable = args[0u].toReference() else { return Value::Undefined; }
-				variable = Value::Integer(variable.toInt() - 1);
+				const variable = args[0u] as VarInvoke else { return Expr::Undefined(span, Type::unknown()); }
+				this.setVariable(variable, Expr::Integer(this.getVariable(variable).toInt() - 1, span, function.base_type));
 			}
 			case IntOpAddAssign -> {
-				var variable = args[0u].toReference() else { return Value::Undefined; }
-				variable = Value::Integer(variable.toInt() + args[1u].toInt());
+				const variable = args[0u] as VarInvoke else { return Expr::Undefined(span, Type::unknown()); }
+				this.setVariable(variable, Expr::Integer(this.getVariable(variable).toInt() + args[1u].toInt(), span, function.base_type));
 			}
 			case IntOpSubAssign -> {
-				var variable = args[0u].toReference() else { return Value::Undefined; }
-				variable = Value::Integer(variable.toInt() - args[1u].toInt());
+				const variable = args[0u] as VarInvoke else { return Expr::Undefined(span, Type::unknown()); }
+				this.setVariable(variable, Expr::Integer(this.getVariable(variable).toInt() - args[1u].toInt(), span, function.base_type));
 			}
 			case IntOpMulAssign -> {
-				var variable = args[0u].toReference() else { return Value::Undefined; }
-				variable = Value::Integer(variable.toInt() * args[1u].toInt());
+				const variable = args[0u] as VarInvoke else { return Expr::Undefined(span, Type::unknown()); }
+				this.setVariable(variable, Expr::Integer(this.getVariable(variable).toInt() * args[1u].toInt(), span, function.base_type));
 			}
 			// signed int comparison
-			case SIntOpLT -> return Value::Integer((args[0u].toInt() < args[1u].toInt()) as int);
-			case SIntOpLE -> return Value::Integer((args[0u].toInt() <= args[1u].toInt()) as int);
-			case SIntOpGT -> return Value::Integer((args[0u].toInt() < args[1u].toInt()) as int);
-			case SIntOpGE -> return Value::Integer((args[0u].toInt() >= args[1u].toInt()) as int);
+			case SIntOpLT -> return Expr::Integer((args[0u].toInt() < args[1u].toInt()) as int, span, return_type);
+			case SIntOpLE -> return Expr::Integer((args[0u].toInt() <= args[1u].toInt()) as int, span, return_type);
+			case SIntOpGT -> return Expr::Integer((args[0u].toInt() < args[1u].toInt()) as int, span, return_type);
+			case SIntOpGE -> return Expr::Integer((args[0u].toInt() >= args[1u].toInt()) as int, span, return_type);
 			// signed int arithmetic operators
-			case SIntOpDiv -> return Value::Integer(args[0u].toInt() / args[1u].toInt());
-			case SIntOpMod -> return Value::Integer(args[0u].toInt() % args[1u].toInt());
+			case SIntOpDiv -> return Expr::Integer(args[0u].toInt() / args[1u].toInt(), span, return_type);
+			case SIntOpMod -> return Expr::Integer(args[0u].toInt() % args[1u].toInt(), span, return_type);
 			// signed int arithmetic assignment operators
 			case SIntOpDivAssign -> {
-				var variable = args[0u].toReference() else { return Value::Undefined; }
-				variable = Value::Integer(variable.toInt() / args[1u].toInt());
+				const variable = args[0u] as VarInvoke else { return Expr::Undefined(span, Type::unknown()); }
+				this.setVariable(variable, Expr::Integer(this.getVariable(variable).toInt() / args[1u].toInt(), span, function.base_type));
 			}
 			case SIntOpModAssign -> {
-				var variable = args[0u].toReference() else { return Value::Undefined; }
-				variable = Value::Integer(variable.toInt() % args[1u].toInt());
+				const variable = args[0u] as VarInvoke else { return Expr::Undefined(span, Type::unknown()); }
+				this.setVariable(variable, Expr::Integer(this.getVariable(variable).toInt() % args[1u].toInt(), span, function.base_type));
 			}
 			// unsigned int comparison
-			case UIntOpLT -> return Value::Integer((args[0u].toUInt() < args[1u].toUInt()) as int);
-			case UIntOpLE -> return Value::Integer((args[0u].toUInt() <= args[1u].toUInt()) as int);
-			case UIntOpGT -> return Value::Integer((args[0u].toUInt() < args[1u].toUInt()) as int);
-			case UIntOpGE -> return Value::Integer((args[0u].toUInt() >= args[1u].toUInt()) as int);
+			case UIntOpLT -> return Expr::Integer((args[0u].toUInt() < args[1u].toUInt()) as int, span, return_type);
+			case UIntOpLE -> return Expr::Integer((args[0u].toUInt() <= args[1u].toUInt()) as int, span, return_type);
+			case UIntOpGT -> return Expr::Integer((args[0u].toUInt() < args[1u].toUInt()) as int, span, return_type);
+			case UIntOpGE -> return Expr::Integer((args[0u].toUInt() >= args[1u].toUInt()) as int, span, return_type);
 			// unsigned int arithmetic operators
-			case UIntOpDiv -> return Value::Integer((args[0u].toUInt() / args[1u].toUInt()) as int);
-			case UIntOpMod -> return Value::Integer((args[0u].toUInt() % args[1u].toUInt()) as int);
+			case UIntOpDiv -> return Expr::Integer((args[0u].toUInt() / args[1u].toUInt()) as int, span, return_type);
+			case UIntOpMod -> return Expr::Integer((args[0u].toUInt() % args[1u].toUInt()) as int, span, return_type);
 			// unsigned int arithmetic assignment operators
 			case UIntOpDivAssign -> {
-				var variable = args[0u].toReference() else { return Value::Undefined; }
-				variable = Value::Integer((variable.toUInt() / args[1u].toUInt()) as int);
+				const variable = args[0u] as VarInvoke else { return Expr::Undefined(span, Type::unknown()); }
+				this.setVariable(variable, Expr::Integer((this.getVariable(variable).toUInt() / args[1u].toUInt()) as int, span, function.base_type));
 			}
 			case UIntOpModAssign -> {
-				var variable = args[0u].toReference() else { return Value::Undefined; }
-				variable = Value::Integer((variable.toUInt() % args[1u].toUInt()) as int);
+				const variable = args[0u] as VarInvoke else { return Expr::Undefined(span, Type::unknown()); }
+				this.setVariable(variable, Expr::Integer((this.getVariable(variable).toUInt() % args[1u].toUInt()) as int, span, function.base_type));
 			}
 			// float comparisons
-			case FloatOpEQ -> return Value::Integer((args[0u].toFloat() == args[1u].toFloat()) as int);
-			case FloatOpNE -> return Value::Integer((args[0u].toFloat() != args[1u].toFloat()) as int);
-			case FloatOpLT -> return Value::Integer((args[0u].toFloat() < args[1u].toFloat()) as int);
-			case FloatOpLE -> return Value::Integer((args[0u].toFloat() <= args[1u].toFloat()) as int);
-			case FloatOpGT -> return Value::Integer((args[0u].toFloat() > args[1u].toFloat()) as int);
-			case FloatOpGE -> return Value::Integer((args[0u].toFloat() >= args[1u].toFloat()) as int);
-			case FloatOpCmp -> return Value::Integer(args[0u].toFloat() <=> args[1u].toFloat());
+			case FloatOpEQ -> return Expr::Integer((args[0u].toFloat() == args[1u].toFloat()) as int, span, return_type);
+			case FloatOpNE -> return Expr::Integer((args[0u].toFloat() != args[1u].toFloat()) as int, span, return_type);
+			case FloatOpLT -> return Expr::Integer((args[0u].toFloat() < args[1u].toFloat()) as int, span, return_type);
+			case FloatOpLE -> return Expr::Integer((args[0u].toFloat() <= args[1u].toFloat()) as int, span, return_type);
+			case FloatOpGT -> return Expr::Integer((args[0u].toFloat() > args[1u].toFloat()) as int, span, return_type);
+			case FloatOpGE -> return Expr::Integer((args[0u].toFloat() >= args[1u].toFloat()) as int, span, return_type);
+			case FloatOpCmp -> return Expr::Integer(args[0u].toFloat() <=> args[1u].toFloat(), span, return_type);
 			// float arithmetic operators
-			case FloatOpAdd -> return Value::Float(args[0u].toFloat() + args[1u].toFloat());
-			case FloatOpSub -> return Value::Float(args[0u].toFloat() - args[1u].toFloat());
-			case FloatOpMul -> return Value::Float(args[0u].toFloat() * args[1u].toFloat());
-			case FloatOpDiv -> return Value::Float(args[0u].toFloat() / args[1u].toFloat());
-			case FloatOpMod -> return Value::Float(args[0u].toFloat() % args[1u].toFloat());
-			case FloatOpNeg -> return Value::Float(-args[0u].toFloat());
+			case FloatOpAdd -> return Expr::Float(args[0u].toFloat() + args[1u].toFloat(), span, return_type);
+			case FloatOpSub -> return Expr::Float(args[0u].toFloat() - args[1u].toFloat(), span, return_type);
+			case FloatOpMul -> return Expr::Float(args[0u].toFloat() * args[1u].toFloat(), span, return_type);
+			case FloatOpDiv -> return Expr::Float(args[0u].toFloat() / args[1u].toFloat(), span, return_type);
+			case FloatOpMod -> return Expr::Float(args[0u].toFloat() % args[1u].toFloat(), span, return_type);
+			case FloatOpNeg -> return Expr::Float(-args[0u].toFloat(), span, return_type);
 			// float arithmetic assignment operators
 			case FloatOpAddAssign -> {
-				var variable = args[0u].toReference() else { return Value::Undefined; }
-				variable = Value::Float(variable.toFloat() + args[1u].toFloat());
+				const variable = args[0u] as VarInvoke else { return Expr::Undefined(span, Type::unknown()); }
+				this.setVariable(variable, Expr::Float(this.getVariable(variable).toFloat() + args[1u].toFloat(), span, function.base_type));
 			}
 			case FloatOpSubAssign -> {
-				var variable = args[0u].toReference() else { return Value::Undefined; }
-				variable = Value::Float(variable.toFloat() - args[1u].toFloat());
+				const variable = args[0u] as VarInvoke else { return Expr::Undefined(span, Type::unknown()); }
+				this.setVariable(variable, Expr::Float(this.getVariable(variable).toFloat() - args[1u].toFloat(), span, function.base_type));
 			}
 			case FloatOpMulAssign -> {
-				var variable = args[0u].toReference() else { return Value::Undefined; }
-				variable = Value::Float(variable.toFloat() * args[1u].toFloat());
+				const variable = args[0u] as VarInvoke else { return Expr::Undefined(span, Type::unknown()); }
+				this.setVariable(variable, Expr::Float(this.getVariable(variable).toFloat() * args[1u].toFloat(), span, function.base_type));
 			}
 			case FloatOpDivAssign -> {
-				var variable = args[0u].toReference() else { return Value::Undefined; }
-				variable = Value::Float(variable.toFloat() / args[1u].toFloat());
+				const variable = args[0u] as VarInvoke else { return Expr::Undefined(span, Type::unknown()); }
+				this.setVariable(variable, Expr::Float(this.getVariable(variable).toFloat() / args[1u].toFloat(), span, function.base_type));
 			}
 			case FloatOpModAssign -> {
-				var variable = args[0u].toReference() else { return Value::Undefined; }
-				variable = Value::Float(variable.toFloat() % args[1u].toFloat());
+				const variable = args[0u] as VarInvoke else { return Expr::Undefined(span, Type::unknown()); }
+				this.setVariable(variable, Expr::Float(this.getVariable(variable).toFloat() % args[1u].toFloat(), span, function.base_type));
 			}
 			// casts
 			case IntCast -> return args[0u];
 			case FloatCast -> return args[0u];
-			case IntToFloat -> return Value::Float(args[0u].toInt() as f64);
-			case FloatToInt -> return Value::Integer(args[0u].toFloat() as int);
+			case IntToFloat -> return Expr::Float(args[0u].toInt() as f64, span, return_type);
+			case FloatToInt -> return Expr::Integer(args[0u].toFloat() as int, span, return_type);
 			// reflection functions
-			case ReferenceKindOf -> return Value::Integer(function.base_type.kind as int);
+			case ReferenceKindOf -> return Expr::Integer(function.base_type.reference_kind as int, span, return_type);
 			else -> {
-				this.todo("finish interpretation of inline builtin functions", error_span);
-				return Value::Undefined;
+				this.todo("finish interpretation of inline builtin functions", span);
+				return Expr::Undefined(Span(), Type::unknown());
 			}
 		}
 
-		return Value::Void;
+		return Expr::Void(Span(), this.program.void_type);
 	}
 
-	func interpret(this: &&Interpreter, function: BuiltinFunction, args: List!<Value>, error_span: Span) -> Value {
+	func interpret(this: &&Interpreter, function: BuiltinFunction, return_type: Type, args: List!<Expr>, error_span: Span) -> Expr {
 		match function {
 			else -> {
 				this.todo("finish interpretation of builtin functions", error_span);
-				return Value::Undefined;
+				return Expr::Undefined(Span(), Type::unknown());
 			}
 		}
 	}

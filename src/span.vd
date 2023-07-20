@@ -8,18 +8,16 @@ struct Span {
 	var end: uint;
 	var line: u32;
 	var column: u16;
-	var module: u16;
+	var file: u16;
 
-	func constructor(this: &&Span, module: u16) -> void {
-		this.module := module;
-	}
+	func constructor(this: &&Span) -> void = default;
 
-	func constructor(this: &&Span, start: uint, end: uint, line: u32, column: u16, module: u16) -> void {
+	func constructor(this: &&Span, start: uint, end: uint, line: u32, column: u16, file: u16) -> void {
 		this.start := start;
 		this.end := end;
 		this.line := line;
 		this.column := column;
-		this.module := module;
+		this.file := file;
 	}
 
 	func constructor(this: &&Span, other: Span) -> void = default;
@@ -29,14 +27,14 @@ struct Span {
 	operator ==(this: Span, other: Span) -> bool = default;
 
 	operator ..(this: Span, other: Span) -> Span {
-		assert(this.module == other.module);
+		assert(this.file == other.file);
 
 		return Span(
 			this.start,
 			other.end,
 			this.line,
 			this.column,
-			this.module
+			this.file
 		);
 	}
 
@@ -45,7 +43,7 @@ struct Span {
 	}
 
 	func dump(this: Span) -> String {
-		return "\e[90m" + format(this.module as int) + "[" + format(this.start as int) + ".." + format(this.end as int) + "]\e[0m"
+		return "\e[90m" + format(this.file as int) + "[" + format(this.start as int) + ".." + format(this.end as int) + "]\e[0m"
 			+ " \e[33m@ " + format(this.line as int + 1) + ":" + format(this.column as int + 1) + "\e[0m";
 	}
 

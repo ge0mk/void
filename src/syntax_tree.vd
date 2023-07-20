@@ -18,26 +18,14 @@ func toString(this: ReferenceKind) -> String {
 	}
 }
 
-struct ParsedModule {
-	var children: List!<ParsedStmt>;
-	var errors: List!<CompilationError>;
+func dumpModule(stmts: &List!<ParsedStmt>) -> String {
+	var out: TreeFormatter = ("Module");
 
-	func constructor(this: &&ParsedModule) -> void = default;
-	func constructor(this: &&ParsedModule, other: ParsedModule) -> void = default;
-	func destructor(this: &&ParsedModule) -> void = default;
-
-	operator =(this: &&ParsedModule, other: ParsedModule) -> void = default;
-	operator ==(this: ParsedModule, other: ParsedModule) -> bool = default;
-
-	func dump(this: &ParsedModule) -> String {
-		var out: TreeFormatter = ("Module");
-
-		for i in 0u..this.children.size() {
-			this.children[i].dump(&&out, i == this.children.size() - 1);
-		}
-
-		return out.finalize();
+	for i in 0u..stmts.size() {
+		stmts[i].dump(&&out, i == stmts.size() - 1);
 	}
+
+	return out.finalize();
 }
 
 variant ParsedAnnotation {
@@ -97,11 +85,54 @@ struct ParsedTemplateParameterDecl {
 	}
 }
 
+
+struct ParsedNamespace {
+	var span: Span;
+	var name_span: Span;
+
+	var annotations: List!<ParsedAnnotation>;
+	var template_parameters: List!<ParsedTemplateParameterDecl>;
+	var name: String;
+	var children: SharedPtr!<List!<ParsedStmt>>;
+
+	func constructor(this: &&ParsedNamespace, annotations: List!<ParsedAnnotation>, template_parameters: List!<ParsedTemplateParameterDecl>, name: String) -> void {
+		this.annotations := annotations;
+		this.template_parameters := template_parameters;
+		this.name := name;
+		this.children := SharedPtr!<List!<ParsedStmt>>::new(List!<ParsedStmt>());
+	}
+
+	func constructor(this: &&ParsedNamespace, other: ParsedNamespace) -> void = default;
+	func destructor(this: &&ParsedNamespace) -> void = default;
+
+	operator =(this: &&ParsedNamespace, other: ParsedNamespace) -> void = default;
+	operator ==(this: ParsedNamespace, other: ParsedNamespace) -> bool = default;
+
+	func dump(this: &ParsedNamespace, out: &&TreeFormatter, is_last: bool) -> void {
+		out.push("Namespace", is_last);
+		out.span(this.span);
+		out.value(this.name);
+
+		for i in 0u..this.annotations.size() {
+			this.annotations[i].dump(&&out, (i == this.annotations.size() - 1) && this.template_parameters.isEmpty() && this.children.isEmpty());
+		}
+
+		for i in 0u..this.template_parameters.size() {
+			this.template_parameters[i].dump(&&out, (i == this.template_parameters.size() - 1) && this.children.isEmpty());
+		}
+
+		for i in 0u..this.children.size() {
+			this.children[i].dump(&&out, (i == this.children.size() - 1));
+		}
+
+		out.pop();
+	}
+}
+
 enum TypeDeclKind {
 	case Struct;
 	case Enum;
 	case Variant;
-	case Extension;
 	case Garbage;
 }
 
@@ -113,13 +144,10 @@ struct ParsedTypeDecl {
 	var template_parameters: List!<ParsedTemplateParameterDecl>;
 	var kind: TypeDeclKind;
 	var name: String;
-	var base_type: Optional!<ParsedType>;
+	var id_type: Optional!<ParsedType>;
 	var children: SharedPtr!<List!<ParsedStmt>>;
 
-	func constructor(this: &&ParsedTypeDecl, start: Span, annotations: List!<ParsedAnnotation>, template_parameters: List!<ParsedTemplateParameterDecl>) -> void {
-		this.span := start;
-		this.name_span := 0u16;
-
+	func constructor(this: &&ParsedTypeDecl, annotations: List!<ParsedAnnotation>, template_parameters: List!<ParsedTemplateParameterDecl>) -> void {
 		this.annotations := annotations;
 		this.template_parameters := template_parameters;
 		this.kind := Garbage;
@@ -137,7 +165,6 @@ struct ParsedTypeDecl {
 			case Struct -> out.push("StructDecl", is_last);
 			case Enum -> out.push("EnumDecl", is_last);
 			case Variant -> out.push("VariantDecl", is_last);
-			case Extension -> out.push("ExtensionDecl", is_last);
 			case Garbage -> out.push("GarbageTypeDecl", is_last);
 		}
 
@@ -241,8 +268,7 @@ struct ParsedFunctionDecl {
 	var signature: ParsedFunctionSignature;
 	var body: ParsedFunctionBody;
 
-	func constructor(this: &&ParsedFunctionDecl, start: Span, annotations: List!<ParsedAnnotation>, template_parameters: List!<ParsedTemplateParameterDecl>, is_comptime: bool, signature: ParsedFunctionSignature) -> void {
-		this.span := start;
+	func constructor(this: &&ParsedFunctionDecl, annotations: List!<ParsedAnnotation>, template_parameters: List!<ParsedTemplateParameterDecl>, is_comptime: bool, signature: ParsedFunctionSignature) -> void {
 		this.annotations := annotations;
 		this.template_parameters := template_parameters;
 		this.is_comptime := is_comptime;
@@ -382,12 +408,7 @@ variant ParsedType {
 		match this {
 			case Name: name -> {
 				out.push("NamedType", is_last);
-				out.attribute("::".join(name.namespaces + name.name));
-				out.span(this.span);
-
-				for i in 0u..name.template_parameters.size() {
-					name.template_parameters[i].dump(&&out, i == name.template_parameters.size() - 1);
-				}
+				name.dump(&&out, true);
 			}
 			case ConstReference: base -> {
 				out.push("ConstReferenceType", is_last);
@@ -431,17 +452,54 @@ variant ParsedType {
 	}
 }
 
-struct ParsedName {
+struct ParsedNameSegment {
 	var span: Span;
-	var namespaces: List!<String>;
 	var name: String;
 	var template_parameters: List!<ParsedExpr>;
 
-	func constructor(this: &&ParsedName, span: Span, namespaces: List!<String>, name: String, template_parameters: List!<ParsedExpr>) -> void {
+	func constructor(this: &&ParsedNameSegment, span: Span, name: String, template_parameters: List!<ParsedExpr>) -> void {
 		this.span := span;
-		this.namespaces := namespaces;
 		this.name := name;
 		this.template_parameters := template_parameters;
+	}
+
+	func constructor(this: &&ParsedNameSegment, other: ParsedNameSegment) -> void = default;
+	func destructor(this: &&ParsedNameSegment) -> void = default;
+
+	operator =(this: &&ParsedNameSegment, other: ParsedNameSegment) -> void = default;
+	operator ==(this: ParsedNameSegment, other: ParsedNameSegment) -> bool = default;
+
+	func dump(this: &ParsedNameSegment, out: &&TreeFormatter, is_last: bool) -> void {
+		out.push("NameSegment", is_last);
+		out.value(this.name);
+		out.span(this.span);
+
+		for i in 0u..this.template_parameters.size() {
+			this.template_parameters[i].dump(&&out, i == this.template_parameters.size() - 1);
+		}
+
+		out.pop();
+	}
+}
+
+struct ParsedName {
+	var span: Span;
+	var segments: List!<ParsedNameSegment>;
+
+	func constructor(this: &&ParsedName, span: Span, segments: List!<ParsedNameSegment>) -> void {
+		this.span := span;
+		this.segments := segments;
+	}
+
+	func constructor(this: &&ParsedName, span: Span, name: String) -> void {
+		this.span := span;
+		this.segments := ();
+		this.segments.append(ParsedNameSegment(span, name, List!<ParsedExpr>()));
+	}
+
+	func constructor(this: &&ParsedName, name: String) -> void {
+		this.segments := ();
+		this.segments.append(ParsedNameSegment(Span(), name, List!<ParsedExpr>()));
 	}
 
 	func constructor(this: &&ParsedName, other: ParsedName) -> void = default;
@@ -452,11 +510,10 @@ struct ParsedName {
 
 	func dump(this: &ParsedName, out: &&TreeFormatter, is_last: bool) -> void {
 		out.push("Name", is_last);
-		out.attribute("::".join(this.namespaces + this.name));
 		out.span(this.span);
 
-		for i in 0u..this.template_parameters.size() {
-			this.template_parameters[i].dump(&&out, i == this.template_parameters.size() - 1);
+		for i in 0u..this.segments.size() {
+			this.segments[i].dump(&&out, i == this.segments.size() - 1);
 		}
 
 		out.pop();
@@ -501,6 +558,7 @@ variant ParsedStmt {
 
 	case Pragma: String;
 	case Import: String;
+	case Namespace: ParsedNamespace;
 	case TypeDecl: ParsedTypeDecl;
 	case FunctionDecl: ParsedFunctionDecl;
 
@@ -545,6 +603,7 @@ variant ParsedStmt {
 				out.span(this.span);
 				out.pop();
 			}
+			case Namespace: decl -> return decl.dump(&&out, is_last);
 			case TypeDecl: decl -> return decl.dump(&&out, is_last);
 			case FunctionDecl: decl -> return decl.dump(&&out, is_last);
 			case VarDecl: decl -> return decl.dump(&&out, is_last);
@@ -855,7 +914,6 @@ variant ParsedExpr {
 	case Bool: bool;
 
 	case Name: ParsedName;
-	case MemberName: ParsedMemberName;
 	case Operator: ParsedOperatorExpr;
 
 	case Paren: Box!<ParsedExpr>;
@@ -895,19 +953,6 @@ variant ParsedExpr {
 				out.pop();
 			}
 			case Name: name -> name.dump(&&out, is_last);
-			case MemberName: member_name -> {
-				out.push("MemberName", is_last);
-				out.attribute(member_name.name);
-				out.span(this.span);
-
-				member_name.parent.dump(&&out, !member_name.template_parameters.isEmpty());
-
-				for i in 0u..member_name.template_parameters.size() {
-					member_name.template_parameters[i].dump(&&out, i == member_name.template_parameters.size() - 1);
-				}
-
-				out.pop();
-			}
 			case Operator: operator_expr -> {
 				if operator_expr.op.isUnaryOperator() {
 					out.push("UnaryOperatorExpr", is_last);
@@ -1023,24 +1068,6 @@ variant ParsedExpr {
 
 		return true;
 	}
-}
-
-struct ParsedMemberName {
-	var parent: ParsedName;
-	var name: String;
-	var template_parameters: List!<ParsedExpr>;
-
-	func constructor(this: &&ParsedMemberName, parent: ParsedName, name: String, template_parameters: List!<ParsedExpr>) -> void {
-		this.parent := parent;
-		this.name := name;
-		this.template_parameters := template_parameters;
-	}
-
-	func constructor(this: &&ParsedMemberName, other: ParsedMemberName) -> void = default;
-	func destructor(this: &&ParsedMemberName) -> void = default;
-
-	operator =(this: &&ParsedMemberName, other: ParsedMemberName) -> void = default;
-	operator ==(this: ParsedMemberName, other: ParsedMemberName) -> bool = default;
 }
 
 struct ParsedOperatorExpr {

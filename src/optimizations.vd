@@ -44,11 +44,10 @@ func eliminateCallResultCopies(stmt: &&Stmt) -> void {
 // -> replace result var of rhs with lhs and replace expr with rhs
 func eliminateCallResultCopies(expr: &&Expr) -> void {
 	match expr {
-		case Empty -> {}
-		case Integer -> {}
-		case Float -> {}
-		case String -> {}
-		case Array: &&elements -> {
+		case Undefined | Void
+		| Integer | Float | String
+		| TypeRef | FunctionRef -> {}
+		case ConstAggregate: &&elements -> {
 			for i in 0u..elements.size() {
 				elements[i].eliminateCallResultCopies();
 			}
@@ -102,7 +101,7 @@ func eliminateCallResultCopies(expr: &&Expr) -> void {
 		return;
 	}
 
-	old_result_var.destructor_call = Expr::Empty(old_result_var.destructor_call.span, TypeRef::unknown());
+	old_result_var.destructor_call = Expr::Undefined(old_result_var.destructor_call.span, Type::unknown());
 	old_result_var.is_unused = true;
 
 	rhs_call.result_var = result_var;

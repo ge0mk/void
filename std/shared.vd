@@ -58,15 +58,15 @@ struct SharedPtr {
 	}
 
 	operator unwrap(this: SharedPtr!<T>) -> T {
-		return this.data.value().value;
+		return this.data[0u].value;
 	}
 
 	operator unwrap(this: &SharedPtr!<T>) -> &T {
-		return &this.data.value().value;
+		return &this.data[0u].value;
 	}
 
 	operator unwrap(this: &&SharedPtr!<T>) -> &&T {
-		return &&this.data.value().value;
+		return &&this.data[0u].value;
 	}
 }
 

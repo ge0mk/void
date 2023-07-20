@@ -1,0 +1,10 @@
+//> error "too many matching functions found"
+
+import std/core;
+
+func foo() -> void {}
+func foo() -> void {}
+
+func main() -> int {
+	return foo();
+}

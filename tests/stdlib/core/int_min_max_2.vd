@@ -1,9 +1,9 @@
 import std/core;
 
 func main() -> void {
-	assert(min(1u32, 2u32) == 1u32);
-	assert(min(2u32, 1u32) == 1u32);
+	assert(1u32.min(2u32) == 1u32);
+	assert(2u32.min(1u32) == 1u32);
 
-	assert(max(1u32, 2u32) == 2u32);
-	assert(max(2u32, 1u32) == 2u32);
+	assert(1u32.max(2u32) == 2u32);
+	assert(2u32.max(1u32) == 2u32);
 }

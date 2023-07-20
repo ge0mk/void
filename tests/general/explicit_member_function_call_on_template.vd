@@ -3,10 +3,7 @@ import std/list;
 
 func main() -> void {
 	var a: List!<int>;
-	var b: List!<uint>;
-
-	append(&&a, 5);
-	List!<uint>::append(&&b, 5u);
-
-	assert(a.size() == 1 && b.size() == 1);
+	List!<int>::append(&&a, 5);
+	assert(a.size() == 1);
+	assert(a[0u] == 5)
 }

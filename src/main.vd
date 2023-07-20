@@ -20,7 +20,6 @@ func parseArguments(arguments: Range!<String>, options: &&CompilerOptions) -> bo
 	options.dump_tokens = args_parser.flag("dump-tokens", "t", "dump tokens") ?? false;
 	options.dump_ast = args_parser.flag("dump-ast", "a", "dump ast") ?? false;
 	options.dump_program = args_parser.flag("dump-program", "p", "dump program") ?? false;
-	options.dump_import_tree = args_parser.flag("dump-import-tree", "", "dump import tree") ?? false;
 
 	options.hide_errors = args_parser.flag("hide_errors", "q", "do not display error messages") ?? false;
 
@@ -87,12 +86,12 @@ func parseArguments(arguments: Range!<String>, options: &&CompilerOptions) -> bo
 		}
 	}
 
+	options.import_search_paths.append(Path::cwd());
+
 	const absolute_root_module_path = Path::cwd() / Path(options.root_module_path);
 	if const root_module_dir = absolute_root_module_path.parentDir() {
 		options.import_search_paths.append(root_module_dir);
 	}
-
-	options.import_search_paths.append(Path::cwd());
 
 	return true;
 }
@@ -104,16 +103,7 @@ func main(args: Range!<String>) -> int {
 	}
 
 	var program: Program = (options);
-	if const error = program.loadModule(options.root_module_path, options.program_name) as Error {
-		eprintln("couldn't load module " + options.root_module_path + ": " + String::fromErrorCode(error));
-		return 1;
-	}
-
-	program.typecheck(&&program.modules[0u].operator unwrap());
-
-	if options.dump_import_tree {
-		print(program.dumpImportTree());
-	}
+	typecheck(&&program);
 
 	if options.dump_program {
 		print(program.dump());
@@ -125,8 +115,8 @@ func main(args: Range!<String>) -> int {
 
 	if options.interpret {
 		var interpreter: Interpreter = (&&program);
-		var interpret_args: List!<interpreter::Value>;
-		match interpreter.interpret(program.main_function, interpret_args, Span(0u16)) {
+		var interpreter_args: List!<Expr>;
+		match interpreter.interpret(program.main_function, interpreter_args, Span()) {
 			case Void -> return 0;
 			case Integer: value -> return value;
 			else -> return 1;

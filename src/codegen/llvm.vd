@@ -67,12 +67,11 @@ struct CGContext {
 
 	var di_builder: llvm::DIBuilderRef;
 	var di_compile_unit: llvm::MetaDataRef;
-	var di_files: Map!<uint, llvm::MetaDataRef>;
-	var di_modules: Map!<uint, llvm::MetaDataRef>;
-	var di_module_namespaces: Map!<uint, llvm::MetaDataRef>;
-	var di_type_namespaces: Map!<program::TypeRef, llvm::MetaDataRef>;
-	var di_types: Map!<program::TypeRef, llvm::MetaDataRef>;
-	var di_functions: Map!<program::FunctionRef, llvm::MetaDataRef>;
+	var di_files: List!<llvm::MetaDataRef>;
+	var di_modules: List!<llvm::MetaDataRef>;
+	var di_namespaces: Map!<WeakPtr!<Namespace>, llvm::MetaDataRef>;
+	var di_types: Map!<WeakPtr!<TypeDecl>, llvm::MetaDataRef>;
+	var di_functions: Map!<WeakPtr!<FunctionDecl>, llvm::MetaDataRef>;
 	var di_scope_stack: List!<llvm::MetaDataRef>;
 
 	var void_type: llvm::TypeRef;
@@ -81,15 +80,15 @@ struct CGContext {
 	var int_type: llvm::TypeRef;
 	var ptr_type: llvm::TypeRef;
 
-	var types: Map!<program::TypeRef, llvm::TypeRef>;
-	var functions: Map!<program::FunctionRef, llvm::ValueRef>;
-	var function_types: Map!<program::FunctionRef, llvm::TypeRef>;
-	var finished_functions: Set!<program::FunctionRef>;
+	var types: Map!<WeakPtr!<TypeDecl>, llvm::TypeRef>;
+	var functions: Map!<WeakPtr!<FunctionDecl>, llvm::ValueRef>;
+	var function_types: Map!<WeakPtr!<FunctionDecl>, llvm::TypeRef>;
+	var finished_functions: Set!<WeakPtr!<FunctionDecl>>;
 	var string_globals: Map!<String, llvm::ValueRef>;
 
 	var builder: llvm::BuilderRef;
 	var current_function: llvm::ValueRef;
-	var variables: Map!<WeakPtr!<program::VarDecl>, llvm::ValueRef>;
+	var variables: Map!<WeakPtr!<VarDecl>, llvm::ValueRef>;
 
 	var break_target: llvm::BasicBlockRef;
 	var continue_target: llvm::BasicBlockRef;
@@ -129,24 +128,32 @@ struct CGContext {
 		this.program.printError(CompilationError(message, ErrorType::Todo, ErrorStage::CodeGenerator, span));
 	}
 
-	func getType(this: &CGContext, type: program::TypeRef) -> llvm::TypeRef {
-		match type.kind {
-			case None -> {
-				const impl = this.types.get(type) else {
-					panic("invalid codegen for type '" + type.signature() + "'");
-				}
-				return impl;
-			}
+	func getType(this: &CGContext, type: WeakPtr!<TypeDecl>) -> llvm::TypeRef {
+		const impl = this.types.get(type) else {
+			const type_decl = type.forceLock();
+			panic("invalid codegen for type '" + type_decl.signature() + "'");
+		}
+		return impl;
+	}
+
+	func getType(this: &CGContext, type: Type) -> llvm::TypeRef {
+		match type.reference_kind {
+			case None -> return this.getType(type.decl);
 			else -> return this.ptr_type;
 		}
 	}
 
-	func getDIType(this: &&CGContext, type: program::TypeRef) -> llvm::MetaDataRef {
-		const base_type = this.di_types.get(type.base()) else {
-			panic("invalid debug info for type '" + type.base().signature() + "'");
+	func getDIType(this: &&CGContext, type: WeakPtr!<TypeDecl>) -> llvm::MetaDataRef {
+		const base_type = this.di_types.get(type) else {
+			const type_decl = type.forceLock();
+			panic("invalid debug info for type '" + type_decl.signature() + "'");
 		}
+		return base_type;
+	}
 
-		if type.kind == ReferenceKind::None {
+	func getDIType(this: &&CGContext, type: Type) -> llvm::MetaDataRef {
+		const base_type = this.getDIType(type.decl);
+		if type.reference_kind == None {
 			return base_type;
 		} else {
 			return this.di_builder.createReferenceType(dwarf::Tag::Reference_type, base_type);
@@ -168,13 +175,11 @@ struct CGContext {
 
 		this.codegenTypes();
 
-		const functions = this.program.collectFunctions();
-
-		for function in functions {
+		for function in this.program.functions {
 			this.codegenFunctionDecl(function);
 		}
 
-		for function in functions {
+		for function in this.program.functions {
 			this.codegenFunctionImpl(function);
 		}
 
@@ -200,14 +205,14 @@ struct CGContext {
 
 		this.di_builder = this.llvm_module.createDIBuilder();
 
-		for module in this.program.modules {
-			const path = module.path;
-			var segments = module.path.split('/'b);
+		for file in this.program.files {
+			const path = file.path;
+			var segments = file.path.split('/'b);
 			const filename = segments.last().value();
 			segments.removeLast();
 			const directory = "/".join(segments);
 
-			this.di_files[module.id] = this.di_builder.createFile(filename, directory);
+			this.di_files.append(this.di_builder.createFile(filename, directory));
 		}
 
 		this.di_compile_unit = this.di_builder.createCompileUnit(
@@ -226,16 +231,31 @@ struct CGContext {
 			"",			// sdk
 		);
 
-		for module in this.program.modules {
-			this.di_modules[module.id] = this.di_builder.createModule(
+		for file in this.program.files {
+			this.di_modules.append(this.di_builder.createModule(
 				this.di_compile_unit,
-				module.name,
+				file.name,
 				"",		// config macros
 				"",		// include path
 				"", 	// api notes file
-			);
+			));
+		}
 
-			this.di_module_namespaces[module.id] = this.di_builder.createNameSpace(this.di_modules[module.id], "::".join(module.namespace), true)
+		for ns in this.program.top_level_namespaces {
+			this.createDINamespaces(ns);
+		}
+	}
+
+	func createDINamespaces(this: &&CGContext, current_namespace: SharedPtr!<Namespace>) -> void {
+		var parent = this.di_modules[0u];
+		if current_namespace.parent.isAlive() {
+			parent = this.di_namespaces.get(current_namespace.parent).value();
+		}
+
+		this.di_namespaces.set(WeakPtr!<Namespace>(current_namespace), this.di_builder.createNameSpace(parent, current_namespace.name, true));
+
+		for child in current_namespace.children {
+			this.createDINamespaces(child);
 		}
 	}
 
@@ -255,12 +275,11 @@ struct CGContext {
 	}
 
 	func codegenTypes(this: &&CGContext) -> void {
-		var all_types = this.program.collectTypes();
-		var incomplete_types = all_types;
-		var complete_types: Set!<program::TypeRef>;
+		var incomplete_types = Set!<WeakPtr!<TypeDecl>>(Range!<WeakPtr!<TypeDecl>>(this.program.types.range()));
+		var complete_types: Set!<WeakPtr!<TypeDecl>>;
 
 		while !incomplete_types.isEmpty() {
-			var completable_types: Set!<program::TypeRef>;
+			var completable_types: Set!<WeakPtr!<TypeDecl>>;
 
 			for type in incomplete_types {
 				var is_completable = true;
@@ -279,9 +298,10 @@ struct CGContext {
 			}
 
 			if completable_types.isEmpty() {
-				this.error("some type dependencies cannot be fullfilled", Span(0u16));
+				this.error("some type dependencies cannot be fullfilled", Span());
 				for type in incomplete_types {
-					this.info(type.signature(), Span(0u16));
+					const type_decl = type.forceLock();
+					this.info(type_decl.signature(), Span());
 				}
 				abort();
 			}
@@ -294,17 +314,17 @@ struct CGContext {
 		}
 
 		if this.program.options.generate_debug_info {
-			for type in all_types {
+			for type in this.program.types {
 				this.codegenTypeDI(type, true);
 			}
 
-			for type in all_types {
+			for type in this.program.types {
 				this.codegenTypeDI(type, false);
 			}
 		}
 	}
 
-	func getTypeName(this: &CGContext, type: program::TypeRef) -> String {
+	func getTypeName(this: &CGContext, type: WeakPtr!<TypeDecl>) -> String {
 		const decl = type.forceLock();
 
 		var name = "";
@@ -317,7 +337,7 @@ struct CGContext {
 		return name;
 	}
 
-	func codegenType(this: &&CGContext, type: program::TypeRef) -> void {
+	func codegenType(this: &&CGContext, type: WeakPtr!<TypeDecl>) -> void {
 		const decl = type.lock() else {
 			return;
 		}
@@ -401,18 +421,21 @@ struct CGContext {
 				llvm_type.setStructBody(element_types, false);
 				this.types.set(type, llvm_type);
 			}
-			case Unchecked -> this.error("cannot codegen an unchecked type", decl.span);
 		}
 	}
 
 	// first pass: generate full di for primitive types & temporary di for composites
 	// second pass: finish di for composite types & replace temporaries
-	func codegenTypeDI(this: &&CGContext, type: program::TypeRef, first_pass: bool) -> void {
+	func codegenTypeDI(this: &&CGContext, type: WeakPtr!<TypeDecl>, first_pass: bool) -> void {
 		const decl = type.forceLock();
-		const module = decl.module.forceLock();
+
+		if decl.isIncompleteTemplate() {
+			return;
+		}
+
 		const line = decl.name_span.line as uint;
-		const di_file = this.di_files[module.id];
-		const parent_namespace = this.di_module_namespaces[module.id];
+		const di_file = this.di_files[decl.span.file as uint];
+		const parent_namespace = this.di_namespaces.get(decl.parent_namespace).value();
 
 		const llvm_type = this.getType(type);
 		var size_in_bits = 0u;
@@ -432,7 +455,7 @@ struct CGContext {
 		var di_type: llvm::MetaDataRef;
 		if first_pass {
 			match decl.body {
-				case Empty | Unchecked -> di_type = this.di_builder.createUnspecifiedType(di_name);
+				case Empty -> di_type = this.di_builder.createUnspecifiedType(di_name);
 				case Void -> di_type = this.di_builder.createBasicType(di_name, size_in_bits, 0 as dwarf::TypeEncoding, LLVMDIFlags::LLVMDIFlagZero);
 				case Bool -> di_type = this.di_builder.createBasicType(di_name, size_in_bits, dwarf::TypeEncoding::Boolean, LLVMDIFlags::LLVMDIFlagZero);
 				case Byte -> di_type = this.di_builder.createBasicType(di_name, size_in_bits, dwarf::TypeEncoding::Unsigned_char, LLVMDIFlags::LLVMDIFlagZero);
@@ -443,10 +466,8 @@ struct CGContext {
 				//this.llvm_context.createTemporaryMDNode();
 				//this.di_builder.createForwardDecl(DwarfTag::Unspecified_type, di_name, parent_namespace, di_file, line, 0u32, size_in_bits, alignment_in_bits, decl.signature());
 			}
-
-			this.di_type_namespaces.set(type, this.di_builder.createNameSpace(parent_namespace, di_name, true));
 		} else {
-			const type_scope = this.di_type_namespaces.get(type).value();
+			const type_scope = this.di_namespaces.get(decl.linked_namespace).value();
 			match decl.body {
 				case Pointer: pointer_type -> {
 					if pointer_type.base_type.isUnknown() {
@@ -575,8 +596,12 @@ struct CGContext {
 		this.di_types.set(type, di_type);
 	}
 
-	func codegenFunctionDecl(this: &&CGContext, function: program::FunctionRef) -> void {
+	func codegenFunctionDecl(this: &&CGContext, function: WeakPtr!<FunctionDecl>) -> void {
 		const decl = function.forceLock();
+
+		if decl.isIncompleteTemplate() {
+			return;
+		}
 
 		if decl.body is InlineBuiltin && this.program.options.dont_codegen_builtins {
 			return;
@@ -614,20 +639,26 @@ struct CGContext {
 		this.functions.set(function, this.llvm_module.addFunction(name, function_type));
 	}
 
-	func codegenFunctionImpl(this: &&CGContext, function: program::FunctionRef) -> void {
+	func codegenFunctionImpl(this: &&CGContext, function: WeakPtr!<FunctionDecl>) -> void {
 		const decl = function.forceLock();
 
+		if decl.isIncompleteTemplate() {
+			return;
+		}
+
 		match decl.body {
-			case Empty | Extern | Unchecked -> return;
+			case Empty | Extern -> return;
 			case InlineBuiltin -> {
 				if this.program.options.dont_codegen_builtins {
 					return;
 				}
 			}
+			case Unchecked -> {
+				this.error("unchecked function: " + decl.signature(), decl.signature_span);
+				return;
+			}
 			else -> {}
 		}
-
-		const parent_module = decl.module.forceLock();
 
 		this.variables.clear();
 		this.current_function = this.functions.get(function).value();
@@ -643,17 +674,12 @@ struct CGContext {
 			}
 
 			const di_function_type = this.di_builder.createSubroutineType(
-				this.di_files[parent_module.id],
+				this.di_files[decl.span.file as uint],
 				di_return_and_parameter_types,
 				LLVMDIFlags::LLVMDIFlagZero
 			);
 
-			var di_namespace: llvm::MetaDataRef;
-			if decl.parent_type.isUnknown() {
-				di_namespace = this.di_module_namespaces[parent_module.id];
-			} else {
-				di_namespace = this.di_type_namespaces[decl.parent_type];
-			}
+			const di_namespace = this.di_namespaces.get(decl.parent_namespace).value();
 
 			var di_name = decl.name;
 			if !decl.template_parameters.isEmpty() {
@@ -664,7 +690,7 @@ struct CGContext {
 				di_namespace,
 				di_name,
 				decl.extern_name,
-				this.di_files[parent_module.id],
+				this.di_files[decl.span.file as uint],
 				decl.signature_span.line as uint + 1,
 				di_function_type,
 				false, 		// is local to unit
@@ -705,7 +731,7 @@ struct CGContext {
 							this.di_scope_stack.last().value(),
 							variable.name,
 							variable.id + 1, // ArgNo starts counting at 1
-							this.di_files[parent_module.id],
+							this.di_files[decl.span.file as uint],
 							variable.span.line as uint,
 							this.getDIType(variable.type),
 							false,
@@ -732,7 +758,7 @@ struct CGContext {
 					const di_variable = this.di_builder.createAutoVariable(
 						this.di_scope_stack.last().value(),
 						variable.name,
-						this.di_files[parent_module.id],
+						this.di_files[decl.span.file as uint],
 						variable.span.line as uint,
 						this.getDIType(variable.type),
 						false,
@@ -797,20 +823,12 @@ struct CGContext {
 			case StructDefaultConstructor -> {
 				for i in 0u..decl.member_variables.size() {
 					const member_ptr = this.builder.buildStructGEP2(type, param0, i, "");
+					const member_type = decl.member_variables[i].type.forceLock();
 
-					if decl.member_variables[i].type.kind == ReferenceKind::None {
-						const member_type = decl.member_variables[i].type.forceLock();
+					var parameters: List!<llvm::ValueRef>;
+					parameters.append(member_ptr);
 
-						var parameters: List!<llvm::ValueRef>;
-						parameters.append(member_ptr);
-
-						if member_type.default_constructor.isUnknown() {
-							this.error(member_type.signature() + " doesn't have a default constructor", member_type.name_span);
-							this.info("which is required by", signature_span);
-						} else {
-							discard this.codegenCall(member_type.default_constructor, parameters, ReturnKind::None, signature_span);
-						}
-					}
+					discard this.codegenCall(member_type.default_constructor, parameters, ReturnKind::None, signature_span);
 				}
 
 				this.builder.buildRetVoid();
@@ -820,19 +838,14 @@ struct CGContext {
 					const member_ptr = this.builder.buildStructGEP2(type, param0, i, "");
 					const initializer = this.builder.buildExtractValue(param1, i, "");
 
-					if decl.member_variables[i].type.kind == ReferenceKind::None {
+					if decl.member_variables[i].type.reference_kind == None {
 						const member_type = decl.member_variables[i].type.forceLock();
 
 						var parameters: List!<llvm::ValueRef>;
 						parameters.append(member_ptr);
 						parameters.append(initializer);
 
-						if member_type.copy_constructor.isUnknown() {
-							this.error(member_type.signature() + " doesn't have a copy constructor", member_type.name_span);
-							this.info("which is required by", signature_span);
-						} else {
-							discard this.codegenCall(member_type.copy_constructor, parameters, ReturnKind::None, signature_span);
-						}
+						discard this.codegenCall(member_type.copy_constructor, parameters, ReturnKind::None, signature_span);
 					} else {
 						this.builder.buildStore(initializer, member_ptr);
 					}
@@ -842,21 +855,17 @@ struct CGContext {
 			}
 			case StructDestructor -> {
 				for i in 0u..decl.member_variables.size() {
-					const member_ptr = this.builder.buildStructGEP2(type, param0, i, "");
-
-					if decl.member_variables[i].type.kind == ReferenceKind::None {
-						const member_type = decl.member_variables[i].type.forceLock();
-
-						var parameters: List!<llvm::ValueRef>;
-						parameters.append(member_ptr);
-
-						if member_type.destructor.isUnknown() {
-							this.error(member_type.signature() + " doesn't have a destructor", member_type.name_span);
-							this.info("which is required by", signature_span);
-						} else {
-							discard this.codegenCall(member_type.destructor, parameters, ReturnKind::None, signature_span);
-						}
+					if decl.member_variables[i].type.reference_kind != None {
+						continue;
 					}
+
+					const member_ptr = this.builder.buildStructGEP2(type, param0, i, "");
+					const member_type = decl.member_variables[i].type.forceLock();
+
+					var parameters: List!<llvm::ValueRef>;
+					parameters.append(member_ptr);
+
+					discard this.codegenCall(member_type.destructor, parameters, ReturnKind::None, signature_span);
 				}
 
 				this.builder.buildRetVoid();
@@ -866,19 +875,14 @@ struct CGContext {
 					const member_ptr = this.builder.buildStructGEP2(type, param0, i, "");
 					const initializer = this.builder.buildExtractValue(param1, i, "");
 
-					if decl.member_variables[i].type.kind == ReferenceKind::None {
+					if decl.member_variables[i].type.reference_kind == None {
 						const member_type = decl.member_variables[i].type.forceLock();
 
 						var parameters: List!<llvm::ValueRef>;
 						parameters.append(member_ptr);
 						parameters.append(initializer);
 
-						if member_type.op_assign.isUnknown() {
-							this.error(member_type.signature() + " doesn't have an assignment operator", member_type.name_span);
-							this.info("which is required by", signature_span);
-						} else {
-							discard this.codegenCall(member_type.op_assign, parameters, ReturnKind::None, signature_span);
-						}
+						discard this.codegenCall(member_type.op_assign, parameters, ReturnKind::None, signature_span);
 					} else {
 						this.builder.buildStore(initializer, member_ptr);
 					}
@@ -900,19 +904,14 @@ struct CGContext {
 					const this_payload_ptr = this.builder.buildStructGEP2(type, param0, 1u, "");
 					const initializer = param1;
 
-					if case_decl.type.kind == ReferenceKind::None {
+					if case_decl.type.reference_kind == None {
 						const case_type = case_decl.type.forceLock();
 
 						var parameters: List!<llvm::ValueRef>;
 						parameters.append(this_payload_ptr);
 						parameters.append(initializer);
 
-						if case_type.copy_constructor.isUnknown() {
-							this.error(case_type.signature() + " doesn't have a copy constructor operator", case_type.name_span);
-							this.info("which is required by", signature_span);
-						} else {
-							discard this.codegenCall(case_type.copy_constructor, parameters, ReturnKind::None, signature_span);
-						}
+						discard this.codegenCall(case_type.copy_constructor, parameters, ReturnKind::None, signature_span);
 					} else {
 						this.builder.buildStore(initializer, this_payload_ptr);
 					}
@@ -922,19 +921,14 @@ struct CGContext {
 					const this_member_ptr = this.builder.buildStructGEP2(type, param0, i + 2, "");
 					const initializer = this.current_function.getParam(i + member_var_param_offset);
 
-					if decl.member_variables[i].type.kind == ReferenceKind::None {
+					if decl.member_variables[i].type.reference_kind == None {
 						var parameters: List!<llvm::ValueRef>;
 						parameters.append(this_member_ptr);
 						parameters.append(initializer);
 
 						const member_type = decl.member_variables[i].type.forceLock();
 
-						if member_type.copy_constructor.isUnknown() {
-							this.error(member_type.signature() + " doesn't have a copy constructor", member_type.name_span);
-							this.info("which is required by", signature_span);
-						} else {
-							discard this.codegenCall(member_type.copy_constructor, parameters, ReturnKind::None, signature_span);
-						}
+						discard this.codegenCall(member_type.copy_constructor, parameters, ReturnKind::None, signature_span);
 					} else {
 						this.builder.buildStore(initializer, this_member_ptr);
 					}
@@ -975,18 +969,13 @@ struct CGContext {
 
 					const other_payload = this.builder.buildLoad2(this.getType(case_decl.type), other_payload_ptr, "");
 
-					if case_decl.type.kind == ReferenceKind::None {
+					if case_decl.type.reference_kind == None {
 						const case_type = case_decl.type.forceLock();
 						var parameters: List!<llvm::ValueRef>;
 						parameters.append(this_payload_ptr);
 						parameters.append(other_payload);
 
-						if case_type.copy_constructor.isUnknown() {
-							this.error(case_type.signature() + " doesn't have a copy constructor", case_type.name_span);
-							this.info("which is required by", signature_span);
-						} else {
-							discard this.codegenCall(case_type.copy_constructor, parameters, ReturnKind::None, signature_span);
-						}
+						discard this.codegenCall(case_type.copy_constructor, parameters, ReturnKind::None, signature_span);
 					} else {
 						this.builder.buildStore(other_payload, this_payload_ptr);
 					}
@@ -1000,19 +989,14 @@ struct CGContext {
 					const this_member_ptr = this.builder.buildStructGEP2(type, param0, i + 2, "");
 					const other_member = this.builder.buildExtractValue(param1, i + 2, "");
 
-					if decl.member_variables[i].type.kind == ReferenceKind::None {
+					if decl.member_variables[i].type.reference_kind == None {
 						const member_type = decl.member_variables[i].type.forceLock();
 
 						var parameters: List!<llvm::ValueRef>;
 						parameters.append(this_member_ptr);
 						parameters.append(other_member);
 
-						if member_type.copy_constructor.isUnknown() {
-							this.error(member_type.signature() + " doesn't have a copy constructor", member_type.name_span);
-							this.info("which is required by", signature_span);
-						} else {
-							discard this.codegenCall(member_type.copy_constructor, parameters, ReturnKind::None, signature_span);
-						}
+						discard this.codegenCall(member_type.copy_constructor, parameters, ReturnKind::None, signature_span);
 					} else {
 						this.builder.buildStore(other_member, this_member_ptr);
 					}
@@ -1033,14 +1017,14 @@ struct CGContext {
 
 				var case_count = 0u;
 				for case_decl in decl.variant_cases {
-					if case_decl.type != this.program.void_type && case_decl.type.kind == ReferenceKind::None {
+					if case_decl.type != this.program.void_type && case_decl.type.reference_kind == None {
 						case_count++;
 					}
 				}
 				var switch_instr = this.builder.buildSwitch(this_id, cont_block, case_count);
 
 				for case_decl in decl.variant_cases {
-					if case_decl.type == this.program.void_type || case_decl.type.kind != ReferenceKind::None {
+					if case_decl.type == this.program.void_type || case_decl.type.reference_kind != None {
 						continue;
 					}
 
@@ -1050,12 +1034,7 @@ struct CGContext {
 
 					const case_type = case_decl.type.forceLock();
 
-					if case_type.destructor.isUnknown() {
-						this.error(case_type.signature() + " doesn't have a destructor", case_type.name_span);
-						this.info("which is required by", signature_span);
-					} else {
-						discard this.codegenCall(case_type.destructor, case_destructor_args, ReturnKind::None, signature_span);
-					}
+					discard this.codegenCall(case_type.destructor, case_destructor_args, ReturnKind::None, signature_span);
 
 					this.builder.buildBr(cont_block);
 				}
@@ -1063,7 +1042,7 @@ struct CGContext {
 				this.builder.positionAtEnd(cont_block);
 
 				for i in 0u..decl.member_variables.size() {
-					if decl.member_variables[i].type.kind != ReferenceKind::None {
+					if decl.member_variables[i].type.reference_kind != None {
 						continue;
 					}
 
@@ -1072,12 +1051,7 @@ struct CGContext {
 					var parameters: List!<llvm::ValueRef>;
 					parameters.append(this.builder.buildStructGEP2(type, param0, i + 2, ""));
 
-					if member_type.destructor.isUnknown() {
-						this.error(member_type.signature() + " doesn't have a destructor", member_type.name_span);
-						this.info("which is required by", signature_span);
-					} else {
-						discard this.codegenCall(member_type.destructor, parameters, ReturnKind::None, signature_span);
-					}
+					discard this.codegenCall(member_type.destructor, parameters, ReturnKind::None, signature_span);
 				}
 
 				this.builder.buildRetVoid();
@@ -1102,7 +1076,7 @@ struct CGContext {
 					if case_decl.type != this.program.void_type {
 						copy_case_count++;
 
-						if case_decl.type.kind == ReferenceKind::None {
+						if case_decl.type.reference_kind == None {
 							dest_case_count++;
 						}
 					}
@@ -1124,18 +1098,13 @@ struct CGContext {
 
 					const other_payload = this.builder.buildLoad2(this.getType(case_decl.type), other_payload_ptr, "");
 
-					if case_decl.type.kind == ReferenceKind::None {
+					if case_decl.type.reference_kind == None {
 						const case_type = case_decl.type.forceLock();
 						var parameters: List!<llvm::ValueRef>;
 						parameters.append(payload_copy_ptr);
 						parameters.append(other_payload);
 
-						if case_type.copy_constructor.isUnknown() {
-							this.error(case_type.signature() + " doesn't have a copy constructor", case_type.name_span);
-							this.info("which is required by", signature_span);
-						} else {
-							discard this.codegenCall(case_type.copy_constructor, parameters, ReturnKind::None, signature_span);
-						}
+						discard this.codegenCall(case_type.copy_constructor, parameters, ReturnKind::None, signature_span);
 					} else {
 						this.builder.buildStore(other_payload, payload_copy_ptr);
 					}
@@ -1154,7 +1123,7 @@ struct CGContext {
 				var switch_instr = this.builder.buildSwitch(this_id, cont_block, dest_case_count);
 
 				for case_decl in decl.variant_cases {
-					if case_decl.type == this.program.void_type || case_decl.type.kind != ReferenceKind::None {
+					if case_decl.type == this.program.void_type || case_decl.type.reference_kind != None {
 						continue;
 					}
 
@@ -1164,12 +1133,7 @@ struct CGContext {
 					switch_instr.addCase(llvm::constInt(id_type, case_decl.id, false), case_block);
 					this.builder.positionAtEnd(case_block);
 
-					if case_type.destructor.isUnknown() {
-						this.error(case_type.signature() + " doesn't have a destructor", case_type.name_span);
-						this.info("which is required by", signature_span);
-					} else {
-						discard this.codegenCall(case_type.destructor, case_destructor_args, ReturnKind::None, signature_span);
-					}
+					discard this.codegenCall(case_type.destructor, case_destructor_args, ReturnKind::None, signature_span);
 
 					this.builder.buildBr(cont_block);
 				}
@@ -1188,19 +1152,14 @@ struct CGContext {
 					const member_ptr = this.builder.buildStructGEP2(type, param0, i + 2, "");
 					const initializer = this.builder.buildExtractValue(param1, i + 2, "");
 
-					if decl.member_variables[i].type.kind == ReferenceKind::None {
+					if decl.member_variables[i].type.reference_kind == None {
 						const member_type = decl.member_variables[i].type.forceLock();
 
 						var parameters: List!<llvm::ValueRef>;
 						parameters.append(member_ptr);
 						parameters.append(initializer);
 
-						if member_type.op_assign.isUnknown() {
-							this.error(member_type.signature() + " doesn't have an assignment operator", member_type.name_span);
-							this.info("which is required by", signature_span);
-						} else {
-							discard this.codegenCall(member_type.op_assign, parameters, ReturnKind::None, signature_span);
-						}
+						discard this.codegenCall(member_type.op_assign, parameters, ReturnKind::None, signature_span);
 					} else {
 						this.builder.buildStore(initializer, member_ptr);
 					}
@@ -1255,19 +1214,13 @@ struct CGContext {
 						const rhs = this.builder.buildLoad2(this.getType(case_decl.type), rhs_payload_ptr, "");
 
 						var equal = llvm::ValueRef();
-						if case_decl.type.kind == ReferenceKind::None {
+						if case_decl.type.reference_kind == None {
 							const case_type = case_decl.type.forceLock();
 							var parameters: List!<llvm::ValueRef>;
 							parameters.append(lhs);
 							parameters.append(rhs);
 
-							if case_type.op_equal.isUnknown() {
-								this.error(case_type.signature() + " doesn't have an equal operator", case_type.name_span);
-								this.info("which is required by", signature_span);
-								equal = this.bool_type.getUndef();
-							} else {
-								equal = this.codegenCall(case_type.op_equal, parameters, ReturnKind::Value, signature_span);
-							}
+							equal = this.codegenCall(case_type.op_equal, parameters, ReturnKind::Value, signature_span);
 						} else {
 							equal = this.builder.buildICmp(LLVMIntPredicate::LLVMIntEQ, lhs, rhs, "");
 						}
@@ -1284,19 +1237,13 @@ struct CGContext {
 					const rhs = this.builder.buildExtractValue(param1, i + member_var_offset, "");
 
 					var equal = llvm::ValueRef();
-					if decl.member_variables[i].type.kind == ReferenceKind::None {
+					if decl.member_variables[i].type.reference_kind == None {
 						const member_type = decl.member_variables[i].type.forceLock();
 						var parameters: List!<llvm::ValueRef>;
 						parameters.append(lhs);
 						parameters.append(rhs);
 
-						if member_type.op_equal.isUnknown() {
-							this.error(member_type.signature() + " doesn't have an equal operator", member_type.name_span);
-							this.info("which is required by", signature_span);
-							equal = this.bool_type.getUndef();
-						} else {
-							equal = this.codegenCall(member_type.op_equal, parameters, ReturnKind::Value, signature_span);
-						}
+						equal = this.codegenCall(member_type.op_equal, parameters, ReturnKind::Value, signature_span);
 					} else {
 						equal = this.builder.buildICmp(LLVMIntPredicate::LLVMIntEQ, lhs, rhs, "");
 					}
@@ -1327,15 +1274,9 @@ struct CGContext {
 					parameters.append(rhs);
 
 					var sign = llvm::ValueRef();
-					if decl.member_variables[i].type.kind == ReferenceKind::None {
+					if decl.member_variables[i].type.reference_kind == None {
 						const member_type = decl.member_variables[i].type.forceLock();
-						if member_type.op_equal.isUnknown() {
-							this.error(member_type.signature() + " doesn't have a comparison operator", member_type.name_span);
-							this.info("which is required by", signature_span);
-							sign = this.int_type.getUndef();
-						} else {
-							sign = this.codegenCall(member_type.op_compare, parameters, ReturnKind::Value, signature_span);
-						}
+						sign = this.codegenCall(member_type.op_compare, parameters, ReturnKind::Value, signature_span);
 					} else {
 						sign = this.codegenInlineBuiltinFunctionCall(InlineBuiltinFunction::UIntOpCmp(decl.member_variables[i].type), parameters);
 					}
@@ -1368,12 +1309,7 @@ struct CGContext {
 					indices.append(llvm::constInt(this.int_type, i as int, false));
 					const element_ptr = this.builder.buildGEP2(type, param0, indices, "");
 
-					if element_type_decl.default_constructor.isUnknown() {
-						this.error(element_type_decl.signature() + " doesn't have a default constructor", element_type_decl.name_span);
-						this.info("which is required by", signature_span);
-					} else {
-						discard this.codegenCall(element_type_decl.default_constructor, List!<llvm::ValueRef>(1u, element_ptr), ReturnKind::None, signature_span);
-					}
+					discard this.codegenCall(element_type_decl.default_constructor, List!<llvm::ValueRef>(1u, element_ptr), ReturnKind::None, signature_span);
 				}
 
 				this.builder.buildRetVoid();
@@ -1393,12 +1329,7 @@ struct CGContext {
 					const element_ptr = this.builder.buildGEP2(type, param0, indices, "");
 
 					if !(function is ArrayCopyConstructor) {
-						if element_type_decl.destructor.isUnknown() {
-							this.error(element_type_decl.signature() + " doesn't have a destructor", element_type_decl.name_span);
-							this.info("which is required by", signature_span);
-						} else {
-							discard this.codegenCall(element_type_decl.destructor, List!<llvm::ValueRef>(1u, element_ptr), ReturnKind::None, signature_span);
-						}
+						discard this.codegenCall(element_type_decl.destructor, List!<llvm::ValueRef>(1u, element_ptr), ReturnKind::None, signature_span);
 					}
 
 					if !(function is ArrayDestructor) {
@@ -1408,12 +1339,7 @@ struct CGContext {
 						parameters.append(element_ptr);
 						parameters.append(other_element);
 
-						if element_type_decl.destructor.isUnknown() {
-							this.error(element_type_decl.signature() + " doesn't have a copy constructor", element_type_decl.name_span);
-							this.info("which is required by", signature_span);
-						} else {
-							discard this.codegenCall(element_type_decl.copy_constructor, parameters, ReturnKind::None, signature_span);
-						}
+						discard this.codegenCall(element_type_decl.copy_constructor, parameters, ReturnKind::None, signature_span);
 					}
 				}
 
@@ -1432,18 +1358,12 @@ struct CGContext {
 					const rhs = this.builder.buildExtractValue(param1, i, "");
 
 					var equal = llvm::ValueRef();
-					if element_type.kind == ReferenceKind::None {
+					if element_type.reference_kind == None {
 						var parameters: List!<llvm::ValueRef>;
 						parameters.append(lhs);
 						parameters.append(rhs);
 
-						if element_type_decl.op_equal.isUnknown() {
-							this.error(element_type_decl.signature() + " doesn't have an equal operator", element_type_decl.name_span);
-							this.info("which is required by", signature_span);
-							equal = this.bool_type.getUndef();
-						} else {
-							equal = this.codegenCall(element_type_decl.op_equal, parameters, ReturnKind::Value, signature_span);
-						}
+						equal = this.codegenCall(element_type_decl.op_equal, parameters, ReturnKind::Value, signature_span);
 					} else {
 						equal = this.builder.buildICmp(LLVMIntPredicate::LLVMIntEQ, lhs, rhs, "");
 					}
@@ -1761,13 +1681,13 @@ struct CGContext {
 				);
 			}
 			case AlignmentOf -> return llvm::constInt(this.int_type, this.data_layout.getPreferredAlignmentOfType(this.getType(function.base_type)) as int, false);
-			case ReferenceKindOf -> return llvm::constInt(this.int_type, function.base_type.kind as int, false);
+			case ReferenceKindOf -> return llvm::constInt(this.int_type, function.base_type.reference_kind as int, false);
 
 			case VariantOpUnsafeAs: id -> {
 				const type_decl = function.base_type.forceLock();
 				const case_decl = type_decl.getVariantCase(id).value();
 				var result = this.builder.buildStructGEP2(this.getType(function.base_type), parameters[0u], 1u, "");
-				if case_decl.type.kind != ReferenceKind::None {
+				if case_decl.type.reference_kind != None {
 					result = this.builder.buildLoad2(this.getType(case_decl.type), result, "");
 				}
 				return result;
@@ -1818,7 +1738,7 @@ struct CGContext {
 				this.builder.buildBr(this.yield_target);
 			}
 			case Return: value -> {
-				if value is Empty && this.current_function == this.functions.get(this.program.main_function).value() {
+				if value is Void && this.current_function == this.functions.get(this.program.main_function).value() {
 					this.setCurrentDebugLocation(stmt.span);
 					this.builder.buildRet(llvm::constInt(this.int_type, 0, false));
 				} else {
@@ -1829,7 +1749,7 @@ struct CGContext {
 			}
 			case LifeTimeStart: variable -> {
 				const var_decl = variable.forceLock();
-				if !(var_decl.destructor_call is Empty) {
+				if !(var_decl.destructor_call is Undefined) {
 					this.codegenLifeTimeStart(this.getVariable(variable));
 				}
 				discard this.codegenExpr(var_decl.constructor_call);
@@ -1837,7 +1757,7 @@ struct CGContext {
 			case LifeTimeEnd: variable -> {
 				const var_decl = variable.forceLock();
 				discard this.codegenExpr(var_decl.destructor_call);
-				if !(var_decl.destructor_call is Empty) {
+				if !(var_decl.destructor_call is Undefined) {
 					this.codegenLifeTimeEnd(this.getVariable(variable));
 				}
 			}
@@ -1961,13 +1881,14 @@ struct CGContext {
 		const span = expr.span;
 
 		match expr {
-			case Empty -> {
+			case Undefined -> {
 				if expr.type == this.program.void_type || expr.type.isUnknown() {
 					return llvm::ValueRef();
 				} else {
 					return this.getType(expr.type).getUndef();
 				}
 			}
+			case Void -> return llvm::ValueRef();
 			case Integer: value -> return llvm::constInt(this.getType(expr.type), value, expr.type.isSigned());
 			case Float: value -> return llvm::constFloat(this.getType(expr.type), value);
 			case String: value -> {
@@ -1978,7 +1899,7 @@ struct CGContext {
 				result = this.builder.buildInsertValue(result, llvm::constInt(this.int_type, value.size() as int, false), 2u, ""); // capacity
 				return result;
 			}
-			case Array: elements -> {
+			case ConstAggregate: elements -> {
 				var result = llvm::constNull(this.getType(expr.type));
 				for i in 0u..elements.size() {
 					const element = this.codegenExpr(elements[i]);
@@ -1989,7 +1910,7 @@ struct CGContext {
 			case Call: call_expr -> return this.codegenCall(call_expr, expr.span);
 			case VarInvoke: variable -> {
 				const decl = variable.forceLock();
-				if decl.type.kind == ReferenceKind::None || decl.is_parameter {
+				if decl.type.reference_kind == None || decl.is_parameter {
 					return this.getVariable(variable);
 				} else {
 					this.setCurrentDebugLocation(span);
@@ -2011,7 +1932,7 @@ struct CGContext {
 				this.setCurrentDebugLocation(span);
 				const ptr = this.builder.buildStructGEP2(object_type, object, id, "");
 
-				if member_decl.type.kind == ReferenceKind::None {
+				if member_decl.type.reference_kind == None {
 					return ptr;
 				} else {
 					return this.builder.buildLoad2(this.getType(member_decl.type), ptr, "");
@@ -2046,6 +1967,8 @@ struct CGContext {
 				this.builder.buildStore(val, dst);
 				return val;
 			}
+			case TypeRef -> return llvm::ValueRef();
+			case FunctionRef: function -> return this.functions.get(function).value();
 		}
 	}
 
@@ -2058,12 +1981,12 @@ struct CGContext {
 		return this.codegenCall(call_expr.function, parameters, call_expr.return_kind, call_expr.result_var, span);
 	}
 
-	func codegenCall(this: &&CGContext, function: FunctionRef, parameters: List!<llvm::ValueRef>, return_kind: ReturnKind, span: Span) -> llvm::ValueRef {
+	func codegenCall(this: &&CGContext, function: WeakPtr!<FunctionDecl>, parameters: List!<llvm::ValueRef>, return_kind: ReturnKind, span: Span) -> llvm::ValueRef {
 		assert(return_kind == ReturnKind::None || return_kind == ReturnKind::Value);
 		return this.codegenCall(function, parameters, return_kind, WeakPtr!<VarDecl>(), span);
 	}
 
-	func codegenCall(this: &&CGContext, function: FunctionRef, parameters: List!<llvm::ValueRef>, return_kind: ReturnKind, result_var: WeakPtr!<VarDecl>, span: Span) -> llvm::ValueRef {
+	func codegenCall(this: &&CGContext, function: WeakPtr!<FunctionDecl>, parameters: List!<llvm::ValueRef>, return_kind: ReturnKind, result_var: WeakPtr!<VarDecl>, span: Span) -> llvm::ValueRef {
 		this.setCurrentDebugLocation(span);
 
 		const decl = function.forceLock();
@@ -2109,7 +2032,7 @@ struct CGContext {
 					value, 0u, ""
 				), ""
 			);
-		} else if match_expr.value.type.kind != ReferenceKind::None {
+		} else if match_expr.value.type.reference_kind != None {
 			value = this.builder.buildLoad2(
 				this.getType(match_expr.value.type.base()),
 				value, ""

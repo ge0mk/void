@@ -1,9 +1,9 @@
 import std/core;
 
 func main() -> void {
-	assert(min(1, 2) == 1);
-	assert(min(2, 1) == 1);
+	assert(int::min(1, 2) == 1);
+	assert(int::min(2, 1) == 1);
 
-	assert(max(1, 2) == 2);
-	assert(max(2, 1) == 2);
+	assert(int::max(1, 2) == 2);
+	assert(int::max(2, 1) == 2);
 }

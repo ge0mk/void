@@ -339,10 +339,10 @@ enum Error: i32 {
 
 	@[extern_name: "error_toCString"]
 	func toCString(this: Error) -> cptr!<byte> = extern;
-
-	@[extern_name: "error_panic"]
-	func panic(error: Error) -> never = extern;
 }
+
+@[extern_name: "error_panic"]
+func panic(error: Error) -> never = extern;
 
 template <Tok: type, Terr: type>
 variant Result {

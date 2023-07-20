@@ -145,7 +145,6 @@ enum TokenType {
 	case KeywordDo;
 	case KeywordElse;
 	case KeywordEnum;
-	case KeywordExtend;
 	case KeywordExtern;
 	case KeywordFalse;
 	case KeywordFor;
@@ -156,6 +155,7 @@ enum TokenType {
 	case KeywordIs;
 	case KeywordMatch;
 	case KeywordMust;
+	case KeywordNamespace;
 	case KeywordOperator;
 	case KeywordPragma;
 	case KeywordPrivate;
@@ -240,7 +240,6 @@ enum TokenType {
 			case KeywordDo -> return "<keyword> do";
 			case KeywordElse -> return "<keyword> else";
 			case KeywordEnum -> return "<keyword> enum";
-			case KeywordExtend -> return "<keyword> extend";
 			case KeywordExtern -> return "<keyword> extern";
 			case KeywordFalse -> return "<keyword> false";
 			case KeywordFor -> return "<keyword> for";
@@ -251,6 +250,7 @@ enum TokenType {
 			case KeywordIs -> return "<keyword> is";
 			case KeywordMatch -> return "<keyword> match";
 			case KeywordMust -> return "<keyword> must";
+			case KeywordNamespace -> return "<keyword> namespace";
 			case KeywordOperator -> return "<keyword> operator";
 			case KeywordPragma -> return "<keyword> pragma";
 			case KeywordPrivate -> return "<keyword> private";
@@ -830,8 +830,6 @@ struct Lexer {
 			return Token(TokenType::KeywordElse, span);
 		} else if name == "enum" {
 			return Token(TokenType::KeywordEnum, span);
-		} else if name == "extend" {
-			return Token(TokenType::KeywordExtend, span);
 		} else if name == "extern" {
 			return Token(TokenType::KeywordExtern, span);
 		} else if name == "false" {
@@ -852,6 +850,8 @@ struct Lexer {
 			return Token(TokenType::KeywordMatch, span);
 		} else if name == "must" {
 			return Token(TokenType::KeywordMust, span);
+		} else if name == "namespace" || name == "extend" {	// TODO: remove 'extend' when namespaces are working
+			return Token(TokenType::KeywordNamespace, span);
 		} else if name == "operator" {
 			return Token(TokenType::KeywordOperator, span);
 		} else if name == "pragma" {
