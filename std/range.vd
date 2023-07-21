@@ -15,6 +15,11 @@ struct Range {
 		this.size := other.size;
 	}
 
+	func constructor(this: &&Range!<T>, other: VRange!<T>) -> void {
+		this.data := other.data as cptr!<T>;
+		this.size := other.size;
+	}
+
 	operator =(this: &&Range!<T>, other: Range!<T>) -> void {
 		this.data = other.data;
 		this.size = other.size;
