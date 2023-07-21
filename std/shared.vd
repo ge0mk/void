@@ -116,6 +116,14 @@ struct WeakPtr {
 		return this.data[0u].strong_count > 0;
 	}
 
+	func isEmpty(this: &WeakPtr!<T>) -> bool {
+		if this.data == vptr::null() {
+			return true;
+		}
+
+		return this.data[0u].strong_count == 0;
+	}
+
 	func lock(this: &WeakPtr!<T>) -> Optional!<SharedPtr!<T>> {
 		if this.data == vptr::null() {
 			return None;
