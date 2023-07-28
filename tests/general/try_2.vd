@@ -14,7 +14,7 @@ func bar() -> Result!<void, Error> {
 	return Result!<void, Error>::Ok;
 }
 
-func main() {
+func main() -> void {
 	const r = bar();
 	assert(r is Ok);
 }

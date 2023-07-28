@@ -2,7 +2,7 @@ import std/core;
 import std/string;
 import std/base64;
 
-func main() {
+func main() -> void {
 	assert(decode("bGlnaHQgd29yay4=") == "light work.");
 	assert(decode("bGlnaHQgd29yaw==") == "light work");
 	assert(decode("bGlnaHQgd29y") == "light wor");

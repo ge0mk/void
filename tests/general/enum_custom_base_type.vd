@@ -3,7 +3,7 @@ import std/core;
 enum Foo: i32 {}
 enum Bar: i64 {}
 
-func main() {
+func main() -> void {
 	assert(sizeOf!<Foo>() == sizeOf!<i32>());
 	assert(sizeOf!<Bar>() == sizeOf!<i64>());
 }

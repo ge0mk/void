@@ -5,7 +5,7 @@ import std/string;
 import std/json;
 import std/io;
 
-func main() {
+func main() -> void {
 	const json = must json::parse("[\"hello\", \"world\"]");
 	assert(json is Array);
 	println(json.format());

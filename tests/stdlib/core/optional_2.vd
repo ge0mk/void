@@ -1,6 +1,6 @@
 import std/core;
 
-func main() {
+func main() -> void {
 	var a = Optional!<int>::Some(5);
 	assert(a.hasValue());
 	assert(a.value() == 5);

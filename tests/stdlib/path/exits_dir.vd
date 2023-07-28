@@ -2,7 +2,7 @@ import std/core;
 import std/string;
 import std/path;
 
-func main() {
+func main() -> void {
 	var a = Path(".");
 	assert(a.exists());
 	assert(a.isDirectory());

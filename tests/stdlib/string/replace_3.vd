@@ -1,7 +1,7 @@
 import std/core;
 import std/string;
 
-func main() {
+func main() -> void {
 	var a = "hello world!";
 	a.replace("world", "friends");
 	assert(a == "hello friends!");

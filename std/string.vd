@@ -12,7 +12,7 @@ struct String {
 	var capacity: uint;
 	var is_owner: bool;
 
-	func constructor(this: &&String) = default;
+	func constructor(this: &&String) -> void = default;
 
 	func constructor(this: &&String, other: String) -> void {
 		this.data := libc::stdlib::malloc(other.size() * sizeOf!<byte>()) as vptr!<byte>;
@@ -52,7 +52,7 @@ struct String {
 		this.size = other.size();
 	}
 
-	func destructor(this: &&String) {
+	func destructor(this: &&String) -> void {
 		if this.is_owner {
 			libc::stdlib::free(this.data as vptr);
 		}
@@ -114,7 +114,7 @@ struct String {
 		return Some(this.data[index]);
 	}
 
-	func clear(this: &&String) {
+	func clear(this: &&String) -> void {
 		this.size = 0u;
 	}
 

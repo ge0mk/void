@@ -5,15 +5,15 @@ import std/io;
 struct Foo {
 	var x: int;
 
-	func constructor(this: &&Foo) {
+	func constructor(this: &&Foo) -> void {
 		print("+");
 	}
 
-	func constructor(this: &&Foo, other: Foo) {
+	func constructor(this: &&Foo, other: Foo) -> void {
 		print("=");
 	}
 
-	func destructor(this: &&Foo) {
+	func destructor(this: &&Foo) -> void {
 		print("-");
 	}
 
@@ -26,7 +26,7 @@ func bar(x: Result!<&&Foo>) -> Foo {
 	return must x;
 }
 
-func main() {
+func main() -> void {
 	var x: Foo;
 	discard bar(Result!<&&Foo>::Ok(&&x));
 }

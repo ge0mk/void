@@ -11,20 +11,20 @@ struct Foo {
 	func constructor(this: &&Foo, other: Foo) -> void = default;
 	func destructor(this: &&Foo) -> void = default;
 
-	func foo(this: &&Foo) {
+	func foo(this: &&Foo) -> void {
 		println("var-ref");
 	}
 
-	func foo(this: &Foo) {
+	func foo(this: &Foo) -> void {
 		println("const-ref");
 	}
 
-	func foo(this: Foo) {
+	func foo(this: Foo) -> void {
 		println("base");
 	}
 }
 
-func main() {
+func main() -> void {
 	var x = Foo();
 	x.foo();
 }

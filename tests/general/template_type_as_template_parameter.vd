@@ -2,16 +2,16 @@ import std/core;
 
 template <T: type>
 struct Foo {
-	func constructor(this: &&Foo!<T>) {}
-	func destructor(this: &&Foo!<T>) {}
+	func constructor(this: &&Foo!<T>) -> void {}
+	func destructor(this: &&Foo!<T>) -> void {}
 }
 
 template <S: uint>
 struct Bar {
-	func constructor(this: &&Bar!<S>) {}
-	func destructor(this: &&Bar!<S>) {}
+	func constructor(this: &&Bar!<S>) -> void {}
+	func destructor(this: &&Bar!<S>) -> void {}
 }
 
-func main() {
+func main() -> void {
 	var x: Foo!<Bar!<5>>;
 }

@@ -2,7 +2,7 @@ import std/core;
 import std/string;
 import std/json;
 
-func main() {
+func main() -> void {
 	const a = must json::parse("\"hello\"");
 	assert(a is String);
 	assert(a.format() == "\"hello\"");

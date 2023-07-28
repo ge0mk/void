@@ -2,6 +2,6 @@
 
 import std/core;
 
-func main() {
+func main() -> void {
 	return false;
 }

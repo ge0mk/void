@@ -4,6 +4,6 @@ import std/core;
 import std/io;
 import std/string;
 
-func main() {
+func main() -> void {
 	println("hello");
 }

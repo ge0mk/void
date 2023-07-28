@@ -4,6 +4,6 @@ func foo() -> Result!<void, Error> {
 	return Ok();
 }
 
-func main() {
+func main() -> void {
 	assert(foo() is Ok);
 }

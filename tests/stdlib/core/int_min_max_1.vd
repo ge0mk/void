@@ -1,6 +1,6 @@
 import std/core;
 
-func main() {
+func main() -> void {
 	assert(min(1, 2) == 1);
 	assert(min(2, 1) == 1);
 

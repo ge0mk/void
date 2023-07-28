@@ -8,7 +8,7 @@ variant Foo {
 	case C: byte;
 }
 
-func main() {
+func main() -> void {
 	var a = Foo::A(1);
 	var b = Foo::B(false, 2);
 	var c = Foo::C('A'b, 3);

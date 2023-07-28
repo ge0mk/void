@@ -1,7 +1,7 @@
 import std/core;
 import std/string;
 
-func main() {
+func main() -> void {
 	var a = "abcdef";
 	assert(a.size() == 6u);
 	a.remove(2u);

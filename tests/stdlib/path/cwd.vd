@@ -3,7 +3,7 @@ import std/string;
 import std/path;
 import std/io;
 
-func main() {
+func main() -> void {
 	const a = Path::cwd().toString();
 	assert(a.size() > 0);
 	println(a);

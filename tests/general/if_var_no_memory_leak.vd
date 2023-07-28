@@ -3,7 +3,7 @@ import std/core;
 struct Bar {
 	var counter: &&int;
 
-	func constructor(this: &&Bar, counter: &&int) {
+	func constructor(this: &&Bar, counter: &&int) -> void {
 		this.counter := &&counter;
 		this.counter++;
 	}
@@ -13,7 +13,7 @@ struct Bar {
 		this.counter++;
 	}
 
-	func destructor(this: &&Bar) {
+	func destructor(this: &&Bar) -> void {
 		this.counter--;
 	}
 
@@ -21,7 +21,7 @@ struct Bar {
 	operator ==(this: Bar, other: Bar) -> bool = default;
 }
 
-func main() {
+func main() -> void {
 	var counter = 0;
 	if var bar = Optional!<Bar>::Some(Bar(&&counter)) {
 		// should call bar.destructor();

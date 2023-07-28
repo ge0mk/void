@@ -5,7 +5,7 @@ func foo(counter: &&int) -> Result!<int> {
 	return Ok(0);
 }
 
-func main() {
+func main() -> void {
 	var counter = 0;
 	match foo(&&counter) {
 		case Ok: value -> {}

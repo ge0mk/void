@@ -4,7 +4,7 @@ func foo() -> Result!<void> {
 	throw Error::EINVAL;
 }
 
-func main() {
+func main() -> void {
 	const r = foo();
 	assert(r is Error);
 	assert(r.error() == Error::EINVAL);

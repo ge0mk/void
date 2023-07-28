@@ -12,7 +12,7 @@ struct Foo {
 	operator ==(this: Foo, other: Foo) -> bool = default;
 }
 
-func main() {
+func main() -> void {
 	var a: Foo;
 	assert(a.a == 0);
 	assert(a.b == false);

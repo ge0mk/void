@@ -3,7 +3,7 @@ import std/core;
 struct Foo {
 	var value: int;
 
-	func constructor(this: &&Foo, value: int) {
+	func constructor(this: &&Foo, value: int) -> void {
 		this.value := value;
 	}
 
@@ -15,7 +15,7 @@ struct Foo {
 	}
 }
 
-func main() {
+func main() -> void {
 	assert(Foo(1) == Foo(1));
 	assert(Foo(0) != Foo(1));
 	assert(Foo(0) < Foo(1));

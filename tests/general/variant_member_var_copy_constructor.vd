@@ -12,7 +12,7 @@ variant Foo {
 	var y: int;
 }
 
-func main() {
+func main() -> void {
 	var a: Foo = Foo::B(false, 1, 2);
 	assert(a.x == 1);
 	assert(a.y == 2);

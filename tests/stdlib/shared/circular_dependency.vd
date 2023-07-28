@@ -22,12 +22,12 @@ struct Foo {
 	}
 }
 
-func foo(counter: &&int) {
+func foo(counter: &&int) -> void {
 	var a = SharedPtr!<Foo>::new(Foo(&&counter));
 	a.that = WeakPtr!<Foo>(a);
 }
 
-func main() {
+func main() -> void {
 	var counter = 0;
 	foo(&&counter);
 	assert(counter == 0);

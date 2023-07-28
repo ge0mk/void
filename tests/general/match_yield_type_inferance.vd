@@ -7,7 +7,7 @@ func foo(x: int) -> Optional!<int> {
 	}
 }
 
-func main() {
+func main() -> void {
 	const a = foo(0);
 	assert(a is None);
 

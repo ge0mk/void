@@ -8,6 +8,6 @@ enum Foo {
 	operator |(this: Foo, other: Foo) -> Foo = default;
 }
 
-func main() {
+func main() -> void {
 	var x = Foo::A | Foo::C;
 }

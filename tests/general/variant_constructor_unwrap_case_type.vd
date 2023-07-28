@@ -6,7 +6,7 @@ variant Foo {
 	case B;
 }
 
-func main() {
+func main() -> void {
 	// indirectly calls Box!<int>::constructor(&&Box!<int>, int)
 	// -> Box!<int>(5) must be unwrapped internally by Foo::constructor<id = 0>()
 	const a = Foo::A(Box!<int>(5));

@@ -810,7 +810,7 @@ struct TypeDecl {
 		return None;
 	}
 
-	func createDefaultFunctions(this: &&TypeDecl) {
+	func createDefaultFunctions(this: &&TypeDecl) -> void {
 		const module = this.module.forceLock();
 		const type = this.getRef();
 

@@ -2,7 +2,7 @@ import std/core;
 import std/array;
 import std/list;
 
-func main() {
+func main() -> void {
 	var a = [1, 2, 3];
 
 	var b: List!<int> = a.range();

@@ -7,6 +7,6 @@ func foo() -> Result!<int> {
 	throw Error::EINVAL;
 }
 
-func main() {
+func main() -> void {
 	discard must foo();
 }

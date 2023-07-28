@@ -15,7 +15,7 @@ struct Foo {
 	operator <=>(this: Foo, other: Foo) -> int = default;
 }
 
-func main() {
+func main() -> void {
 	const a = Foo(0, 0b);
 	const b = Foo(10, 0b);
 	const c = Foo(0, 10b);

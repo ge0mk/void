@@ -1,7 +1,7 @@
 import std/core;
 import std/list;
 
-func main() {
+func main() -> void {
 	var a = List!<int>(10u, 0);
 	assert(a.size() == 10u);
 	assert(a[0u] == 0);

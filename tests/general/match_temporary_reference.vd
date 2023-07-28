@@ -15,7 +15,7 @@ struct Bar {
 	func destructor(this: &&Bar) -> void = default;
 }
 
-func main() {
+func main() -> void {
 	var y: Bar = ();
 	match &&y.x {
 		case A: &&z -> z = 10;

@@ -6,11 +6,11 @@ import std/string;
 import std/io;
 
 struct Foo {
-	func constructor(this: &&Foo) {
+	func constructor(this: &&Foo) -> void {
 		println("+Foo");
 	}
 
-	func destructor(this: &&Foo) {
+	func destructor(this: &&Foo) -> void {
 		println("-Foo");
 	}
 }
@@ -18,10 +18,10 @@ struct Foo {
 struct Bar {
 	var x: Foo;
 
-	func constructor(this: &&Bar) {}
-	func destructor(this: &&Bar) {}
+	func constructor(this: &&Bar) -> void {}
+	func destructor(this: &&Bar) -> void {}
 }
 
-func main() {
+func main() -> void {
 	var x: Bar;
 }

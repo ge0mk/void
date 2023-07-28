@@ -1,7 +1,7 @@
 import std/core;
 import std/list;
 
-func main() {
+func main() -> void {
 	var a: List!<int>;
 	assert(a.size() == 0u);
 	assert(a.isEmpty());

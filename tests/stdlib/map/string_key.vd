@@ -2,7 +2,7 @@ import std/core;
 import std/string;
 import std/map;
 
-func main() {
+func main() -> void {
 	var a: Map!<String, int>;
 	a.set("4", 1);
 	a.set("3", 2);

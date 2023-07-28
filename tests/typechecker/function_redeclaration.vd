@@ -2,8 +2,8 @@
 
 import std/core;
 
-func foo() {}
+func foo() -> void {}
 
-func foo() {}
+func foo() -> void {}
 
-func main() {}
+func main() -> void {}

@@ -2,7 +2,7 @@ import std/core;
 import std/string;
 import std/list;
 
-func main() {
+func main() -> void {
 	var a: List!<String>;
 	a.append("hello");
 	a.append("world");

@@ -1,7 +1,7 @@
 import std/core;
 import std/string;
 
-func main() {
+func main() -> void {
 	const a = "hello world 123";
 	const b = a.split("orl");
 	assert(b.size() == 2u);

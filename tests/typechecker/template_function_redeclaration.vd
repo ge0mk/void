@@ -8,4 +8,4 @@ func foo() {}
 template <T: type>
 func foo() {}
 
-func main() {}
+func main() -> void {}

@@ -645,11 +645,12 @@ struct Parser {
 			this.recover(TokenType::RParen);
 		}
 
-		var return_type = Optional!<ParsedType>::None;
-		if this.accept(TokenType::Arrow) {
-			return_type = Some(this.parseType());
+		if !this.expect(TokenType::Arrow) {
+			this.error("expected function return type", this.currentSpan());
+			return Some(ParsedFunctionSignature(start..this.previousSpan(), name, parameters, ParsedType::Garbage(this.currentSpan())));
 		}
 
+		const return_type = this.parseType();
 		return Some(ParsedFunctionSignature(start..this.previousSpan(), name, parameters, return_type));
 	}
 

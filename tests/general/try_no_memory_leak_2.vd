@@ -6,11 +6,11 @@ import std/string;
 import std/io;
 
 struct Foo {
-	func constructor(this: &&Foo) {
+	func constructor(this: &&Foo) -> void {
 		println("+");
 	}
 
-	func destructor(this: &&Foo) {
+	func destructor(this: &&Foo) -> void {
 		println("-");
 	}
 }
@@ -25,7 +25,7 @@ func bar() -> Result!<void, int> {
 	return Ok;
 }
 
-func main() {
+func main() -> void {
 	const r = bar();
 	assert(r is Error);
 }

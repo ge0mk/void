@@ -371,15 +371,8 @@ contexts:
   func_decl_parameters_end:
     - include: comments
 
-    - match: '='
-      set: func_decl_inline_body
-
     - match: ->
       set: func_decl_return_type
-
-    - match: '{'
-      scope: punctuation.section.block.begin
-      set: compound_stmt
 
   func_decl_return_type:
     - include: type_without_dict

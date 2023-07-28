@@ -3,17 +3,17 @@ import std/core;
 struct Foo {
 	var counter: &&int;
 
-	func constructor(this: &&Foo, counter: &&int) {
+	func constructor(this: &&Foo, counter: &&int) -> void {
 		this.counter := &&counter;
 		this.counter++;
 	}
 
-	func constructor(this: &&Foo, other: Foo) {
+	func constructor(this: &&Foo, other: Foo) -> void {
 		this.counter := &&other.counter;
 		this.counter++;
 	}
 
-	func destructor(this: &&Foo) {
+	func destructor(this: &&Foo) -> void {
 		this.counter--;
 	}
 }
@@ -22,14 +22,14 @@ func foo() -> Result!<int, int> {
 	throw 0;
 }
 
-func bar(a: Foo, b: int) {}
+func bar(a: Foo, b: int) -> void {}
 
 func baz(counter: &&int) -> Result!<void, int> {
 	bar(Foo(&&counter), try foo());
 	return Ok;
 }
 
-func main() {
+func main() -> void {
 	var counter = 0;
 	const r = baz(&&counter);
 	assert(r is Error);

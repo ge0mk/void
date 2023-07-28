@@ -10,6 +10,6 @@ func foo(err: bool) -> Result!<int, Error> {
 	}
 }
 
-func main() {
+func main() -> void {
 	const r = must foo(true);
 }

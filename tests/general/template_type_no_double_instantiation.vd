@@ -13,6 +13,6 @@ struct Foo {
 	}
 }
 
-func main() {
+func main() -> void {
 	assert(Foo!<0>() == Foo!<0>());
 }

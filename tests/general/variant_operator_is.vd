@@ -6,7 +6,7 @@ variant Foo {
 	case C: uint;
 }
 
-func main() {
+func main() -> void {
 	assert(Foo::A is A);
 	assert(Foo::B(5) is B);
 	assert(!(Foo::B(5) is A));

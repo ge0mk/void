@@ -12,12 +12,12 @@ variant Value {
 	case Array: List!<Value>;
 	case Object: Map!<String, Value>;
 
-	func constructor(this: &&Value) {
+	func constructor(this: &&Value) -> void {
 		this.constructor!<0>();
 	}
 }
 
-func skipWhitespace(str: &String, index: &&uint) {
+func skipWhitespace(str: &String, index: &&uint) -> void {
 	while index < str.size() {
 		if !isSpace(str[index]) {
 			break;

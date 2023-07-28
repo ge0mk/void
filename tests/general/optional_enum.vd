@@ -9,4 +9,4 @@ func bar() -> Optional!<Foo> {
 	return Optional!<Foo>::None;
 }
 
-func main() {}
+func main() -> void {}

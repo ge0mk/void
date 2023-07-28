@@ -1,7 +1,7 @@
 import std/core;
 import std/set;
 
-func main() {
+func main() -> void {
 	var a = Set!<int>();
 	a.add(0);
 	a.add(0);

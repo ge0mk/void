@@ -19,7 +19,7 @@ hello world
 import std/core;
 import std/string;
 import std/io;
-func main() {
+func main() -> void {
 	println("Hello world!");
 }
 ```

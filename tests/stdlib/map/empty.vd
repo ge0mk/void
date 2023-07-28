@@ -1,7 +1,7 @@
 import std/core;
 import std/map;
 
-func main() {
+func main() -> void {
 	var a: Map!<uint, int>;
 	assert(a.isEmpty());
 }

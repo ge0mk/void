@@ -149,11 +149,11 @@ struct Path {
 	func constructor(this: &&Path) -> void = default;
 	func constructor(this: &&Path, other: Path) -> void = default;
 
-	func constructor(this: &&Path, str: String) {
+	func constructor(this: &&Path, str: String) -> void {
 		this.segments := str.split('/'b);
 	}
 
-	func constructor(this: &&Path, segments: List!<String>) {
+	func constructor(this: &&Path, segments: List!<String>) -> void {
 		this.segments := segments;
 	}
 

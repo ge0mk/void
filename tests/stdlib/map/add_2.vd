@@ -1,7 +1,7 @@
 import std/core;
 import std/map;
 
-func main() {
+func main() -> void {
 	var a: Map!<int, int>;
 	a.set(1, 4);
 	a.set(2, 3);

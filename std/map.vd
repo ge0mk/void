@@ -9,7 +9,7 @@ struct MapEntry {
 	var key: Tkey;
 	var value: Tvalue;
 
-	func constructor(this: &&MapEntry!<Tkey, Tvalue>, key: Tkey, value: Tvalue) {
+	func constructor(this: &&MapEntry!<Tkey, Tvalue>, key: Tkey, value: Tvalue) -> void {
 		this.key := key;
 		this.value := value;
 	}

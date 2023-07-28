@@ -1,6 +1,6 @@
 import std/core;
 
-func main() {
+func main() -> void {
 	assert(min(1u32, 2u32) == 1u32);
 	assert(min(2u32, 1u32) == 1u32);
 

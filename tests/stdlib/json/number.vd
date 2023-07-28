@@ -2,7 +2,7 @@ import std/core;
 import std/string;
 import std/json;
 
-func main() {
+func main() -> void {
 	const a = must json::parse("-123");
 	assert(a is Number);
 	assert(a.format() == "-123");

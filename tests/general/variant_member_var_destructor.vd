@@ -11,17 +11,17 @@ import std/io;
 struct Foo {
 	var id: int;
 
-	func constructor(this: &&Foo) {
+	func constructor(this: &&Foo) -> void {
 		this.id := 0;
 		println("+" + format(this.id));
 	}
 
-	func constructor(this: &&Foo, other: Foo) {
+	func constructor(this: &&Foo, other: Foo) -> void {
 		this.id := other.id + 1;
 		println("+" + format(this.id));
 	}
 
-	func destructor(this: &&Foo) {
+	func destructor(this: &&Foo) -> void {
 		println("-" + format(this.id));
 	}
 
@@ -35,6 +35,6 @@ variant Bar {
 	case A;
 }
 
-func main() {
+func main() -> void {
 	var x = Bar::A(Foo());
 }

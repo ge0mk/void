@@ -684,14 +684,11 @@ struct TCContext {
 		this.current_type = decl.parent_type;
 		this.current_function = function;
 
-		decl.return_type = this.program.void_type;
-		if const parsed_return_type = signature.return_type {
-			match this.checkTypeUsage(parsed_return_type) {
-				case Ok: return_type -> decl.return_type = return_type;
-				case Error: errors -> {
-					this.program.printErrors(errors);
-					decl.return_type = TypeRef::unknown();
-				}
+		match this.checkTypeUsage(signature.return_type) {
+			case Ok: return_type -> decl.return_type = return_type;
+			case Error: errors -> {
+				this.program.printErrors(errors);
+				decl.return_type = TypeRef::unknown();
 			}
 		}
 
@@ -3701,7 +3698,7 @@ struct TCContext {
 		return result;
 	}
 
-	func checkActiveMembersForCall(this: &&TCContext, arguments: List!<Expr>, function_name: String, span: Span) {
+	func checkActiveMembersForCall(this: &&TCContext, arguments: List!<Expr>, function_name: String, span: Span) -> void {
 		const parent_function_decl = this.current_function.lock() else {
 			return;
 		}

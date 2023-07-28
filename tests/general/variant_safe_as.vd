@@ -5,7 +5,7 @@ variant Foo {
 	case B: bool;
 }
 
-func main() {
+func main() -> void {
 	const a = Foo::A(5) as A;
 	assert(a is Some);
 	assert(a.value() == 5);

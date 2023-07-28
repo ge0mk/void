@@ -1,7 +1,7 @@
 import std/core;
 import std/string;
 
-func main() {
+func main() -> void {
 	var a = "hello";
 	a = "world123";
 	assert(a == "world123");

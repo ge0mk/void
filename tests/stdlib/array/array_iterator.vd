@@ -7,7 +7,7 @@ import std/array;
 import std/format;
 import std/io;
 
-func main() {
+func main() -> void {
 	for a in [1, 2, 3] {
 		println(format(a));
 	}

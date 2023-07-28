@@ -1,7 +1,7 @@
 import std/core;
 import std/string;
 
-func main() {
+func main() -> void {
 	const a = "hello world";
 	const r = a.find("wor");
 	assert(r is Some);

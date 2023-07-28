@@ -7,7 +7,7 @@ func foo(val: byte) -> bool {
 	}
 }
 
-func main() {
+func main() -> void {
 	assert(foo('a'b) == true);
 	assert(foo('b'b) == true);
 	assert(foo('c'b) == true);

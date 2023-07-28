@@ -2,7 +2,7 @@ import std/core;
 import std/string;
 import std/format;
 
-func main() {
+func main() -> void {
 	assert(format(4) == "4");
 	assert(format(100) == "100");
 	assert(format(123) == "123");

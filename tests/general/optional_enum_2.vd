@@ -11,4 +11,4 @@ struct Bar {
 	}
 }
 
-func main() {}
+func main() -> void {}

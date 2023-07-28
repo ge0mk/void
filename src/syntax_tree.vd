@@ -291,9 +291,9 @@ struct ParsedFunctionSignature {
 	var span: Span;
 	var name: String;
 	var parameters: List!<ParsedParameterDecl>;
-	var return_type: Optional!<ParsedType>;
+	var return_type: ParsedType;
 
-	func constructor(this: &&ParsedFunctionSignature, span: Span, name: String, parameters: List!<ParsedParameterDecl>, return_type: Optional!<ParsedType>) -> void {
+	func constructor(this: &&ParsedFunctionSignature, span: Span, name: String, parameters: List!<ParsedParameterDecl>, return_type: ParsedType) -> void {
 		this.span := span;
 		this.name := name;
 		this.parameters := parameters;
@@ -312,12 +312,10 @@ struct ParsedFunctionSignature {
 		out.span(this.span);
 
 		for i in 0u..this.parameters.size() {
-			this.parameters[i].dump(&&out, (i == this.parameters.size() - 1) && !this.return_type.hasValue());
+			this.parameters[i].dump(&&out, false);
 		}
 
-		if const return_type = this.return_type {
-			return_type.dump(&&out, true);
-		}
+		this.return_type.dump(&&out, true);
 
 		out.pop();
 	}

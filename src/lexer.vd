@@ -379,7 +379,7 @@ struct Lexer {
 		return Span(start, end, this.line, (start - this.line_start) as u16, this.file_id);
 	}
 
-	func skipWhitespaceAndComments(this: &&Lexer) {
+	func skipWhitespaceAndComments(this: &&Lexer) -> void {
 		while this.index < this.src.size() {
 			match this.src[this.index] {
 				case ' 'b | '\t'b | '\r'b -> this.index++;
