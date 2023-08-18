@@ -364,7 +364,7 @@ struct List {
 	// ensure that memory for at least 'new_capacity' elements is available
 	func grow(this: &&List!<T>, new_capacity: uint) -> void {
 		const old_capacity = this.capacity;
-		if new_capacity <= old_capacity {
+		if old_capacity >= new_capacity {
 			return;
 		}
 
