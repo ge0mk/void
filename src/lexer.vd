@@ -428,6 +428,11 @@ struct Lexer {
 				comment_completed = true;
 				break;
 			} else {
+				if this.src[this.index] == '\n'b {
+					this.line++;
+					this.line_start = this.index;
+				}
+
 				this.index++;
 			}
 		}
