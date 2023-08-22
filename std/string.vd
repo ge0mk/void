@@ -592,6 +592,10 @@ func parseDigit(val: byte, base: int) -> int {
 }
 
 func parseNumber(str: String, start: uint) -> ParsedNumber {
+	if start >= str.size() {
+		return ParsedNumber(0, 0, 0, 0u, false, false);
+	}
+
 	var index = start;
 	var negative = false;
 	var significant = 0;

@@ -1,0 +1,28 @@
+import std/core;
+import std/string;
+
+func main() -> void {
+	const a = parseNumber("123", 0u);
+	assert(a.toInt() == 123);
+	assert(a.length == 3);
+	assert(a.base == 10);
+
+	const b = parseNumber("0x42", 0u);
+	assert(b.toInt() == 0x42);
+	assert(b.length == 4);
+	assert(b.base == 16);
+
+	const c = parseNumber("10hello", 0u);
+	assert(c.toInt() == 10);
+	assert(c.length == 2);
+	assert(c.base == 10);
+
+	const d = parseNumber("", 0u);
+	assert(d.toInt() == 0);
+	assert(d.length == 0);
+
+	const e = parseNumber("abc10hello", 3u);
+	assert(e.toInt() == 10);
+	assert(e.length == 2);
+	assert(e.base == 10);
+}
