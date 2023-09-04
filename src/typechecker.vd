@@ -1714,7 +1714,7 @@ struct TCContext {
 					this.todo("implement comptime variables", parsed_stmt.span);
 				}
 			}
-			case Compound: compound_stmt -> result.append(this.checkCompoundStmt(compound_stmt));
+			case Compound: compound_stmt -> result.append(this.checkCompoundStmt(compound_stmt, true));
 			case If: if_stmt -> result.append(this.checkIfStmt(if_stmt, parsed_stmt.is_comptime, parsed_stmt.span));
 			case IfVar: if_var_stmt -> result.append(this.checkIfVarStmt(if_var_stmt, parsed_stmt.span));
 			case VarElse: var_else_stmt -> result.append(this.checkVarElseStmt(var_else_stmt, parsed_stmt.span));
@@ -1855,9 +1855,11 @@ struct TCContext {
 		}
 	}
 
-	func checkCompoundStmt(this: &&TCContext, parsed_stmt: ParsedCompoundStmt) -> Stmt {
+	func checkCompoundStmt(this: &&TCContext, parsed_stmt: ParsedCompoundStmt, create_scope: bool) -> Stmt {
 		var result = CompoundStmt(parsed_stmt.span);
-		this.pushScope(ScopeKind::Compound);
+		if create_scope {
+			this.pushScope(ScopeKind::Compound);
+		}
 
 		this.checkStmtList(parsed_stmt.children, &&result.children.operator unwrap());
 
@@ -1865,7 +1867,9 @@ struct TCContext {
 			result.children.append(this.collectCleanupCallsForCurrentScope());
 		}
 
-		this.popScope();
+		if create_scope {
+			this.popScope();
+		}
 
 		return Stmt::Compound(result, parsed_stmt.span);
 	}
@@ -1908,14 +1912,14 @@ struct TCContext {
 			}
 
 			if condition_value.toInt() != 0 {
-				return this.checkCompoundStmt(if_stmt.then_branch);
+				return this.checkCompoundStmt(if_stmt.then_branch, true);
 			} else if if_stmt.else_branch.hasValue() {
 				return this.checkStmt(if_stmt.else_branch.value());
 			} else {
 				return Stmt::Empty(span);
 			}
 		} else {
-			const then_branch = this.checkCompoundStmt(if_stmt.then_branch);
+			const then_branch = this.checkCompoundStmt(if_stmt.then_branch, true);
 
 			var else_branch = Stmt::Empty(Span(0u16));
 			if const parsed_else_branch = if_stmt.else_branch {
@@ -2090,7 +2094,7 @@ struct TCContext {
 		}
 
 		this.pushScope(ScopeKind::Loop);
-		const body = this.checkCompoundStmt(parsed_stmt.body);
+		const body = this.checkCompoundStmt(parsed_stmt.body, false);
 		this.popScope();
 
 		return Stmt::While(WhileStmt(condition, condition_cleanup, body, WhileStmtKind::While), span);
@@ -2098,12 +2102,14 @@ struct TCContext {
 
 	func checkDoWhileStmt(this: &&TCContext, parsed_stmt: ParsedDoWhileStmt, span: Span) -> Stmt {
 		this.pushScope(ScopeKind::Loop);
-		const body = this.checkCompoundStmt(parsed_stmt.body);
-		this.popScope();
+
+		const body = this.checkCompoundStmt(parsed_stmt.body, false);
 
 		this.pushScope(ScopeKind::Expr);
 		const condition = this.checkExpr(parsed_stmt.condition, this.program.bool_type);
 		const condition_cleanup = this.collectCleanupCallsForCurrentScope();
+		this.popScope();
+
 		this.popScope();
 
 		if condition.type != this.program.bool_type && !condition.type.isUnknown() {
