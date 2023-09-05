@@ -8,6 +8,7 @@ import std/list;
 import std/map;
 import std/set;
 import std/shared;
+import std/shared_list;
 import std/string;
 
 import builtins;
@@ -44,11 +45,11 @@ enum SymbolLookupFilter {
 }
 
 variant Symbol {
-	var parent_namespace: WeakPtr!<Namespace>;
+	var parent_namespace: SharedHandle!<Namespace>;
 
-	case Namespace: WeakPtr!<Namespace>;
-	case Type: WeakPtr!<TypeDecl>;
-	case Function: WeakPtr!<FunctionDecl>;
+	case Namespace: SharedHandle!<Namespace>;
+	case Type: SharedHandle!<TypeDecl>;
+	case Function: SharedHandle!<FunctionDecl>;
 	case MemberVariable: uint;
 	case EnumCase: uint;
 	case VariantCase: uint;
@@ -57,9 +58,9 @@ variant Symbol {
 
 	func toString(this: &Symbol) -> String {
 		match this {
-			case Namespace: value -> return "namespace " + value.forceLock().signature();
-			case Type: value -> return "type " + value.forceLock().signature();
-			case Function: value -> return "function " + value.forceLock().signature();
+			case Namespace: value -> return "namespace " + value.signature();
+			case Type: value -> return "type " + value.signature();
+			case Function: value -> return "function " + value.signature();
 			case MemberVariable: value -> return "member variable";
 			case EnumCase: value -> return "enum case";
 			case VariantCase: value -> return "variant case";
@@ -121,8 +122,8 @@ struct TCContext {
 	var interpreter: &&Interpreter;
 
 	var current_target_state: NamespaceState;
-	var current_namespace: WeakPtr!<Namespace>;
-	var current_function: WeakPtr!<FunctionDecl>;
+	var current_namespace: SharedHandle!<Namespace>;
+	var current_function: SharedHandle!<FunctionDecl>;
 
 	var scope_stack: List!<Scope>;
 	var current_return_type: Type;
@@ -274,10 +275,9 @@ struct TCContext {
 		return Ok(file_id);
 	}
 
-	func loadModule(this: &&TCContext, imported_module: ImportedModule) -> Result!<WeakPtr!<Namespace>> {
+	func loadModule(this: &&TCContext, imported_module: ImportedModule) -> Result!<SharedHandle!<Namespace>> {
 		const file_id = try this.loadFile(imported_module);
-		const module = this.program.createModule(imported_module);
-		var module_decl = module.forceLock();
+		var module = this.program.createModule(imported_module);
 
 		// lex
 		const tokens = Lexer::lex(this.program.files[file_id].source, file_id as u16);
@@ -288,18 +288,17 @@ struct TCContext {
 		// parse
 		var parser = Parser(&&this.program, &tokens);
 		while !parser.eof() {
-			module_decl.unchecked_children.append(parser.parseStmt());
+			module.unchecked_children.append(parser.parseStmt());
 		}
 
 		if this.program.options.dump_ast {
-			print(dumpModule(&module_decl.unchecked_children));
+			print(dumpModule(&module.unchecked_children));
 		}
 
 		return Ok(module);
 	}
 
 	func checkImport(this: &&TCContext, import_name: String, span: Span) -> void {
-		var current_namespace = this.current_namespace.forceLock();
 		const imported_modules = this.program.options.getImportPaths(import_name);
 
 		if imported_modules.isEmpty() {
@@ -309,7 +308,7 @@ struct TCContext {
 
 		for imported_module in imported_modules {
 			if const module = this.program.getModule(imported_module.path) {
-				current_namespace.imported_namespaces.append(module);
+				this.current_namespace.imported_namespaces.append(module);
 				continue;
 			}
 
@@ -318,12 +317,12 @@ struct TCContext {
 				continue;
 			}
 
-			current_namespace.imported_namespaces.append(module);
-			discard this.check(module.forceLock(), this.current_target_state);
+			this.current_namespace.imported_namespaces.append(module);
+			discard this.check(module, this.current_target_state);
 		}
 	}
 
-	func check(this: &&TCContext, namespace_to_check: SharedPtr!<Namespace>, max_state: NamespaceState) -> bool {
+	func check(this: &&TCContext, namespace_to_check: SharedHandle!<Namespace>, max_state: NamespaceState) -> bool {
 		if namespace_to_check.state == IncompleteTemplate || namespace_to_check.state >= max_state {
 			return false;
 		}
@@ -332,8 +331,8 @@ struct TCContext {
 		const prev_target_state = this.current_target_state;
 		const prev_function = this.current_function;
 
-		this.current_namespace = WeakPtr!<Namespace>(namespace_to_check);
-		this.current_function = WeakPtr!<FunctionDecl>();
+		this.current_namespace = namespace_to_check;
+		this.current_function = SharedHandle!<FunctionDecl>();
 
 		while namespace_to_check.state < max_state {
 			this.current_target_state = namespace_to_check.state + 1u;
@@ -341,7 +340,7 @@ struct TCContext {
 			do {
 				var changes = false;
 				for imported_namespace in namespace_to_check.imported_namespaces {
-					changes |= this.check(imported_namespace.forceLock(), this.current_target_state);
+					changes |= this.check(imported_namespace, this.current_target_state);
 				}
 
 				var i = 0u;
@@ -369,10 +368,9 @@ struct TCContext {
 	}
 
 	func checkTopLevelStatements(this: &&TCContext) -> void {
-		var current_namespace = this.current_namespace.forceLock();
-		while !current_namespace.unchecked_children.isEmpty() {
-			const stmts = current_namespace.unchecked_children;
-			current_namespace.unchecked_children.clear();
+		while !this.current_namespace.unchecked_children.isEmpty() {
+			const stmts = this.current_namespace.unchecked_children;
+			this.current_namespace.unchecked_children.clear();
 
 			for parsed_stmt in stmts {
 				const stmt = this.checkStmt(parsed_stmt);
@@ -387,62 +385,58 @@ struct TCContext {
 			}
 		}
 
-		if current_namespace.state == Unchecked {
-			current_namespace.updateState(NamespaceState::UncheckedTypeBodies);
+		if this.current_namespace.state == Unchecked {
+			this.current_namespace.updateState(NamespaceState::UncheckedTypeBodies);
 		}
 	}
 
 	func checkTypeBodies(this: &&TCContext) -> void {
-		var current_namespace = this.current_namespace.forceLock();
-		var next = current_namespace.unchecked_types.last();
-		while next.hasValue() && current_namespace.state == UncheckedTypeBodies {
-			current_namespace.unchecked_types.removeLast();
+		var next = this.current_namespace.unchecked_types.last();
+		while next.hasValue() && this.current_namespace.state == UncheckedTypeBodies {
+			this.current_namespace.unchecked_types.removeLast();
 			this.checkTypeBody(next.value());
-			next = current_namespace.unchecked_types.last();
+			next = this.current_namespace.unchecked_types.last();
 		}
 
-		if current_namespace.state == UncheckedTypeBodies {
-			current_namespace.updateState(NamespaceState::UncheckedFunctionSignatures);
+		if this.current_namespace.state == UncheckedTypeBodies {
+			this.current_namespace.updateState(NamespaceState::UncheckedFunctionSignatures);
 		}
 	}
 
 	func checkFunctionSignatures(this: &&TCContext) -> void {
-		var current_namespace = this.current_namespace.forceLock();
-		var next = current_namespace.unchecked_functions.last();
-		while next.hasValue() && current_namespace.state == UncheckedFunctionSignatures {
-			current_namespace.unchecked_functions.removeLast();
+		var next = this.current_namespace.unchecked_functions.last();
+		while next.hasValue() && this.current_namespace.state == UncheckedFunctionSignatures {
+			this.current_namespace.unchecked_functions.removeLast();
 			this.checkFunctionSignature(next.value());
-			next = current_namespace.unchecked_functions.last();
+			next = this.current_namespace.unchecked_functions.last();
 		}
 
-		if current_namespace.state == UncheckedFunctionSignatures {
-			current_namespace.updateState(NamespaceState::UncheckedFunctionBodies);
+		if this.current_namespace.state == UncheckedFunctionSignatures {
+			this.current_namespace.updateState(NamespaceState::UncheckedFunctionBodies);
 		}
 	}
 
 	func checkFunctionBodies(this: &&TCContext) -> void {
-		var current_namespace = this.current_namespace.forceLock();
-		var next = current_namespace.unchecked_function_bodies.last();
-		while next.hasValue() && current_namespace.state == UncheckedFunctionBodies {
-			current_namespace.unchecked_function_bodies.removeLast();
+		var next = this.current_namespace.unchecked_function_bodies.last();
+		while next.hasValue() && this.current_namespace.state == UncheckedFunctionBodies {
+			this.current_namespace.unchecked_function_bodies.removeLast();
 			this.checkFunctionBody(next.value());
-			next = current_namespace.unchecked_function_bodies.last();
+			next = this.current_namespace.unchecked_function_bodies.last();
 		}
 
-		if current_namespace.state == UncheckedFunctionBodies {
-			current_namespace.updateState(NamespaceState::Done);
+		if this.current_namespace.state == UncheckedFunctionBodies {
+			this.current_namespace.updateState(NamespaceState::Done);
 		}
 	}
 
-	func checkNamespaceDecl(this: &&TCContext, parsed_decl: ParsedNamespace) -> WeakPtr!<Namespace> {
+	func checkNamespaceDecl(this: &&TCContext, parsed_decl: ParsedNamespace) -> SharedHandle!<Namespace> {
 		const template_parameters = this.checkTemplateParameterDecl(parsed_decl.template_parameters);
-		const namespace_handle = this.program.getOrCreateChildNamespace(this.current_namespace, parsed_decl.name, template_parameters, false, false);
-		var namespace_decl = namespace_handle.forceLock();
+		var namespace_decl = this.program.getOrCreateChildNamespace(this.current_namespace, parsed_decl.name, template_parameters, false);
 		namespace_decl.addUncheckedChildren(parsed_decl.children);
-		return namespace_handle;
+		return namespace_decl;
 	}
 
-	func checkTypeDecl(this: &&TCContext, parsed_decl: ParsedTypeDecl) -> WeakPtr!<TypeDecl> {
+	func checkTypeDecl(this: &&TCContext, parsed_decl: ParsedTypeDecl) -> SharedHandle!<TypeDecl> {
 		const body = match parsed_decl.kind {
 			case Struct -> yield TypeBody::Struct;
 			case Enum -> yield TypeBody::Enum;
@@ -459,24 +453,22 @@ struct TCContext {
 			true
 		);
 
-		var decl = type.forceLock();
-		decl.parsed_id_type = parsed_decl.id_type;
-
-		var linked_namespace = decl.linked_namespace.forceLock();
-		linked_namespace.addUncheckedChildren(parsed_decl.children);
+		type.parsed_id_type = parsed_decl.id_type;
+		type.linked_namespace.addUncheckedChildren(parsed_decl.children);
 
 		return type;
 	}
 
-	func checkTypeDecl(this: &&TCContext, name: String, template_parameters: List!<TemplateParameterDecl>, body: TypeBody, span: Span, name_span: Span, add_to_unchecked_list: bool) -> WeakPtr!<TypeDecl> {
-		const type = this.program.createType(this.current_namespace, name, template_parameters, body);
+	func checkTypeDecl(this: &&TCContext, name: String, template_parameters: List!<TemplateParameterDecl>, body: TypeBody, span: Span, name_span: Span, add_to_unchecked_list: bool) -> SharedHandle!<TypeDecl> {
+		var type = this.program.createType(this.current_namespace, name, template_parameters, body);
+		type.span = span;
+		type.name_span = name_span;
 
-		var parent_namespace = this.current_namespace.forceLock();
 		if add_to_unchecked_list {
-			parent_namespace.addUncheckedType(type);
+			this.current_namespace.addUncheckedType(type);
 		}
 
-		for sibling in parent_namespace.types_by_name[name] {
+		for sibling in this.current_namespace.types_by_name[name] {
 			if sibling == type {
 				continue;
 			}
@@ -485,41 +477,34 @@ struct TCContext {
 				continue;
 			}
 
-			const sibling_decl = sibling.forceLock();
-			if sibling_decl.template_parameters == template_parameters {
+			if sibling.template_parameters == template_parameters {
 				this.error("type redeclared with identical template parameters", name_span);
-				this.info("previously declared here: ", sibling_decl.name_span);
+				this.info("previously declared here: ", sibling.name_span);
 			}
 		}
-
-		var decl = type.forceLock();
-		decl.span = span;
-		decl.name_span = name_span;
 
 		return type;
 	}
 
-	func checkTypeBody(this: &&TCContext, type: WeakPtr!<TypeDecl>) -> void {
-		var decl = type.forceLock();
-
-		if decl.isIncompleteTemplate() {
+	func checkTypeBody(this: &&TCContext, type: SharedHandle!<TypeDecl>) -> void {
+		if type.isIncompleteTemplate() {
 			return;
 		}
 
 		this.program.createDefaultFunctions(Type(type, ReferenceKind::None));
-		if decl.body is Enum || decl.body is Variant {
-			if decl.parsed_id_type.hasValue() {
-				decl.id_type = this.checkTypeUsage(decl.parsed_id_type.value(), false);
+		if type.body is Enum || type.body is Variant {
+			if type.parsed_id_type.hasValue() {
+				type.id_type = this.checkTypeUsage(type.parsed_id_type.value(), false);
 			} else {
-				decl.id_type = this.program.int_type;
+				type.id_type = this.program.int_type;
 			}
 
-			decl.addContainedType(decl.id_type);
+			type.addContainedType(type.id_type);
 		}
 
-		discard this.check(decl.linked_namespace.forceLock(), NamespaceState::UncheckedFunctionSignatures);
+		discard this.check(type.linked_namespace, NamespaceState::UncheckedFunctionSignatures);
 
-		for c in decl.variant_cases {
+		for c in type.variant_cases {
 			this.program.createVariantCaseConstructor(type, c.id, c.type);
 			this.program.createVariantOpIs(type, c.id);
 
@@ -530,19 +515,20 @@ struct TCContext {
 		}
 	}
 
-	func checkFunctionDecl(this: &&TCContext, parsed_decl: ParsedFunctionDecl) -> WeakPtr!<FunctionDecl> {
+	func checkFunctionDecl(this: &&TCContext, parsed_decl: ParsedFunctionDecl) -> SharedHandle!<FunctionDecl> {
 		return this.checkFunctionDecl(parsed_decl, this.checkTemplateParameterDecl(parsed_decl.template_parameters), true);
 	}
 
-	func checkFunctionDecl(this: &&TCContext, parsed_decl: ParsedFunctionDecl, template_parameters: List!<TemplateParameterDecl>, add_to_unchecked_list: bool) -> WeakPtr!<FunctionDecl> {
+	func checkFunctionDecl(this: &&TCContext, parsed_decl: ParsedFunctionDecl, template_parameters: List!<TemplateParameterDecl>, add_to_unchecked_list: bool) -> SharedHandle!<FunctionDecl> {
 		const function = this.program.createFunction(this.current_namespace, parsed_decl.signature.name, template_parameters, FunctionBody::Unchecked(parsed_decl));
+		function.span = parsed_decl.span;
+		function.signature_span = parsed_decl.signature.span;
 
-		var parent_namespace = this.current_namespace.forceLock();
 		if add_to_unchecked_list {
-			parent_namespace.addUncheckedFunction(function);
+			this.current_namespace.addUncheckedFunction(function);
 		}
 
-		for sibling in parent_namespace.functions_by_name[parsed_decl.signature.name] {
+		for sibling in this.current_namespace.functions_by_name[parsed_decl.signature.name] {
 			if sibling == function {
 				continue;
 			}
@@ -551,21 +537,16 @@ struct TCContext {
 				continue;
 			}
 
-			const sibling_decl = sibling.forceLock();
-			if sibling_decl.template_parameters == template_parameters {
+			if sibling.template_parameters == template_parameters {
 				this.error("function redeclared with identical template parameters", parsed_decl.signature.span);
-				this.info("previously declared here: ", sibling_decl.signature_span);
+				this.info("previously declared here: ", sibling.signature_span);
 			}
 		}
-
-		var decl = function.forceLock();
-		decl.span = parsed_decl.span;
-		decl.signature_span = parsed_decl.signature.span;
 
 		for annotation in parsed_decl.annotations {
 			if annotation.name == "extern_name" {
 				match annotation {
-					case String: value -> decl.extern_name = value;
+					case String: value -> function.extern_name = value;
 					else -> this.error("invalid annotation", annotation.span);
 				}
 			} else {
@@ -576,14 +557,12 @@ struct TCContext {
 		return function;
 	}
 
-	func checkFunctionSignature(this: &&TCContext, function: WeakPtr!<FunctionDecl>) -> void {
-		var decl = function.forceLock();
-
-		if decl.isIncompleteTemplate() {
+	func checkFunctionSignature(this: &&TCContext, function: SharedHandle!<FunctionDecl>) -> void {
+		if function.isIncompleteTemplate() {
 			return;
 		}
 
-		const signature = match decl.body {
+		const signature = match function.body {
 			case Unchecked: parsed_body -> yield parsed_body.signature;
 			else -> return;
 		}
@@ -591,38 +570,36 @@ struct TCContext {
 		const prev_namespace = this.current_namespace;
 		const prev_function = this.current_function;
 
-		this.current_namespace = decl.parent_namespace;
+		this.current_namespace = function.parent_namespace;
 		this.current_function = function;
 
-		decl.return_type = this.checkTypeUsage(signature.return_type, false);
+		function.return_type = this.checkTypeUsage(signature.return_type, false);
 		for parameter in signature.parameters {
 			const parameter_type = this.checkTypeUsage(parameter.type, false);
-			decl.parameter_types.append(parameter_type);
-			decl.createParameter(parameter.span, parameter.name, parameter_type);
+			function.parameter_types.append(parameter_type);
+			function.createParameter(parameter.span, parameter.name, parameter_type);
 		}
 
-		var parent_namespace = this.current_namespace.forceLock();
-		parent_namespace.addUncheckedFunctionBody(function);
+		this.current_namespace.addUncheckedFunctionBody(function);
 
-		for sibling in parent_namespace.functions_by_name[decl.name] {
+		for sibling in this.current_namespace.functions_by_name[function.name] {
 			if sibling == function {
 				continue;
 			}
 
-			const sibling_decl = sibling.forceLock();
-			if sibling_decl.template_parameters != decl.template_parameters {
+			if sibling.template_parameters != function.template_parameters {
 				continue;
 			}
 
-			if sibling_decl.parameter_types == decl.parameter_types {
-				this.error("function redeclared with identical parameter types", decl.signature_span);
-				this.info("previously declared here: ", sibling_decl.signature_span);
+			if sibling.parameter_types == function.parameter_types {
+				this.error("function redeclared with identical parameter types", function.signature_span);
+				this.info("previously declared here: ", sibling.signature_span);
 			}
 		}
 
-		if decl.name == "main" {
-			if decl.return_type != this.program.int_type && decl.return_type != this.program.void_type {
-				this.error("invalid return type for main, expected " + this.program.int_type.signature() + " or " + this.program.void_type.signature(), decl.signature_span);
+		if function.name == "main" {
+			if function.return_type != this.program.int_type && function.return_type != this.program.void_type {
+				this.error("invalid return type for main, expected " + this.program.int_type.signature() + " or " + this.program.void_type.signature(), function.signature_span);
 			}
 
 			// TODO: validate parameter types
@@ -630,50 +607,49 @@ struct TCContext {
 			if this.program.main_function.isEmpty() {
 				this.program.main_function = function;
 			} else {
-				const prev_decl = this.program.main_function.forceLock();
-				this.error("re-declaration of the main function", decl.signature_span);
-				this.hint("main was already declared here:", prev_decl.signature_span);
+				this.error("re-declaration of the main function", function.signature_span);
+				this.hint("main was already declared here:", this.program.main_function.signature_span);
 			}
 		}
 
-		if parent_namespace.linked_type.isAlive() {
-			var parent_type = parent_namespace.linked_type.forceLock();
-			const type = Type(parent_namespace.linked_type);
+		if this.current_namespace.linked_type.isAlive() {
+			var parent_type = this.current_namespace.linked_type;
+			const type = Type(parent_type);
 
-			if decl.name == "constructor" && decl.parameter_types.size() == 1 {
-				if decl.parameter_types[0u] == type.varRef() {
+			if function.name == "constructor" && function.parameter_types.size() == 1 {
+				if function.parameter_types[0u] == type.varRef() {
 					parent_type.default_constructor = function;
 				}
-			} else if decl.name == "constructor" && decl.parameter_types.size() == 2 {
-				if decl.parameter_types[0u] == type.varRef() && decl.parameter_types[1u] == type {
+			} else if function.name == "constructor" && function.parameter_types.size() == 2 {
+				if function.parameter_types[0u] == type.varRef() && function.parameter_types[1u] == type {
 					parent_type.copy_constructor = function;
-					decl.is_copy_constructor = true;
+					function.is_copy_constructor = true;
 				}
-			} else if decl.name == "destructor" && decl.parameter_types.size() == 1 {
-				if decl.parameter_types[0u] == type.varRef() {
+			} else if function.name == "destructor" && function.parameter_types.size() == 1 {
+				if function.parameter_types[0u] == type.varRef() {
 					parent_type.destructor = function;
 				}
-			} else if decl.name == "operator =" && decl.parameter_types.size() == 2 {
-				if decl.parameter_types[0u] == type.varRef() && decl.parameter_types[1u] == type {
+			} else if function.name == "operator =" && function.parameter_types.size() == 2 {
+				if function.parameter_types[0u] == type.varRef() && function.parameter_types[1u] == type {
 					parent_type.op_assign = function;
 				}
-			} else if decl.name == "operator ==" && decl.parameter_types.size() == 2 {
-				if decl.parameter_types[0u] == type && decl.parameter_types[1u] == type {
+			} else if function.name == "operator ==" && function.parameter_types.size() == 2 {
+				if function.parameter_types[0u] == type && function.parameter_types[1u] == type {
 					parent_type.op_equal = function;
 				}
-			} else if decl.name == "operator <=>" && decl.parameter_types.size() == 2 {
-				if decl.parameter_types[0u] == type && decl.parameter_types[1u] == type {
+			} else if function.name == "operator <=>" && function.parameter_types.size() == 2 {
+				if function.parameter_types[0u] == type && function.parameter_types[1u] == type {
 					parent_type.op_compare = function;
 				}
-			} else if decl.name == "operator unwrap" && decl.parameter_types.size() == 1 {
+			} else if function.name == "operator unwrap" && function.parameter_types.size() == 1 {
 				if parent_type.unwrapped_type.isEmpty() {
-					parent_type.unwrapped_type = decl.return_type.decl;
-				} else if parent_type.unwrapped_type != decl.return_type.decl {
-					this.error("operator unwrap redeclared with different return type", decl.signature_span);
+					parent_type.unwrapped_type = function.return_type.decl;
+				} else if parent_type.unwrapped_type != function.return_type.decl {
+					this.error("operator unwrap redeclared with different return type", function.signature_span);
 				}
 
-				if decl.return_type.reference_kind < decl.parameter_types[0u].reference_kind {
-					this.error("invalid operator unwrap declaration", decl.signature_span);
+				if function.return_type.reference_kind < function.parameter_types[0u].reference_kind {
+					this.error("invalid operator unwrap declaration", function.signature_span);
 				}
 			}
 		}
@@ -682,37 +658,35 @@ struct TCContext {
 		this.current_function = prev_function;
 	}
 
-	func checkFunctionBody(this: &&TCContext, function: WeakPtr!<FunctionDecl>) -> void {
-		var decl = function.forceLock();
-
+	func checkFunctionBody(this: &&TCContext, function: SharedHandle!<FunctionDecl>) -> void {
 		const prev_namespace = this.current_namespace;
 		const prev_function = this.current_function;
 
-		this.current_namespace = decl.parent_namespace;
+		this.current_namespace = function.parent_namespace;
 		this.current_function = function;
 
-		match decl.body {
+		match function.body {
 			case Unchecked: parsed_function -> match parsed_function.body {
 				case Garbage -> {} // do nothing
 				case Extern -> {
-					decl.variables.clear();
-					decl.body = FunctionBody::Extern;
-					if decl.extern_name == "" {
-						decl.extern_name = decl.name;
+					function.variables.clear();
+					function.body = FunctionBody::Extern;
+					if function.extern_name == "" {
+						function.extern_name = function.name;
 					}
 				}
 				case Default -> {
-					decl.variables.clear();
-					decl.body = decl.getDefaultFunctionBody();
-					match decl.body {
-						case Builtin: builtin_function -> this.validateBuiltinFunctionDecl(builtin_function, decl.signature(), decl.signature_span);
+					function.variables.clear();
+					function.body = function.getDefaultFunctionBody();
+					match function.body {
+						case Builtin: builtin_function -> this.validateBuiltinFunctionDecl(builtin_function, function.signature(), function.signature_span);
 						else -> {}
 					}
 				}
-				case Compound: compound_stmt -> this.checkFunctionBody(&&decl.operator unwrap(), compound_stmt);
+				case Compound: compound_stmt -> this.checkFunctionBody(&&function.operator unwrap(), compound_stmt);
 			}
-			case Builtin: builtin_function -> this.validateBuiltinFunctionDecl(builtin_function, decl.signature(), decl.signature_span);
-			else -> this.error("function body is already checked", decl.span);
+			case Builtin: builtin_function -> this.validateBuiltinFunctionDecl(builtin_function, function.signature(), function.signature_span);
+			else -> this.error("function body is already checked", function.span);
 		}
 
 		this.current_namespace = prev_namespace;
@@ -720,14 +694,14 @@ struct TCContext {
 	}
 
 	func validateBuiltinFunctionDecl(this: &&TCContext, body: BuiltinFunction, caller_signature: String, caller_span: Span) -> void {
-		const parent_type = body.base_type.forceLock();
+		const parent_type = body.base_type.decl;
 
 		for v in parent_type.member_variables {
 			if v.type.isUnknown() || v.type.reference_kind != None {
 				continue;
 			}
 
-			const t = v.type.forceLock();
+			const t = v.type.decl;
 
 			match body {
 				case StructDefaultConstructor | ArrayDefaultConstructor -> {
@@ -774,7 +748,7 @@ struct TCContext {
 				continue;
 			}
 
-			const t = c.type.forceLock();
+			const t = c.type.decl;
 
 			match body {
 				case VariantCaseConstructor: id -> {
@@ -830,10 +804,10 @@ struct TCContext {
 
 		this.pushScope(ScopeKind::Function);
 
-		var parent_namespace = this.current_namespace.forceLock();
-
 		var required_member_variables: Set!<uint>;
-		if const parent_type = parent_namespace.linked_type.lock() {
+		if this.current_namespace.linked_type.isAlive() {
+			const parent_type = this.current_namespace.linked_type;
+
 			if decl.name == "constructor" {
 				for member_variable in parent_type.member_variables {
 					required_member_variables.add(member_variable.id);
@@ -850,7 +824,7 @@ struct TCContext {
 		for parameter in decl.parameters {
 			// create a local copy of all parameters passed by value
 			if parameter.type.reference_kind == None {
-				var copy = decl.createVariable(decl.signature_span, parameter.name, parameter.type, true);
+				var copy = decl.createVariable(decl.signature_span, parameter.name, parameter.type, false);
 				const parameter_expr = Expr::VarInvoke(WeakPtr!<VarDecl>(parameter), decl.signature_span, parameter.type);
 
 				if decl.is_copy_constructor {
@@ -889,7 +863,7 @@ struct TCContext {
 					this.error("not all member variables de-initialized", decl.signature_span);
 				}
 			} else {
-				const parent_type = parent_namespace.linked_type.forceLock();
+				const parent_type = this.current_namespace.linked_type;
 				var unhandled_member_variables: List!<uint>;
 				if decl.name == "constructor" {
 					for id in required_member_variables - this.active_member_variables {
@@ -1029,17 +1003,14 @@ struct TCContext {
 			case VarDecl: parsed_var_decl -> {
 				if this.current_function.isAlive() {
 					result = this.checkVarDecl(parsed_var_decl);
+				} else if this.current_namespace.linked_type.isAlive() {
+					this.checkMemberVarDecl(parsed_var_decl);
 				} else {
-					const current_namespace = this.current_namespace.forceLock();
-					match current_namespace.linked_type.lock() {
-						case Some: parent_type -> this.checkMemberVarDecl(parsed_var_decl);
-						else -> discard this.checkVarDecl(parsed_var_decl);
-					}
+					discard this.checkVarDecl(parsed_var_decl);
 				}
 			}
 			case CaseDecl: parsed_case_decl -> {
-				const current_namespace = this.current_namespace.forceLock();
-				if current_namespace.linked_type.isAlive() {
+				if this.current_namespace.linked_type.isAlive() {
 					this.checkCaseDecl(parsed_case_decl);
 				} else {
 					this.error("case decls must be inside a enum or variant type", parsed_case_decl.span);
@@ -1076,8 +1047,7 @@ struct TCContext {
 	}
 
 	func checkMemberVarDecl(this: &&TCContext, parsed_decl: ParsedVarDecl) -> void {
-		var current_namespace = this.current_namespace.forceLock();
-		var type_decl = current_namespace.linked_type.forceLock();
+		var type_decl = this.current_namespace.linked_type;
 
 		if !(type_decl.body is Struct) && !(type_decl.body is Variant) {
 			this.error("member variables are only allowed inside struct or variant types", parsed_decl.span);
@@ -1100,11 +1070,11 @@ struct TCContext {
 	}
 
 	func checkCaseDecl(this: &&TCContext, parsed_decl: ParsedCaseDecl) -> void {
-		var current_namespace = this.current_namespace.forceLock();
-		var type_decl = current_namespace.linked_type.lock() else {
+		if !this.current_namespace.linked_type.isAlive() {
 			this.error("case declarations are only allowed inside enum or variant types", parsed_decl.span);
 		}
 
+		var type_decl = this.current_namespace.linked_type;
 		if !(type_decl.body is Enum) && !(type_decl.body is Variant) {
 			this.error("case declarations are only allowed inside enum or variant types", parsed_decl.span);
 			return;
@@ -1181,8 +1151,7 @@ struct TCContext {
 			}
 		}
 
-		var function = this.current_function.forceLock();
-		const variable = function.createVariable(span, name, type, is_const);
+		const variable = this.current_function.createVariable(span, name, type, is_const);
 
 		this.addVariableToCurrentScope(variable);
 
@@ -1344,7 +1313,7 @@ struct TCContext {
 			return result;
 		}
 
-		const value_type_decl = value.type.forceLock();
+		const value_type_decl = value.type.decl;
 
 		var ok_case_name = "";
 		if value_type_decl.getVariantCase("Ok").hasValue() {
@@ -1409,7 +1378,7 @@ struct TCContext {
 			return List!<Stmt>();
 		}
 
-		const value_type_decl = value.type.forceLock();
+		const value_type_decl = value.type.decl;
 
 		var ok_case_name = "";
 		var error_case_name = "";
@@ -1562,8 +1531,7 @@ struct TCContext {
 		}
 
 		initializer.append(next_value);
-		var function = this.current_function.forceLock();
-		const variable = function.createVariable(parsed_stmt.capture_span, parsed_stmt.capture_name, next_value.type, next_value.type.reference_kind != Var);
+		const variable = this.current_function.createVariable(parsed_stmt.capture_span, parsed_stmt.capture_name, next_value.type, next_value.type.reference_kind == Const);
 
 		this.addVariableToCurrentScope(variable);
 
@@ -1615,7 +1583,7 @@ struct TCContext {
 			return Stmt::Empty(span);
 		}
 
-		const match_type_decl = this.match_type.forceLock();
+		const match_type_decl = this.match_type.decl;
 
 		var patterns: List!<Expr>;
 		for parsed_pattern in parsed_stmt.patterns {
@@ -1695,8 +1663,7 @@ struct TCContext {
 				capture_init = removeDereference(capture_init);
 			}
 
-			var function = this.current_function.forceLock();
-			const variable = function.createVariable(span, parsed_stmt.capture_name.value(), capture_type, capture_type.reference_kind != Var);
+			const variable = this.current_function.createVariable(span, parsed_stmt.capture_name.value(), capture_type, capture_type.reference_kind != Var);
 
 			this.addVariableToCurrentScope(variable);
 
@@ -1732,7 +1699,7 @@ struct TCContext {
 	}
 
 	func checkThrowStmt(this: &&TCContext, parsed_value: ParsedExpr, span: Span) -> List!<Stmt> {
-		const return_type_decl = this.current_return_type.forceLock();
+		const return_type_decl = this.current_return_type.decl;
 		const c = return_type_decl.getVariantCase("Error") else {
 			this.error("invalid return type for throw: expected std::core::Result or similar, but got " + this.current_return_type.signature(), span);
 			return List!<Stmt>();
@@ -1759,7 +1726,8 @@ struct TCContext {
 			this.pushScope(ScopeKind::Expr);
 			value = this.checkExpr(parsed_value.value(), this.current_return_type);
 
-			if const type_decl = value.type.lock() {
+			if value.type.decl.isAlive() {
+				const type_decl = value.type.decl;
 				if value.type != this.current_return_type && type_decl.unwrapped_type == this.current_return_type.decl && value.type.reference_kind == this.current_return_type.reference_kind {
 					value = this.checkCall(
 						Name("operator unwrap"),
@@ -1859,8 +1827,7 @@ struct TCContext {
 			}
 
 			if !this.yield_var.isAlive() {
-				var func_decl = this.current_function.forceLock();
-				this.yield_var = func_decl.createVariable(Span(), "#yield_var", checked_value.type, checked_value.type.reference_kind != Var);
+				this.yield_var = this.current_function.createVariable(Span(), "#yield_var", checked_value.type, checked_value.type.reference_kind != Var);
 				this.createDestructorCall(this.yield_var);
 			}
 
@@ -2041,7 +2008,8 @@ struct TCContext {
 
 	func checkArrayExpr(this: &&TCContext, parsed_elements: List!<ParsedExpr>, span: Span, expected_type: Type) -> Expr {
 		var expected_element_type = Type::unknown();
-		if const type_decl = expected_type.lock() {
+		if !expected_type.isUnknown() {
+			const type_decl = expected_type.decl;
 			if const array_type = type_decl.body as Array {
 				expected_element_type = array_type.element_type;
 			}
@@ -2098,7 +2066,7 @@ struct TCContext {
 
 		this.match_value = checked_value;
 
-		const value_type_decl = this.match_value.type.forceLock();
+		const value_type_decl = this.match_value.type.decl;
 		if !((value_type_decl.body is Variant) || this.match_value.type.isIntType()) {
 			this.error("value in match statement has invalid type: expected integral type or variant but got '" + this.match_value.type.signature() + "'", this.match_value.span);
 		}
@@ -2257,7 +2225,7 @@ struct TCContext {
 		const checked_name = this.checkName(parsed_name);
 		const symbols = this.lookupSymbol(
 			checked_name,
-			WeakPtr!<TypeDecl>(),
+			SharedHandle!<TypeDecl>(),
 			SymbolLookupFilter::Variables | TemplateParameters,
 			span
 		) + this.lookupSymbol(
@@ -2272,15 +2240,15 @@ struct TCContext {
 		for s in symbols {
 			match s {
 				case EnumCase: index -> {
-					const parent_type = symbols[0u].parent_namespace.forceLock().linked_type;
-					result_candidates.append(Expr::Integer(parent_type.forceLock().enum_cases[index].id, span, Type(parent_type)));
+					const parent_type = symbols[0u].parent_namespace.linked_type;
+					result_candidates.append(Expr::Integer(parent_type.enum_cases[index].id, span, Type(parent_type)));
 				}
 				case VariantCase: index -> {
-					const parent_type = symbols[0u].parent_namespace.forceLock().linked_type;
+					const parent_type = symbols[0u].parent_namespace.linked_type;
 
 					var template_parameters: List!<TemplateParameter>;
 					template_parameters.append(TemplateParameter::Integer(
-						parent_type.forceLock().variant_cases[index].id
+						parent_type.variant_cases[index].id
 					));
 
 					result_candidates.append(this.createTemporaryVariable(
@@ -2331,7 +2299,7 @@ struct TCContext {
 					return Expr::Undefined(span, Type::unknown());
 				}
 
-				const type_decl = member_access_expr.object.type.forceLock();
+				const type_decl = member_access_expr.object.type.decl;
 
 				const member_variable = type_decl.member_variables[member_access_expr.id];
 				if member_variable.type.reference_kind == None {
@@ -2381,7 +2349,7 @@ struct TCContext {
 						const parameter_types = getExprListTypes(arguments);
 						const matching_functions = this.lookupFunction(
 							checked_name,
-							WeakPtr!<TypeDecl>(),
+							SharedHandle!<TypeDecl>(),
 							parameter_types,
 							ReferenceKind::None if parameter_types.isEmpty() else parameter_types[0u].reference_kind,
 							true, true,
@@ -2405,11 +2373,11 @@ struct TCContext {
 										span
 									);
 									case VariantCase: index -> {
-										const parent_type = matching_symbols[0u].parent_namespace.forceLock().linked_type;
+										const parent_type = matching_symbols[0u].parent_namespace.linked_type;
 
 										var template_parameters: List!<TemplateParameter>;
 										template_parameters.append(TemplateParameter::Integer(
-											parent_type.forceLock().variant_cases[index].id
+											parent_type.variant_cases[index].id
 										));
 
 										return this.createTemporaryVariable(
@@ -2452,7 +2420,7 @@ struct TCContext {
 									true, true, span
 								);
 
-								const parent_type = object.type.decl.forceLock();
+								const parent_type = object.type.decl;
 								if candidates.isEmpty() && name.segments.size() == 1 {
 									if name.segments[0u].template_parameters.isEmpty() && parent_type.member_variables_by_name.contains(parsed_name.segments[0u].name) {
 										arguments[0u] = this.checkMemberAccessExpr(object, name.segments[0u].name, span);
@@ -2560,16 +2528,15 @@ struct TCContext {
 			return Expr::Undefined(span, Type::unknown());
 		}
 
-		var type_decl = object.type.forceLock();
+		var type_decl = object.type.decl;
 		if type_decl.getMemberVariable(member_name) is None && !type_decl.unwrapped_type.isEmpty() {
-			const unwrapped_decl = type_decl.unwrapped_type.forceLock();
-			if unwrapped_decl.getMemberVariable(member_name) is Some {
+			if type_decl.unwrapped_type.getMemberVariable(member_name) is Some {
 				object = removeDereference(this.checkCall(
 					Name("operator unwrap"),
 					List!<Expr>(1u, object), false, false, CallKind::MemberCall, span
 				));
 
-				type_decl = unwrapped_decl;
+				type_decl = type_decl.unwrapped_type;
 			}
 		}
 
@@ -2606,7 +2573,7 @@ struct TCContext {
 			return Expr::Undefined(span, Type::unknown());
 		}
 
-		const type_decl = value.type.forceLock();
+		const type_decl = value.type.decl;
 
 		const ok_case_decl = type_decl.getVariantCase("Ok") else {
 			this.error("value has invalid type: expected std::core::Result or similar, but got " + value.type.signature(), span);
@@ -2713,7 +2680,7 @@ struct TCContext {
 			return Expr::Undefined(span, Type::unknown());
 		}
 
-		const lhs_type_decl = lhs.type.forceLock();
+		const lhs_type_decl = lhs.type.decl;
 
 		if lhs_type_decl.body is Enum {
 			const rhs = this.checkExpr(parsed_rhs, lhs.type.base());
@@ -2767,7 +2734,7 @@ struct TCContext {
 			return Expr::Undefined(span, Type::unknown());
 		}
 
-		const lhs_type_decl = lhs.type.forceLock();
+		const lhs_type_decl = lhs.type.decl;
 
 		if lhs_type_decl.body is Variant && parsed_rhs is Name {
 			const parsed_name = (parsed_rhs as Name).value();
@@ -2836,7 +2803,7 @@ struct TCContext {
 		//     else -> yield None;
 		// }
 
-		const type_decl = value.type.forceLock();
+		const type_decl = value.type.decl;
 		const case_decl = type_decl.getVariantCase(case_name).value();
 
 		if case_decl.type == this.program.void_type {
@@ -2879,14 +2846,14 @@ struct TCContext {
 		return this.checkMatchExpr(value, cases, yield_type, span);
 	}
 
-	func lookupNamespace(this: &&TCContext, namespaces_to_search: Set!<WeakPtr!<Namespace>>, name: NameSegment) -> Set!<WeakPtr!<Namespace>> {
-		var result: Set!<WeakPtr!<Namespace>>;
+	func lookupNamespace(this: &&TCContext, namespaces_to_search: Set!<SharedHandle!<Namespace>>, name: NameSegment) -> Set!<SharedHandle!<Namespace>> {
+		var result: Set!<SharedHandle!<Namespace>>;
 
 		for n in namespaces_to_search {
-			var decl = n.forceLock();
+			var decl = n;
 
 			var most_matching_template_parameters = 0;
-			var children_with_matching_template_parameters: List!<WeakPtr!<Namespace>>;
+			var children_with_matching_template_parameters: List!<SharedHandle!<Namespace>>;
 
 			for child in decl.children {
 				if child.name != name.name {
@@ -2896,16 +2863,15 @@ struct TCContext {
 				const matching_template_parameters = this.getMatchingTemplateParameterCount(&child.template_parameters, &name.template_parameters);
 				if matching_template_parameters > most_matching_template_parameters {
 					children_with_matching_template_parameters.clear();
-					children_with_matching_template_parameters.append(WeakPtr!<Namespace>(child));
+					children_with_matching_template_parameters.append(SharedHandle!<Namespace>(child));
 					most_matching_template_parameters = matching_template_parameters;
 				} else if matching_template_parameters == most_matching_template_parameters {
-					children_with_matching_template_parameters.append(WeakPtr!<Namespace>(child));
+					children_with_matching_template_parameters.append(SharedHandle!<Namespace>(child));
 				}
 			}
 
 			for child in children_with_matching_template_parameters {
-				const child_decl = child.forceLock();
-				if child_decl.isIncompleteTemplate() {
+				if child.isIncompleteTemplate() {
 					result.add(this.createTemplateInstance(child, name.template_parameters, name.span));
 				} else {
 					result.add(child);
@@ -2916,7 +2882,7 @@ struct TCContext {
 		return result;
 	}
 
-	func lookupSymbol(this: &&TCContext, name: Name, parent_type: WeakPtr!<TypeDecl>, filter: SymbolLookupFilter, span: Span) -> List!<Symbol> {
+	func lookupSymbol(this: &&TCContext, name: Name, parent_type: SharedHandle!<TypeDecl>, filter: SymbolLookupFilter, span: Span) -> List!<Symbol> {
 		var result: List!<Symbol>;
 		if name.segments.isEmpty() {
 			return result;
@@ -2926,12 +2892,11 @@ struct TCContext {
 		const last_segment = name_segments.last().value();
 		name_segments.removeLast();
 
-		var namespaces_to_search: Set!<WeakPtr!<Namespace>>;
+		var namespaces_to_search: Set!<SharedHandle!<Namespace>>;
 		for n in this.program.getVisibleNamespaces(this.current_namespace) {
-			const namespace_decl = n.forceLock();
-			const intersecting_segments = namespace_decl.full_name.intersection(name_segments);
+			const intersecting_segments = n.full_name.intersection(name_segments);
 
-			var matching_namespaces: Set!<WeakPtr!<Namespace>>;
+			var matching_namespaces: Set!<SharedHandle!<Namespace>>;
 			matching_namespaces.add(n);
 
 			for i in intersecting_segments..name_segments.size() {
@@ -2942,23 +2907,21 @@ struct TCContext {
 		}
 
 		if name_segments.isEmpty() && parent_type.isAlive() {
-			const parent_type_decl = parent_type.forceLock();
-			namespaces_to_search.add(parent_type_decl.linked_namespace);
+			namespaces_to_search.add(parent_type.linked_namespace);
 
-			if const unwrapped_type = parent_type_decl.unwrapped_type.lock() {
-				namespaces_to_search.add(unwrapped_type.linked_namespace);
+			if parent_type.unwrapped_type.isAlive() {
+				namespaces_to_search.add(parent_type.unwrapped_type.linked_namespace);
 			}
 		}
 
 		for n in this.lookupNamespace(namespaces_to_search, last_segment) {
-			const namespace_decl = n.forceLock();
 			if (filter & Namespaces) != None {
-				result.append(Symbol::Namespace(n, namespace_decl.parent));
+				result.append(Symbol::Namespace(n, n.parent));
 			}
 
 			if (filter & Types) != None {
-				if namespace_decl.linked_type.isAlive() {
-					result.append(Symbol::Type(namespace_decl.linked_type, namespace_decl.parent));
+				if n.linked_type.isAlive() {
+					result.append(Symbol::Type(n.linked_type, n.parent));
 				}
 			}
 		}
@@ -2976,46 +2939,43 @@ struct TCContext {
 				}
 
 				for n in this.lookupNamespace(namespaces_to_search, NameSegment(numeric_type_name, numeric_type_template_parameters)) {
-					const namespace_decl = n.forceLock();
-					if namespace_decl.linked_type.isAlive() {
-						result.append(Symbol::Type(namespace_decl.linked_type, namespace_decl.parent));
+					if n.linked_type.isAlive() {
+						result.append(Symbol::Type(n.linked_type, n.parent));
 					}
 				}
 			}
 		}
 
 		if name_segments.isEmpty() && parent_type.isAlive() {
-			const parent_type_decl = parent_type.forceLock();
-
 			if (filter & MemberVariables) != None {
-				if const index = parent_type_decl.member_variables_by_name.get(last_segment.name) {
-					result.append(Symbol::MemberVariable(index, parent_type_decl.linked_namespace));
+				if const index = parent_type.member_variables_by_name.get(last_segment.name) {
+					result.append(Symbol::MemberVariable(index, parent_type.linked_namespace));
 				}
 			}
 
 			if (filter & CaseDecls) != None {
-				if const index = parent_type_decl.enum_cases_by_name.get(last_segment.name) {
-					result.append(Symbol::EnumCase(index, parent_type_decl.linked_namespace));
+				if const index = parent_type.enum_cases_by_name.get(last_segment.name) {
+					result.append(Symbol::EnumCase(index, parent_type.linked_namespace));
 				}
 
-				if const index = parent_type_decl.variant_cases_by_name.get(last_segment.name) {
-					result.append(Symbol::VariantCase(index, parent_type_decl.linked_namespace));
+				if const index = parent_type.variant_cases_by_name.get(last_segment.name) {
+					result.append(Symbol::VariantCase(index, parent_type.linked_namespace));
 				}
 			}
 		}
 
 		if !name_segments.isEmpty() {
 			for n in namespaces_to_search {
-				const parent_type_decl = n.forceLock().linked_type.lock() else {
+				if n.linked_type.isEmpty() {
 					continue;
 				}
 
 				if (filter & CaseDecls) != None {
-					if const index = parent_type_decl.enum_cases_by_name.get(last_segment.name) {
+					if const index = n.linked_type.enum_cases_by_name.get(last_segment.name) {
 						result.append(Symbol::EnumCase(index, n));
 					}
 
-					if const index = parent_type_decl.variant_cases_by_name.get(last_segment.name) {
+					if const index = n.linked_type.variant_cases_by_name.get(last_segment.name) {
 						result.append(Symbol::VariantCase(index, n));
 					}
 				}
@@ -3024,13 +2984,10 @@ struct TCContext {
 
 		if (filter & Functions) != None {
 			for n in namespaces_to_search {
-				const namespace_decl = n.forceLock();
-
 				var most_matching_template_parameters = 0;
-				var functions_with_matching_template_parameters: List!<WeakPtr!<FunctionDecl>>;
-				for function in namespace_decl.functions_by_name.get(last_segment.name) ?? List!<WeakPtr!<FunctionDecl>>() {
-					const function_decl = function.forceLock();
-					const matching_template_parameters = this.getMatchingTemplateParameterCount(&function_decl.template_parameters, &last_segment.template_parameters);
+				var functions_with_matching_template_parameters: List!<SharedHandle!<FunctionDecl>>;
+				for function in n.functions_by_name.get(last_segment.name) ?? List!<SharedHandle!<FunctionDecl>>() {
+					const matching_template_parameters = this.getMatchingTemplateParameterCount(&function.template_parameters, &last_segment.template_parameters);
 
 					if matching_template_parameters > most_matching_template_parameters {
 						functions_with_matching_template_parameters.clear();
@@ -3042,8 +2999,7 @@ struct TCContext {
 				}
 
 				for function in functions_with_matching_template_parameters {
-					const function_decl = function.forceLock();
-					if function_decl.isIncompleteTemplate() {
+					if function.isIncompleteTemplate() {
 						result.append(Symbol::Function(this.createTemplateInstance(function, last_segment.template_parameters, span), n));
 					} else {
 						result.append(Symbol::Function(function, n));
@@ -3054,38 +3010,36 @@ struct TCContext {
 
 		if name_segments.isEmpty() && last_segment.template_parameters.isEmpty() && (filter & Variables) != None {
 			if const variable = this.getVariableByName(last_segment.name) {
-				result.append(Symbol::Variable(variable, WeakPtr!<Namespace>()));
+				result.append(Symbol::Variable(variable, SharedHandle!<Namespace>()));
 			}
 		}
 
 		if name_segments.isEmpty() && last_segment.template_parameters.isEmpty() && (filter & TemplateParameters) != None {
-			if const function_decl = this.current_function.lock() {
-				for template_parameter in function_decl.template_parameters {
+			if this.current_function.isAlive() {
+				for template_parameter in this.current_function.template_parameters {
 					if template_parameter.name != last_segment.name {
 						continue;
 					}
 
 					if const value = template_parameter.value {
-						result.append(Symbol::TemplateParameter(value, WeakPtr!<Namespace>()));
+						result.append(Symbol::TemplateParameter(value, SharedHandle!<Namespace>()));
 					}
 				}
 			}
 
 			var current_namespace = this.current_namespace;
 			while current_namespace.isAlive() {
-				var namespace_decl = current_namespace.forceLock();
-
-				for template_parameter in namespace_decl.template_parameters {
+				for template_parameter in current_namespace.template_parameters {
 					if template_parameter.name != last_segment.name {
 						continue;
 					}
 
 					if const value = template_parameter.value {
-						result.append(Symbol::TemplateParameter(value, this.current_namespace));
+						result.append(Symbol::TemplateParameter(value, current_namespace));
 					}
 				}
 
-				current_namespace = namespace_decl.parent;
+				current_namespace = current_namespace.parent;
 			}
 		}
 
@@ -3094,7 +3048,7 @@ struct TCContext {
 
 	func lookupType(this: &&TCContext, name: Name, span: Span) -> List!<Type> {
 		var candidates: List!<Type>;
-		for s in this.lookupSymbol(name, WeakPtr!<TypeDecl>(), SymbolLookupFilter::Types | TemplateParameters, span) {
+		for s in this.lookupSymbol(name, SharedHandle!<TypeDecl>(), SymbolLookupFilter::Types | TemplateParameters, span) {
 			match s {
 				case Type: type -> candidates.append(Type(type));
 				case TemplateParameter: template_parameter -> match template_parameter {
@@ -3128,8 +3082,8 @@ struct TCContext {
 		}
 	}
 
-	func lookupFunction(this: &&TCContext, name: Name, parent_type: WeakPtr!<TypeDecl>, parameter_types: List!<Type>, first_arg_max_ref_kind: ReferenceKind, allow_unwrapping_this: bool, allow_unwrapping: bool, span: Span) -> List!<WeakPtr!<FunctionDecl>> {
-		var candidates: List!<WeakPtr!<FunctionDecl>>;
+	func lookupFunction(this: &&TCContext, name: Name, parent_type: SharedHandle!<TypeDecl>, parameter_types: List!<Type>, first_arg_max_ref_kind: ReferenceKind, allow_unwrapping_this: bool, allow_unwrapping: bool, span: Span) -> List!<SharedHandle!<FunctionDecl>> {
+		var candidates: List!<SharedHandle!<FunctionDecl>>;
 		for s in this.lookupSymbol(name, parent_type, SymbolLookupFilter::Functions, span) {
 			candidates.append((s as Function).value());
 		}
@@ -3155,14 +3109,13 @@ struct TCContext {
 		return Some(number.toInt() as uint);
 	}
 
-	func selectMatchingFunctions(this: &&TCContext, candidates: List!<WeakPtr!<FunctionDecl>>, parameter_types: List!<Type>, first_arg_max_ref_kind: ReferenceKind, allow_unwrapping_this: bool, allow_unwrapping: bool) -> List!<WeakPtr!<FunctionDecl>> {
-		var result: List!<WeakPtr!<FunctionDecl>>;
+	func selectMatchingFunctions(this: &&TCContext, candidates: List!<SharedHandle!<FunctionDecl>>, parameter_types: List!<Type>, first_arg_max_ref_kind: ReferenceKind, allow_unwrapping_this: bool, allow_unwrapping: bool) -> List!<SharedHandle!<FunctionDecl>> {
+		var result: List!<SharedHandle!<FunctionDecl>>;
 		result.grow(4u);
 
 		var most_matching_parameters = 0;
 		for function in candidates {
-			const function_decl = function.forceLock();
-			const matching_parameters = function_decl.getMatchingParameterCount(&parameter_types, first_arg_max_ref_kind, allow_unwrapping_this, allow_unwrapping);
+			const matching_parameters = function.getMatchingParameterCount(&parameter_types, first_arg_max_ref_kind, allow_unwrapping_this, allow_unwrapping);
 
 			if matching_parameters < most_matching_parameters {
 				continue;
@@ -3176,11 +3129,11 @@ struct TCContext {
 				continue;
 			}
 
-			const ref_kind = function_decl.parameter_types[0u].reference_kind;
+			const ref_kind = function.parameter_types[0u].reference_kind;
 			var inserted = false;
 
 			for i in 0u..result.size() {
-				if result[i].forceLock().parameter_types[0u].reference_kind < ref_kind {
+				if result[i].parameter_types[0u].reference_kind < ref_kind {
 					result.insert(i, function);
 					inserted = true;
 					break;
@@ -3195,7 +3148,7 @@ struct TCContext {
 		return result;
 	}
 
-	func validateFunctionCanditates(this: &&TCContext, candidates: List!<WeakPtr!<FunctionDecl>>, required_name: Name, required_parameter_types: List!<Type>, span: Span) -> bool {
+	func validateFunctionCanditates(this: &&TCContext, candidates: List!<SharedHandle!<FunctionDecl>>, required_name: Name, required_parameter_types: List!<Type>, span: Span) -> bool {
 		if candidates.isEmpty() {
 			this.error("no matching function found", span);
 			this.info("looking for " + required_name.toString() + format(required_parameter_types), Span());
@@ -3208,13 +3161,12 @@ struct TCContext {
 		var no_param_count = 0;
 
 		for f in candidates {
-			const decl = f.forceLock();
-			if decl.parameter_types.isEmpty() {
+			if f.parameter_types.isEmpty() {
 				no_param_count++;
 				continue;
 			}
 
-			match decl.parameter_types[0u].reference_kind {
+			match f.parameter_types[0u].reference_kind {
 				case None -> no_ref_count++;
 				case Const -> const_ref_count++;
 				case Var -> var_ref_count++;
@@ -3225,7 +3177,7 @@ struct TCContext {
 			this.error("too many matching functions found", span);
 			this.info("candidates are:", Span());
 			for f in candidates {
-				this.info("    " + f.forceLock().signature(), Span());
+				this.info("    " + f.signature(), Span());
 			}
 			return false;
 		}
@@ -3272,9 +3224,8 @@ struct TCContext {
 		return count;
 	}
 
-	func doesConceptAcceptTemplateParameter(this: &&TCContext, concept_ref: WeakPtr!<Concept>, parameter: TemplateParameter) -> bool {
-		const concept_decl = concept_ref.forceLock();
-		const concept = &concept_decl.operator unwrap();
+	func doesConceptAcceptTemplateParameter(this: &&TCContext, concept_ref: SharedHandle!<Concept>, parameter: TemplateParameter) -> bool {
+		const concept = &concept_ref.operator unwrap();
 
 		if concept is IntLiteral && parameter is Integer {
 			return true;
@@ -3314,7 +3265,7 @@ struct TCContext {
 				count++;
 			} else if !((i != 0 && allow_unwrapping) || (i == 0 && allow_unwrapping_this)) {
 				return -1;
-			} else if required_parameter_type.forceLock().unwrapped_type != function_parameter_type.decl {
+			} else if required_parameter_type.decl.unwrapped_type != function_parameter_type.decl {
 				return -1;
 			}
 		}
@@ -3322,28 +3273,26 @@ struct TCContext {
 		return count;
 	}
 
-	func createTemplateInstance(this: &&TCContext, base: WeakPtr!<Namespace>, template_parameters: List!<TemplateParameter>, error_span: Span) -> WeakPtr!<Namespace> {
-		var base_decl = base.forceLock();
-
+	func createTemplateInstance(this: &&TCContext, base: SharedHandle!<Namespace>, template_parameters: List!<TemplateParameter>, error_span: Span) -> SharedHandle!<Namespace> {
 		const prev_namespace = this.current_namespace;
-		this.current_namespace = base_decl.parent;
+		this.current_namespace = base.parent;
 
-		var instance: WeakPtr!<Namespace>;
-		if base_decl.linked_type.isAlive() {
-			const base_type = base_decl.linked_type.forceLock();
-			var type_instance: WeakPtr!<TypeDecl>;
+		var instance: SharedHandle!<Namespace>;
+		if base.linked_type.isAlive() {
+			const base_type = base.linked_type;
+			var type_instance: SharedHandle!<TypeDecl>;
 			match base_type.body {
 				case Int | UInt | Float -> {
 					const bits = (template_parameters[0u] as Integer).value();
 					if bits <= 0 {
 						this.error("only numeric types with size >= 1 are allowed", error_span);
-						return WeakPtr!<Namespace>();
+						return SharedHandle!<Namespace>();
 					}
 
 					match base_type.body {
-						case Int -> type_instance = this.program.createIntTypeInstance(base_decl.parent, true, bits).decl;
-						case UInt -> type_instance = this.program.createIntTypeInstance(base_decl.parent, false, bits).decl;
-						case Float -> type_instance = this.program.createFloatTypeInstance(base_decl.parent, bits).decl;
+						case Int -> type_instance = this.program.createIntTypeInstance(base.parent, true, bits).decl;
+						case UInt -> type_instance = this.program.createIntTypeInstance(base.parent, false, bits).decl;
+						case Float -> type_instance = this.program.createFloatTypeInstance(base.parent, bits).decl;
 						else -> panic("unreachable");
 					}
 				}
@@ -3351,10 +3300,10 @@ struct TCContext {
 					const pointee_type = (template_parameters[0u] as Type).value();
 					if pointee_type == this.program.void_type || pointee_type == this.program.never_type {
 						this.error("invalid pointer template parameter: pointee type must not be void", error_span);
-						return WeakPtr!<Namespace>();
+						return SharedHandle!<Namespace>();
 					}
 
-					type_instance = this.program.createPtrTypeInstance(base_decl.parent, pointer_type.is_const, pointee_type).decl;
+					type_instance = this.program.createPtrTypeInstance(base.parent, pointer_type.is_const, pointee_type).decl;
 				}
 				case Array -> {
 					const element_type = (template_parameters[0u] as Type).value();
@@ -3362,7 +3311,7 @@ struct TCContext {
 
 					if size < 0 {
 						this.error("only array types with size >= 0 are allowed", error_span);
-						return WeakPtr!<Namespace>();
+						return SharedHandle!<Namespace>();
 					}
 
 					var element_ptr_type_template_parameters: List!<TemplateParameter>;
@@ -3371,57 +3320,52 @@ struct TCContext {
 					const element_cptr_type = this.getType(Name("cptr", element_ptr_type_template_parameters), Span(), false);
 					const element_vptr_type = this.getType(Name("vptr", element_ptr_type_template_parameters), Span(), false);
 
-					type_instance = this.program.createArrayTypeInstance(base_decl.parent, element_type, size as uint, element_cptr_type, element_vptr_type).decl;
+					type_instance = this.program.createArrayTypeInstance(base.parent, element_type, size as uint, element_cptr_type, element_vptr_type).decl;
 				}
 				else -> {
 					type_instance = this.checkTypeDecl(
-						base_decl.name,
-						getTemplateParameterDecls(base_decl.template_parameters, template_parameters),
+						base.name,
+						getTemplateParameterDecls(base.template_parameters, template_parameters),
 						base_type.body,
-						base_decl.span,
-						base_decl.name_span,
+						base.span,
+						base.name_span,
 						this.current_target_state <= UncheckedTypeBodies
 					);
 
-					var decl = type_instance.forceLock();
-					decl.parsed_id_type = base_type.parsed_id_type;
+					type_instance.parsed_id_type = base_type.parsed_id_type;
 				}
 			}
 
-			instance = type_instance.forceLock().linked_namespace;
+			instance = type_instance.linked_namespace;
 		} else {
-			instance = this.program.getOrCreateChildNamespace(base_decl.parent, base_decl.name, getTemplateParameterDecls(base_decl.template_parameters, template_parameters), false, false);
+			instance = this.program.getOrCreateChildNamespace(base.parent, base.name, getTemplateParameterDecls(base.template_parameters, template_parameters), false);
 		}
 
 		if instance == base || instance.isEmpty() {
-			panic("bad template instance: " + base_decl.signature() + " - " + format(template_parameters));
+			panic("bad template instance: " + base.signature() + " - " + format(template_parameters));
 		}
 
-		var instance_decl = instance.forceLock();
-		instance_decl.addUncheckedChildren(base_decl.unchecked_children);
-		base_decl.template_instances.append(instance);
+		instance.addUncheckedChildren(base.unchecked_children);
+		base.template_instances.append(instance);
 
-
-		if instance_decl.linked_type.isAlive() && this.current_target_state > UncheckedTypeBodies {
-			discard this.check(instance_decl, NamespaceState::UncheckedTypeBodies);
-			this.checkTypeBody(instance_decl.linked_type);
+		if instance.linked_type.isAlive() && this.current_target_state > UncheckedTypeBodies {
+			discard this.check(instance, NamespaceState::UncheckedTypeBodies);
+			this.checkTypeBody(instance.linked_type);
 		}
 
-		discard this.check(instance_decl, this.current_target_state);
+		discard this.check(instance, this.current_target_state);
 
 		this.current_namespace = prev_namespace;
 		return instance;
 	}
 
-	func createTemplateInstance(this: &&TCContext, base: WeakPtr!<FunctionDecl>, template_parameters: List!<TemplateParameter>, error_span: Span) -> WeakPtr!<FunctionDecl> {
-		const base_decl = base.forceLock();
-
+	func createTemplateInstance(this: &&TCContext, base: SharedHandle!<FunctionDecl>, template_parameters: List!<TemplateParameter>, error_span: Span) -> SharedHandle!<FunctionDecl> {
 		const prev_namespace = this.current_namespace;
-		this.current_namespace = base_decl.parent_namespace;
+		this.current_namespace = base.parent_namespace;
 
-		var instance: WeakPtr!<FunctionDecl>;
+		var instance: SharedHandle!<FunctionDecl>;
 
-		match base_decl.body {
+		match base.body {
 			case InlineBuiltin: builtin_function -> match builtin_function {
 				case IntCast
 				| FloatCast
@@ -3445,7 +3389,7 @@ struct TCContext {
 						this.error("invalid pointer cast, source type is const but target isn't", error_span);
 					}
 
-					instance = this.program.createPrimitiveCastInstance(base_decl.parent_namespace, cast_name, source, target);
+					instance = this.program.createPrimitiveCastInstance(base.parent_namespace, cast_name, source, target);
 				}
 				case SizeOf
 				| AlignmentOf
@@ -3471,21 +3415,20 @@ struct TCContext {
 						else -> panic(Error::EINVAL);
 					}
 
-					instance = this.program.createFunction(base_decl.parent_namespace, name, parameter_types, return_type, FunctionBody::InlineBuiltin(body));
-					var instance_decl = instance.forceLock();
-					instance_decl.template_parameters.append(TemplateParameterDecl("Type", this.program.any_concept, false, template_parameters[0u]));
+					instance = this.program.createFunction(base.parent_namespace, name, parameter_types, return_type, FunctionBody::InlineBuiltin(body));
+					instance.template_parameters.append(TemplateParameterDecl("Type", this.program.any_concept, false, template_parameters[0u]));
 				}
-				else -> this.error("cannot create template instance of builtin function " + base_decl.signature(), base_decl.signature_span);
+				else -> this.error("cannot create template instance of builtin function " + base.signature(), base.signature_span);
 			}
 			case Unchecked: parsed_function -> {
 				if this.current_target_state > UncheckedFunctionSignatures {
-					instance = this.checkFunctionDecl(parsed_function, getTemplateParameterDecls(base_decl.template_parameters, template_parameters), false);
+					instance = this.checkFunctionDecl(parsed_function, getTemplateParameterDecls(base.template_parameters, template_parameters), false);
 					this.checkFunctionSignature(instance);
 				} else {
-					instance = this.checkFunctionDecl(parsed_function, getTemplateParameterDecls(base_decl.template_parameters, template_parameters), true);
+					instance = this.checkFunctionDecl(parsed_function, getTemplateParameterDecls(base.template_parameters, template_parameters), true);
 				}
 			}
-			else -> this.error("cannot create template instance of this function", base_decl.signature_span);
+			else -> this.error("cannot create template instance of this function", base.signature_span);
 		}
 
 		this.current_namespace = prev_namespace;
@@ -3586,7 +3529,7 @@ struct TCContext {
 
 		const parameter_types = getExprListTypes(arguments);
 
-		var parent_type = WeakPtr!<TypeDecl>();
+		var parent_type = SharedHandle!<TypeDecl>();
 		var first_arg_max_ref_kind = ReferenceKind::None;
 
 		if kind == MemberCall || kind == Operator {
@@ -3684,30 +3627,29 @@ struct TCContext {
 		return true;
 	}
 
-	func createCall(this: &&TCContext, function: WeakPtr!<FunctionDecl>, arguments: List!<Expr>, call_kind: CallKind, span: Span) -> Expr {
-		const callee_decl = function.forceLock();
-		const unwrapped_arguments = this.unwrapArguments(arguments, callee_decl.parameter_types);
-		if !this.validateArgumentTypes(unwrapped_arguments, callee_decl.parameter_types, span) {
+	func createCall(this: &&TCContext, function: SharedHandle!<FunctionDecl>, arguments: List!<Expr>, call_kind: CallKind, span: Span) -> Expr {
+		const unwrapped_arguments = this.unwrapArguments(arguments, function.parameter_types);
+		if !this.validateArgumentTypes(unwrapped_arguments, function.parameter_types, span) {
 			return Expr::Undefined(span, Type::unknown());
 		}
 
 		var return_kind = ReturnKind::None;
-		var result_type = callee_decl.return_type;
+		var result_type = function.return_type;
 
 		if call_kind == TempVar {
 			return_kind = Parameter;
-			result_type = callee_decl.parameter_types[0u].constRef();
-		} else if !callee_decl.return_type.isPrimitive() {
+			result_type = function.parameter_types[0u].constRef();
+		} else if !function.return_type.isPrimitive() {
 			return_kind = Variable;
-			result_type = callee_decl.return_type.constRef();
-		} else if callee_decl.return_type == this.program.void_type || callee_decl.return_type == this.program.never_type {
+			result_type = function.return_type.constRef();
+		} else if function.return_type == this.program.void_type || function.return_type == this.program.never_type {
 			return_kind = None;
 		} else {
 			return_kind = Value;
 		}
 
 		if result_type.isUnknown() {
-			this.error("function '" + callee_decl.signature() + "' has unknown return type", callee_decl.signature_span);
+			this.error("function '" + function.signature() + "' has unknown return type", function.signature_span);
 			return Expr::Undefined(span, Type::unknown());
 		}
 
@@ -3718,14 +3660,13 @@ struct TCContext {
 				return Expr::Undefined(span, Type::unknown());
 			}
 
-			var current_function_decl = this.current_function.forceLock();
-			result_var = current_function_decl.createVariable(span, "#result", result_type.base(), true);
+			result_var = this.current_function.createVariable(span, "#result", result_type.base(), true);
 			// no constructor call needed, the callee does that
 			this.createDestructorCall(result_var);
 			this.addVariableToCurrentScope(result_var);
 		}
 
-		this.checkActiveMembersForCall(unwrapped_arguments, callee_decl.name, span);
+		this.checkActiveMembersForCall(unwrapped_arguments, function.name, span);
 
 		return addDereference(Expr::Call(
 			CallExpr(
@@ -3733,7 +3674,7 @@ struct TCContext {
 				unwrapped_arguments,
 				result_var,
 				return_kind,
-				callee_decl.is_copy_constructor
+				function.is_copy_constructor
 			), span, result_type
 		));
 	}
@@ -3755,8 +3696,7 @@ struct TCContext {
 	}
 
 	func createTemporaryVariable(this: &&TCContext, type: Type, template_parameters: List!<TemplateParameter>, checked_arguments: List!<Expr>, span: Span) -> Expr {
-		var current_function_decl = this.current_function.forceLock();
-		const variable = current_function_decl.createVariable(span, "#tmp", type, true);
+		const variable = this.current_function.createVariable(span, "#tmp", type, true);
 
 		this.createDestructorCall(variable);
 		this.addVariableToCurrentScope(variable);
@@ -3772,7 +3712,7 @@ struct TCContext {
 				return Expr::Undefined(span, Type::unknown());
 			}
 
-			const constructor_decl = candidates[0u].forceLock();
+			const constructor_decl = candidates[0u];
 			const unwrapped_arguments = this.unwrapArguments(constructor_arguments, constructor_decl.parameter_types);
 			if !this.validateArgumentTypes(unwrapped_arguments, constructor_decl.parameter_types, span) {
 				return Expr::Undefined(span, Type::unknown());
@@ -3804,14 +3744,11 @@ struct TCContext {
 			return;
 		}
 
-		const current_namespace = this.current_namespace.forceLock();
-		const parent_function_decl = this.current_function.forceLock();
-
-		if arguments.isEmpty() || parent_function_decl.parameter_types.isEmpty() {
+		if arguments.isEmpty() || this.current_function.parameter_types.isEmpty() {
 			return;
 		}
 
-		if parent_function_decl.parameter_types[0u].decl != current_namespace.linked_type {
+		if this.current_function.parameter_types[0u].decl != this.current_namespace.linked_type {
 			return;
 		}
 
@@ -3846,7 +3783,7 @@ struct TCContext {
 					return;
 				}
 
-				const object_type_decl = object_decl.type.forceLock();
+				const object_type_decl = object_decl.type.decl;
 				if function_name == "constructor" {
 					for variable in object_type_decl.member_variables {
 						if this.active_member_variables.contains(variable.id) {

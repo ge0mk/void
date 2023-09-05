@@ -3,6 +3,7 @@ import std/list;
 import std/map;
 import std/range;
 import std/shared;
+import std/shared_list;
 import std/string;
 
 import error;
@@ -159,20 +160,19 @@ struct Interpreter {
 		}
 	}
 
-	func interpret(this: &&Interpreter, function: WeakPtr!<FunctionDecl>, args: List!<Expr>, error_span: Span) -> Expr {
-		const decl = function.forceLock();
-		match decl.body {
+	func interpret(this: &&Interpreter, function: SharedHandle!<FunctionDecl>, args: List!<Expr>, error_span: Span) -> Expr {
+		match function.body {
 			case Extern -> {
 				this.todo("interpret calls to extern functions", error_span);
 				return Expr::Undefined(Span(), Type::unknown());
 			}
-			case InlineBuiltin: builtin_funcion -> return this.interpret(builtin_funcion, decl.return_type, args, error_span);
-			case Builtin: builtin_funcion -> return this.interpret(builtin_funcion, decl.return_type, args, error_span);
+			case InlineBuiltin: builtin_funcion -> return this.interpret(builtin_funcion, function.return_type, args, error_span);
+			case Builtin: builtin_funcion -> return this.interpret(builtin_funcion, function.return_type, args, error_span);
 			case Stmt: stmt -> {
 				this.pushStackFrame();
 
 				for i in 0u..args.size() {
-					this.setVariable(WeakPtr!<VarDecl>(decl.variables[i]), args[i]);
+					this.setVariable(WeakPtr!<VarDecl>(function.variables[i]), args[i]);
 				}
 
 				discard this.interpret(stmt);
@@ -180,7 +180,7 @@ struct Interpreter {
 				return this.popStackFrame();
 			}
 			else -> {
-				this.error("function can't be interpreted: " + decl.signature(), error_span);
+				this.error("function can't be interpreted: " + function.signature(), error_span);
 				return Expr::Undefined(Span(), Type::unknown());
 			}
 		}

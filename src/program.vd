@@ -6,6 +6,7 @@ import std/list;
 import std/map;
 import std/set;
 import std/shared;
+import std/shared_list;
 import std/string;
 
 import error;
@@ -38,27 +39,28 @@ struct Program {
 	var name: String;
 	var options: CompilerOptions;
 
-	var files: List!<SourceFile>;
-	var top_level_namespaces: List!<SharedPtr!<Namespace>>;
-	var modules: Map!<String, WeakPtr!<Namespace>>;
-
-	var concepts: List!<SharedPtr!<Concept>>;
-
-	var namespaces: List!<WeakPtr!<Namespace>>;
-	var types: List!<WeakPtr!<TypeDecl>>;
-	var functions: List!<WeakPtr!<FunctionDecl>>;
-
 	var has_errors: bool;
-	var main_function: WeakPtr!<FunctionDecl>;
 
-	var core_namespace: WeakPtr!<Namespace>;
+	var files: List!<SourceFile>;
 
-	// often used builtin concepts
-	var any_concept: WeakPtr!<Concept>;
-	var int_concept: WeakPtr!<Concept>;
-	var uint_concept: WeakPtr!<Concept>;
+	// namespaces
+	var namespaces: SharedList!<Namespace>;
+	var top_level_namespaces: List!<SharedHandle!<Namespace>>;
+	var modules: Map!<String, SharedHandle!<Namespace>>;
 
-	// often used builtin types
+	var core_namespace: SharedHandle!<Namespace>;
+
+	// concepts
+	var concepts: SharedList!<Concept>;
+	var concepts_by_name: Map!<String, SharedHandle!<Concept>>;
+
+	var any_concept: SharedHandle!<Concept>;
+	var int_concept: SharedHandle!<Concept>;
+	var uint_concept: SharedHandle!<Concept>;
+
+	// types
+	var types: SharedList!<TypeDecl>;
+
 	var void_type: Type;
 	var never_type: Type;
 
@@ -72,21 +74,25 @@ struct Program {
 	var cptr_type: Type;
 	var vptr_type: Type;
 
+	// functions
+	var functions: SharedList!<FunctionDecl>;
+
+	var main_function: SharedHandle!<FunctionDecl>;
+
 	func constructor(this: &&Program, options: CompilerOptions) -> void {
 		this.name := options.program_name;
 		this.options := options;
 
+		this.has_errors := false;
+
 		this.files := ();
 		this.files.append(SourceFile("unknown", "unknown", "", List!<Span>(1u, Span())));
-
-		this.has_errors := false;
 
 		this.namespaces := ();
 		this.top_level_namespaces := ();
 		for i in 0u..options.import_search_paths.size() {
-			var ns = SharedPtr!<Namespace>(Namespace(format(i), List!<TemplateParameterDecl>(), WeakPtr!<Namespace>()));
+			const ns = this.namespaces.append(Namespace(format(i), List!<TemplateParameterDecl>(), SharedHandle!<Namespace>()));
 			this.top_level_namespaces.append(ns);
-			this.namespaces.append(WeakPtr!<Namespace>(ns));
 		}
 	}
 
@@ -148,9 +154,9 @@ struct Program {
 	func dump(this: &Program) -> String {
 		var out: TreeFormatter = ("Program");
 		out.attribute(this.name);
-		if const main_function = this.main_function.lock() {
+		if this.main_function.isAlive() {
 			out.text(" main:");
-			out.value(main_function.signature());
+			out.value(this.main_function.signature());
 		}
 
 		for concept in this.concepts {
@@ -164,26 +170,18 @@ struct Program {
 		return out.finalize();
 	}
 
-	func createConcept(this: &&Program, concept: Concept) -> WeakPtr!<Concept> {
-		const concept_decl = SharedPtr!<Concept>::new(concept);
-		this.concepts.append(concept_decl);
-		return WeakPtr!<Concept>(concept_decl);
+	func createConcept(this: &&Program, concept: Concept) -> SharedHandle!<Concept> {
+		const instance = this.concepts.append(concept);
+		this.concepts_by_name[concept.name] = instance;
+		return instance;
 	}
 
-	func getConcept(this: &Program, name: String) -> Optional!<WeakPtr!<Concept>> {
-		for concept in this.concepts {
-			if concept.name == name {
-				return Some(WeakPtr!<Concept>(concept));
-			}
-		}
-
-		return None;
+	func getConcept(this: &Program, name: String) -> Optional!<SharedHandle!<Concept>> {
+		return this.concepts_by_name.get(name);
 	}
 
-	func getOrCreateChildNamespace(this: &&Program, parent_namespace: WeakPtr!<Namespace>, name: String, template_parameters: List!<TemplateParameterDecl>, is_directory: bool, is_file: bool) -> WeakPtr!<Namespace> {
-		var parent_decl = parent_namespace.forceLock();
-
-		for child in parent_decl.children {
+	func getOrCreateChildNamespace(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, template_parameters: List!<TemplateParameterDecl>, is_file: bool) -> SharedHandle!<Namespace> {
+		for child in parent_namespace.children {
 			if child.name != name {
 				continue;
 			}
@@ -192,43 +190,40 @@ struct Program {
 				continue;
 			}
 
-			return WeakPtr!<Namespace>(child);
+			return child;
 		}
 
-		var child = SharedPtr!<Namespace>(Namespace(name, template_parameters, parent_namespace));
+		var child = this.namespaces.append(Namespace(name, template_parameters, parent_namespace));
 
-		if is_directory {
-			child.file_namespace = WeakPtr!<Namespace>();
-		} else if is_file {
-			child.file_namespace = WeakPtr!<Namespace>(child);
+		if is_file {
+			child.file_namespace = child;
 		} else {
-			child.file_namespace = parent_decl.file_namespace;
+			child.file_namespace = parent_namespace.file_namespace;
 		}
 
-		this.namespaces.append(WeakPtr!<Namespace>(child));
-		parent_decl.children.append(child);
-		parent_decl.updateMinState(NamespaceState::Unchecked);
+		parent_namespace.children.append(child);
+		parent_namespace.updateMinState(NamespaceState::Unchecked);
 
-		return WeakPtr!<Namespace>(child);
+		return child;
 	}
 
-	func getVisibleNamespaces(this: &&Program, pov: WeakPtr!<Namespace>) -> Set!<WeakPtr!<Namespace>> {
-		var result: Set!<WeakPtr!<Namespace>>;
+	func getVisibleNamespaces(this: &&Program, pov: SharedHandle!<Namespace>) -> Set!<SharedHandle!<Namespace>> {
+		var result: Set!<SharedHandle!<Namespace>>;
 		result.add(pov);
 
-		var current = pov.forceLock();
-		for other in current.imported_namespaces {
+		for other in pov.imported_namespaces {
 			result.add(other);
 		}
 
+		var current = pov;
 		while current.parent.isAlive() {
 			result.add(current.parent);
-			current = current.parent.forceLock();
+			current = current.parent;
 			for other in current.imported_namespaces {
 				result.add(other);
 			}
 
-			if current.file_namespace == WeakPtr!<Namespace>(current) {
+			if current.file_namespace == current {
 				break;
 			}
 		}
@@ -236,92 +231,83 @@ struct Program {
 		return result;
 	}
 
-	func createModule(this: &&Program, imported_module: ImportedModule) -> WeakPtr!<Namespace> {
+	func createModule(this: &&Program, imported_module: ImportedModule) -> SharedHandle!<Namespace> {
 		const namespaces = imported_module.name.split("/");
 
-		var module = WeakPtr!<Namespace>(this.top_level_namespaces[imported_module.group]);
+		var module = this.top_level_namespaces[imported_module.group];
 		for i in 0u..namespaces.size() {
-			module = this.getOrCreateChildNamespace(module, namespaces[i], List!<TemplateParameterDecl>(), i < namespaces.size() - 1, i == namespaces.size() - 1);
+			module = this.getOrCreateChildNamespace(module, namespaces[i], List!<TemplateParameterDecl>(), i <= namespaces.size() - 1);
 		}
 
 		this.modules.set(imported_module.path, module);
 		return module;
 	}
 
-	func getModule(this: &&Program, path: String) -> Optional!<WeakPtr!<Namespace>> {
+	func getModule(this: &&Program, path: String) -> Optional!<SharedHandle!<Namespace>> {
 		return this.modules.get(path);
 	}
 
-	func createTypeWithExistingLinkedNamespace(this: &&Program, linked_namespace: WeakPtr!<Namespace>, name: String, body: TypeBody) -> WeakPtr!<TypeDecl> {
-		var linked_namespace_decl = linked_namespace.forceLock();
-		var type_decl = SharedPtr!<TypeDecl>(TypeDecl(name, linked_namespace_decl.template_parameters, body));
-		type_decl.parent_namespace = linked_namespace_decl.parent;
+	func createType(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, template_parameters: List!<TemplateParameterDecl>, body: TypeBody) -> SharedHandle!<TypeDecl> {
+		var linked_namespace = this.getOrCreateChildNamespace(parent_namespace, name, template_parameters, false);
+		var type_decl = this.types.append(TypeDecl(name, linked_namespace.template_parameters, body));
+
+		type_decl.parent_namespace = linked_namespace.parent;
 		type_decl.linked_namespace = linked_namespace;
 
-		linked_namespace_decl.linked_type = WeakPtr!<TypeDecl>(type_decl);
+		linked_namespace.linked_type = type_decl;
 
-		var parent_namespace_decl = linked_namespace_decl.parent.forceLock();
-		parent_namespace_decl.types.append(type_decl);
-		parent_namespace_decl.types_by_name[name].append(WeakPtr!<TypeDecl>(type_decl));
+		parent_namespace.types.append(type_decl);
+		parent_namespace.types_by_name[name].append(type_decl);
 
-		this.types.append(WeakPtr!<TypeDecl>(type_decl));
-
-		return WeakPtr!<TypeDecl>(type_decl);
+		return type_decl;
 	}
 
-	func createType(this: &&Program, parent_namespace: WeakPtr!<Namespace>, name: String, template_parameters: List!<TemplateParameterDecl>, body: TypeBody) -> WeakPtr!<TypeDecl> {
-		var type_namespace = this.getOrCreateChildNamespace(parent_namespace, name, template_parameters, false, false);
-		return this.createTypeWithExistingLinkedNamespace(type_namespace, name, body);
-	}
-
-	func createType(this: &&Program, parent_namespace: WeakPtr!<Namespace>, name: String, body: TypeBody) -> WeakPtr!<TypeDecl> {
+	func createType(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, body: TypeBody) -> SharedHandle!<TypeDecl> {
 		return this.createType(parent_namespace, name, List!<TemplateParameterDecl>(), body);
 	}
 
-	func createFunction(this: &&Program, parent_namespace: WeakPtr!<Namespace>, name: String, template_parameters: List!<TemplateParameterDecl>, parameter_types: List!<Type>, return_type: Type, body: FunctionBody) -> WeakPtr!<FunctionDecl> {
-		var function_decl = SharedPtr!<FunctionDecl>(FunctionDecl(name, template_parameters, body));
-		function_decl.parent_namespace = parent_namespace;
-		function_decl.parameter_types = parameter_types;
-		function_decl.return_type = return_type;
+	func createFunction(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, template_parameters: List!<TemplateParameterDecl>, parameter_types: List!<Type>, return_type: Type, body: FunctionBody) -> SharedHandle!<FunctionDecl> {
+		var function = this.functions.append(FunctionDecl(name, template_parameters, body));
 
-		var parent_namespace_decl = parent_namespace.forceLock();
-		parent_namespace_decl.functions.append(function_decl);
-		parent_namespace_decl.functions_by_name[name].append(WeakPtr!<FunctionDecl>(function_decl));
+		function.parent_namespace = parent_namespace;
+		function.parameter_types = parameter_types;
+		function.return_type = return_type;
 
-		this.functions.append(WeakPtr!<FunctionDecl>(function_decl));
+		parent_namespace.functions.append(function);
+		parent_namespace.functions_by_name[name].append(function);
 
-		return WeakPtr!<FunctionDecl>(function_decl);
+		return function;
 	}
 
-	func createFunction(this: &&Program, parent_namespace: WeakPtr!<Namespace>, name: String, template_parameters: List!<TemplateParameterDecl>, parameter_types: List!<Type>, return_type: Type, body: InlineBuiltinFunction) -> WeakPtr!<FunctionDecl> {
+	func createFunction(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, template_parameters: List!<TemplateParameterDecl>, parameter_types: List!<Type>, return_type: Type, body: InlineBuiltinFunction) -> SharedHandle!<FunctionDecl> {
 		return this.createFunction(parent_namespace, name, template_parameters, parameter_types, return_type, FunctionBody::InlineBuiltin(body));
 	}
 
-	func createFunction(this: &&Program, parent_namespace: WeakPtr!<Namespace>, name: String, template_parameters: List!<TemplateParameterDecl>, parameter_types: List!<Type>, return_type: Type, body: BuiltinFunction) -> WeakPtr!<FunctionDecl> {
+	func createFunction(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, template_parameters: List!<TemplateParameterDecl>, parameter_types: List!<Type>, return_type: Type, body: BuiltinFunction) -> SharedHandle!<FunctionDecl> {
 		return this.createFunction(parent_namespace, name, template_parameters, parameter_types, return_type, FunctionBody::Builtin(body));
 	}
 
-	func createFunction(this: &&Program, parent_namespace: WeakPtr!<Namespace>, name: String, template_parameters: List!<TemplateParameterDecl>, body: FunctionBody) -> WeakPtr!<FunctionDecl> {
+	func createFunction(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, template_parameters: List!<TemplateParameterDecl>, body: FunctionBody) -> SharedHandle!<FunctionDecl> {
 		return this.createFunction(parent_namespace, name, template_parameters, List!<Type>(), Type::unknown(), body);
 	}
 
-	func createFunction(this: &&Program, parent_namespace: WeakPtr!<Namespace>, name: String, template_parameters: List!<TemplateParameterDecl>, body: InlineBuiltinFunction) -> WeakPtr!<FunctionDecl> {
+	func createFunction(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, template_parameters: List!<TemplateParameterDecl>, body: InlineBuiltinFunction) -> SharedHandle!<FunctionDecl> {
 		return this.createFunction(parent_namespace, name, template_parameters, List!<Type>(), Type::unknown(), FunctionBody::InlineBuiltin(body));
 	}
 
-	func createFunction(this: &&Program, parent_namespace: WeakPtr!<Namespace>, name: String, template_parameters: List!<TemplateParameterDecl>, body: BuiltinFunction) -> WeakPtr!<FunctionDecl> {
+	func createFunction(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, template_parameters: List!<TemplateParameterDecl>, body: BuiltinFunction) -> SharedHandle!<FunctionDecl> {
 		return this.createFunction(parent_namespace, name, template_parameters, List!<Type>(), Type::unknown(), FunctionBody::Builtin(body));
 	}
 
-	func createFunction(this: &&Program, parent_namespace: WeakPtr!<Namespace>, name: String, parameter_types: List!<Type>, return_type: Type, body: FunctionBody) -> WeakPtr!<FunctionDecl> {
+	func createFunction(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, parameter_types: List!<Type>, return_type: Type, body: FunctionBody) -> SharedHandle!<FunctionDecl> {
 		return this.createFunction(parent_namespace, name, List!<TemplateParameterDecl>(), parameter_types, return_type, body);
 	}
 
-	func createFunction(this: &&Program, parent_namespace: WeakPtr!<Namespace>, name: String, parameter_types: List!<Type>, return_type: Type, body: InlineBuiltinFunction) -> WeakPtr!<FunctionDecl> {
+	func createFunction(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, parameter_types: List!<Type>, return_type: Type, body: InlineBuiltinFunction) -> SharedHandle!<FunctionDecl> {
 		return this.createFunction(parent_namespace, name, List!<TemplateParameterDecl>(), parameter_types, return_type, FunctionBody::InlineBuiltin(body));
 	}
 
-	func createFunction(this: &&Program, parent_namespace: WeakPtr!<Namespace>, name: String, parameter_types: List!<Type>, return_type: Type, body: BuiltinFunction) -> WeakPtr!<FunctionDecl> {
+	func createFunction(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, parameter_types: List!<Type>, return_type: Type, body: BuiltinFunction) -> SharedHandle!<FunctionDecl> {
 		return this.createFunction(parent_namespace, name, List!<TemplateParameterDecl>(), parameter_types, return_type, FunctionBody::Builtin(body));
 	}
 }
@@ -348,19 +334,19 @@ variant Concept {
 struct TemplateParameterDecl {
 	var name: String;
 
-	var concept: WeakPtr!<Concept>;
+	var concept: SharedHandle!<Concept>;
 	var is_variadic: bool;
 
 	var value: Optional!<TemplateParameter>;
 
-	func constructor(this: &&TemplateParameterDecl, name: String, concept: WeakPtr!<Concept>, is_variadic: bool) -> void {
+	func constructor(this: &&TemplateParameterDecl, name: String, concept: SharedHandle!<Concept>, is_variadic: bool) -> void {
 		this.name := name;
 		this.concept := concept;
 		this.is_variadic := is_variadic;
 		this.value := None;
 	}
 
-	func constructor(this: &&TemplateParameterDecl, name: String, concept: WeakPtr!<Concept>, is_variadic: bool, value: TemplateParameter) -> void {
+	func constructor(this: &&TemplateParameterDecl, name: String, concept: SharedHandle!<Concept>, is_variadic: bool, value: TemplateParameter) -> void {
 		this.name := name;
 		this.concept := concept;
 		this.is_variadic := is_variadic;
@@ -376,7 +362,7 @@ struct TemplateParameterDecl {
 
 	func signature(this: &TemplateParameterDecl) -> String {
 		var result = this.name + ": ";
-		result += ("..." if this.is_variadic else "") + this.concept.forceLock().name;
+		result += ("..." if this.is_variadic else "") + this.concept.name;
 		if const value = this.value {
 			result += " = " + value.toString();
 		}
@@ -387,7 +373,7 @@ struct TemplateParameterDecl {
 		out.push("TemplateParameterDecl", is_last);
 		out.attribute(this.name);
 		out.text(":");
-		out.attribute(this.concept.forceLock().name);
+		out.attribute(this.concept.name);
 
 		if const value = this.value {
 			out.text(" =");
@@ -529,27 +515,28 @@ struct Namespace {
 	var full_name: Name;
 	var template_parameters: List!<TemplateParameterDecl>;
 
-	var file_namespace: WeakPtr!<Namespace>;
-	var imported_namespaces: List!<WeakPtr!<Namespace>>;
-	var template_instances: List!<WeakPtr!<Namespace>>;
+	var parent: SharedHandle!<Namespace>;
+	var children: List!<SharedHandle!<Namespace>>;
+	var imported_namespaces: List!<SharedHandle!<Namespace>>;
+	var file_namespace: SharedHandle!<Namespace>;
 
-	var parent: WeakPtr!<Namespace>;
-	var children: List!<SharedPtr!<Namespace>>;
-	var linked_type: WeakPtr!<TypeDecl>;
+	var template_instances: List!<SharedHandle!<Namespace>>;
 
-	var types: List!<SharedPtr!<TypeDecl>>;
-	var types_by_name: Map!<String, List!<WeakPtr!<TypeDecl>>>;
+	var linked_type: SharedHandle!<TypeDecl>;
 
-	var functions: List!<SharedPtr!<FunctionDecl>>;
-	var functions_by_name: Map!<String, List!<WeakPtr!<FunctionDecl>>>;
+	var types: List!<SharedHandle!<TypeDecl>>;
+	var types_by_name: Map!<String, List!<SharedHandle!<TypeDecl>>>;
+
+	var functions: List!<SharedHandle!<FunctionDecl>>;
+	var functions_by_name: Map!<String, List!<SharedHandle!<FunctionDecl>>>;
 
 	var state: NamespaceState;
 	var unchecked_children: List!<ParsedStmt>;
-	var unchecked_types: List!<WeakPtr!<TypeDecl>>;
-	var unchecked_functions: List!<WeakPtr!<FunctionDecl>>;
-	var unchecked_function_bodies: List!<WeakPtr!<FunctionDecl>>;
+	var unchecked_types: List!<SharedHandle!<TypeDecl>>;
+	var unchecked_functions: List!<SharedHandle!<FunctionDecl>>;
+	var unchecked_function_bodies: List!<SharedHandle!<FunctionDecl>>;
 
-	func constructor(this: &&Namespace, name: String, template_parameters: List!<TemplateParameterDecl>, parent: WeakPtr!<Namespace>) -> void {
+	func constructor(this: &&Namespace, name: String, template_parameters: List!<TemplateParameterDecl>, parent: SharedHandle!<Namespace>) -> void {
 		this.name := name;
 		this.template_parameters := template_parameters;
 		this.parent := parent;
@@ -566,8 +553,7 @@ struct Namespace {
 
 		var full_name: Name;
 		if this.parent.isAlive() {
-			const parent_decl = this.parent.forceLock();
-			full_name = parent_decl.full_name + NameSegment(Span(), name, template_parameter_values);
+			full_name = this.parent.full_name + NameSegment(Span(), name, template_parameter_values);
 		} else {
 			full_name = Name(name, template_parameter_values);
 		}
@@ -581,8 +567,8 @@ struct Namespace {
 	operator =(this: &&Namespace, other: Namespace) -> void = default;
 
 	func signature(this: &Namespace) -> String {
-		if const parent = this.parent.lock() {
-			return parent.signature() + "::" + this.name + format(this.template_parameters);
+		if this.parent.isAlive() {
+			return this.parent.signature() + "::" + this.name + format(this.template_parameters);
 		}
 
 		return this.name + format(this.template_parameters);
@@ -623,8 +609,8 @@ struct Namespace {
 
 		this.state = new_state;
 
-		if var parent = this.parent.lock() {
-			parent.updateMinState(new_state);
+		if this.parent.isAlive() {
+			this.parent.updateMinState(new_state);
 		}
 	}
 
@@ -639,8 +625,8 @@ struct Namespace {
 
 		this.state = min_state;
 
-		if var parent = this.parent.lock() {
-			parent.updateMinState(min_state);
+		if this.parent.isAlive() {
+			this.parent.updateMinState(min_state);
 		}
 	}
 
@@ -649,22 +635,21 @@ struct Namespace {
 		this.updateMinState(NamespaceState::Unchecked);
 
 		for instance in this.template_instances {
-			var decl = instance.forceLock();
-			decl.addUncheckedChildren(children);
+			instance.addUncheckedChildren(children);
 		}
 	}
 
-	func addUncheckedType(this: &&Namespace, type: WeakPtr!<TypeDecl>) -> void {
+	func addUncheckedType(this: &&Namespace, type: SharedHandle!<TypeDecl>) -> void {
 		this.unchecked_types.append(type);
 		this.updateMinState(NamespaceState::UncheckedTypeBodies);
 	}
 
-	func addUncheckedFunction(this: &&Namespace, function: WeakPtr!<FunctionDecl>) -> void {
+	func addUncheckedFunction(this: &&Namespace, function: SharedHandle!<FunctionDecl>) -> void {
 		this.unchecked_functions.append(function);
 		this.updateMinState(NamespaceState::UncheckedFunctionSignatures);
 	}
 
-	func addUncheckedFunctionBody(this: &&Namespace, function: WeakPtr!<FunctionDecl>) -> void {
+	func addUncheckedFunctionBody(this: &&Namespace, function: SharedHandle!<FunctionDecl>) -> void {
 		this.unchecked_function_bodies.append(function);
 		this.updateMinState(NamespaceState::UncheckedFunctionBodies);
 	}
@@ -678,19 +663,19 @@ struct TypeDecl {
 	var template_parameters: List!<TemplateParameterDecl>;
 	var body: TypeBody;
 
-	var parent_namespace: WeakPtr!<Namespace>;
-	var linked_namespace: WeakPtr!<Namespace>;
+	var parent_namespace: SharedHandle!<Namespace>;
+	var linked_namespace: SharedHandle!<Namespace>;
 
-	var unwrapped_type: WeakPtr!<TypeDecl>;
+	var unwrapped_type: SharedHandle!<TypeDecl>;
 
-	var default_constructor: WeakPtr!<FunctionDecl>;
-	var copy_constructor: WeakPtr!<FunctionDecl>;
-	var destructor: WeakPtr!<FunctionDecl>;
-	var op_assign: WeakPtr!<FunctionDecl>;
-	var op_equal: WeakPtr!<FunctionDecl>;
-	var op_compare: WeakPtr!<FunctionDecl>;
+	var default_constructor: SharedHandle!<FunctionDecl>;
+	var copy_constructor: SharedHandle!<FunctionDecl>;
+	var destructor: SharedHandle!<FunctionDecl>;
+	var op_assign: SharedHandle!<FunctionDecl>;
+	var op_equal: SharedHandle!<FunctionDecl>;
+	var op_compare: SharedHandle!<FunctionDecl>;
 
-	var contained_types: Set!<WeakPtr!<TypeDecl>>;
+	var contained_types: Set!<SharedHandle!<TypeDecl>>;
 
 	// struct & variant
 	var member_variables: List!<MemberVarDecl>;
@@ -779,8 +764,7 @@ struct TypeDecl {
 	}
 
 	func signature(this: &TypeDecl) -> String {
-		const linked_namespace = this.linked_namespace.forceLock();
-		return linked_namespace.signature();
+		return this.linked_namespace.signature();
 	}
 
 	func isIncompleteTemplate(this: &TypeDecl) -> bool {
@@ -875,15 +859,15 @@ struct TypeDecl {
 }
 
 struct Type {
-	var decl: WeakPtr!<TypeDecl>;
+	var decl: SharedHandle!<TypeDecl>;
 	var reference_kind: ReferenceKind;
 
-	func constructor(this: &&Type, decl: WeakPtr!<TypeDecl>) -> void {
+	func constructor(this: &&Type, decl: SharedHandle!<TypeDecl>) -> void {
 		this.decl := decl;
 		this.reference_kind := None;
 	}
 
-	func constructor(this: &&Type, decl: WeakPtr!<TypeDecl>, reference_kind: ReferenceKind) -> void {
+	func constructor(this: &&Type, decl: SharedHandle!<TypeDecl>, reference_kind: ReferenceKind) -> void {
 		this.decl := decl;
 		this.reference_kind := reference_kind;
 	}
@@ -898,7 +882,7 @@ struct Type {
 	operator <=>(this: Type, other: Type) -> int = default;
 
 	func unknown() -> Type {
-		return Type(WeakPtr!<TypeDecl>(), ReferenceKind::None);
+		return Type(SharedHandle!<TypeDecl>(), ReferenceKind::None);
 	}
 
 	func hasSameBaseTypeAs(this: &Type, other: Type) -> bool {
@@ -906,26 +890,19 @@ struct Type {
 	}
 
 	func isUnknown(this: &Type) -> bool {
-		return this.decl.data == vptr::null();
+		return this.decl.isEmpty();
 	}
 
 	func isAlive(this: &Type) -> bool {
 		return this.decl.isAlive();
 	}
 
-	func lock(this: &Type) -> Optional!<SharedPtr!<TypeDecl>> {
-		return this.decl.lock();
-	}
-
-	func forceLock(this: &Type) -> SharedPtr!<TypeDecl> {
-		return this.decl.forceLock();
-	}
-
 	func signature(this: &Type) -> String {
-		match this.decl.lock() {
-			case Some: decl -> return this.reference_kind.toString() + decl.signature();
-			case None -> return "unknown";
+		if this.decl.isAlive() {
+			return this.reference_kind.toString() + this.decl.signature();
 		}
+
+		return "unknown";
 	}
 
 	func base(this: &Type) -> Type {
@@ -941,19 +918,19 @@ struct Type {
 	}
 
 	func isIncompleteTemplate(this: &Type) -> bool {
-		const decl = this.lock() else {
+		if this.decl.isEmpty() {
 			return false;
 		}
 
-		return decl.isIncompleteTemplate();
+		return this.decl.isIncompleteTemplate();
 	}
 
 	func isIntType(this: &Type) -> bool {
-		const decl = this.lock() else {
+		if this.decl.isEmpty() {
 			return false;
 		}
 
-		match decl.body {
+		match this.decl.body {
 			case Bool
 			| Byte
 			| Int
@@ -964,11 +941,11 @@ struct Type {
 	}
 
 	func isSigned(this: &Type) -> bool {
-		const decl = this.lock() else {
+		if this.decl.isEmpty() {
 			return false;
 		}
 
-		match decl.body {
+		match this.decl.body {
 			case Int
 			| Float -> return true;
 			else -> return false;
@@ -976,48 +953,48 @@ struct Type {
 	}
 
 	func isFloatType(this: &Type) -> bool {
-		const decl = this.lock() else {
+		if this.decl.isEmpty() {
 			return false;
 		}
 
-		match decl.body {
+		match this.decl.body {
 			case Float -> return true;
 			else -> return false;
 		}
 	}
 
 	func isPtrType(this: &Type) -> bool {
-		const decl = this.lock() else {
+		if this.decl.isEmpty() {
 			return false;
 		}
 
-		match decl.body {
+		match this.decl.body {
 			case Pointer -> return true;
 			else -> return false;
 		}
 	}
 
 	func isConstPtrType(this: &Type) -> bool {
-		const decl = this.lock() else {
+		if this.decl.isEmpty() {
 			return false;
 		}
 
-		match decl.body {
+		match this.decl.body {
 			case Pointer: pointer_type -> return pointer_type.is_const;
 			else -> return false;
 		}
 	}
 
 	func isPrimitive(this: &Type) -> bool {
-		const decl = this.lock() else {
-			return false;
-		}
-
 		if this.reference_kind != None {
 			return true; // reference types are always primitive
 		}
 
-		match decl.body {
+		if this.decl.isEmpty() {
+			return false;
+		}
+
+		match this.decl.body {
 			case Void
 			| Bool
 			| Byte
@@ -1031,11 +1008,11 @@ struct Type {
 	}
 
 	func isVariant(this: &Type) -> bool {
-		const decl = this.lock() else {
+		if this.decl.isEmpty() {
 			return false;
 		}
 
-		match decl.body {
+		match this.decl.body {
 			case Variant -> return true;
 			else -> return false;
 		}
@@ -1050,7 +1027,7 @@ struct FunctionDecl {
 	var template_parameters: List!<TemplateParameterDecl>;
 	var body: FunctionBody;
 
-	var parent_namespace: WeakPtr!<Namespace>;
+	var parent_namespace: SharedHandle!<Namespace>;
 
 	var extern_name: String;
 
@@ -1118,8 +1095,7 @@ struct FunctionDecl {
 	}
 
 	func signature(this: &FunctionDecl) -> String {
-		const parent_namespace = this.parent_namespace.forceLock();
-		var result = parent_namespace.signature();
+		var result = this.parent_namespace.signature();
 
 		result += "::" + this.name + this.template_parameters.format();
 		result += "(";
@@ -1609,8 +1585,8 @@ variant InlineBuiltinFunction {
 	func dump(this: &InlineBuiltinFunction, out: &&TreeFormatter) -> void {
 		out.attribute(this.name());
 
-		if const base_type_decl = this.base_type.lock() {
-			out.value(base_type_decl.signature());
+		if this.base_type.isAlive() {
+			out.value(this.base_type.signature());
 		}
 
 		match this {
@@ -1670,9 +1646,7 @@ variant BuiltinFunction {
 
 	func dump(this: &BuiltinFunction, out: &&TreeFormatter) -> void {
 		out.attribute(this.name());
-
-		const base_type_decl = this.base_type.forceLock();
-		out.value(base_type_decl.signature());
+		out.value(this.base_type.signature());
 
 		match this {
 			case VariantCaseConstructor: id -> out.value(format(id));
@@ -1935,7 +1909,7 @@ variant Expr {
 	case ShallowCopy: ShallowCopyExpr;
 
 	case TypeRef: Type;
-	case FunctionRef: WeakPtr!<FunctionDecl>;
+	case FunctionRef: SharedHandle!<FunctionDecl>;
 
 	func constructor(this: &&Expr) -> void {
 		this.constructor!<0>(Span(), Type::unknown());
@@ -2005,9 +1979,7 @@ variant Expr {
 			case ConstAggregate -> {}
 			case Call: call_expr -> {
 				out.push("CallExpr", is_last);
-				if const function = call_expr.function.lock() {
-					out.value(function.signature());
-				}
+				out.value(call_expr.function.signature());
 				out.attribute(call_expr.return_kind.toString());
 				out.span(this.span);
 
@@ -2080,9 +2052,7 @@ variant Expr {
 			case FunctionRef: function -> {
 				out.push("FunctionRefExpr", is_last);
 				out.span(this.span);
-				if const decl = function.lock() {
-					out.value(decl.signature());
-				}
+				out.value(function.signature());
 				out.pop();
 			}
 		}
@@ -2108,13 +2078,13 @@ enum ReturnKind {
 }
 
 struct CallExpr {
-	var function: WeakPtr!<FunctionDecl>;
+	var function: SharedHandle!<FunctionDecl>;
 	var parameters: List!<Expr>;
 	var result_var: WeakPtr!<VarDecl>;
 	var return_kind: ReturnKind;
 	var is_copy_constructor_call: bool;
 
-	func constructor(this: &&CallExpr, function: WeakPtr!<FunctionDecl>, parameters: List!<Expr>, result_var: WeakPtr!<VarDecl>, return_kind: ReturnKind, is_copy_constructor_call: bool) -> void {
+	func constructor(this: &&CallExpr, function: SharedHandle!<FunctionDecl>, parameters: List!<Expr>, result_var: WeakPtr!<VarDecl>, return_kind: ReturnKind, is_copy_constructor_call: bool) -> void {
 		this.function := function;
 		this.parameters := parameters;
 		this.result_var := result_var;

@@ -1,0 +1,92 @@
+import std/core;
+import std/list;
+import std/range;
+
+import std/libc/stdlib;
+
+template <T: type>
+struct SharedHandle {
+	var data: vptr!<T>;
+
+	func constructor(this: &&SharedHandle!<T>, data: vptr!<T>) -> void {
+		this.data := data;
+	}
+
+	func constructor(this: &&SharedHandle!<T>) -> void = default;
+	func constructor(this: &&SharedHandle!<T>, other: SharedHandle!<T>) -> void = default;
+	func destructor(this: &&SharedHandle!<T>) -> void = default;
+
+	operator =(this: &&SharedHandle!<T>, other: SharedHandle!<T>) -> void = default;
+
+	operator ==(this: SharedHandle!<T>, other: SharedHandle!<T>) -> bool = default;
+	operator <=>(this: SharedHandle!<T>, other: SharedHandle!<T>) -> int = default;
+
+	func isAlive(this: SharedHandle!<T>) -> bool {
+		return this.data != vptr::null();
+	}
+
+	func isEmpty(this: SharedHandle!<T>) -> bool {
+		return this.data == vptr::null();
+	}
+
+	operator unwrap(this: SharedHandle!<T>) -> &&T {
+		if this.data == vptr::null() {
+			panic(Error::EOPTNONE);
+		}
+
+		return &&this.data[0u];
+	}
+
+	operator unwrap(this: &SharedHandle!<T>) -> &&T {
+		if this.data == vptr::null() {
+			panic(Error::EOPTNONE);
+		}
+
+		return &&this.data[0u];
+	}
+
+	operator unwrap(this: &&SharedHandle!<T>) -> &&T {
+		if this.data == vptr::null() {
+			panic(Error::EOPTNONE);
+		}
+
+		return &&this.data[0u];
+	}
+}
+
+template <T: type>
+struct SharedList {
+	var elements: List!<SharedHandle!<T>>;
+
+	func constructor(this: &&SharedList!<T>) -> void = default;
+
+	func destructor(this: &&SharedList!<T>) -> void {
+		for e in this.elements {
+			e.data[0u].destructor();
+			libc::stdlib::free(e.data as vptr);
+		}
+	}
+
+	func append(this: &&SharedList!<T>, value: T) -> SharedHandle!<T> {
+		var data = libc::stdlib::malloc(sizeOf!<T>()) as vptr!<T>;
+		data[0u].constructor(value);
+		this.elements.append(SharedHandle!<T>(data));
+		return SharedHandle!<T>(data);
+	}
+
+	func range(this: &SharedList!<T>) -> Range!<SharedHandle!<T>> {
+		return this.elements.range();
+	}
+
+	func iterator(this: &SharedList!<T>) -> RangeIterator!<SharedHandle!<T>> {
+		return this.elements.iterator();
+	}
+
+	func size(this: &SharedList!<T>) -> uint {
+		return this.elements.size();
+	}
+
+	operator [](this: &SharedList!<T>, index: uint) -> SharedHandle!<T> {
+		return this.elements[index];
+	}
+}

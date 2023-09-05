@@ -6,6 +6,7 @@ import std/map;
 import std/range;
 import std/set;
 import std/shared;
+import std/shared_list;
 import std/string;
 
 import error;
@@ -69,9 +70,9 @@ struct CGContext {
 	var di_compile_unit: llvm::MetaDataRef;
 	var di_files: List!<llvm::MetaDataRef>;
 	var di_modules: List!<llvm::MetaDataRef>;
-	var di_namespaces: Map!<WeakPtr!<Namespace>, llvm::MetaDataRef>;
-	var di_types: Map!<WeakPtr!<TypeDecl>, llvm::MetaDataRef>;
-	var di_functions: Map!<WeakPtr!<FunctionDecl>, llvm::MetaDataRef>;
+	var di_namespaces: Map!<SharedHandle!<Namespace>, llvm::MetaDataRef>;
+	var di_types: Map!<SharedHandle!<TypeDecl>, llvm::MetaDataRef>;
+	var di_functions: Map!<SharedHandle!<FunctionDecl>, llvm::MetaDataRef>;
 	var di_scope_stack: List!<llvm::MetaDataRef>;
 
 	var void_type: llvm::TypeRef;
@@ -80,10 +81,10 @@ struct CGContext {
 	var int_type: llvm::TypeRef;
 	var ptr_type: llvm::TypeRef;
 
-	var types: Map!<WeakPtr!<TypeDecl>, llvm::TypeRef>;
-	var functions: Map!<WeakPtr!<FunctionDecl>, llvm::ValueRef>;
-	var function_types: Map!<WeakPtr!<FunctionDecl>, llvm::TypeRef>;
-	var finished_functions: Set!<WeakPtr!<FunctionDecl>>;
+	var types: Map!<SharedHandle!<TypeDecl>, llvm::TypeRef>;
+	var functions: Map!<SharedHandle!<FunctionDecl>, llvm::ValueRef>;
+	var function_types: Map!<SharedHandle!<FunctionDecl>, llvm::TypeRef>;
+	var finished_functions: Set!<SharedHandle!<FunctionDecl>>;
 	var string_globals: Map!<String, llvm::ValueRef>;
 
 	var builder: llvm::BuilderRef;
@@ -128,10 +129,9 @@ struct CGContext {
 		this.program.printError(CompilationError(message, ErrorType::Todo, ErrorStage::CodeGenerator, span));
 	}
 
-	func getType(this: &CGContext, type: WeakPtr!<TypeDecl>) -> llvm::TypeRef {
+	func getType(this: &CGContext, type: SharedHandle!<TypeDecl>) -> llvm::TypeRef {
 		const impl = this.types.get(type) else {
-			const type_decl = type.forceLock();
-			panic("invalid codegen for type '" + type_decl.signature() + "'");
+			panic("invalid codegen for type '" + type.signature() + "'");
 		}
 		return impl;
 	}
@@ -143,10 +143,9 @@ struct CGContext {
 		}
 	}
 
-	func getDIType(this: &&CGContext, type: WeakPtr!<TypeDecl>) -> llvm::MetaDataRef {
+	func getDIType(this: &&CGContext, type: SharedHandle!<TypeDecl>) -> llvm::MetaDataRef {
 		const base_type = this.di_types.get(type) else {
-			const type_decl = type.forceLock();
-			panic("invalid debug info for type '" + type_decl.signature() + "'");
+			panic("invalid debug info for type '" + type.signature() + "'");
 		}
 		return base_type;
 	}
@@ -176,11 +175,11 @@ struct CGContext {
 		this.codegenTypes();
 
 		for function in this.program.functions {
-			this.codegenFunctionDecl(function);
+			this.codegenFunctionDecl(SharedHandle!<FunctionDecl>(function));
 		}
 
 		for function in this.program.functions {
-			this.codegenFunctionImpl(function);
+			this.codegenFunctionImpl(SharedHandle!<FunctionDecl>(function));
 		}
 
 		const libc_module = this.llvm_context.loadModuleFromFile("libc.ll").value();
@@ -246,13 +245,13 @@ struct CGContext {
 		}
 	}
 
-	func createDINamespaces(this: &&CGContext, current_namespace: SharedPtr!<Namespace>) -> void {
+	func createDINamespaces(this: &&CGContext, current_namespace: SharedHandle!<Namespace>) -> void {
 		var parent = this.di_modules[0u];
 		if current_namespace.parent.isAlive() {
 			parent = this.di_namespaces.get(current_namespace.parent).value();
 		}
 
-		this.di_namespaces.set(WeakPtr!<Namespace>(current_namespace), this.di_builder.createNameSpace(parent, current_namespace.name, true));
+		this.di_namespaces.set(current_namespace, this.di_builder.createNameSpace(parent, current_namespace.name, true));
 
 		for child in current_namespace.children {
 			this.createDINamespaces(child);
@@ -275,17 +274,16 @@ struct CGContext {
 	}
 
 	func codegenTypes(this: &&CGContext) -> void {
-		var incomplete_types = Set!<WeakPtr!<TypeDecl>>(Range!<WeakPtr!<TypeDecl>>(this.program.types.range()));
-		var complete_types: Set!<WeakPtr!<TypeDecl>>;
+		var incomplete_types = Set!<SharedHandle!<TypeDecl>>(this.program.types.range());
+		var complete_types: Set!<SharedHandle!<TypeDecl>>;
 
 		while !incomplete_types.isEmpty() {
-			var completable_types: Set!<WeakPtr!<TypeDecl>>;
+			var completable_types: Set!<SharedHandle!<TypeDecl>>;
 
 			for type in incomplete_types {
 				var is_completable = true;
 
-				const decl = type.forceLock();
-				for other in decl.contained_types {
+				for other in type.contained_types {
 					if !complete_types.contains(other) {
 						is_completable = false;
 						break;
@@ -300,8 +298,7 @@ struct CGContext {
 			if completable_types.isEmpty() {
 				this.error("some type dependencies cannot be fullfilled", Span());
 				for type in incomplete_types {
-					const type_decl = type.forceLock();
-					this.info(type_decl.signature(), Span());
+					this.info(type.signature(), Span());
 				}
 				abort();
 			}
@@ -324,31 +321,25 @@ struct CGContext {
 		}
 	}
 
-	func getTypeName(this: &CGContext, type: WeakPtr!<TypeDecl>) -> String {
-		const decl = type.forceLock();
-
+	func getTypeName(this: &CGContext, type: SharedHandle!<TypeDecl>) -> String {
 		var name = "";
 		match this.program.options.symbol_type {
 			case None -> {}
-			case Name -> name = decl.name;
-			case Full -> name = decl.signature();
+			case Name -> name = type.name;
+			case Full -> name = type.signature();
 		}
 
 		return name;
 	}
 
-	func codegenType(this: &&CGContext, type: WeakPtr!<TypeDecl>) -> void {
-		const decl = type.lock() else {
-			return;
-		}
-
-		if decl.isIncompleteTemplate() {
+	func codegenType(this: &&CGContext, type: SharedHandle!<TypeDecl>) -> void {
+		if type.isIncompleteTemplate() {
 			return;
 		}
 
 		const name = this.getTypeName(type);
 
-		match decl.body {
+		match type.body {
 			case Empty -> this.types.set(type, this.void_type);
 			case Void -> this.types.set(type, this.void_type);
 			case Bool -> this.types.set(type, this.bool_type);
@@ -370,13 +361,13 @@ struct CGContext {
 			case Float: bits -> match bits {
 				case 32 -> this.types.set(type, this.llvm_context.getFloatType());
 				case 64 -> this.types.set(type, this.llvm_context.getDoubleType());
-				else -> this.error("invalid size for float type: " + format(bits), decl.span);
+				else -> this.error("invalid size for float type: " + format(bits), type.span);
 			}
 			case Pointer -> this.types.set(type, this.ptr_type);
 			case Array: array_type -> this.types.set(type, this.llvm_context.getArrayType(this.getType(array_type.element_type), array_type.size));
 			case Struct -> {
 				var element_types: List!<llvm::TypeRef>;
-				for member_variable in decl.member_variables {
+				for member_variable in type.member_variables {
 					element_types.append(this.getType(member_variable.type));
 				}
 
@@ -384,15 +375,15 @@ struct CGContext {
 				llvm_type.setStructBody(element_types, false);
 				this.types.set(type, llvm_type);
 			}
-			case Enum -> this.types.set(type, this.getType(decl.id_type));
+			case Enum -> this.types.set(type, this.getType(type.id_type));
 			case Variant -> {
 				var element_types: List!<llvm::TypeRef>;
-				element_types.append(this.getType(decl.id_type));
+				element_types.append(this.getType(type.id_type));
 
 				var max_size = 0u;
 				var max_alignment = 1u;
 
-				for case_decl in decl.variant_cases {
+				for case_decl in type.variant_cases {
 					if case_decl.type == this.program.void_type {
 						continue;
 					}
@@ -413,7 +404,7 @@ struct CGContext {
 				const max_alignment_type = this.llvm_context.getIntType(max_alignment * 8);
 				element_types.append(this.llvm_context.getArrayType(max_alignment_type, max_size / max_alignment));
 
-				for member_variable in decl.member_variables {
+				for member_variable in type.member_variables {
 					element_types.append(this.getType(member_variable.type));
 				}
 
@@ -426,16 +417,14 @@ struct CGContext {
 
 	// first pass: generate full di for primitive types & temporary di for composites
 	// second pass: finish di for composite types & replace temporaries
-	func codegenTypeDI(this: &&CGContext, type: WeakPtr!<TypeDecl>, first_pass: bool) -> void {
-		const decl = type.forceLock();
-
-		if decl.isIncompleteTemplate() {
+	func codegenTypeDI(this: &&CGContext, type: SharedHandle!<TypeDecl>, first_pass: bool) -> void {
+		if type.isIncompleteTemplate() {
 			return;
 		}
 
-		const line = decl.name_span.line as uint;
-		const di_file = this.di_files[decl.span.file as uint];
-		const parent_namespace = this.di_namespaces.get(decl.parent_namespace).value();
+		const line = type.name_span.line as uint;
+		const di_file = this.di_files[type.span.file as uint];
+		const parent_namespace = this.di_namespaces.get(type.parent_namespace).value();
 
 		const llvm_type = this.getType(type);
 		var size_in_bits = 0u;
@@ -447,14 +436,14 @@ struct CGContext {
 			alignment_in_bits = this.data_layout.getPreferredAlignmentOfType(llvm_type) * 8;
 		}
 
-		var di_name = decl.name;
-		if !decl.template_parameters.isEmpty() {
-			di_name += decl.template_parameters.format();
+		var di_name = type.name;
+		if !type.template_parameters.isEmpty() {
+			di_name += type.template_parameters.format();
 		}
 
 		var di_type: llvm::MetaDataRef;
 		if first_pass {
-			match decl.body {
+			match type.body {
 				case Empty -> di_type = this.di_builder.createUnspecifiedType(di_name);
 				case Void -> di_type = this.di_builder.createBasicType(di_name, size_in_bits, 0 as dwarf::TypeEncoding, LLVMDIFlags::LLVMDIFlagZero);
 				case Bool -> di_type = this.di_builder.createBasicType(di_name, size_in_bits, dwarf::TypeEncoding::Boolean, LLVMDIFlags::LLVMDIFlagZero);
@@ -462,13 +451,11 @@ struct CGContext {
 				case Int -> di_type = this.di_builder.createBasicType(di_name, size_in_bits, dwarf::TypeEncoding::Signed, LLVMDIFlags::LLVMDIFlagZero);
 				case UInt -> di_type = this.di_builder.createBasicType(di_name, size_in_bits, dwarf::TypeEncoding::Unsigned, LLVMDIFlags::LLVMDIFlagZero);
 				case Float -> di_type = this.di_builder.createBasicType(di_name, size_in_bits, dwarf::TypeEncoding::Float, LLVMDIFlags::LLVMDIFlagZero);
-				else -> di_type = this.di_builder.createReplaceableCompositeType(dwarf::Tag::Unspecified_type, di_name, parent_namespace, di_file, line, 0u32, size_in_bits, alignment_in_bits, LLVMDIFlags::LLVMDIFlagZero, decl.signature());
-				//this.llvm_context.createTemporaryMDNode();
-				//this.di_builder.createForwardDecl(DwarfTag::Unspecified_type, di_name, parent_namespace, di_file, line, 0u32, size_in_bits, alignment_in_bits, decl.signature());
+				else -> di_type = this.di_builder.createReplaceableCompositeType(dwarf::Tag::Unspecified_type, di_name, parent_namespace, di_file, line, 0u32, size_in_bits, alignment_in_bits, LLVMDIFlags::LLVMDIFlagZero, type.signature());
 			}
 		} else {
-			const type_scope = this.di_namespaces.get(decl.linked_namespace).value();
-			match decl.body {
+			const type_scope = this.di_namespaces.get(type.linked_namespace).value();
+			match type.body {
 				case Pointer: pointer_type -> {
 					if pointer_type.base_type.isUnknown() {
 						di_type = this.di_builder.createPointerType(this.getDIType(this.program.void_type), size_in_bits, alignment_in_bits, 0u, di_name);
@@ -480,10 +467,10 @@ struct CGContext {
 				case Struct | Variant -> {
 					var members: List!<llvm::MetaDataRef>;
 
-					if decl.body is Variant {
+					if type.body is Variant {
 						var cases: List!<llvm::MetaDataRef>;
 						var payload_members: List!<llvm::MetaDataRef>;
-						for c in decl.variant_cases {
+						for c in type.variant_cases {
 							cases.append(this.di_builder.createEnumerator(c.name, c.id, true));
 
 							if c.type == this.program.void_type {
@@ -503,10 +490,10 @@ struct CGContext {
 							));
 						}
 
-						const id_size_in_bits = this.data_layout.getStoreSizeOfType(this.getType(decl.id_type)) * 8;
-						const id_alignment_in_bits = this.data_layout.getPreferredAlignmentOfType(this.getType(decl.id_type)) * 8;
+						const id_size_in_bits = this.data_layout.getStoreSizeOfType(this.getType(type.id_type)) * 8;
+						const id_alignment_in_bits = this.data_layout.getPreferredAlignmentOfType(this.getType(type.id_type)) * 8;
 						const id_offset_in_bits = this.data_layout.getOffsetOfElement(llvm_type, 0u) * 8;
-						const id_type = this.di_builder.createEnumerationType(parent_namespace, di_name + "::Id", di_file, line, id_size_in_bits, id_alignment_in_bits, cases, this.getDIType(decl.id_type));
+						const id_type = this.di_builder.createEnumerationType(parent_namespace, di_name + "::Id", di_file, line, id_size_in_bits, id_alignment_in_bits, cases, this.getDIType(type.id_type));
 						members.append(this.di_builder.createMemberType(
 							type_scope,
 							"#id",
@@ -523,7 +510,7 @@ struct CGContext {
 						const payload_size_in_bits = this.data_layout.getStoreSizeOfType(payload_type_impl) * 8;
 						const payload_alignment_in_bits = this.data_layout.getPreferredAlignmentOfType(payload_type_impl) * 8;
 						const payload_offset_in_bits = this.data_layout.getOffsetOfElement(llvm_type, 1u) * 8;
-						const payload_type = this.di_builder.createUnionType(type_scope, di_name + "::Payload", di_file, line, payload_size_in_bits, payload_alignment_in_bits, LLVMDIFlags::LLVMDIFlagZero, payload_members, 0u32, decl.signature() + "::Payload");
+						const payload_type = this.di_builder.createUnionType(type_scope, di_name + "::Payload", di_file, line, payload_size_in_bits, payload_alignment_in_bits, LLVMDIFlags::LLVMDIFlagZero, payload_members, 0u32, type.signature() + "::Payload");
 						members.append(this.di_builder.createMemberType(
 							type_scope,
 							"#payload",
@@ -537,8 +524,8 @@ struct CGContext {
 						));
 					}
 
-					for i in 0u..decl.member_variables.size() {
-						const member_variable = decl.member_variables[i];
+					for i in 0u..type.member_variables.size() {
+						const member_variable = type.member_variables[i];
 						const member_type = this.getType(member_variable.type);
 						if member_type == this.void_type {
 							continue;
@@ -548,7 +535,7 @@ struct CGContext {
 
 						const member_size_in_bits = this.data_layout.getStoreSizeOfType(llvm_type) * 8;
 						const member_alignment_in_bits = this.data_layout.getPreferredAlignmentOfType(llvm_type) * 8;
-						const member_offset_in_bits = this.data_layout.getOffsetOfElement(llvm_type, i + (2u if decl.body is Variant else 0u)) * 8;
+						const member_offset_in_bits = this.data_layout.getOffsetOfElement(llvm_type, i + (2u if type.body is Variant else 0u)) * 8;
 
 						members.append(this.di_builder.createMemberType(
 							type_scope,
@@ -575,16 +562,16 @@ struct CGContext {
 						members,
 						0u32,
 						MetaDataRef(),
-						decl.signature()
+						type.signature()
 					);
 				}
 				case Enum -> {
 					var cases: List!<llvm::MetaDataRef>;
-					for c in decl.enum_cases {
+					for c in type.enum_cases {
 						cases.append(this.di_builder.createEnumerator(c.name, c.id, true));
 					}
 
-					di_type = this.di_builder.createEnumerationType(parent_namespace, di_name, di_file, line, size_in_bits, alignment_in_bits, cases, this.getDIType(decl.id_type));
+					di_type = this.di_builder.createEnumerationType(parent_namespace, di_name, di_file, line, size_in_bits, alignment_in_bits, cases, this.getDIType(type.id_type));
 				}
 				else -> return;
 			}
@@ -596,18 +583,16 @@ struct CGContext {
 		this.di_types.set(type, di_type);
 	}
 
-	func codegenFunctionDecl(this: &&CGContext, function: WeakPtr!<FunctionDecl>) -> void {
-		const decl = function.forceLock();
-
-		if decl.isIncompleteTemplate() {
+	func codegenFunctionDecl(this: &&CGContext, function: SharedHandle!<FunctionDecl>) -> void {
+		if function.isIncompleteTemplate() {
 			return;
 		}
 
-		if decl.body is InlineBuiltin && this.program.options.dont_codegen_builtins {
+		if function.body is InlineBuiltin && this.program.options.dont_codegen_builtins {
 			return;
 		}
 
-		var return_type = this.getType(decl.return_type);
+		var return_type = this.getType(function.return_type);
 		var parameter_types: List!<llvm::TypeRef>;
 
 		if function == this.program.main_function {
@@ -615,7 +600,7 @@ struct CGContext {
 			parameter_types.append(this.int_type);
 			return_type = this.int_type;
 		} else {
-			for type in decl.parameter_types {
+			for type in function.parameter_types {
 				parameter_types.append(this.getType(type));
 			}
 		}
@@ -626,12 +611,12 @@ struct CGContext {
 		var name = "";
 		match this.program.options.symbol_type {
 			case None -> {}
-			case Name -> name = decl.name;
-			case Full -> name = decl.signature();
+			case Name -> name = function.name;
+			case Full -> name = function.signature();
 		}
 
-		if decl.extern_name != "" {
-			name = decl.extern_name;
+		if function.extern_name != "" {
+			name = function.extern_name;
 		} else if function == this.program.main_function {
 			name = "void_main";
 		}
@@ -639,14 +624,12 @@ struct CGContext {
 		this.functions.set(function, this.llvm_module.addFunction(name, function_type));
 	}
 
-	func codegenFunctionImpl(this: &&CGContext, function: WeakPtr!<FunctionDecl>) -> void {
-		const decl = function.forceLock();
-
-		if decl.isIncompleteTemplate() {
+	func codegenFunctionImpl(this: &&CGContext, function: SharedHandle!<FunctionDecl>) -> void {
+		if function.isIncompleteTemplate() {
 			return;
 		}
 
-		match decl.body {
+		match function.body {
 			case Empty | Extern -> return;
 			case InlineBuiltin -> {
 				if this.program.options.dont_codegen_builtins {
@@ -654,7 +637,7 @@ struct CGContext {
 				}
 			}
 			case Unchecked -> {
-				this.error("unchecked function: " + decl.signature(), decl.signature_span);
+				this.error("unchecked function: " + function.signature(), function.signature_span);
 				return;
 			}
 			else -> {}
@@ -668,34 +651,34 @@ struct CGContext {
 		if this.program.options.generate_debug_info {
 			var di_return_and_parameter_types: List!<llvm::MetaDataRef>;
 
-			di_return_and_parameter_types.append(this.getDIType(decl.return_type));
-			for parameter_type in decl.parameter_types {
+			di_return_and_parameter_types.append(this.getDIType(function.return_type));
+			for parameter_type in function.parameter_types {
 				di_return_and_parameter_types.append(this.getDIType(parameter_type));
 			}
 
 			const di_function_type = this.di_builder.createSubroutineType(
-				this.di_files[decl.span.file as uint],
+				this.di_files[function.span.file as uint],
 				di_return_and_parameter_types,
 				LLVMDIFlags::LLVMDIFlagZero
 			);
 
-			const di_namespace = this.di_namespaces.get(decl.parent_namespace).value();
+			const di_namespace = this.di_namespaces.get(function.parent_namespace).value();
 
-			var di_name = decl.name;
-			if !decl.template_parameters.isEmpty() {
-				di_name += decl.template_parameters.format();
+			var di_name = function.name;
+			if !function.template_parameters.isEmpty() {
+				di_name += function.template_parameters.format();
 			}
 
 			di_function = this.di_builder.createFunction(
 				di_namespace,
 				di_name,
-				decl.extern_name,
-				this.di_files[decl.span.file as uint],
-				decl.signature_span.line as uint + 1,
+				function.extern_name,
+				this.di_files[function.span.file as uint],
+				function.signature_span.line as uint + 1,
 				di_function_type,
 				false, 		// is local to unit
 				true,		// is definition
-				decl.signature_span.line as uint + 1,
+				function.signature_span.line as uint + 1,
 				LLVMDIFlags::LLVMDIFlagZero,
 				this.program.options.optimized_build
 			);
@@ -710,7 +693,7 @@ struct CGContext {
 		this.builder.positionAtEnd(entry_block);
 
 		// initialize function parameters & variables
-		for variable in decl.variables {
+		for variable in function.variables {
 			if variable.type.isUnknown() {
 				this.error("variable '" + variable.name + "' has unknown type", variable.span);
 				continue;
@@ -718,7 +701,7 @@ struct CGContext {
 
 			if variable.is_parameter {
 				if function == this.program.main_function {
-					var args = llvm::constNull(this.getType(decl.parameter_types[0u]));
+					var args = llvm::constNull(this.getType(function.parameter_types[0u]));
 					args = this.builder.buildInsertValue(args, this.current_function.getParam(0u), 0u, "");
 					args = this.builder.buildInsertValue(args, this.current_function.getParam(1u), 1u, "");
 					this.variables.set(WeakPtr!<VarDecl>(variable), args);
@@ -731,7 +714,7 @@ struct CGContext {
 							this.di_scope_stack.last().value(),
 							variable.name,
 							variable.id + 1, // ArgNo starts counting at 1
-							this.di_files[decl.span.file as uint],
+							this.di_files[function.span.file as uint],
 							variable.span.line as uint,
 							this.getDIType(variable.type),
 							false,
@@ -758,7 +741,7 @@ struct CGContext {
 					const di_variable = this.di_builder.createAutoVariable(
 						this.di_scope_stack.last().value(),
 						variable.name,
-						this.di_files[decl.span.file as uint],
+						this.di_files[function.span.file as uint],
 						variable.span.line as uint,
 						this.getDIType(variable.type),
 						false,
@@ -780,7 +763,7 @@ struct CGContext {
 		}
 
 		// codegen body
-		match decl.body {
+		match function.body {
 			case InlineBuiltin: builtin_funcion -> {
 				var parameters: List!<llvm::ValueRef>;
 				for i in 0u..this.current_function.countParams() {
@@ -789,7 +772,7 @@ struct CGContext {
 
 				this.builder.buildRet(this.codegenInlineBuiltinFunctionCall(builtin_funcion, parameters));
 			}
-			case Builtin: builtin_funcion -> this.codegenBuiltinFunction(builtin_funcion, decl.signature_span);
+			case Builtin: builtin_funcion -> this.codegenBuiltinFunction(builtin_funcion, function.signature_span);
 			case Stmt: stmt -> this.codegenStmt(stmt);
 			else -> panic("invalid function body for codegen");
 		}
@@ -797,7 +780,7 @@ struct CGContext {
 		if !this.builder.getInsertBlock().hasTerminator() {
 			if function == this.program.main_function {
 				this.builder.buildRet(llvm::constInt(this.int_type, 0, false));
-			} else if decl.return_type == this.program.void_type {
+			} else if function.return_type == this.program.void_type {
 				this.builder.buildRetVoid();
 			} else {
 				panic("function doesn't have a terminator");
@@ -814,7 +797,7 @@ struct CGContext {
 
 	func codegenBuiltinFunction(this: &&CGContext, function: BuiltinFunction, signature_span: Span) -> void {
 		const type = this.getType(function.base_type);
-		const decl = function.base_type.forceLock();
+		const decl = function.base_type.decl;
 
 		const param0 = this.current_function.getParam(0u);
 		const param1 = this.current_function.getParam(1u);
@@ -823,7 +806,7 @@ struct CGContext {
 			case StructDefaultConstructor -> {
 				for i in 0u..decl.member_variables.size() {
 					const member_ptr = this.builder.buildStructGEP2(type, param0, i, "");
-					const member_type = decl.member_variables[i].type.forceLock();
+					const member_type = decl.member_variables[i].type.decl;
 
 					var parameters: List!<llvm::ValueRef>;
 					parameters.append(member_ptr);
@@ -839,7 +822,7 @@ struct CGContext {
 					const initializer = this.builder.buildExtractValue(param1, i, "");
 
 					if decl.member_variables[i].type.reference_kind == None {
-						const member_type = decl.member_variables[i].type.forceLock();
+						const member_type = decl.member_variables[i].type.decl;
 
 						var parameters: List!<llvm::ValueRef>;
 						parameters.append(member_ptr);
@@ -860,7 +843,7 @@ struct CGContext {
 					}
 
 					const member_ptr = this.builder.buildStructGEP2(type, param0, i, "");
-					const member_type = decl.member_variables[i].type.forceLock();
+					const member_type = decl.member_variables[i].type.decl;
 
 					var parameters: List!<llvm::ValueRef>;
 					parameters.append(member_ptr);
@@ -876,7 +859,7 @@ struct CGContext {
 					const initializer = this.builder.buildExtractValue(param1, i, "");
 
 					if decl.member_variables[i].type.reference_kind == None {
-						const member_type = decl.member_variables[i].type.forceLock();
+						const member_type = decl.member_variables[i].type.decl;
 
 						var parameters: List!<llvm::ValueRef>;
 						parameters.append(member_ptr);
@@ -905,7 +888,7 @@ struct CGContext {
 					const initializer = param1;
 
 					if case_decl.type.reference_kind == None {
-						const case_type = case_decl.type.forceLock();
+						const case_type = case_decl.type.decl;
 
 						var parameters: List!<llvm::ValueRef>;
 						parameters.append(this_payload_ptr);
@@ -926,7 +909,7 @@ struct CGContext {
 						parameters.append(this_member_ptr);
 						parameters.append(initializer);
 
-						const member_type = decl.member_variables[i].type.forceLock();
+						const member_type = decl.member_variables[i].type.decl;
 
 						discard this.codegenCall(member_type.copy_constructor, parameters, ReturnKind::None, signature_span);
 					} else {
@@ -970,7 +953,7 @@ struct CGContext {
 					const other_payload = this.builder.buildLoad2(this.getType(case_decl.type), other_payload_ptr, "");
 
 					if case_decl.type.reference_kind == None {
-						const case_type = case_decl.type.forceLock();
+						const case_type = case_decl.type.decl;
 						var parameters: List!<llvm::ValueRef>;
 						parameters.append(this_payload_ptr);
 						parameters.append(other_payload);
@@ -990,7 +973,7 @@ struct CGContext {
 					const other_member = this.builder.buildExtractValue(param1, i + 2, "");
 
 					if decl.member_variables[i].type.reference_kind == None {
-						const member_type = decl.member_variables[i].type.forceLock();
+						const member_type = decl.member_variables[i].type.decl;
 
 						var parameters: List!<llvm::ValueRef>;
 						parameters.append(this_member_ptr);
@@ -1032,7 +1015,7 @@ struct CGContext {
 					switch_instr.addCase(llvm::constInt(id_type, case_decl.id, false), case_block);
 					this.builder.positionAtEnd(case_block);
 
-					const case_type = case_decl.type.forceLock();
+					const case_type = case_decl.type.decl;
 
 					discard this.codegenCall(case_type.destructor, case_destructor_args, ReturnKind::None, signature_span);
 
@@ -1046,7 +1029,7 @@ struct CGContext {
 						continue;
 					}
 
-					const member_type = decl.member_variables[i].type.forceLock();
+					const member_type = decl.member_variables[i].type.decl;
 
 					var parameters: List!<llvm::ValueRef>;
 					parameters.append(this.builder.buildStructGEP2(type, param0, i + 2, ""));
@@ -1099,7 +1082,7 @@ struct CGContext {
 					const other_payload = this.builder.buildLoad2(this.getType(case_decl.type), other_payload_ptr, "");
 
 					if case_decl.type.reference_kind == None {
-						const case_type = case_decl.type.forceLock();
+						const case_type = case_decl.type.decl;
 						var parameters: List!<llvm::ValueRef>;
 						parameters.append(payload_copy_ptr);
 						parameters.append(other_payload);
@@ -1127,7 +1110,7 @@ struct CGContext {
 						continue;
 					}
 
-					const case_type = case_decl.type.forceLock();
+					const case_type = case_decl.type.decl;
 
 					const case_block = this.llvm_context.appendBasicBlock(this.current_function, "case");
 					switch_instr.addCase(llvm::constInt(id_type, case_decl.id, false), case_block);
@@ -1153,7 +1136,7 @@ struct CGContext {
 					const initializer = this.builder.buildExtractValue(param1, i + 2, "");
 
 					if decl.member_variables[i].type.reference_kind == None {
-						const member_type = decl.member_variables[i].type.forceLock();
+						const member_type = decl.member_variables[i].type.decl;
 
 						var parameters: List!<llvm::ValueRef>;
 						parameters.append(member_ptr);
@@ -1215,7 +1198,7 @@ struct CGContext {
 
 						var equal = llvm::ValueRef();
 						if case_decl.type.reference_kind == None {
-							const case_type = case_decl.type.forceLock();
+							const case_type = case_decl.type.decl;
 							var parameters: List!<llvm::ValueRef>;
 							parameters.append(lhs);
 							parameters.append(rhs);
@@ -1238,7 +1221,7 @@ struct CGContext {
 
 					var equal = llvm::ValueRef();
 					if decl.member_variables[i].type.reference_kind == None {
-						const member_type = decl.member_variables[i].type.forceLock();
+						const member_type = decl.member_variables[i].type.decl;
 						var parameters: List!<llvm::ValueRef>;
 						parameters.append(lhs);
 						parameters.append(rhs);
@@ -1275,7 +1258,7 @@ struct CGContext {
 
 					var sign = llvm::ValueRef();
 					if decl.member_variables[i].type.reference_kind == None {
-						const member_type = decl.member_variables[i].type.forceLock();
+						const member_type = decl.member_variables[i].type.decl;
 						sign = this.codegenCall(member_type.op_compare, parameters, ReturnKind::Value, signature_span);
 					} else {
 						sign = this.codegenInlineBuiltinFunctionCall(InlineBuiltinFunction::UIntOpCmp(decl.member_variables[i].type), parameters);
@@ -1301,7 +1284,7 @@ struct CGContext {
 				// TODO: turn into a loop for better code size (llvm can unroll it for performance)
 				const array_type = (decl.body as Array).value();
 				const element_type = array_type.element_type;
-				const element_type_decl = element_type.forceLock();
+				const element_type_decl = element_type.decl;
 
 				for i in 0u..array_type.size {
 					var indices: List!<llvm::ValueRef>;
@@ -1320,7 +1303,7 @@ struct CGContext {
 				// TODO: turn into a loop for better code size (llvm can unroll it for performance)
 				const array_type = (decl.body as Array).value();
 				const element_type = array_type.element_type;
-				const element_type_decl = element_type.forceLock();
+				const element_type_decl = element_type.decl;
 
 				for i in 0u..array_type.size {
 					var indices: List!<llvm::ValueRef>;
@@ -1349,7 +1332,7 @@ struct CGContext {
 				// TODO: turn into a loop for better code size (llvm can unroll it for performance)
 				const array_type = (decl.body as Array).value();
 				const element_type = array_type.element_type;
-				const element_type_decl = element_type.forceLock();
+				const element_type_decl = element_type.decl;
 
 				const uneq_block = this.llvm_context.appendBasicBlock(this.current_function, "uneq");
 
@@ -1605,15 +1588,13 @@ struct CGContext {
 			case PointerCast -> return parameters[0u];	// all pointer types are the same in llvm
 
 			case PointerDiff -> {
-				const base_type_decl = function.base_type.forceLock();
-				const pointer_type = (base_type_decl.body as Pointer).value();
+				const pointer_type = (function.base_type.decl.body as Pointer).value();
 				const pointee_type = this.getType(pointer_type.base_type);
 				return this.builder.buildPtrDiff2(pointee_type, parameters[0u], parameters[1u], "");
 			}
 			case PointerOffset
 			| PointerOpIndex -> {
-				const base_type_decl = function.base_type.forceLock();
-				const pointer_type = (base_type_decl.body as Pointer).value();
+				const pointer_type = (function.base_type.decl.body as Pointer).value();
 				const pointee_type = this.getType(pointer_type.base_type);
 
 				var indices: List!<llvm::ValueRef>;
@@ -1684,8 +1665,7 @@ struct CGContext {
 			case ReferenceKindOf -> return llvm::constInt(this.int_type, function.base_type.reference_kind as int, false);
 
 			case VariantOpUnsafeAs: id -> {
-				const type_decl = function.base_type.forceLock();
-				const case_decl = type_decl.getVariantCase(id).value();
+				const case_decl = function.base_type.decl.getVariantCase(id).value();
 				var result = this.builder.buildStructGEP2(this.getType(function.base_type), parameters[0u], 1u, "");
 				if case_decl.type.reference_kind != None {
 					result = this.builder.buildLoad2(this.getType(case_decl.type), result, "");
@@ -1694,15 +1674,13 @@ struct CGContext {
 			}
 
 			case VariantOpIs: id -> {
-				const type_decl = function.base_type.forceLock();
-				const id_type = this.getType(type_decl.id_type);
+				const id_type = this.getType(function.base_type.decl.id_type);
 				const object_id = this.builder.buildExtractValue(parameters[0u], 0u, "");
 				return this.builder.buildICmp(LLVMIntPredicate::LLVMIntEQ, object_id, llvm::constInt(id_type, id, false), "");
 			}
 
 			case ArrayGetSize -> {
-				const type_decl = function.base_type.forceLock();
-				const size = (type_decl.body as Array).value().size;
+				const size = (function.base_type.decl.body as Array).value().size;
 				return llvm::constInt(this.int_type, size as int, false);
 			}
 			case ArrayGetDataPointer -> {
@@ -1918,7 +1896,7 @@ struct CGContext {
 				}
 			}
 			case MemberVarInvoke: member_var_invoke_expr -> {
-				const object_type_decl = member_var_invoke_expr.object.type.forceLock();
+				const object_type_decl = member_var_invoke_expr.object.type.decl;
 				const member_decl = object_type_decl.member_variables[member_var_invoke_expr.id];
 
 				const object = this.codegenExpr(member_var_invoke_expr.object);
@@ -1981,16 +1959,15 @@ struct CGContext {
 		return this.codegenCall(call_expr.function, parameters, call_expr.return_kind, call_expr.result_var, span);
 	}
 
-	func codegenCall(this: &&CGContext, function: WeakPtr!<FunctionDecl>, parameters: List!<llvm::ValueRef>, return_kind: ReturnKind, span: Span) -> llvm::ValueRef {
+	func codegenCall(this: &&CGContext, function: SharedHandle!<FunctionDecl>, parameters: List!<llvm::ValueRef>, return_kind: ReturnKind, span: Span) -> llvm::ValueRef {
 		assert(return_kind == ReturnKind::None || return_kind == ReturnKind::Value);
 		return this.codegenCall(function, parameters, return_kind, WeakPtr!<VarDecl>(), span);
 	}
 
-	func codegenCall(this: &&CGContext, function: WeakPtr!<FunctionDecl>, parameters: List!<llvm::ValueRef>, return_kind: ReturnKind, result_var: WeakPtr!<VarDecl>, span: Span) -> llvm::ValueRef {
+	func codegenCall(this: &&CGContext, function: SharedHandle!<FunctionDecl>, parameters: List!<llvm::ValueRef>, return_kind: ReturnKind, result_var: WeakPtr!<VarDecl>, span: Span) -> llvm::ValueRef {
 		this.setCurrentDebugLocation(span);
 
-		const decl = function.forceLock();
-		match decl.body {
+		match function.body {
 			case InlineBuiltin: function -> return this.codegenInlineBuiltinFunctionCall(function, parameters);
 			else -> {
 				if return_kind is Parameter {
@@ -2024,7 +2001,7 @@ struct CGContext {
 		var value = this.codegenExpr(match_expr.value);
 
 		if match_expr.value.type.isVariant() {
-			const value_type_decl = match_expr.value.type.forceLock();
+			const value_type_decl = match_expr.value.type.decl;
 			value = this.builder.buildLoad2(
 				this.getType(value_type_decl.id_type),
 				this.builder.buildStructGEP2(
