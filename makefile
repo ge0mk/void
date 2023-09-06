@@ -17,7 +17,7 @@ clean-but-keep-stage0:
 stage0: build/stage0
 
 build/stage0: build/stage0.ll
-	clang build/stage0.ll -o build/stage0 -O3 -march=native -lc -lm -lLLVM
+	clang build/stage0.ll -o build/stage0 -lc -lm -lLLVM -ltcmalloc -O3 -march=native -flto
 
 build/stage0.ll:
 	-@mkdir build -p
