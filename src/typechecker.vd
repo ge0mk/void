@@ -2868,31 +2868,26 @@ struct TCContext {
 		return this.checkMatchExpr(value, cases, yield_type, span);
 	}
 
-	func lookupNamespace(this: &&TCContext, namespaces_to_search: Set!<SharedHandle!<Namespace>>, name: NameSegment) -> Set!<SharedHandle!<Namespace>> {
+	func lookupNamespace(this: &&TCContext, namespaces_to_search: &Set!<SharedHandle!<Namespace>>, name: NameSegment) -> Set!<SharedHandle!<Namespace>> {
 		var result: Set!<SharedHandle!<Namespace>>;
 
 		for n in namespaces_to_search {
-			var decl = n;
-
 			var most_matching_template_parameters = 0;
-			var children_with_matching_template_parameters: List!<SharedHandle!<Namespace>>;
+			var matching_children: List!<SharedHandle!<Namespace>>;
 
-			for child in decl.children {
-				if child.name != name.name {
-					continue;
-				}
-
+			for child in n.children_by_name.getOrDefault(name.name) {
 				const matching_template_parameters = this.getMatchingTemplateParameterCount(&child.template_parameters, &name.template_parameters);
 				if matching_template_parameters > most_matching_template_parameters {
-					children_with_matching_template_parameters.clear();
-					children_with_matching_template_parameters.append(SharedHandle!<Namespace>(child));
+					matching_children.clear();
+					matching_children.append(child);
 					most_matching_template_parameters = matching_template_parameters;
 				} else if matching_template_parameters == most_matching_template_parameters {
-					children_with_matching_template_parameters.append(SharedHandle!<Namespace>(child));
+					matching_children.append(child);
 				}
 			}
 
-			for child in children_with_matching_template_parameters {
+			result.grow(result.size() + matching_children.size());
+			for child in matching_children {
 				if child.isIncompleteTemplate() {
 					result.add(this.createTemplateInstance(child, name.template_parameters, name.span));
 				} else {
@@ -2922,7 +2917,7 @@ struct TCContext {
 			matching_namespaces.add(n);
 
 			for i in intersecting_segments..name_segments.size() {
-				matching_namespaces = this.lookupNamespace(matching_namespaces, name_segments[i]);
+				matching_namespaces = this.lookupNamespace(&matching_namespaces, name_segments[i]);
 			}
 
 			namespaces_to_search.add(matching_namespaces);
@@ -2936,7 +2931,7 @@ struct TCContext {
 			}
 		}
 
-		for n in this.lookupNamespace(namespaces_to_search, last_segment) {
+		for n in this.lookupNamespace(&namespaces_to_search, last_segment) {
 			if (filter & Namespaces) != None {
 				result.append(Symbol::Namespace(n, n.parent));
 			}
@@ -2960,7 +2955,7 @@ struct TCContext {
 					else -> panic("invalid numeric type");
 				}
 
-				for n in this.lookupNamespace(namespaces_to_search, NameSegment(numeric_type_name, numeric_type_template_parameters)) {
+				for n in this.lookupNamespace(&namespaces_to_search, NameSegment(numeric_type_name, numeric_type_template_parameters)) {
 					if n.linked_type.isAlive() {
 						result.append(Symbol::Type(n.linked_type, n.parent));
 					}
@@ -3008,7 +3003,7 @@ struct TCContext {
 			for n in namespaces_to_search {
 				var most_matching_template_parameters = 0;
 				var functions_with_matching_template_parameters: List!<SharedHandle!<FunctionDecl>>;
-				for function in n.functions_by_name.get(last_segment.name) ?? List!<SharedHandle!<FunctionDecl>>() {
+				for function in n.functions_by_name.getOrDefault(last_segment.name) {
 					const matching_template_parameters = this.getMatchingTemplateParameterCount(&function.template_parameters, &last_segment.template_parameters);
 
 					if matching_template_parameters > most_matching_template_parameters {

@@ -202,6 +202,7 @@ struct Program {
 		}
 
 		parent_namespace.children.append(child);
+		parent_namespace.children_by_name[name].append(child);
 		parent_namespace.updateMinState(NamespaceState::Unchecked);
 
 		return child;
@@ -517,6 +518,8 @@ struct Namespace {
 
 	var parent: SharedHandle!<Namespace>;
 	var children: List!<SharedHandle!<Namespace>>;
+	var children_by_name: Map!<String, List!<SharedHandle!<Namespace>>>;
+
 	var imported_namespaces: List!<SharedHandle!<Namespace>>;
 	var file_namespace: SharedHandle!<Namespace>;
 
