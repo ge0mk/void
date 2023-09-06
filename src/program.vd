@@ -696,6 +696,9 @@ struct TypeDecl {
 	var variant_cases_by_id: Map!<int, uint>;
 	var variant_cases_by_name: Map!<String, uint>;
 
+	// flags for codegen
+	var is_packed: bool;
+
 	func constructor(this: &&TypeDecl, name: String, template_parameters: List!<TemplateParameterDecl>, body: TypeBody) -> void {
 		this.name := name;
 		this.template_parameters := template_parameters;

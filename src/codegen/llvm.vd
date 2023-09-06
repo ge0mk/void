@@ -372,7 +372,7 @@ struct CGContext {
 				}
 
 				const llvm_type = this.llvm_context.createNamedStruct(name);
-				llvm_type.setStructBody(element_types, false);
+				llvm_type.setStructBody(element_types, type.is_packed);
 				this.types.set(type, llvm_type);
 			}
 			case Enum -> this.types.set(type, this.getType(type.id_type));
@@ -409,7 +409,7 @@ struct CGContext {
 				}
 
 				const llvm_type = this.llvm_context.createNamedStruct(name);
-				llvm_type.setStructBody(element_types, false);
+				llvm_type.setStructBody(element_types, type.is_packed);
 				this.types.set(type, llvm_type);
 			}
 		}

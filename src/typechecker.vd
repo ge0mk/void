@@ -461,7 +461,7 @@ struct TCContext {
 		return type;
 	}
 
-	func checkTypeDecl(this: &&TCContext, name: String, template_parameters: List!<TemplateParameterDecl>, body: TypeBody, span: Span, name_span: Span, add_to_unchecked_list: bool) -> SharedHandle!<TypeDecl> {
+	func checkTypeDecl(this: &&TCContext, name: String, template_parameters: List!<TemplateParameterDecl>, body: TypeBody, span: Span, name_span: Span, parsed_annotations: List!<ParsedAnnotation>, add_to_unchecked_list: bool) -> SharedHandle!<TypeDecl> {
 		var type = this.program.createType(this.current_namespace, name, template_parameters, body);
 		type.span = span;
 		type.name_span = name_span;
@@ -486,6 +486,14 @@ struct TCContext {
 		}
 
 		for annotation in parsed_annotations {
+			if annotation.name == "packed" {
+				match annotation {
+					case Flag -> type.is_packed = true;
+					else -> this.error("invalid annotation", annotation.span);
+				}
+			} else {
+				this.error("invalid annotation name '" + annotation.name + "'", annotation.span);
+			}
 		}
 
 		return type;
