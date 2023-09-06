@@ -14,7 +14,7 @@ struct KeyboardEvent {
 	var keycode: KeyCode;
 	var mod: Keymod;
 
-	func constructor(this: &&KeyboardEvent) {
+	func constructor(this: &&KeyboardEvent) -> void {
 		this.scancode := ScanCode::UNKNOWN;
 		this.keycode := KeyCode::UNKNOWN;
 		this.mod := Keymod::NONE;
@@ -27,6 +27,7 @@ struct KeyboardEvent {
 	operator ==(this: KeyboardEvent, other: KeyboardEvent) -> bool = default;
 }
 
+@[packed]
 variant Event: i32 {
 	case None                     = 0;
 	case Quit                     = 0x100;

@@ -27,8 +27,20 @@ func present(renderer: vptr!<Renderer>) -> void = extern;
 
 func SDL_SetRenderDrawColor(renderer: vptr!<Renderer>, r: u8, g: u8, b: u8, a: u8) -> i32 = extern;
 
+func setDrawColor(renderer: vptr!<Renderer>, r: u8, g: u8, b: u8, a: u8) -> void {
+	discard SDL_SetRenderDrawColor(renderer, r, g, b, a);
+}
+
 func SDL_RenderDrawRect(renderer: vptr!<Renderer>, rect: cptr!<Rect>) -> i32 = extern;
 func SDL_RenderFillRect(renderer: vptr!<Renderer>, rect: cptr!<Rect>) -> i32 = extern;
+
+func drawRect(renderer: vptr!<Renderer>, rect: Rect) -> void {
+	discard SDL_RenderDrawRect(renderer, cptr!<Rect>::addressOf(&rect));
+}
+
+func fillRect(renderer: vptr!<Renderer>, rect: Rect) -> void {
+	discard SDL_RenderFillRect(renderer, cptr!<Rect>::addressOf(&rect));
+}
 
 struct Rect {
 	var x: i32;
@@ -36,7 +48,7 @@ struct Rect {
 	var width: i32;
 	var height: i32;
 
-	func constructor(this: &&Rect, x: i32, y: i32, width: i32, height: i32) {
+	func constructor(this: &&Rect, x: i32, y: i32, width: i32, height: i32) -> void {
 		this.x := x;
 		this.y := y;
 		this.width := width;
@@ -49,18 +61,4 @@ struct Rect {
 
 	operator =(this: &&Rect, other: Rect) -> void = default;
 	operator ==(this: Rect, other: Rect) -> bool = default;
-}
-
-extend Renderer {
-	func setDrawColor(renderer: vptr!<Renderer>, r: u8, g: u8, b: u8, a: u8) -> void {
-		discard SDL_SetRenderDrawColor(renderer, r, g, b, a);
-	}
-
-	func drawRect(renderer: vptr!<Renderer>, rect: Rect) {
-		discard SDL_RenderDrawRect(renderer, cptr!<Rect>::addressOf(&rect));
-	}
-
-	func fillRect(renderer: vptr!<Renderer>, rect: Rect) {
-		discard SDL_RenderFillRect(renderer, cptr!<Rect>::addressOf(&rect));
-	}
 }

@@ -11,7 +11,7 @@ func main(args: Range!<String>) -> int {
 		return 1;
 	}
 
-	var file = open(path, OpenMode::read) else {
+	var file = File::open(path, OpenMode::read) else {
 		eprintln("couldn't open file " + path);
 		return 1;
 	}
