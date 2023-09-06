@@ -5,12 +5,14 @@ test: test-stage1
 clean:
 	-@rm -rf build
 	-@rm -rf bootstrap
-	-@rm -f libc.ll
+	-@rm -f rt.ll
 	-@rm -f llvm/llvm_c.vd
 
 clean-but-keep-stage0:
 	-@find build ! -name 'stage0*' -type f -exec rm -rf {} +
 	-@rm -rf bootstrap
+	-@rm -f rt.ll
+	-@rm -f llvm/llvm_c.vd
 
 stage0: build/stage0
 
@@ -29,7 +31,7 @@ stage1: build/stage1
 build/stage1: build/stage1.ll
 	clang build/stage1.ll -o build/stage1 -lc -lm -lLLVM
 
-build/stage1.ll: build/stage0 libc.ll std/*.vd src/*.vd src/*/*.vd llvm/*.vd llvm/llvm_c.vd
+build/stage1.ll: build/stage0 rt.ll std/*.vd src/*.vd src/*/*.vd llvm/*.vd llvm/llvm_c.vd
 	build/stage0 src/main.vd -o stage1 -c -g -m
 
 test-stage1: build/stage1
@@ -49,8 +51,8 @@ test-stage2: build/stage2
 llvm/llvm_c.vd: llvm/llvm.h
 	python3 binding_generator.py llvm/llvm.h llvm/llvm_c.vd
 
-libc.ll: libc.c
-	clang libc.c -S -emit-llvm -O3 -o libc.ll
+rt.ll: rt.c
+	clang rt.c -S -emit-llvm -O3 -o rt.ll
 
 generate-bootstrap-files: build/stage2
 	build/stage2 src/main.vd -o bootstrap -c -m -O

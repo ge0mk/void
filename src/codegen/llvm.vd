@@ -182,8 +182,8 @@ struct CGContext {
 			this.codegenFunctionImpl(SharedHandle!<FunctionDecl>(function));
 		}
 
-		const libc_module = this.llvm_context.loadModuleFromFile("libc.ll").value();
-		this.llvm_module.link(libc_module);
+		const rt_module = this.llvm_context.loadModuleFromFile("rt.ll").value();
+		this.llvm_module.link(rt_module);
 
 		if this.program.options.generate_debug_info {
 			this.deinitDIBuilder();
