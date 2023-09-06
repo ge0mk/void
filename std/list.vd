@@ -136,18 +136,6 @@ struct List {
 		return Range!<T>(this.data as cptr!<T> + range.start, range.end - range.start);
 	}
 
-	operator [](this: &&List!<T>, range: NumericRange!<uint>) -> VRange!<T> {
-		if range.end > this.size() {
-			panic(Error::EBOUNDS);
-		}
-
-		if range.start > range.end || range.step != 1u {
-			panic(Error::EINVAL);
-		}
-
-		return VRange!<T>(this.data + range.start, range.end - range.start);
-	}
-
 	func first(this: &List!<T>) -> Optional!<T> {
 		if this.isEmpty() {
 			return None;
@@ -168,7 +156,7 @@ struct List {
 		return Range!<T>(this.data as cptr!<T>, this.size);
 	}
 
-	func range(this: &&List!<T>) -> VRange!<T> {
+	func vrange(this: &&List!<T>) -> VRange!<T> {
 		return VRange!<T>(this.data, this.size);
 	}
 
