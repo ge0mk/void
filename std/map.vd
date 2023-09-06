@@ -191,6 +191,17 @@ struct Map {
 		return None;
 	}
 
+	func getOrDefault(this: &Map!<Tkey, Tvalue>, key: Tkey) -> Tvalue {
+		var exact_match = false;
+		const index = this.getInsertPos(key, &&exact_match);
+		if exact_match {
+			return this.values[index];
+		}
+
+		var d: Tvalue;
+		return d;
+	}
+
 	func remove(this: &&Map!<Tkey, Tvalue>, key: Tkey) -> void {
 		var exact_match = false;
 		const index = this.getInsertPos(key, &&exact_match);
