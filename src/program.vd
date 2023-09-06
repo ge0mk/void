@@ -677,6 +677,8 @@ struct TypeDecl {
 
 	var contained_types: Set!<SharedHandle!<TypeDecl>>;
 
+	var parsed_annotations: List!<ParsedAnnotation>;
+
 	// struct & variant
 	var member_variables: List!<MemberVarDecl>;
 	var member_variables_by_name: Map!<String, uint>;

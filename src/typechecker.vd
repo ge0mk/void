@@ -450,10 +450,12 @@ struct TCContext {
 			body,
 			parsed_decl.span,
 			parsed_decl.name_span,
+			parsed_decl.annotations,
 			true
 		);
 
 		type.parsed_id_type = parsed_decl.id_type;
+		type.parsed_annotations = parsed_decl.annotations;
 		type.linked_namespace.addUncheckedChildren(parsed_decl.children);
 
 		return type;
@@ -481,6 +483,9 @@ struct TCContext {
 				this.error("type redeclared with identical template parameters", name_span);
 				this.info("previously declared here: ", sibling.name_span);
 			}
+		}
+
+		for annotation in parsed_annotations {
 		}
 
 		return type;
@@ -3338,10 +3343,12 @@ struct TCContext {
 						base_type.body,
 						base.span,
 						base.name_span,
+						base_type.parsed_annotations,
 						this.current_target_state <= UncheckedTypeBodies
 					);
 
 					type_instance.parsed_id_type = base_type.parsed_id_type;
+					type_instance.parsed_annotations = base_type.parsed_annotations;
 				}
 			}
 
