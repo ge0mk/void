@@ -1553,7 +1553,7 @@ struct TCContext {
 		for parameter in decl.parameters {
 			// create a local copy of all parameters passed by value
 			if parameter.type.kind == ReferenceKind::None {
-				var copy = decl.createVariable(decl.signature_span, parameter.name, parameter.type, true);
+				var copy = decl.createVariable(decl.signature_span, parameter.name, parameter.type, false);
 				const parameter_expr = Expr::VarInvoke(WeakPtr!<VarDecl>(parameter), decl.signature_span, parameter.type);
 
 				if decl.isCopyConstructor() {
@@ -2173,7 +2173,7 @@ struct TCContext {
 
 		initializer.append(next_value);
 		var function = this.current_function.forceLock();
-		const variable = function.createVariable(parsed_stmt.capture_span, parsed_stmt.capture_name, next_value.type, next_value.type.kind != ReferenceKind::Var);
+		const variable = function.createVariable(parsed_stmt.capture_span, parsed_stmt.capture_name, next_value.type, next_value.type.kind == ReferenceKind::Const);
 
 		this.addVariableToCurrentScope(variable);
 
