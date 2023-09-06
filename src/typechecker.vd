@@ -2054,6 +2054,29 @@ struct TCContext {
 		return this.checkMatchExpr(this.checkExpr(parsed_expr.value, Type::unknown()), parsed_expr.body.children, expected_type, span);
 	}
 
+	func addCasesToMatchExpr(this: &&TCContext, match_expr: &&MatchExpr, stmt: Stmt) -> void {
+		match stmt {
+			case Compound: compound_stmt -> {
+				for other in compound_stmt.children {
+					this.addCasesToMatchExpr(&&match_expr, other);
+				}
+			}
+			case Case: case_stmt -> match_expr.cases.append(case_stmt);
+			case ElseCase: body -> {
+				if match_expr.else_case.hasValue() {
+					this.error("mutiple definitions of an else case in the same match expr", stmt.span);
+					this.info("else case first declared here:", match_expr.else_case.value().span);
+				} else {
+					match_expr.else_case = Some(body);
+				}
+			}
+			case Empty -> {}
+			else -> {
+				this.error("expected case statement", stmt.span);
+			}
+		}
+	}
+
 	func checkMatchExpr(this: &&TCContext, checked_value: Expr, parsed_body: List!<ParsedStmt>, expected_type: Type, span: Span) -> Expr {
 		if checked_value is Undefined {
 			return Expr::Undefined(span, Type::unknown());
@@ -2110,21 +2133,7 @@ struct TCContext {
 
 		for parsed_stmt in parsed_body {
 			const child = this.checkStmt(parsed_stmt);
-			match child {
-				case Case: case_stmt -> match_expr.cases.append(case_stmt);
-				case ElseCase: body -> {
-					if match_expr.else_case.hasValue() {
-						this.error("mutiple definitions of an else case in the same match expr", span);
-						this.info("else case first declared here:", match_expr.else_case.value().span);
-					} else {
-						match_expr.else_case = Some(body);
-					}
-				}
-				case Empty -> {}
-				else -> {
-					this.error("expected case statement", child.span);
-				}
-			}
+			this.addCasesToMatchExpr(&&match_expr, child);
 		}
 
 		this.popScope();
