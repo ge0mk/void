@@ -26,12 +26,8 @@ func main() -> void {
 
 planned features (wip / near future)
 --
-- compiler: namespaces
-	- every module & type has a namespace
-	- functions & types are inside of namespaces (not module / parent-type)
-	- -> faster symbol lookup
-	- public / private namespaces, types & functions
-- typechecker: track member (de)initialization through if & match stmts
+- compiler: public / private namespaces, types & functions
+- typechecker: track member (de)initialization through match stmts
 - codegen: generate better llvm ir
 	- function attributes (especially for allocators)
 - codegen: better debug info
