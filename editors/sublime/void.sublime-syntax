@@ -44,9 +44,9 @@ contexts:
       scope: keyword.declaration.type
       push: type_alias
 
-    - match: \bextend\b
+    - match: \bnamespace\b
       scope: keyword.declaration.namespace
-      push: type_extension
+      push: namespace_decl
 
     - match: \b(func|operator)\b
       scope: keyword.declaration.function
@@ -141,7 +141,7 @@ contexts:
       scope: entity.name.namespace
       pop: true
 
-  type_extension:
+  namespace_decl:
     - include: comments
 
     - match: \w+
@@ -149,9 +149,9 @@ contexts:
 
     - match: '{'
       scope: punctuation.section.block.begin
-      set: type_extension_body
+      set: namespace_decl_body
 
-  type_extension_body:
+  namespace_decl_body:
     - include: comments
 
     - match: \btemplate\b

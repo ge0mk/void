@@ -850,7 +850,7 @@ struct Lexer {
 			return Token(TokenType::KeywordMatch, span);
 		} else if name == "must" {
 			return Token(TokenType::KeywordMust, span);
-		} else if name == "namespace" || name == "extend" {	// TODO: remove 'extend' when namespaces are working
+		} else if name == "namespace" {
 			return Token(TokenType::KeywordNamespace, span);
 		} else if name == "operator" {
 			return Token(TokenType::KeywordOperator, span);

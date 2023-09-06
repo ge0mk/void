@@ -6,7 +6,7 @@ func exit(value: int) -> never = extern;
 @[extern_name: "abort"]
 func abort() -> never = extern;
 
-extend int {
+namespace int {
 	operator ..(start: int, end: int) -> NumericRange!<int> {
 		return NumericRange!<int>(start, end, 1i);
 	}
@@ -20,7 +20,7 @@ extend int {
 	}
 }
 
-extend uint {
+namespace uint {
 	operator ..(start: uint, end: uint) -> NumericRange!<uint> {
 		return NumericRange!<uint>(start, end, 1u);
 	}
@@ -35,7 +35,7 @@ extend uint {
 }
 
 template <Size: uint>
-extend int {
+namespace int {
 	operator ..(start: int!<Size>, end: int!<Size>) -> NumericRange!<int!<Size>> {
 		return NumericRange!<int!<Size>>(start, end, 1 as int!<Size>);
 	}
@@ -50,7 +50,7 @@ extend int {
 }
 
 template <Size: uint>
-extend uint {
+namespace uint {
 	operator ..(start: uint!<Size>, end: uint!<Size>) -> NumericRange!<uint!<Size>> {
 		return NumericRange!<uint!<Size>>(start, end, 1 as uint!<Size>);
 	}

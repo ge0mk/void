@@ -4,7 +4,7 @@ import std/range;
 pragma generate_std_array_builtins;
 
 template <T: type, Size: uint>
-extend Array {
+namespace Array {
 	func iterator(this: &Array!<T, Size>) -> RangeIterator!<T> {
 		return RangeIterator!<T>(this.data(), this.data() + Size);
 	}
