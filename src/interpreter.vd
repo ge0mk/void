@@ -267,7 +267,7 @@ struct Interpreter {
 			// signed int comparison
 			case SIntOpLT -> return Expr::Integer((args[0u].toInt() < args[1u].toInt()) as int, span, return_type);
 			case SIntOpLE -> return Expr::Integer((args[0u].toInt() <= args[1u].toInt()) as int, span, return_type);
-			case SIntOpGT -> return Expr::Integer((args[0u].toInt() < args[1u].toInt()) as int, span, return_type);
+			case SIntOpGT -> return Expr::Integer((args[0u].toInt() > args[1u].toInt()) as int, span, return_type);
 			case SIntOpGE -> return Expr::Integer((args[0u].toInt() >= args[1u].toInt()) as int, span, return_type);
 			// signed int arithmetic operators
 			case SIntOpDiv -> return Expr::Integer(args[0u].toInt() / args[1u].toInt(), span, return_type);
@@ -284,7 +284,7 @@ struct Interpreter {
 			// unsigned int comparison
 			case UIntOpLT -> return Expr::Integer((args[0u].toUInt() < args[1u].toUInt()) as int, span, return_type);
 			case UIntOpLE -> return Expr::Integer((args[0u].toUInt() <= args[1u].toUInt()) as int, span, return_type);
-			case UIntOpGT -> return Expr::Integer((args[0u].toUInt() < args[1u].toUInt()) as int, span, return_type);
+			case UIntOpGT -> return Expr::Integer((args[0u].toUInt() > args[1u].toUInt()) as int, span, return_type);
 			case UIntOpGE -> return Expr::Integer((args[0u].toUInt() >= args[1u].toUInt()) as int, span, return_type);
 			// unsigned int arithmetic operators
 			case UIntOpDiv -> return Expr::Integer((args[0u].toUInt() / args[1u].toUInt()) as int, span, return_type);
