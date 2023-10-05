@@ -121,7 +121,7 @@ func typecheck(program: &&Program) -> void {
 		return;
 	}
 
-	match program.llvm_context.loadModuleFromFile("rt.ll") {
+	match program.llvm_context.loadModuleFromFile(program.options.install_path + "/rt.ll") {
 		case Some: rt_module -> program.llvm_module.link(rt_module);
 		else -> program.has_errors = true;
 	}

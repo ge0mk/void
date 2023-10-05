@@ -41,6 +41,7 @@ struct CompilerOptions {
 
 	var hide_errors: bool;
 
+	var install_path: String;
 	var root_module_path: String;
 	var program_name: String;
 	var build_dir: String;
