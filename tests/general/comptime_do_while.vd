@@ -1,0 +1,10 @@
+import std/core;
+
+func main() -> void {
+	comptime var x = 10;
+	comptime do {
+		x--;
+	} while x > 0;
+
+	assert(x == 0);
+}

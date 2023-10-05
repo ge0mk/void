@@ -1145,8 +1145,8 @@ struct FunctionDecl {
 		this.parameters.append(variable);
 	}
 
-	func createVariable(this: &&FunctionDecl, span: Span, name: String, type: Type, is_const: bool) -> SharedHandle!<VarDecl> {
-		return this.variables.append(VarDecl(span, this.variables.size(), name, type, is_const, false, false));
+	func createVariable(this: &&FunctionDecl, span: Span, name: String, type: Type, is_const: bool, is_comptime: bool) -> SharedHandle!<VarDecl> {
+		return this.variables.append(VarDecl(span, this.variables.size(), name, type, is_const, false, is_comptime));
 	}
 
 	func isIncompleteTemplate(this: &FunctionDecl) -> bool {

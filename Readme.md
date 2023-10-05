@@ -55,6 +55,7 @@ planned features (wip / near future)
 - typechecker: variadic templates
 	- compiletime for-each to iterate parameters
 - typechecker+interpreter: expand compile time code execution (ast interpreter)
+	- implement comptime if-var, var-else & for statements, comptime match statement ?
 	- provide functions to query system info at compile-time (e.g. os, architecture, ...)
 	- extend reflection library (get information about types at compile-time)
 	- make all builtin functions & libc external functions available at compile time
