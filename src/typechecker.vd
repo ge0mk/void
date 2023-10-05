@@ -369,6 +369,12 @@ struct TCContext {
 				}
 			} while changes;
 
+			if namespace_to_check.linked_type.isAlive() {
+				for contained_type in namespace_to_check.linked_type.contained_types {
+					discard this.check(contained_type.linked_namespace, namespace_to_check.state);
+				}
+			}
+
 			match namespace_to_check.state {
 				case IncompleteTemplate -> {}
 				case Unchecked -> this.checkTopLevelStatements();
