@@ -296,7 +296,7 @@ func createByteType(program: &&Program, dest_namespace: SharedHandle!<Namespace>
 }
 
 func createOpaquePtrType(program: &&Program, dest_namespace: SharedHandle!<Namespace>, is_const: bool) -> void {
-	const type = Type(program.createType(dest_namespace, "cptr" if is_const else "vptr", TypeBody::Pointer(PointerType(is_const))), ReferenceKind::None);
+	const type = Type(program.createType(dest_namespace, "cptr" if is_const else "vptr", TypeBody::Pointer((pointee_type: Type::unknown(), is_const: is_const))), ReferenceKind::None);
 	const type_namespace = type.decl.linked_namespace;
 
 	if is_const {
@@ -313,7 +313,7 @@ func createOpaquePtrType(program: &&Program, dest_namespace: SharedHandle!<Names
 
 func createPtrTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>, is_const: bool) -> void {
 	const name = "cptr" if is_const else "vptr";
-	const body = TypeBody::Pointer(PointerType(is_const));
+	const body = TypeBody::Pointer((pointee_type: Type::unknown(), is_const: is_const));
 
 	var template_parameters: List!<TemplateParameterDecl>;
 	template_parameters.append(TemplateParameterDecl("Pointee", program.any_concept, false));
@@ -323,7 +323,7 @@ func createPtrTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Nam
 
 func createPtrTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, is_const: bool, pointee_type: Type) -> Type {
 	const name = "cptr" if is_const else "vptr";
-	const body = TypeBody::Pointer(PointerType(pointee_type, is_const));
+	const body = TypeBody::Pointer((pointee_type: pointee_type, is_const: is_const));
 
 	var template_parameters: List!<TemplateParameterDecl>;
 	template_parameters.append(TemplateParameterDecl("Pointee", program.any_concept, false, TemplateParameter::Type(pointee_type)));
@@ -406,14 +406,14 @@ func createArrayTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<N
 	var template_parameters: List!<TemplateParameterDecl>;
 	template_parameters.append(TemplateParameterDecl("T", program.any_concept, false));
 	template_parameters.append(TemplateParameterDecl("Size", program.uint_concept, false));
-	discard program.createType(dest_namespace, "Array", template_parameters, TypeBody::Array(ArrayType(Type::unknown(), 0u)));
+	discard program.createType(dest_namespace, "Array", template_parameters, TypeBody::Array((element_type: Type::unknown(), size: 0u)));
 }
 
 func createArrayTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, element_type: Type, size: uint, element_cptr_type: Type, element_vptr_type: Type) -> SharedHandle!<TypeDecl> {
 	var template_parameters: List!<TemplateParameterDecl>;
 	template_parameters.append(TemplateParameterDecl("T", program.any_concept, false, TemplateParameter::Type(element_type)));
 	template_parameters.append(TemplateParameterDecl("Size", program.uint_concept, false, TemplateParameter::Integer(size as int)));
-	var type_decl = program.createType(dest_namespace, "Array", template_parameters, TypeBody::Array(ArrayType(element_type, size)));
+	var type_decl = program.createType(dest_namespace, "Array", template_parameters, TypeBody::Array((element_type: element_type, size: size)));
 	const type = Type(type_decl, ReferenceKind::None);
 
 	type_decl.addContainedType(element_type);

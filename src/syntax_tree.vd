@@ -395,19 +395,15 @@ struct ParsedParameterDecl {
 variant ParsedType {
 	var span: Span;
 
-	case Garbage;
 	case Name: ParsedName;
 	case ConstReference: Box!<ParsedType>;
 	case VarReference: Box!<ParsedType>;
 	case Optional: Box!<ParsedType>;
-	case Tuple: List!<ParsedTupleTypeElement>;
+	case Tuple: List!<(name: String, type: ParsedType)>;
 	case List: Box!<ParsedType>;
-	case Array: ParsedArrayType;
-	case Dict: ParsedDictType;
-
-	func constructor(this: &&ParsedType) -> void {
-		this.constructor!<0u>(Span());
-	}
+	case Array: (element_type: Box!<ParsedType>, size: ParsedExpr);
+	case Dict: (key_type: Box!<ParsedType>, value_type: Box!<ParsedType>);
+	case Garbage;
 
 	func dump(this: &ParsedType, out: &&TreeFormatter, is_last: bool) -> void {
 		match this {
@@ -532,54 +528,6 @@ struct ParsedName {
 
 		out.pop();
 	}
-}
-
-struct ParsedTupleTypeElement {
-	var name: String;
-	var type: Box!<ParsedType>;
-
-	func constructor(this: &&ParsedTupleTypeElement, name: String, type: ParsedType) -> void {
-		this.name := name;
-		this.type := type;
-	}
-
-	func constructor(this: &&ParsedTupleTypeElement, other: ParsedTupleTypeElement) -> void = default;
-	func destructor(this: &&ParsedTupleTypeElement) -> void = default;
-
-	operator =(this: &&ParsedTupleTypeElement, other: ParsedTupleTypeElement) -> void = default;
-	operator ==(this: ParsedTupleTypeElement, other: ParsedTupleTypeElement) -> bool = default;
-}
-
-struct ParsedArrayType {
-	var element_type: Box!<ParsedType>;
-	var size: ParsedExpr;
-
-	func constructor(this: &&ParsedArrayType, element_type: ParsedType, size: ParsedExpr) -> void {
-		this.element_type := element_type;
-		this.size := size;
-	}
-
-	func constructor(this: &&ParsedArrayType, other: ParsedArrayType) -> void = default;
-	func destructor(this: &&ParsedArrayType) -> void = default;
-
-	operator =(this: &&ParsedArrayType, other: ParsedArrayType) -> void = default;
-	operator ==(this: ParsedArrayType, other: ParsedArrayType) -> bool = default;
-}
-
-struct ParsedDictType {
-	var key_type: Box!<ParsedType>;
-	var value_type: Box!<ParsedType>;
-
-	func constructor(this: &&ParsedDictType, key_type: ParsedType, value_type: ParsedType) -> void {
-		this.key_type := key_type;
-		this.value_type := value_type;
-	}
-
-	func constructor(this: &&ParsedDictType, other: ParsedDictType) -> void = default;
-	func destructor(this: &&ParsedDictType) -> void = default;
-
-	operator =(this: &&ParsedDictType, other: ParsedDictType) -> void = default;
-	operator ==(this: ParsedDictType, other: ParsedDictType) -> bool = default;
 }
 
 variant ParsedStmt {
@@ -1081,13 +1029,13 @@ variant ParsedExpr {
 				}
 			}
 			case Tuple: elements -> {
-				var result: List!<ParsedTupleTypeElement>;
+				var result: List!<(name: String, type: ParsedType)>;
 				for e in elements {
 					const type = e.value.toType() else {
 						return None;
 					}
 
-					result.append(ParsedTupleTypeElement(e.name, type));
+					result.append((name: e.name, type: type));
 				}
 
 				return Some(ParsedType::Tuple(result, this.span));

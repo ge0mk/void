@@ -893,7 +893,7 @@ struct TypeDecl {
 			case Pointer: pointer_type -> {
 				out.push("PointerTypeDecl", is_last);
 				out.attribute("const" if pointer_type.is_const else "var");
-				out.value(pointer_type.base_type.signature());
+				out.value(pointer_type.pointee_type.signature());
 			}
 			case Tuple -> {
 				out.push("Tuple", is_last);
@@ -1332,54 +1332,14 @@ variant TypeBody {
 	// size in bits attached
 	case Float: uint;
 
-	case Pointer: PointerType;
+	case Pointer: (pointee_type: Type, is_const: bool);
 	case Tuple;
 
-	case Array: ArrayType;
+	case Array: (element_type: Type, size: uint);
 
 	case Struct;
 	case Enum;
 	case Variant;
-}
-
-struct PointerType {
-	var base_type: Type;
-	var is_const: bool;
-
-	func constructor(this: &&PointerType, is_const: bool) -> void {
-		this.is_const := is_const;
-	}
-
-	func constructor(this: &&PointerType, base_type: Type, is_const: bool) -> void {
-		this.base_type := base_type;
-		this.is_const := is_const;
-	}
-
-	func constructor(this: &&PointerType, other: PointerType) -> void = default;
-	func destructor(this: &&PointerType) -> void = default;
-
-	operator =(this: &&PointerType, other: PointerType) -> void = default;
-	operator ==(this: PointerType, other: PointerType) -> bool = default;
-
-	func isOpaque(this: PointerType) -> bool {
-		return this.base_type.isUnknown();
-	}
-}
-
-struct ArrayType {
-	var element_type: Type;
-	var size: uint;
-
-	func constructor(this: &&ArrayType, element_type: Type, size: uint) -> void {
-		this.element_type := element_type;
-		this.size := size;
-	}
-
-	func constructor(this: &&ArrayType, other: ArrayType) -> void = default;
-	func destructor(this: &&ArrayType) -> void = default;
-
-	operator =(this: &&ArrayType, other: ArrayType) -> void = default;
-	operator ==(this: ArrayType, other: ArrayType) -> bool = default;
 }
 
 struct MemberVarDecl {

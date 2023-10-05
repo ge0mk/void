@@ -5,22 +5,6 @@ import std/libc/stdlib;
 import std/libc/string;
 
 template <Tkey: type, Tvalue: type>
-struct MapEntry {
-	var key: Tkey;
-	var value: Tvalue;
-
-	func constructor(this: &&MapEntry!<Tkey, Tvalue>, key: Tkey, value: Tvalue) -> void {
-		this.key := key;
-		this.value := value;
-	}
-
-	func constructor(this: &&MapEntry!<Tkey, Tvalue>, other: MapEntry!<Tkey, Tvalue>) -> void = default;
-	func destructor(this: &&MapEntry!<Tkey, Tvalue>) -> void = default;
-
-	operator ==(this: MapEntry!<Tkey, Tvalue>, other: MapEntry!<Tkey, Tvalue>) -> bool = default;
-}
-
-template <Tkey: type, Tvalue: type>
 struct MapIterator {
 	var keys: cptr!<Tkey>;
 	var values: cptr!<Tvalue>;
@@ -39,14 +23,14 @@ struct MapIterator {
 		return this.keys < this.end;
 	}
 
-	func getNext(this: &&MapIterator!<Tkey, Tvalue>) -> MapEntry!<Tkey, Tvalue> {
+	func getNext(this: &&MapIterator!<Tkey, Tvalue>) -> (key: Tkey, value: Tvalue) {
 		if this.keys >= this.end {
 			panic(Error::EINVAL);
 		}
 
 		this.keys = this.keys + 1;
 		this.values = this.values + 1;
-		return MapEntry!<Tkey, Tvalue>(this.keys[-1], this.values[-1]);
+		return (key: this.keys[-1], value: this.values[-1]);
 	}
 }
 

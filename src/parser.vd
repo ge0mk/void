@@ -967,7 +967,7 @@ struct Parser {
 			}
 			case LParen -> {
 				this.next();
-				var elements: List!<ParsedTupleTypeElement>;
+				var elements: List!<(name: String, type: ParsedType)>;
 
 				while !this.accept(TokenType::RParen) {
 					var name = "";
@@ -982,7 +982,7 @@ struct Parser {
 					}
 
 					const type = this.parseType();
-					elements.append(ParsedTupleTypeElement(name, type));
+					elements.append((name: name, type: type));
 
 					if !(this.current() is RParen) {
 						if !this.expect(TokenType::Comma) {
@@ -996,25 +996,24 @@ struct Parser {
 			}
 			case LSquare -> {
 				this.next();
-				const element_type = this.parseType();
+				const element_type = Box!<ParsedType>(this.parseType());
 
 				if this.accept(TokenType::Comma) {
 					const size = this.parseExpr();
 					discard this.expect(TokenType::RSquare);
-					const array_type = ParsedArrayType(element_type, size);
-					return ParsedType::Array(array_type, start..this.previousSpan());
+					return ParsedType::Array((element_type: element_type, size: size), start..this.previousSpan());
 				} else {
 					discard this.expect(TokenType::RSquare);
-					return ParsedType::List(Box!<ParsedType>(element_type), start..this.previousSpan());
+					return ParsedType::List(element_type, start..this.previousSpan());
 				}
 			}
 			case LCurly -> {
 				this.next();
-				const key_type = this.parseType();
+				const key_type = Box!<ParsedType>(this.parseType());
 				discard this.expect(TokenType::Comma);
-				const value_type = this.parseType();
+				const value_type = Box!<ParsedType>(this.parseType());
 				discard this.expect(TokenType::RCurly);
-				return ParsedType::Dict(ParsedDictType(key_type, value_type), start..this.previousSpan());
+				return ParsedType::Dict((key_type: key_type, value_type: value_type), start..this.previousSpan());
 			}
 			else -> {
 				this.next();

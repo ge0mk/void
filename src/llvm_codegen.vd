@@ -250,12 +250,12 @@ struct CGContext {
 			case Pointer: pointer_type -> {
 				type.llvm_di = this.di_builder.createReplaceableCompositeType(dwarf::Tag::Unspecified_type, di_name, parent_namespace, di_file, line, 0u32, size_in_bits, alignment_in_bits, LLVMDIFlags::LLVMDIFlagZero, type.signature());
 
-				const base_type = match pointer_type.base_type.isUnknown() {
+				const pointee_type = match pointer_type.pointee_type.isUnknown() {
 					case true -> yield this.getDIType(this.program.void_type);
-					case false -> yield this.getDIType(pointer_type.base_type);
+					case false -> yield this.getDIType(pointer_type.pointee_type);
 				};
 
-				const di_type = this.di_builder.createPointerType(base_type, size_in_bits, alignment_in_bits, 0u, di_name);
+				const di_type = this.di_builder.createPointerType(pointee_type, size_in_bits, alignment_in_bits, 0u, di_name);
 
 				type.llvm_di.replaceAllUsesWith(di_type);
 				type.llvm_di = di_type;
@@ -1425,13 +1425,13 @@ struct CGContext {
 
 			case PointerDiff -> {
 				const pointer_type = (function.base_type.decl.body as Pointer).value();
-				const pointee_type = this.getType(pointer_type.base_type);
+				const pointee_type = this.getType(pointer_type.pointee_type);
 				return this.builder.buildPtrDiff2(pointee_type, parameters[0u], parameters[1u], "");
 			}
 			case PointerOffset
 			| PointerOpIndex -> {
 				const pointer_type = (function.base_type.decl.body as Pointer).value();
-				const pointee_type = this.getType(pointer_type.base_type);
+				const pointee_type = this.getType(pointer_type.pointee_type);
 
 				var indices: List!<ValueRef>;
 				indices.append(parameters[1u]);
