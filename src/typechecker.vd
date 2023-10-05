@@ -161,6 +161,28 @@ struct TCContext {
 		this.program.printError(CompilationError(message, ErrorType::Todo, ErrorStage::Typechecker, span));
 	}
 
+	func interpret(this: &&TCContext, expr: Expr) -> Expr {
+		match this.interpreter.interpret(expr) {
+			case Ok: value -> return value;
+			else -> {
+				this.error("unexpected control flow in comptime expression", expr.span);
+				return Expr::Undefined(expr.span, Type::unknown());
+			}
+		}
+	}
+
+	func interpret(this: &&TCContext, stmt: Stmt) -> void {
+		if this.interpreter.interpret(stmt) is Error {
+			this.error("unexpected control flow in comptime statement", stmt.span);
+		}
+	}
+
+	func interpret(this: &&TCContext, stmts: List!<Stmt>) -> void {
+		for stmt in stmts {
+			this.interpret(stmt);
+		}
+	}
+
 	func pushScope(this: &&TCContext, kind: ScopeKind) -> void {
 		this.scope_stack.append(Scope(kind));
 	}
@@ -375,10 +397,7 @@ struct TCContext {
 					continue;
 				}
 
-				const result = this.interpreter.interpret(stmt);
-				if result is Error {
-					this.error("invalid top-level comptime statement", stmt.span);
-				}
+				discard this.interpret(stmt);
 			}
 		}
 
@@ -1014,7 +1033,7 @@ struct TCContext {
 					this.checkMemberVarDecl(parsed_var_decl);
 				} else {
 					for stmt in this.checkVarDecl(parsed_var_decl) {
-						discard this.interpreter.interpret(stmt);
+						discard this.interpret(stmt);
 					}
 				}
 			}
@@ -1097,10 +1116,7 @@ struct TCContext {
 		var id = type_decl.getNextCaseId();
 		if parsed_decl.id.hasValue() {
 			const id_expr = this.checkExpr(parsed_decl.id.value(), type_decl.id_type);
-			match this.interpreter.interpret(id_expr) {
-				case Ok: value -> id = value.toInt();
-				else -> this.error("couldn't interpret id for case decl", id_expr.span);
-			}
+			id = this.interpret(id_expr).toInt();
 		}
 
 		var payload_type = this.program.void_type;
@@ -1263,17 +1279,12 @@ struct TCContext {
 		}
 
 		if is_comptime {
-			const condition_value = this.interpreter.interpret(condition) else {
-				return Stmt::Empty(span);
-			}
-
-			if condition_value is Undefined {
-				return Stmt::Empty(span);
-			}
+			const condition_value = this.interpret(condition);
+			this.interpret(condition_cleanup);
 
 			if condition_value.toInt() != 0 {
 				return this.checkCompoundStmt(if_stmt.then_branch, true);
-			} else if if_stmt.else_branch.hasValue() {
+			} else if if_stmt.else_branch.hasValue() && !(condition_value is Undefined) {
 				return this.checkStmt(if_stmt.else_branch.value());
 			} else {
 				return Stmt::Empty(span);
@@ -3490,12 +3501,10 @@ struct TCContext {
 		}
 
 		const checked_parameter = this.checkExpr(parameter, Type::unknown());
-		if const value = this.interpreter.interpret(checked_parameter) {
-			match value {
-				case Integer: val -> return TemplateParameter::Integer(val);
-				case TypeRef: type -> return TemplateParameter::Type(type);
-				else -> this.error("invalid template parameter", parameter.span);
-			}
+		match this.interpret(checked_parameter) {
+			case Integer: val -> return TemplateParameter::Integer(val);
+			case TypeRef: type -> return TemplateParameter::Type(type);
+			else -> this.error("invalid template parameter", parameter.span);
 		}
 
 		return TemplateParameter::Garbage;
@@ -3633,10 +3642,7 @@ struct TCContext {
 				}
 
 				if variable.is_comptime {
-					match this.interpreter.interpret(result[i]) {
-						case Ok: value -> result[i] = value;
-						else -> this.error("unexpected control flow change in comptime expr", result[i].span);
-					}
+					result[i] = this.interpret(result[i]);
 				}
 			}
 		}
@@ -3702,11 +3708,11 @@ struct TCContext {
 
 		this.checkActiveMembersForCall(unwrapped_arguments, function.name, span);
 
-		var is_comptime = false;
+		var should_be_comptime = false;
 		for i in 0u..unwrapped_arguments.size() {
 			if const variable = unwrapped_arguments[i] as VarInvoke {
 				if variable.is_comptime {
-					is_comptime = true;
+					should_be_comptime = true;
 					break;
 				}
 			}
@@ -3722,11 +3728,8 @@ struct TCContext {
 			), span, result_type
 		);
 
-		if is_comptime {
-			match this.interpreter.interpret(result) {
-				case Ok: value -> result = value;
-				else -> this.error("unexpected control flow in comptime expr", span);
-			}
+		if should_be_comptime {
+			result = this.interpret(result);
 		}
 
 		return addDereference(result);
