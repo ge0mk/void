@@ -370,7 +370,7 @@ struct CGContext {
 			}
 			case Pointer -> this.types.set(type, this.ptr_type);
 			case Array: array_type -> this.types.set(type, this.llvm_context.getArrayType(this.getType(array_type.element_type), array_type.size));
-			case Struct -> {
+			case Tuple | Struct -> {
 				var element_types: List!<llvm::TypeRef>;
 				for member_variable in type.member_variables {
 					element_types.append(this.getType(member_variable.type));
@@ -810,6 +810,20 @@ struct CGContext {
 		const param1 = this.current_function.getParam(1u);
 
 		match function {
+			case StructValueConstructor -> {
+				for i in 0u..decl.member_variables.size() {
+					const member_ptr = this.builder.buildStructGEP2(type, param0, i, "");
+					const member_type = decl.member_variables[i].type.decl;
+
+					var parameters: List!<llvm::ValueRef>;
+					parameters.append(member_ptr);
+					parameters.append(this.current_function.getParam(i + 1));
+
+					discard this.codegenCall(member_type.copy_constructor, parameters, ReturnKind::None, signature_span);
+				}
+
+				this.builder.buildRetVoid();
+			}
 			case StructDefaultConstructor -> {
 				for i in 0u..decl.member_variables.size() {
 					const member_ptr = this.builder.buildStructGEP2(type, param0, i, "");

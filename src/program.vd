@@ -57,6 +57,7 @@ struct Program {
 	var any_concept: SharedHandle!<Concept>;
 	var int_concept: SharedHandle!<Concept>;
 	var uint_concept: SharedHandle!<Concept>;
+	var string_concept: SharedHandle!<Concept>;
 
 	// types
 	var types: SharedList!<TypeDecl>;
@@ -318,6 +319,7 @@ variant Concept {
 
 	case Any;
 	case IntLiteral: Type; // for template parameters, that accept int literals
+	case StringLiteral;
 
 	func dump(this: &Concept, out: &&TreeFormatter, is_last: bool) -> void {
 		out.push("Concept", is_last);
@@ -388,12 +390,14 @@ struct TemplateParameterDecl {
 variant TemplateParameter {
 	case Type: Type;
 	case Integer: int;
+	case String: String;
 	case Garbage;
 
 	func toString(this: TemplateParameter) -> String {
 		match this {
 			case Type: t -> return t.signature();
 			case Integer: i -> return format(i);
+			case String: s -> return "\"" + s + "\"";
 			case Garbage -> return "<garbage>";
 		}
 	}
@@ -753,6 +757,9 @@ struct TypeDecl {
 				out.push("PointerTypeDecl", is_last);
 				out.attribute("const" if pointer_type.is_const else "var");
 				out.value(pointer_type.base_type.signature());
+			}
+			case Tuple -> {
+				out.push("Tuple", is_last);
 			}
 			case Array: array_type -> {
 				out.push("ArrayTypeDecl", is_last);
@@ -1183,6 +1190,8 @@ variant TypeBody {
 	case Float: uint;
 
 	case Pointer: PointerType;
+	case Tuple;
+
 	case Array: ArrayType;
 
 	case Struct;
@@ -1646,6 +1655,7 @@ variant InlineBuiltinFunction {
 variant BuiltinFunction {
 	var base_type: Type;
 
+	case StructValueConstructor;
 	case StructDefaultConstructor;
 	case StructCopyConstructor;
 	case StructDestructor;
@@ -1667,6 +1677,7 @@ variant BuiltinFunction {
 
 	func name(this: &BuiltinFunction) -> String {
 		match this {
+			case StructValueConstructor -> return "StructValueConstructor";
 			case StructDefaultConstructor -> return "StructDefaultConstructor";
 			case StructCopyConstructor -> return "StructCopyConstructor";
 			case StructDestructor -> return "StructDestructor";

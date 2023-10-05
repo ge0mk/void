@@ -1,0 +1,7 @@
+import std/core;
+
+func main() -> void {
+	const x = (4, true);
+	assert(x.a == 4);
+	assert(x.b == true);
+}

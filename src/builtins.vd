@@ -6,9 +6,11 @@ import std/shared_list;
 import std/string;
 
 import program;
+import span;
 
 func createCoreDecls(program: &&Program, dest_namespace: SharedHandle!<Namespace>) -> void {
 	program.any_concept = program.createConcept(Concept::Any("type"));
+	program.string_concept = program.createConcept(Concept::StringLiteral("String"));
 
 	program.void_type = Type(program.createType(dest_namespace, "void", TypeBody::Void));
 	program.never_type = Type(program.createType(dest_namespace, "never", TypeBody::Void));
@@ -38,6 +40,8 @@ func createCoreDecls(program: &&Program, dest_namespace: SharedHandle!<Namespace
 	createPtrTypeTemplate(&&program, dest_namespace, false);
 
 	createFloatTypeTemplate(&&program, dest_namespace);
+
+	createTupleTypeTemplate(&&program, dest_namespace);
 }
 
 func createPrimitiveCastTemplates(program: &&Program, dest_namespace: SharedHandle!<Namespace>) -> void {
@@ -405,12 +409,12 @@ func createArrayTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<N
 	discard program.createType(dest_namespace, "Array", template_parameters, TypeBody::Array(ArrayType(Type::unknown(), 0u)));
 }
 
-func createArrayTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, element_type: Type, size: uint, element_cptr_type: Type, element_vptr_type: Type) -> Type {
+func createArrayTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, element_type: Type, size: uint, element_cptr_type: Type, element_vptr_type: Type) -> SharedHandle!<TypeDecl> {
 	var template_parameters: List!<TemplateParameterDecl>;
 	template_parameters.append(TemplateParameterDecl("T", program.any_concept, false, TemplateParameter::Type(element_type)));
 	template_parameters.append(TemplateParameterDecl("Size", program.uint_concept, false, TemplateParameter::Integer(size as int)));
-	const type = Type(program.createType(dest_namespace, "Array", template_parameters, TypeBody::Array(ArrayType(element_type, size))), ReferenceKind::None);
-	var type_decl = type.decl;
+	var type_decl = program.createType(dest_namespace, "Array", template_parameters, TypeBody::Array(ArrayType(element_type, size)));
+	const type = Type(type_decl, ReferenceKind::None);
 
 	type_decl.addContainedType(element_type);
 	const type_namespace = type_decl.linked_namespace;
@@ -424,7 +428,42 @@ func createArrayTypeInstance(program: &&Program, dest_namespace: SharedHandle!<N
 	discard program.createUnaryFunction(type_namespace, "data", type.varRef(), element_vptr_type, InlineBuiltinFunction::ArrayGetDataPointer(type));
 	discard program.createUnaryFunction(type_namespace, "size", type.constRef(), program.uint_type, InlineBuiltinFunction::ArrayGetSize(type));
 
-	return type;
+	return type_decl;
+}
+
+func createTupleTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>) -> void {
+	var template_parameters: List!<TemplateParameterDecl>;
+	template_parameters.append(TemplateParameterDecl("Names", program.string_concept, false));
+	template_parameters.append(TemplateParameterDecl("Types", program.any_concept, true));
+	discard program.createType(dest_namespace, "Tuple", template_parameters, TypeBody::Tuple);
+}
+
+func createTupleTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, names: List!<String>, types: List!<Type>) -> SharedHandle!<TypeDecl> {
+	var template_parameters: List!<TemplateParameterDecl>;
+	template_parameters.append(TemplateParameterDecl("Names", program.string_concept, false, TemplateParameter::String(",".join(names))));
+	for t in types {
+		template_parameters.append(TemplateParameterDecl("Types", program.any_concept, false, TemplateParameter::Type(t)));
+	}
+
+	var type_decl = program.createType(dest_namespace, "Tuple", template_parameters, TypeBody::Tuple);
+	const type = Type(type_decl, ReferenceKind::None);
+
+	for i in 0u..types.size() {
+		type_decl.createMemberVariable(Span(), names[i], types[i], Expr::Undefined(Span(), Type::unknown()));
+	}
+
+	const type_namespace = type_decl.linked_namespace;
+
+	var value_constructor_parameter_types = types;
+	value_constructor_parameter_types.insert(0u, type.varRef());
+	discard program.createFunction(type_namespace, "constructor", value_constructor_parameter_types, program.void_type, BuiltinFunction::StructValueConstructor(type));
+
+	type_decl.copy_constructor = program.createBinaryFunction(type_namespace, "constructor", type.varRef(), type, program.void_type, BuiltinFunction::StructCopyConstructor(type));
+	type_decl.destructor = program.createUnaryFunction(type_namespace, "destructor", type.varRef(), program.void_type, BuiltinFunction::StructDestructor(type));
+	type_decl.op_assign = program.createBinaryFunction(type_namespace, "operator =", type.varRef(), type, program.void_type, BuiltinFunction::StructOpAssign(type));
+	type_decl.op_equal = program.createBinaryFunction(type_namespace, "operator ==", type, type, program.bool_type, BuiltinFunction::StructOpEqual(type));
+
+	return type_decl;
 }
 
 func createDefaultFunctions(program: &&Program, type: Type) -> void {

@@ -743,7 +743,7 @@ struct TCContext {
 						this.info("required by " + caller_signature, caller_span);
 					}
 				}
-				case StructCopyConstructor | VariantCaseConstructor | VariantCopyConstructor | ArrayCopyConstructor -> {
+				case StructValueConstructor | StructCopyConstructor | VariantCaseConstructor | VariantCopyConstructor | ArrayCopyConstructor -> {
 					if t.copy_constructor.isEmpty() {
 						this.error(t.signature() + " is missing a copy constructor", t.name_span);
 						this.info("required by " + caller_signature, caller_span);
@@ -1204,6 +1204,10 @@ struct TCContext {
 	}
 
 	func createConstructorCall(this: &&TCContext, variable: SharedHandle!<VarDecl>, initializer: List!<Expr>) -> void {
+		if variable.type.isUnknown() {
+			return;
+		}
+
 		if variable.type.reference_kind == None {
 			var parameters: List!<Expr>;
 			parameters.append(Expr::VarInvoke(variable, variable.span, variable.type.varRef()));
@@ -1230,6 +1234,10 @@ struct TCContext {
 	}
 
 	func createDestructorCall(this: &&TCContext, variable: SharedHandle!<VarDecl>) -> void {
+		if variable.type.isUnknown() {
+			return;
+		}
+
 		if variable.type.reference_kind == None {
 			var parameters: List!<Expr>;
 			parameters.append(Expr::VarInvoke(variable, variable.span, variable.type.varRef()));
@@ -2108,8 +2116,32 @@ struct TCContext {
 	}
 
 	func checkTupleExpr(this: &&TCContext, parsed_expr: List!<ParsedTupleElement>, expected_type: Type, is_comptime: bool, span: Span) -> Expr {
-		this.todo("implement typechecking of tuple expressions", span);
-		return Expr::Undefined(span, Type::unknown());
+		var names: List!<String>;
+		var elements: List!<Expr>;
+		var element_types: List!<Type>;
+
+		for parsed_element in parsed_expr {
+			if parsed_element.name == "" {
+				names.append(String(1u, ('a'b as uint + names.size()) as byte));
+			} else {
+				names.append(parsed_element.name);
+			}
+
+			const value = this.checkExpr(parsed_element.value, Type::unknown(), is_comptime);
+			elements.append(value);
+			element_types.append(value.type);
+		}
+
+		var template_parameters: List!<TemplateParameter>;
+		template_parameters.append(TemplateParameter::String(",".join(names)));
+		for t in element_types {
+			template_parameters.append(TemplateParameter::Type(t));
+		}
+
+		return this.createTemporaryVariable(
+			this.getType(Name("Tuple", template_parameters), span),
+			List!<TemplateParameter>(), elements, is_comptime, span
+		);
 	}
 
 	func checkDictExpr(this: &&TCContext, parsed_expr: List!<ParsedDictElement>, expected_type: Type, is_comptime: bool, span: Span) -> Expr {
@@ -3154,14 +3186,18 @@ struct TCContext {
 		if candidates.isEmpty() {
 			if !quiet {
 				this.error("no matching type found", span);
+				this.info("looking for " + name.toString(), Span());
 			}
+
 			return Type::unknown();
 		} else if candidates.size() == 1 {
 			return candidates[0u];
 		} else {
 			if !quiet {
 				this.error("more than one matching types found", span);
+				this.info("looking for " + name.toString(), Span());
 			}
+
 			return Type::unknown();
 		}
 	}
@@ -3308,20 +3344,12 @@ struct TCContext {
 		return count;
 	}
 
-	func doesConceptAcceptTemplateParameter(this: &&TCContext, concept_ref: SharedHandle!<Concept>, parameter: TemplateParameter) -> bool {
-		const concept = &concept_ref.operator unwrap();
-
-		if concept is IntLiteral && parameter is Integer {
-			return true;
-		} else if concept is IntLiteral || parameter is Integer {
-			return false;
+	func doesConceptAcceptTemplateParameter(this: &&TCContext, concept: SharedHandle!<Concept>, parameter: TemplateParameter) -> bool {
+		match concept.operator unwrap() {
+			case IntLiteral -> return parameter is Integer;
+			case StringLiteral -> return parameter is String;
+			case Any -> return parameter is Type;
 		}
-
-		if concept is Any && parameter is Type {
-			return true;
-		}
-
-		return false;
 	}
 
 	func getMatchingParameterCount(function: &FunctionDecl, parameter_types: &List!<Type>, first_arg_max_ref_kind: ReferenceKind, allow_unwrapping_this: bool, allow_unwrapping: bool) -> int {
@@ -3404,7 +3432,21 @@ struct TCContext {
 					const element_cptr_type = this.getType(Name("cptr", element_ptr_type_template_parameters), Span(), false);
 					const element_vptr_type = this.getType(Name("vptr", element_ptr_type_template_parameters), Span(), false);
 
-					type_instance = this.program.createArrayTypeInstance(base.parent, element_type, size as uint, element_cptr_type, element_vptr_type).decl;
+					type_instance = this.program.createArrayTypeInstance(base.parent, element_type, size as uint, element_cptr_type, element_vptr_type);
+				}
+				case Tuple -> {
+					const names = (template_parameters[0u] as String).value().split(",");
+					var elements: List!<Type>;
+					for i in 1u..template_parameters.size() {
+						elements.append((template_parameters[i] as Type).value());
+					}
+
+					if names.size() != elements.size() {
+						this.error("name and element count not matching for tuple type", error_span);
+						return SharedHandle!<Namespace>();
+					}
+
+					type_instance = this.program.createTupleTypeInstance(base.parent, names, elements);
 				}
 				else -> {
 					type_instance = this.checkTypeDecl(
@@ -3557,6 +3599,7 @@ struct TCContext {
 		const checked_parameter = this.checkExpr(parameter, Type::unknown(), true);
 		match this.interpret(checked_parameter) {
 			case Integer: val -> return TemplateParameter::Integer(val);
+			case String: val -> return TemplateParameter::String(val);
 			case TypeRef: type -> return TemplateParameter::Type(type);
 			else -> this.error("invalid template parameter", parameter.span);
 		}
@@ -3599,8 +3642,32 @@ struct TCContext {
 				}
 				return checked_base.varRef();
 			}
+			case Tuple: elements -> {
+				var names: List!<String>;
+				var types: List!<Type>;
+
+				for e in elements {
+					types.append(this.checkTypeUsage(e.type, quiet));
+					if e.name == "" {
+						names.append(String(1u, ('a'b as uint + names.size()) as byte));
+					} else {
+						names.append(e.name);
+					}
+				}
+
+				var template_parameters: List!<TemplateParameter>;
+				template_parameters.append(TemplateParameter::String(",".join(names)));
+				for t in types {
+					template_parameters.append(TemplateParameter::Type(t));
+				}
+
+				return this.getType(Name("Tuple", template_parameters), parsed_type.span);
+			}
 			case Garbage -> return Type::unknown();
-			else -> return Type::unknown();
+			else -> {
+				this.todo("finish typechecking of type usages", parsed_type.span);
+				return Type::unknown();
+			}
 		}
 	}
 
@@ -3807,6 +3874,10 @@ struct TCContext {
 	}
 
 	func createTemporaryVariable(this: &&TCContext, type: Type, template_parameters: List!<TemplateParameter>, checked_arguments: List!<Expr>, is_comptime: bool, span: Span) -> Expr {
+		if type.isUnknown() {
+			return Expr::Undefined(span, Type::unknown());
+		}
+
 		const variable = this.current_function.createVariable(span, "#tmp", type, true, is_comptime);
 
 		this.createDestructorCall(variable);

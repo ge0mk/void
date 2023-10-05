@@ -395,14 +395,19 @@ struct ParsedParameterDecl {
 variant ParsedType {
 	var span: Span;
 
+	case Garbage;
 	case Name: ParsedName;
 	case ConstReference: Box!<ParsedType>;
 	case VarReference: Box!<ParsedType>;
 	case Optional: Box!<ParsedType>;
+	case Tuple: List!<ParsedTupleTypeElement>;
 	case List: Box!<ParsedType>;
 	case Array: ParsedArrayType;
 	case Dict: ParsedDictType;
-	case Garbage;
+
+	func constructor(this: &&ParsedType) -> void {
+		this.constructor!<0u>(Span());
+	}
 
 	func dump(this: &ParsedType, out: &&TreeFormatter, is_last: bool) -> void {
 		match this {
@@ -424,6 +429,15 @@ variant ParsedType {
 				out.push("OptionalType", is_last);
 				out.span(this.span);
 				base.dump(&&out, true);
+			}
+			case Tuple: elements -> {
+				out.push("TupleType", is_last);
+				out.span(this.span);
+				for i in 0u..elements.size() {
+					out.push("TupleElement", i == elements.size() - 1);
+					out.value(elements[i].name);
+					elements[i].type.dump(&&out, true);
+				}
 			}
 			case List: element_type -> {
 				out.push("ListType", is_last);
@@ -518,6 +532,22 @@ struct ParsedName {
 
 		out.pop();
 	}
+}
+
+struct ParsedTupleTypeElement {
+	var name: String;
+	var type: Box!<ParsedType>;
+
+	func constructor(this: &&ParsedTupleTypeElement, name: String, type: ParsedType) -> void {
+		this.name := name;
+		this.type := type;
+	}
+
+	func constructor(this: &&ParsedTupleTypeElement, other: ParsedTupleTypeElement) -> void = default;
+	func destructor(this: &&ParsedTupleTypeElement) -> void = default;
+
+	operator =(this: &&ParsedTupleTypeElement, other: ParsedTupleTypeElement) -> void = default;
+	operator ==(this: ParsedTupleTypeElement, other: ParsedTupleTypeElement) -> bool = default;
 }
 
 struct ParsedArrayType {
@@ -1049,6 +1079,18 @@ variant ParsedExpr {
 					case VarRef -> return Some(ParsedType::VarReference(Box!<ParsedType>(base), this.span));
 					else -> return None;
 				}
+			}
+			case Tuple: elements -> {
+				var result: List!<ParsedTupleTypeElement>;
+				for e in elements {
+					const type = e.value.toType() else {
+						return None;
+					}
+
+					result.append(ParsedTupleTypeElement(e.name, type));
+				}
+
+				return Some(ParsedType::Tuple(result, this.span));
 			}
 			// TODO: Array, List & Dict types
 			else -> return None;
