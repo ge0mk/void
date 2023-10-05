@@ -58,11 +58,19 @@ struct Interpreter {
 	}
 
 	func setVariable(this: &&Interpreter, variable: SharedHandle!<VarDecl>, value: Expr) -> void {
-		this.stack[this.stack.size() - 1].variables[variable] = value;
+		if variable.is_comptime {
+			variable.value = value;
+		} else {
+			this.stack[this.stack.size() - 1].variables[variable] = value;
+		}
 	}
 
 	func getVariable(this: &&Interpreter, variable: SharedHandle!<VarDecl>) -> Expr {
-		return this.stack[this.stack.size() - 1].variables[variable];
+		if variable.is_comptime {
+			return variable.value;
+		} else {
+			return this.stack[this.stack.size() - 1].variables[variable];
+		}
 	}
 
 	func interpret(this: &&Interpreter, stmt: Stmt) -> Result!<void, ControlFlow> {

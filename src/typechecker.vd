@@ -1013,7 +1013,9 @@ struct TCContext {
 				} else if this.current_namespace.linked_type.isAlive() {
 					this.checkMemberVarDecl(parsed_var_decl);
 				} else {
-					discard this.checkVarDecl(parsed_var_decl);
+					for stmt in this.checkVarDecl(parsed_var_decl) {
+						discard this.interpreter.interpret(stmt);
+					}
 				}
 			}
 			case CaseDecl: parsed_case_decl -> {
@@ -1157,9 +1159,13 @@ struct TCContext {
 			}
 		}
 
-		const variable = this.current_function.createVariable(span, name, type, is_const);
-
-		this.addVariableToCurrentScope(variable);
+		var variable: SharedHandle!<VarDecl>;
+		if this.current_function.isAlive() {
+			variable = this.current_function.createVariable(span, name, type, is_const);
+			this.addVariableToCurrentScope(variable);
+		} else {
+			variable = this.current_namespace.createComptimeVariable(span, name, type, is_const);
+		}
 
 		this.createConstructorCall(variable, initializer);
 		this.createDestructorCall(variable);
@@ -1205,7 +1211,7 @@ struct TCContext {
 
 			variable.destructor_call = this.checkCall(Name("destructor"), parameters, false, false, CallKind::MemberCall, variable.span);
 		} else {
-			variable.destructor_call = Expr::Undefined(variable.span, Type::unknown());
+			variable.destructor_call = Expr::Void(variable.span, this.program.void_type);
 		}
 	}
 
@@ -1872,10 +1878,12 @@ struct TCContext {
 			return result;
 		}
 
-		const expr_stmt = Stmt::Expr(expr, span);
-		result.append(expr_stmt);
-		if !expr_stmt.isTerminator(this.program.never_type) {
-			result.append(cleanup);
+		if !(expr is Void) {
+			const expr_stmt = Stmt::Expr(expr, span);
+			result.append(expr_stmt);
+			if !expr_stmt.isTerminator(this.program.never_type) {
+				result.append(cleanup);
+			}
 		}
 
 		if !is_discard_stmt {
@@ -3011,6 +3019,14 @@ struct TCContext {
 			}
 		}
 
+		if last_segment.template_parameters.isEmpty() && (filter & Variables) != None {
+			for n in namespaces_to_search {
+				if const variable = n.comptime_variables_by_name.get(last_segment.name) {
+					result.append(Symbol::Variable(variable, n));
+				}
+			}
+		}
+
 		if name_segments.isEmpty() && last_segment.template_parameters.isEmpty() && (filter & Variables) != None {
 			if const variable = this.getVariableByName(last_segment.name) {
 				result.append(Symbol::Variable(variable, SharedHandle!<Namespace>()));
@@ -3610,6 +3626,19 @@ struct TCContext {
 			if i == 0 && required_parameter_types[i].reference_kind != None {
 				result[i] = removeDereference(result[i]);
 			}
+
+			if result[i] is Dereference {
+				const variable = removeDereference(result[i]) as VarInvoke else {
+					continue;
+				}
+
+				if variable.is_comptime {
+					match this.interpreter.interpret(result[i]) {
+						case Ok: value -> result[i] = value;
+						else -> this.error("unexpected control flow change in comptime expr", result[i].span);
+					}
+				}
+			}
 		}
 
 		return result;
@@ -3633,7 +3662,7 @@ struct TCContext {
 	}
 
 	func createCall(this: &&TCContext, function: SharedHandle!<FunctionDecl>, arguments: List!<Expr>, call_kind: CallKind, span: Span) -> Expr {
-		const unwrapped_arguments = this.unwrapArguments(arguments, function.parameter_types);
+		var unwrapped_arguments = this.unwrapArguments(arguments, function.parameter_types);
 		if !this.validateArgumentTypes(unwrapped_arguments, function.parameter_types, span) {
 			return Expr::Undefined(span, Type::unknown());
 		}
@@ -3673,7 +3702,17 @@ struct TCContext {
 
 		this.checkActiveMembersForCall(unwrapped_arguments, function.name, span);
 
-		return addDereference(Expr::Call(
+		var is_comptime = false;
+		for i in 0u..unwrapped_arguments.size() {
+			if const variable = unwrapped_arguments[i] as VarInvoke {
+				if variable.is_comptime {
+					is_comptime = true;
+					break;
+				}
+			}
+		}
+
+		var result = Expr::Call(
 			CallExpr(
 				function,
 				unwrapped_arguments,
@@ -3681,7 +3720,16 @@ struct TCContext {
 				return_kind,
 				function.is_copy_constructor
 			), span, result_type
-		));
+		);
+
+		if is_comptime {
+			match this.interpreter.interpret(result) {
+				case Ok: value -> result = value;
+				else -> this.error("unexpected control flow in comptime expr", span);
+			}
+		}
+
+		return addDereference(result);
 	}
 
 	func createTemporaryVariable(this: &&TCContext, type: Type, template_parameters: List!<TemplateParameter>, parsed_arguments: List!<ParsedExpr>, span: Span) -> Expr {

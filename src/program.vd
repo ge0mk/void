@@ -533,6 +533,9 @@ struct Namespace {
 	var functions: List!<SharedHandle!<FunctionDecl>>;
 	var functions_by_name: Map!<String, List!<SharedHandle!<FunctionDecl>>>;
 
+	var comptime_variables: SharedList!<VarDecl>;
+	var comptime_variables_by_name: Map!<String, SharedHandle!<VarDecl>>;
+
 	var state: NamespaceState;
 	var unchecked_children: List!<ParsedStmt>;
 	var unchecked_types: List!<SharedHandle!<TypeDecl>>;
@@ -594,15 +597,19 @@ struct Namespace {
 		}
 
 		for i in 0u..this.children.size() {
-			this.children[i].dump(&&out, (i == this.children.size() - 1) && this.types.isEmpty() && this.functions.isEmpty());
+			this.children[i].dump(&&out, (i == this.children.size() - 1) && this.types.isEmpty() && this.functions.isEmpty()&& this.comptime_variables.isEmpty());
 		}
 
 		for i in 0u..this.types.size() {
-			this.types[i].dump(&&out, (i == this.types.size() - 1) && this.functions.isEmpty());
+			this.types[i].dump(&&out, (i == this.types.size() - 1) && this.functions.isEmpty()&& this.comptime_variables.isEmpty());
 		}
 
 		for i in 0u..this.functions.size() {
-			this.functions[i].dump(&&out, i == this.functions.size() - 1);
+			this.functions[i].dump(&&out, (i == this.functions.size() - 1) && this.comptime_variables.isEmpty());
+		}
+
+		for i in 0u..this.comptime_variables.size() {
+			this.comptime_variables[i].dump(&&out, i == this.comptime_variables.size() - 1);
 		}
 
 		out.pop();
@@ -662,6 +669,12 @@ struct Namespace {
 	func addUncheckedFunctionBody(this: &&Namespace, function: SharedHandle!<FunctionDecl>) -> void {
 		this.unchecked_function_bodies.append(function);
 		this.updateMinState(NamespaceState::UncheckedFunctionBodies);
+	}
+
+	func createComptimeVariable(this: &&Namespace, span: Span, name: String, type: Type, is_const: bool) -> SharedHandle!<VarDecl> {
+		const variable = this.comptime_variables.append(VarDecl(span, 0u, name, type, is_const, false, true));
+		this.comptime_variables_by_name.set(name, variable);
+		return variable;
 	}
 }
 
@@ -1128,12 +1141,12 @@ struct FunctionDecl {
 	}
 
 	func createParameter(this: &&FunctionDecl, span: Span, name: String, type: Type) -> void {
-		const variable = this.variables.append(VarDecl(span, this.variables.size(), name, type, type.reference_kind != Var, true));
+		const variable = this.variables.append(VarDecl(span, this.variables.size(), name, type, type.reference_kind != Var, true, false));
 		this.parameters.append(variable);
 	}
 
 	func createVariable(this: &&FunctionDecl, span: Span, name: String, type: Type, is_const: bool) -> SharedHandle!<VarDecl> {
-		return this.variables.append(VarDecl(span, this.variables.size(), name, type, is_const, false));
+		return this.variables.append(VarDecl(span, this.variables.size(), name, type, is_const, false, false));
 	}
 
 	func isIncompleteTemplate(this: &FunctionDecl) -> bool {
@@ -1348,12 +1361,16 @@ struct VarDecl {
 
 	var is_const: bool;
 	var is_parameter: bool;
+	var is_comptime: bool;
 	var is_unused: bool;
 
 	var constructor_call: Expr;
 	var destructor_call: Expr;
 
-	func constructor(this: &&VarDecl, span: Span, id: uint, name: String, type: Type, is_const: bool, is_parameter: bool) -> void {
+	// comptime only
+	var value: Expr;
+
+	func constructor(this: &&VarDecl, span: Span, id: uint, name: String, type: Type, is_const: bool, is_parameter: bool, is_comptime: bool) -> void {
 		this.span := span;
 
 		this.id := id;
@@ -1362,9 +1379,12 @@ struct VarDecl {
 
 		this.is_const := is_const;
 		this.is_parameter := is_parameter;
+		this.is_comptime := is_comptime;
 
 		this.constructor_call := Expr::Undefined(Span(), Type::unknown());
 		this.destructor_call := Expr::Undefined(Span(), Type::unknown());
+
+		this.value := Expr::Undefined(Span(), Type::unknown());
 	}
 
 	func constructor(this: &&VarDecl, other: VarDecl) -> void = default;
@@ -1387,11 +1407,20 @@ struct VarDecl {
 		out.value(format(this.id));
 		out.text(" :");
 		out.value(this.type.signature());
+
+		if this.is_comptime {
+			out.value("comptime");
+		}
+
 		out.value("const" if this.is_const else "var");
 		out.span(this.span);
 
 		this.constructor_call.dump(&&out, false);
-		this.destructor_call.dump(&&out, true);
+		this.destructor_call.dump(&&out, !this.is_comptime);
+
+		if this.is_comptime {
+			this.value.dump(&&out, true);
+		}
 
 		out.pop();
 	}

@@ -1,0 +1,9 @@
+import std/core;
+
+var x = 10;
+
+func main() -> void {
+	assert(x == 10);
+	x = 5;
+	assert(x == 5);
+}
