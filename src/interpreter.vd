@@ -22,8 +22,10 @@ struct StackFrame {
 }
 
 enum ControlFlow {
-	case Return;
+	case Continue;
+	case Break;
 	case Yield;
+	case Return;
 }
 
 struct Interpreter {
@@ -75,6 +77,7 @@ struct Interpreter {
 
 	func interpret(this: &&Interpreter, stmt: Stmt) -> Result!<void, ControlFlow> {
 		match stmt {
+			case Empty -> return Ok;
 			case Compound: compound_stmt -> return this.interpret(compound_stmt);
 			case Expr: expr -> {
 				discard try this.interpret(expr);
@@ -97,20 +100,37 @@ struct Interpreter {
 					var condition = try this.interpret(while_stmt.condition);
 
 					while condition.toBool() {
-						try this.interpret(while_stmt.body);
+						if const control_flow = this.interpret(while_stmt.body) as Error {
+							match control_flow {
+								case Break -> break;
+								case Continue -> {}
+								else -> throw control_flow;
+							}
+						}
+
 						condition = try this.interpret(while_stmt.condition);
 					}
 				} else if while_stmt.kind == DoWhile {
 					var condition = Expr::Undefined(Span(), Type::unknown());
 
 					do {
-						try this.interpret(while_stmt.body);
+						if const control_flow = this.interpret(while_stmt.body) as Error {
+							match control_flow {
+								case Break -> break;
+								case Continue -> {}
+								else -> throw control_flow;
+							}
+						}
+
 						condition = try this.interpret(while_stmt.condition);
 					} while condition.toBool();
 				}
 
 				return Ok;
 			}
+			case Break -> throw ControlFlow::Break;
+			case Continue -> throw ControlFlow::Continue;
+			case Yield -> throw ControlFlow::Yield;
 			case Return: value -> {
 				this.setVariable(this.stack[this.stack.size() - 1].return_variable, try this.interpret(value));
 				throw ControlFlow::Return;
@@ -128,7 +148,6 @@ struct Interpreter {
 				return Ok;
 			}
 		}
-
 	}
 
 	func interpret(this: &&Interpreter, stmt: CompoundStmt) -> Result!<void, ControlFlow> {
@@ -141,7 +160,7 @@ struct Interpreter {
 
 	func interpret(this: &&Interpreter, expr: Expr) -> Result!<Expr, ControlFlow> {
 		match expr {
-			case Undefined | Void | Integer | Float | String | ConstAggregate | VarInvoke -> return Ok(expr);
+			case Undefined | Void | Integer | Float | String | ConstAggregate | VarInvoke | TypeRef | FunctionRef -> return Ok(expr);
 			case Call: call -> {
 				var parameters: List!<Expr>;
 				for param in call.parameters {
