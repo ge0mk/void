@@ -86,6 +86,10 @@ struct SharedList {
 		return this.elements.size();
 	}
 
+	func isEmpty(this: &SharedList!<T>) -> bool {
+		return this.elements.isEmpty();
+	}
+
 	operator [](this: &SharedList!<T>, index: uint) -> SharedHandle!<T> {
 		return this.elements[index];
 	}
