@@ -1028,14 +1028,16 @@ struct TCContext {
 				discard this.checkFunctionDecl(parsed_function_decl);
 			}
 			case VarDecl: parsed_var_decl -> {
-				if this.current_function.isAlive() && !parsed_stmt.is_comptime {
+				if parsed_stmt.is_comptime {
+					for stmt in this.checkVarDecl(parsed_var_decl, true) {
+						discard this.interpret(stmt);
+					}
+				} else if this.current_function.isAlive() {
 					result = this.checkVarDecl(parsed_var_decl, false);
 				} else if this.current_namespace.linked_type.isAlive() {
 					this.checkMemberVarDecl(parsed_var_decl);
 				} else {
-					for stmt in this.checkVarDecl(parsed_var_decl, true) {
-						discard this.interpret(stmt);
-					}
+					this.error("non comptime variable declared outside of type / function", parsed_stmt.span);
 				}
 			}
 			case CaseDecl: parsed_case_decl -> {

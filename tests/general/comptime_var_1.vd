@@ -1,6 +1,6 @@
 import std/core;
 
-var x = 10;
+comptime var x = 10;
 
 func main() -> void {
 	assert(x == 10);
