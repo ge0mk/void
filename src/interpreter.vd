@@ -1,9 +1,12 @@
 import std/core;
 import std/list;
+import std/io;
 import std/map;
 import std/range;
 import std/shared_list;
 import std/string;
+
+import std/libc/stdlib;
 
 import error;
 import options;
@@ -128,6 +131,7 @@ struct Interpreter {
 
 				return Ok;
 			}
+			case Case | ElseCase -> panic("case stmts should be handled by interpret(Expr)");
 			case Break -> throw ControlFlow::Break;
 			case Continue -> throw ControlFlow::Continue;
 			case Yield -> throw ControlFlow::Yield;
@@ -143,10 +147,6 @@ struct Interpreter {
 				discard try this.interpret(variable.destructor_call);
 				return Ok;
 			}
-			else -> {
-				this.todo("finish interpretation of statements", stmt.span);
-				return Ok;
-			}
 		}
 	}
 
@@ -159,29 +159,37 @@ struct Interpreter {
 	}
 
 	func interpret(this: &&Interpreter, expr: Expr) -> Result!<Expr, ControlFlow> {
+		var result = Expr::Undefined(expr.span, Type::unknown());
+
 		match expr {
 			case Undefined | Void | Integer | Float | String | ConstAggregate | VarInvoke | TypeRef | FunctionRef -> return Ok(expr);
 			case Call: call -> {
 				var parameters: List!<Expr>;
+				var has_errors = false;
 				for param in call.parameters {
 					const value = try this.interpret(param);
 					if value is Undefined {
-						return Ok(Expr::Undefined(Span(), Type::unknown()));
+						has_errors = true;
 					}
 					parameters.append(value);
 				}
 
-				return Ok(this.interpret(call.function, parameters, expr.span));
+				if !has_errors {
+					result = this.interpret(call.function, parameters, expr.span);
+				}
 			}
 			case Dereference: base -> match try this.interpret(base) {
-				case VarInvoke: variable -> return Ok(this.getVariable(variable));
-				else -> return Ok(Expr::Undefined(Span(), Type::unknown()));
+				case VarInvoke: variable -> result = this.getVariable(variable);
+				else -> {}
 			}
-			else -> {
-				this.todo("implement interpretation of expressions", expr.span);
-				return Ok(Expr::Undefined(Span(), Type::unknown()));
-			}
+			else -> {}
 		}
+
+		if result is Undefined {
+			result = this.compileAndRun(expr, List!<Stmt>());
+		}
+
+		return Ok(result);
 	}
 
 	func interpret(this: &&Interpreter, function: SharedHandle!<FunctionDecl>, args: List!<Expr>, error_span: Span) -> Expr {
@@ -376,5 +384,13 @@ struct Interpreter {
 				return Expr::Undefined(Span(), Type::unknown());
 			}
 		}
+	}
+
+	func compileAndRun(this: &&Interpreter, expr: Expr, cleanup: List!<Stmt>) -> Expr {
+		var result = Expr::Undefined(expr.span, expr.type);
+
+		this.todo("finish interpretation of expressions using llvm", expr.span);
+
+		return result;
 	}
 }

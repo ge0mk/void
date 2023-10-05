@@ -31,7 +31,7 @@ stage1: build/stage1
 build/stage1: build/stage1.ll
 	clang build/stage1.ll -o build/stage1 -lc -lm -lLLVM
 
-build/stage1.ll: build/stage0 rt.ll std/*.vd src/*.vd src/*/*.vd llvm/*.vd llvm/llvm_c.vd
+build/stage1.ll: build/stage0 rt.ll std/*.vd src/*.vd src/llvm_c.vd
 	build/stage0 src/main.vd -o stage1 -c -g -m
 
 test-stage1: build/stage1
@@ -48,8 +48,8 @@ build/stage2.ll: build/stage1
 test-stage2: build/stage2
 	python3 test.py build/stage2 -q -- -m -b -s
 
-llvm/llvm_c.vd: llvm/llvm.h
-	python3 binding_generator.py llvm/llvm.h llvm/llvm_c.vd
+src/llvm_c.vd: src/llvm.h
+	python3 binding_generator.py src/llvm.h src/llvm_c.vd
 
 rt.ll: rt.c
 	clang rt.c -S -emit-llvm -O3 -o rt.ll

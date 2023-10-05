@@ -56,7 +56,7 @@ struct CompilerOptions {
 	var dont_codegen_builtins: bool;
 	var optimized_build: bool;
 
-	var interpret: bool;
+	var run: bool;
 
 	var link_libraries: List!<String>;
 
@@ -69,6 +69,7 @@ struct CompilerOptions {
 	func destructor(this: &&CompilerOptions) -> void = default;
 
 	operator =(this: &&CompilerOptions, other: CompilerOptions) -> void = default;
+	operator ==(this: CompilerOptions, other: CompilerOptions) -> bool = default;
 
 	func getImportPaths(this: CompilerOptions, module: String) -> List!<ImportedModule> {
 		var result: List!<ImportedModule>;

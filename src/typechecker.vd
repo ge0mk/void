@@ -14,6 +14,9 @@ import builtins;
 import error;
 import interpreter;
 import lexer;
+import llvm_c;
+import llvm_codegen;
+import llvm_util;
 import options;
 import parser;
 import optimizations;
@@ -95,8 +98,7 @@ struct Scope {
 }
 
 func typecheck(program: &&Program) -> void {
-	var interpreter: Interpreter = (&&program);
-	var context = TCContext(&&program, &&interpreter);
+	var context: TCContext = (&&program);
 
 	const root_module_desc = ImportedModule(1u, program.options.root_module_path, program.options.program_name);
 	if const error = context.loadModule(root_module_desc) as Error {
@@ -114,11 +116,28 @@ func typecheck(program: &&Program) -> void {
 	if program.main_function.isEmpty() {
 		context.error("no main function specified", Span());
 	}
+
+	if program.has_errors {
+		return;
+	}
+
+	match program.llvm_context.loadModuleFromFile("rt.ll") {
+		case Some: rt_module -> program.llvm_module.link(rt_module);
+		else -> program.has_errors = true;
+	}
+
+	program.finalizeDI();
+
+	if const error = program.llvm_module.verify(LLVMVerifierFailureAction::LLVMReturnStatusAction) as Error {
+		eprintln(error);
+		program.has_errors = true;
+	}
 }
 
 struct TCContext {
 	var program: &&Program;
-	var interpreter: &&Interpreter;
+	var interpreter: Interpreter;
+	var cg_context: CGContext;
 
 	var current_target_state: NamespaceState;
 	var current_namespace: SharedHandle!<Namespace>;
@@ -135,18 +154,24 @@ struct TCContext {
 	var yield_type: Type;
 	var yield_var: SharedHandle!<VarDecl>;
 
-	func constructor(this: &&TCContext, program: &&Program, interpreter: &&Interpreter) -> void {
+	func constructor(this: &&TCContext, program: &&Program) -> void {
 		this.program := &&program;
-		this.interpreter := &&interpreter;
+		this.interpreter := (&&program);
+		this.cg_context := (&&program);
 		this.current_target_state := Unchecked;
 		this.match_value := Expr::Undefined(Span(), Type::unknown());
 	}
 
-	func constructor(this: &&TCContext, other: TCContext) -> void = default;
 	func destructor(this: &&TCContext) -> void = default;
 
 	func error(this: &TCContext, msg: String, span: Span) -> void {
 		this.program.printError(CompilationError(msg, ErrorType::Error, ErrorStage::Typechecker, span));
+
+		if this.current_function.isAlive() {
+			this.current_function.has_errors = true;
+		} else if this.current_namespace.isAlive() {
+			this.current_namespace.has_errors = true;
+		}
 	}
 
 	func info(this: &TCContext, msg: String, span: Span) -> void {
@@ -159,6 +184,12 @@ struct TCContext {
 
 	func todo(this: &TCContext, message: String, span: Span) -> void {
 		this.program.printError(CompilationError(message, ErrorType::Todo, ErrorStage::Typechecker, span));
+
+		if this.current_function.isAlive() {
+			this.current_function.has_errors = true;
+		} else if this.current_namespace.isAlive() {
+			this.current_namespace.has_errors = true;
+		}
 	}
 
 	func interpret(this: &&TCContext, expr: Expr) -> Expr {
@@ -289,7 +320,25 @@ struct TCContext {
 		const span = Span(line_start, index, line as u32, 0u16, file_id as u16);
 		line_spans.append(span);
 
-		this.program.files.append(SourceFile(imported_module.name, imported_module.path, source, line_spans));
+		var source_file = SourceFile(imported_module.name, imported_module.path, source, line_spans);
+
+		if this.program.options.generate_debug_info {
+			var segments = source_file.path.split('/'b);
+			const filename = segments.last().value();
+			segments.removeLast();
+			const directory = "/".join(segments);
+
+			source_file.llvm_di_file = this.program.di_builder.createFile(filename, directory);
+			source_file.llvm_di_module = this.program.di_builder.createModule(
+				this.program.di_compile_unit,
+				source_file.name,
+				"",		// config macros
+				"",		// include path
+				"", 	// api notes file
+			);
+		}
+
+		this.program.files.append(source_file);
 
 		return Ok(file_id);
 	}
@@ -599,6 +648,11 @@ struct TCContext {
 
 		const signature = match function.body {
 			case Unchecked: parsed_body -> yield parsed_body.signature;
+			case Builtin | InlineBuiltin -> {
+				this.cg_context.codegenFunctionDecl(function);
+				function.parent_namespace.addUncheckedFunctionBody(function);
+				return;
+			}
 			else -> return;
 		}
 
@@ -633,7 +687,7 @@ struct TCContext {
 		}
 
 		if function.name == "main" {
-			if function.return_type != this.program.int_type && function.return_type != this.program.void_type {
+			if !function.return_type.isUnknown() && function.return_type != this.program.int_type && function.return_type != this.program.void_type {
 				this.error("invalid return type for main, expected " + this.program.int_type.signature() + " or " + this.program.void_type.signature(), function.signature_span);
 			}
 
@@ -689,6 +743,14 @@ struct TCContext {
 			}
 		}
 
+		if const parsed_function = function.body as Unchecked {
+			if parsed_function.body is Extern && function.extern_name == "" {
+				function.extern_name = function.name;
+			}
+		}
+
+		this.cg_context.codegenFunctionDecl(function);
+
 		this.current_namespace = prev_namespace;
 		this.current_function = prev_function;
 	}
@@ -701,14 +763,12 @@ struct TCContext {
 		this.current_function = function;
 
 		match function.body {
+			case Empty | Extern | InlineBuiltin -> {}
+			case Builtin: builtin_function -> this.validateBuiltinFunctionDecl(builtin_function, function.signature(), function.signature_span);
+			case Stmt -> this.error("function body is already checked", function.span);
 			case Unchecked: parsed_function -> match parsed_function.body {
 				case Garbage -> {} // do nothing
-				case Extern -> {
-					function.body = FunctionBody::Extern;
-					if function.extern_name == "" {
-						function.extern_name = function.name;
-					}
-				}
+				case Extern -> function.body = FunctionBody::Extern;
 				case Default -> {
 					function.body = function.getDefaultFunctionBody();
 					match function.body {
@@ -718,9 +778,9 @@ struct TCContext {
 				}
 				case Compound: compound_stmt -> this.checkFunctionBody(&&function.operator unwrap(), compound_stmt);
 			}
-			case Builtin: builtin_function -> this.validateBuiltinFunctionDecl(builtin_function, function.signature(), function.signature_span);
-			else -> this.error("function body is already checked", function.span);
 		}
+
+		this.cg_context.codegenFunctionBody(function);
 
 		this.current_namespace = prev_namespace;
 		this.current_function = prev_function;
@@ -951,7 +1011,9 @@ struct TCContext {
 				body.children.append(Stmt::Return(Expr::Void(Span(), this.program.void_type), Span()));
 			} else {
 				body.children.append(Stmt::Return(Expr::Undefined(Span(), this.current_return_type), Span()));
-				this.error("non-void function doesn't return a value in all paths", decl.signature_span);
+				if !this.current_return_type.isUnknown() {
+					this.error("non-void function doesn't return a value in all paths", decl.signature_span);
+				}
 			}
 		}
 

@@ -7,15 +7,14 @@ import std/range;
 import std/string;
 
 import args;
-import codegen/llvm;
-import interpreter;
 import options;
 import program;
 import span;
 import typechecker;
 
-func parseArguments(arguments: Range!<String>, options: &&CompilerOptions) -> bool {
+func parseArguments(arguments: Range!<String>) -> Optional!<CompilerOptions> {
 	var args_parser = ArgsParser(arguments, "");
+	var options: CompilerOptions;
 
 	options.dump_tokens = args_parser.flag("dump-tokens", "t", "dump tokens") ?? false;
 	options.dump_ast = args_parser.flag("dump-ast", "a", "dump ast") ?? false;
@@ -52,20 +51,20 @@ func parseArguments(arguments: Range!<String>, options: &&CompilerOptions) -> bo
 		library = args_parser.value("link-library", "l", "library to link against");
 	}
 
-	options.interpret = args_parser.flag("interpret", "i", "interpret") ?? false;
+	options.run = args_parser.flag("run", "r", "run") ?? false;
 
 	match args_parser.anonymous("path", "path to the root module file") {
 		case Some: value -> options.root_module_path = value;
 		else -> {
 			eprintln("no root module specified");
-			return false;
+			return None;
 		}
 	}
 
 	const path = options.root_module_path;
 	if !path.endsWith(".vd") || path.size() <= 3 {
 		eprintln("invalid source file");
-		return false;
+		return None;
 	}
 
 	if options.program_name == "" {
@@ -93,12 +92,11 @@ func parseArguments(arguments: Range!<String>, options: &&CompilerOptions) -> bo
 		options.import_search_paths.append(root_module_dir);
 	}
 
-	return true;
+	return Some(options);
 }
 
 func main(args: Range!<String>) -> int {
-	var options: CompilerOptions;
-	if !args.parseArguments(&&options) {
+	const options = parseArguments(args) else {
 		return 1;
 	}
 
@@ -109,20 +107,23 @@ func main(args: Range!<String>) -> int {
 		print(program.dump());
 	}
 
-	if program.has_errors {
-		return 1;
-	}
-
-	if options.interpret {
-		var interpreter: Interpreter = (&&program);
-		var interpreter_args: List!<Expr>;
-		match interpreter.interpret(program.main_function, interpreter_args, Span()) {
-			case Void -> return 0;
-			case Integer: value -> return value;
-			else -> return 1;
+	if options.run {
+		if program.has_errors {
+			return 1;
 		}
+
+		var main_args: List!<String>;
+		var main_env: List!<String>;
+
+		main_args.append("_");
+
+		return program.runMainFunction(main_args, main_env);
 	} else {
-		const assembly_path = llvm::codegen(&&program);
+		const assembly_path = match options.output_type {
+			case Assembly -> yield program.printLLVMIRToFile();
+			case Bitcode -> yield program.writeLLVMBitcodeToFile();
+		}
+
 		if program.has_errors || assembly_path is None {
 			return 1;
 		}

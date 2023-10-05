@@ -493,22 +493,18 @@ func createDefaultFunctions(program: &&Program, type: Type) -> void {
 	} else if type_decl.body is Variant {
 		if type_decl.copy_constructor.isEmpty() {
 			type_decl.copy_constructor = program.createBinaryFunction(type_namespace, "constructor", type.varRef(), type, program.void_type, BuiltinFunction::VariantCopyConstructor(type));
-			type_namespace.addUncheckedFunctionBody(type_decl.copy_constructor);
 		}
 
 		if type_decl.destructor.isEmpty() {
 			type_decl.destructor = program.createUnaryFunction(type_namespace, "destructor", type.varRef(), program.void_type, BuiltinFunction::VariantDestructor(type));
-			type_namespace.addUncheckedFunctionBody(type_decl.destructor);
 		}
 
 		if type_decl.op_assign.isEmpty() {
 			type_decl.op_assign = program.createBinaryFunction(type_namespace, "operator =", type.varRef(), type, program.void_type, BuiltinFunction::VariantOpAssign(type));
-			type_namespace.addUncheckedFunctionBody(type_decl.op_assign);
 		}
 
 		if type_decl.op_equal.isEmpty() {
 			type_decl.op_equal = program.createBinaryFunction(type_namespace, "operator ==", type, type, program.bool_type, BuiltinFunction::VariantOpEqual(type));
-			type_namespace.addUncheckedFunctionBody(type_decl.op_equal);
 		}
 	}
 }
@@ -536,8 +532,6 @@ func createVariantCaseConstructor(program: &&Program, type: SharedHandle!<TypeDe
 		program.void_type,
 		FunctionBody::Builtin(BuiltinFunction::VariantCaseConstructor(case_id, Type(type)))
 	);
-
-	type.linked_namespace.addUncheckedFunctionBody(function);
 }
 
 func createVariantOpIs(program: &&Program, type: SharedHandle!<TypeDecl>, case_id: int) -> void {

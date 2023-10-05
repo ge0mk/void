@@ -4,11 +4,134 @@ import std/range;
 import std/string;
 import std/io;
 
-import llvm/llvm_c;
-import llvm/dwarf;
+import llvm_c;
+
+namespace dwarf {
+	// llvm/include/llvm/BinaryFormat/Dwarf.def
+	// why the fuck are these not enums in the c/c++ api ??????
+
+	enum Tag {
+		case Null = 0x0000;
+		case Array_type = 0x0001;
+		case Class_type = 0x0002;
+		case Entry_point = 0x0003;
+		case Enumeration_type = 0x0004;
+		case Formal_parameter = 0x0005;
+		case Imported_declaration = 0x0008;
+		case Label = 0x000a;
+		case Lexical_block = 0x000b;
+		case Member = 0x000d;
+		case Pointer_type = 0x000f;
+		case Reference_type = 0x0010;
+		case Compile_unit = 0x0011;
+		case String_type = 0x0012;
+		case Structure_type = 0x0013;
+		case Subroutine_type = 0x0015;
+		case Typedef = 0x0016;
+		case Union_type = 0x0017;
+		case Unspecified_parameters = 0x0018;
+		case Variant = 0x0019;
+		case Common_block = 0x001a;
+		case Common_inclusion = 0x001b;
+		case Inheritance = 0x001c;
+		case Inlined_subroutine = 0x001d;
+		case Module = 0x001e;
+		case Ptr_to_member_type = 0x001f;
+		case Set_type = 0x0020;
+		case Subrange_type = 0x0021;
+		case With_stmt = 0x0022;
+		case Access_declaration = 0x0023;
+		case Base_type = 0x0024;
+		case Catch_block = 0x0025;
+		case Const_type = 0x0026;
+		case Constant = 0x0027;
+		case Enumerator = 0x0028;
+		case File_type = 0x0029;
+		case Friend = 0x002a;
+		case Namelist = 0x002b;
+		case Namelist_item = 0x002c;
+		case Packed_type = 0x002d;
+		case Subprogram = 0x002e;
+		case Template_type_parameter = 0x002f;
+		case Template_value_parameter = 0x0030;
+		case Thrown_type = 0x0031;
+		case Try_block = 0x0032;
+		case Variant_part = 0x0033;
+		case Variable = 0x0034;
+		case Volatile_type = 0x0035;
+		case Dwarf_procedure = 0x0036;
+		case Restrict_type = 0x0037;
+		case Interface_type = 0x0038;
+		case Namespace = 0x0039;
+		case Imported_module = 0x003a;
+		case Unspecified_type = 0x003b;
+		case Partial_unit = 0x003c;
+		case Imported_unit = 0x003d;
+		case Condition = 0x003f;
+		case Shared_type = 0x0040;
+		case Type_unit = 0x0041;
+		case Rvalue_reference_type = 0x0042;
+		case Template_alias = 0x0043;
+		case Coarray_type = 0x0044;
+		case Generic_subrange = 0x0045;
+		case Dynamic_type = 0x0046;
+		case Atomic_type = 0x0047;
+		case Call_site = 0x0048;
+		case Call_site_parameter = 0x0049;
+		case Skeleton_unit = 0x004a;
+		case Immutable_type = 0x004b;
+	}
+
+	enum TypeEncoding {
+		case Address = 0x01;
+		case Boolean = 0x02;
+		case Complex_float = 0x03;
+		case Float = 0x04;
+		case Signed = 0x05;
+		case Signed_char = 0x06;
+		case Unsigned = 0x07;
+		case Unsigned_char = 0x08;
+		case Imaginary_float = 0x09;
+		case Packed_decimal = 0x0a;
+		case Numeric_string = 0x0b;
+		case Edited = 0x0c;
+		case Signed_fixed = 0x0d;
+		case Unsigned_fixed = 0x0e;
+		case Decimal_float = 0x0f;
+		case UTF = 0x10;
+		case UCS = 0x11;
+		case ASCII = 0x12;
+	}
+}
 
 func lookupIntrinsicID(name: String) -> u32{
 	return LLVMLookupIntrinsicID(name.data(), name.size());
+}
+
+func createInterpreterForModule(module: Module) -> Result!<ExecutionEngineRef, String> {
+	var result: vptr!<LLVMOpaqueExecutionEngine>;
+	var out_error: vptr!<byte>;
+
+	if LLVMCreateInterpreterForModule(vptr!<vptr!<LLVMOpaqueExecutionEngine>>::addressOf(&&result), module.handle, vptr!<vptr!<byte>>::addressOf(&&out_error)) != 0 {
+		const error = String::fromCString(out_error as cptr!<byte>);
+		LLVMDisposeMessage(out_error);
+		throw error;
+	}
+
+	return Ok(ExecutionEngineRef(result));
+}
+
+func createJITCompilerForModule(module: Module, optimization_level: uint) -> Result!<ExecutionEngineRef, String> {
+	var result: vptr!<LLVMOpaqueExecutionEngine>;
+	var out_error: vptr!<byte>;
+
+	if LLVMCreateJITCompilerForModule(vptr!<vptr!<LLVMOpaqueExecutionEngine>>::addressOf(&&result), module.handle, optimization_level as u32, vptr!<vptr!<byte>>::addressOf(&&out_error)) != 0 {
+		const error = String::fromCString(out_error as cptr!<byte>);
+		LLVMDisposeMessage(out_error);
+		throw error;
+	}
+
+	return Ok(ExecutionEngineRef(result));
 }
 
 struct Context {
@@ -158,6 +281,8 @@ struct Context {
 struct Module {
 	var handle: vptr!<LLVMOpaqueModule>;
 
+	func constructor(this: &&Module) -> void = default;
+
 	func constructor(this: &&Module, handle: vptr!<LLVMOpaqueModule>) -> void {
 		this.handle := handle;
 	}
@@ -230,6 +355,15 @@ struct Module {
 	func addFunction(this: Module, name: String, type: TypeRef) -> ValueRef {
 		const c_name = name + "\0";
 		return ValueRef(LLVMAddFunction(this.handle, c_name.data(), type.handle));
+	}
+
+	func deleteFunction(this: Module, function: ValueRef) -> void {
+		LLVMDeleteFunction(function.handle);
+	}
+
+	func getFunction(this: Module, name: String) -> ValueRef {
+		const c_name = name + '\0'b;
+		return ValueRef(LLVMGetNamedFunction(this.handle, c_name.data()));
 	}
 
 	func addGlobal(this: Module, type: TypeRef, name: String) -> ValueRef {
@@ -341,6 +475,10 @@ struct ValueRef {
 
 	func getParam(this: ValueRef, index: uint) -> ValueRef {
 		return ValueRef(LLVMGetParam(this.handle, index as u32));
+	}
+
+	func countBasicBlocks(this: ValueRef) -> uint {
+		return LLVMCountBasicBlocks(this.handle) as uint;
 	}
 
 	func addCase(this: ValueRef, on_value: ValueRef, destination: BasicBlockRef) -> void {
@@ -1033,5 +1171,103 @@ struct MetaDataRef {
 
 	func replaceAllUsesWith(node: MetaDataRef, replacement: MetaDataRef) -> void {
 		LLVMMetadataReplaceAllUsesWith(node.handle, replacement.handle);
+	}
+}
+
+struct GenericValueRef {
+	var handle: vptr!<LLVMOpaqueGenericValue>;
+
+	func constructor(this: &&GenericValueRef) -> void = default;
+
+	func constructor(this: &&GenericValueRef, handle: vptr!<LLVMOpaqueGenericValue>) -> void {
+		this.handle := handle;
+	}
+
+	func constructor(this: &&GenericValueRef, other: GenericValueRef) -> void = default;
+	func destructor(this: &&GenericValueRef) -> void = default;
+
+	operator =(this: &&GenericValueRef, other: GenericValueRef) -> void = default;
+
+	operator ==(this: GenericValueRef, other: GenericValueRef) -> bool = default;
+	operator <=>(this: GenericValueRef, other: GenericValueRef) -> int {
+		return this.handle <=> other.handle;
+	}
+
+	func fromInt(type: TypeRef, value: int, is_signed: bool) -> GenericValueRef {
+		return GenericValueRef(LLVMCreateGenericValueOfInt(type.handle, value as u32, is_signed as i32));
+	}
+
+	func fromPointer(value: vptr) -> GenericValueRef {
+		return GenericValueRef(LLVMCreateGenericValueOfPointer(value));
+	}
+
+	func fromFloat(type: TypeRef, value: f64) -> GenericValueRef {
+		return GenericValueRef(LLVMCreateGenericValueOfFloat(type.handle, value));
+	}
+
+	func toInt(this: GenericValueRef, is_signed: bool) -> int {
+		return LLVMGenericValueToInt(this.handle, is_signed as i32) as int;
+	}
+
+	func toPointer(this: GenericValueRef) -> vptr {
+		return LLVMGenericValueToPointer(this.handle);
+	}
+
+	func toFloat(this: GenericValueRef, type: TypeRef) -> f64 {
+		return LLVMGenericValueToFloat(type.handle, this.handle);
+	}
+
+	func dispose(this: GenericValueRef) -> void {
+		LLVMDisposeGenericValue(this.handle);
+	}
+}
+
+struct ExecutionEngineRef {
+	var handle: vptr!<LLVMOpaqueExecutionEngine>;
+
+	func constructor(this: &&ExecutionEngineRef) -> void = default;
+
+	func constructor(this: &&ExecutionEngineRef, handle: vptr!<LLVMOpaqueExecutionEngine>) -> void {
+		this.handle := handle;
+	}
+
+	func constructor(this: &&ExecutionEngineRef, other: ExecutionEngineRef) -> void = default;
+	func destructor(this: &&ExecutionEngineRef) -> void = default;
+
+	operator =(this: &&ExecutionEngineRef, other: ExecutionEngineRef) -> void = default;
+
+	operator ==(this: ExecutionEngineRef, other: ExecutionEngineRef) -> bool = default;
+	operator <=>(this: ExecutionEngineRef, other: ExecutionEngineRef) -> int {
+		return this.handle <=> other.handle;
+	}
+
+	func dispose(this: ExecutionEngineRef) -> void {
+		LLVMDisposeExecutionEngine(this.handle);
+	}
+
+	func runFunctionAsMain(this: ExecutionEngineRef, function: ValueRef, args: List!<String>, env: List!<String>) -> int {
+		var argv: List!<cptr!<byte>>;
+		for &&arg in args {
+			arg.append('\0'b);
+			argv.append(arg.data());
+		}
+
+		var envv: List!<cptr!<byte>>;
+		for &&val in env {
+			val.append('\0'b);
+			envv.append(val.data());
+		}
+		envv.append(cptr!<byte>::null());
+
+		return LLVMRunFunctionAsMain(this.handle, function.handle, argv.size() as u32, argv.data(), envv.data()) as int;
+	}
+
+	func runFunction(this: ExecutionEngineRef, function: ValueRef, args: List!<GenericValueRef>) -> GenericValueRef {
+		var raw_args: List!<vptr!<LLVMOpaqueGenericValue>>;
+		for arg in args {
+			raw_args.append(arg.handle);
+		}
+
+		return GenericValueRef(LLVMRunFunction(this.handle, function.handle, raw_args.size() as u32, raw_args.data));
 	}
 }

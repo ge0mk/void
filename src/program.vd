@@ -9,6 +9,9 @@ import std/shared;
 import std/shared_list;
 import std/string;
 
+import llvm_c;
+import llvm_util;
+
 import error;
 import options;
 import span;
@@ -20,6 +23,9 @@ struct SourceFile {
 	var path: String;
 	var source: String;
 	var line_spans: List!<Span>;
+
+	var llvm_di_file: llvm_util::MetaDataRef;
+	var llvm_di_module: llvm_util::MetaDataRef;
 
 	func constructor(this: &&SourceFile, name: String, path: String, source: String, line_spans: List!<Span>) -> void {
 		this.name := name;
@@ -80,6 +86,17 @@ struct Program {
 
 	var main_function: SharedHandle!<FunctionDecl>;
 
+	// llvm
+	var llvm_context: llvm_util::Context;
+	var llvm_module: llvm_util::Module;
+	var llvm_execution_engine: llvm_util::ExecutionEngineRef;
+	var data_layout: llvm_util::TargetDataRef;
+
+	var string_globals: Map!<String, llvm_util::ValueRef>;
+
+	var di_builder: llvm_util::DIBuilderRef;
+	var di_compile_unit: llvm_util::MetaDataRef;
+
 	func constructor(this: &&Program, options: CompilerOptions) -> void {
 		this.name := options.program_name;
 		this.options := options;
@@ -87,17 +104,86 @@ struct Program {
 		this.has_errors := false;
 
 		this.files := ();
-		this.files.append(SourceFile("unknown", "unknown", "", List!<Span>(1u, Span())));
+		this.files.append(SourceFile("unknown", "unknown", "", List!<Span>()));
 
 		this.namespaces := ();
 		this.top_level_namespaces := ();
+
+		this.llvm_context := ();
+		this.llvm_module := this.llvm_context.createModule(this.name);
+		this.llvm_module.setSourceFileName(options.root_module_path);
+		this.llvm_module.setTargetTriple(options.target_triple);
+		this.llvm_module.setDataLayout(options.target_data_layout);
+
+		this.data_layout := this.llvm_module.getDataLayout();
+
+		this.di_builder := ();
+		if options.generate_debug_info {
+			this.llvm_module.addFlag(LLVMModuleFlagBehavior::LLVMModuleFlagBehaviorError, "Dwarf Version", llvm_util::constInt(this.llvm_context.getIntType(64u), 5, false).asMetadata());
+			this.llvm_module.addFlag(LLVMModuleFlagBehavior::LLVMModuleFlagBehaviorWarning, "Debug Info Version", llvm_util::constInt(this.llvm_context.getIntType(64u), 3, false).asMetadata());
+			this.di_builder = this.llvm_module.createDIBuilder();
+
+			this.files[0u].llvm_di_file = this.di_builder.createFile("unknown", ".");
+
+			this.di_compile_unit = this.di_builder.createCompileUnit(
+				LLVMDWARFSourceLanguage::LLVMDWARFSourceLanguageC,
+				this.files[0u].llvm_di_file,
+				"",			// producer
+				this.options.optimized_build,
+				"",			// flags
+				0u,			// runtime version
+				"",			// split name
+				LLVMDWARFEmissionKind::LLVMDWARFEmissionFull,
+				0u,			// dwo-id
+				false,		// split debug inlining
+				false,		// debug info for profiling
+				"",			// sys-root
+				"",			// sdk
+			);
+
+			this.files[0u].llvm_di_module = this.di_builder.createModule(
+				this.di_compile_unit,
+				this.files[0u].name,
+				"",		// config macros
+				"",		// include path
+				"", 	// api notes file
+			);
+		}
+
 		for i in 0u..options.import_search_paths.size() {
-			const ns = this.namespaces.append(Namespace(format(i), List!<TemplateParameterDecl>(), SharedHandle!<Namespace>()));
+			var ns = this.namespaces.append(Namespace(format(i), List!<TemplateParameterDecl>(), SharedHandle!<Namespace>()));
+
+			if this.di_builder.handle != vptr::null() {
+				ns.llvm_di = this.di_builder.createNameSpace(this.files[0u].llvm_di_module, ns.name, true);
+			}
+
 			this.top_level_namespaces.append(ns);
+		}
+
+		this.llvm_execution_engine := ();
+
+		LLVMLinkInMCJIT();
+		LLVMInitializeX86TargetInfo();
+		LLVMInitializeX86Target();
+		LLVMInitializeX86TargetMC();
+		LLVMInitializeX86AsmPrinter();
+
+		match llvm_util::createJITCompilerForModule(this.llvm_module, 0u) {
+			case Ok: ee -> this.llvm_execution_engine = ee;
+			case Error: error -> panic(error);
 		}
 	}
 
-	func destructor(this: &&Program) -> void = default;
+	func destructor(this: &&Program) -> void {
+		if this.di_builder.handle != vptr::null() {
+			this.di_builder.dispose();
+		}
+
+		this.llvm_execution_engine.dispose();
+		this.llvm_context.dispose();
+
+		LLVMShutdown();
+	}
 
 	func printError(this: &&Program, error: CompilationError) -> void {
 		if error.type == Error {
@@ -206,6 +292,10 @@ struct Program {
 		parent_namespace.children_by_name[name].append(child);
 		parent_namespace.updateMinState(NamespaceState::Unchecked);
 
+		if this.di_builder.handle != vptr::null() {
+			child.llvm_di = this.di_builder.createNameSpace(parent_namespace.llvm_di, child.name, true);
+		}
+
 		return child;
 	}
 
@@ -278,6 +368,10 @@ struct Program {
 		parent_namespace.functions.append(function);
 		parent_namespace.functions_by_name[name].append(function);
 
+		if !(body is Unchecked) {
+			parent_namespace.addUncheckedFunction(function);
+		}
+
 		return function;
 	}
 
@@ -311,6 +405,42 @@ struct Program {
 
 	func createFunction(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, parameter_types: List!<Type>, return_type: Type, body: BuiltinFunction) -> SharedHandle!<FunctionDecl> {
 		return this.createFunction(parent_namespace, name, List!<TemplateParameterDecl>(), parameter_types, return_type, FunctionBody::Builtin(body));
+	}
+
+	func printLLVMIRToFile(this: &Program) -> Optional!<String> {
+		const output_path = this.options.getOutputCodePath(".ll");
+		if this.llvm_module.printToFile(output_path) {
+			return Some(output_path);
+		} else {
+			return None;
+		}
+	}
+
+	func writeLLVMBitcodeToFile(this: &Program) -> Optional!<String> {
+		const output_path = this.options.getOutputCodePath(".bc");
+		if this.llvm_module.writeBitcodeToFile(output_path) {
+			return Some(output_path);
+		} else {
+			return None;
+		}
+	}
+
+	func printLLVMIRString(this: &Program) -> String {
+		return this.llvm_module.printToString();
+	}
+
+	func finalizeDI(this: &Program) -> void {
+		if this.di_builder.handle != vptr::null() {
+			this.di_builder.finalize();
+		}
+	}
+
+	func runFunction(this: &Program, function: SharedHandle!<FunctionDecl>, args: List!<llvm_util::GenericValueRef>) -> llvm_util::GenericValueRef {
+		return this.llvm_execution_engine.runFunction(function.llvm_func, args);
+	}
+
+	func runMainFunction(this: &Program, args: List!<String>, env: List!<String>) -> int {
+		return this.llvm_execution_engine.runFunctionAsMain(this.llvm_module.getFunction("main"), args, env);
 	}
 }
 
@@ -515,6 +645,7 @@ enum NamespaceState {
 struct Namespace {
 	var span: Span;
 	var name_span: Span;
+	var has_errors: bool;
 
 	var name: String;
 	var full_name: Name;
@@ -545,6 +676,8 @@ struct Namespace {
 	var unchecked_types: List!<SharedHandle!<TypeDecl>>;
 	var unchecked_functions: List!<SharedHandle!<FunctionDecl>>;
 	var unchecked_function_bodies: List!<SharedHandle!<FunctionDecl>>;
+
+	var llvm_di: llvm_util::MetaDataRef;
 
 	func constructor(this: &&Namespace, name: String, template_parameters: List!<TemplateParameterDecl>, parent: SharedHandle!<Namespace>) -> void {
 		this.name := name;
@@ -725,6 +858,10 @@ struct TypeDecl {
 
 	// flags for codegen
 	var is_packed: bool;
+
+	// llvm
+	var llvm_type: llvm_util::TypeRef;
+	var llvm_di: llvm_util::MetaDataRef;
 
 	func constructor(this: &&TypeDecl, name: String, template_parameters: List!<TemplateParameterDecl>, body: TypeBody) -> void {
 		this.name := name;
@@ -1055,6 +1192,7 @@ struct Type {
 struct FunctionDecl {
 	var span: Span;
 	var signature_span: Span;
+	var has_errors: bool;
 
 	var name: String;
 	var template_parameters: List!<TemplateParameterDecl>;
@@ -1071,6 +1209,11 @@ struct FunctionDecl {
 	var parameters: List!<SharedHandle!<VarDecl>>;
 
 	var is_copy_constructor: bool;
+
+	// llvm
+	var llvm_func: llvm_util::ValueRef;
+	var llvm_type: llvm_util::TypeRef;
+	var llvm_di: llvm_util::MetaDataRef;
 
 	func constructor(this: &&FunctionDecl, name: String, template_parameters: List!<TemplateParameterDecl>, body: FunctionBody) -> void {
 		this.name := name;
