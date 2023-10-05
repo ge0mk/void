@@ -2,7 +2,6 @@ import std/core;
 import std/list;
 import std/map;
 import std/range;
-import std/shared;
 import std/shared_list;
 import std/string;
 
@@ -12,8 +11,8 @@ import program;
 import span;
 
 struct StackFrame {
-	var variables: Map!<WeakPtr!<VarDecl>, Expr>;
-	var return_variable: WeakPtr!<VarDecl>;
+	var variables: Map!<SharedHandle!<VarDecl>, Expr>;
+	var return_variable: SharedHandle!<VarDecl>;
 
 	func constructor(this: &&StackFrame) -> void = default;
 	func constructor(this: &&StackFrame, other: StackFrame) -> void = default;
@@ -58,11 +57,11 @@ struct Interpreter {
 		return last_stack_frame.variables.get(last_stack_frame.return_variable) ?? Expr::Void(Span(), this.program.void_type);
 	}
 
-	func setVariable(this: &&Interpreter, variable: WeakPtr!<VarDecl>, value: Expr) -> void {
+	func setVariable(this: &&Interpreter, variable: SharedHandle!<VarDecl>, value: Expr) -> void {
 		this.stack[this.stack.size() - 1].variables[variable] = value;
 	}
 
-	func getVariable(this: &&Interpreter, variable: WeakPtr!<VarDecl>) -> Expr {
+	func getVariable(this: &&Interpreter, variable: SharedHandle!<VarDecl>) -> Expr {
 		return this.stack[this.stack.size() - 1].variables[variable];
 	}
 
@@ -109,13 +108,11 @@ struct Interpreter {
 				throw ControlFlow::Return;
 			}
 			case LifeTimeStart: variable -> {
-				const decl = variable.forceLock();
-				discard try this.interpret(decl.constructor_call);
+				discard try this.interpret(variable.constructor_call);
 				return Ok;
 			}
 			case LifeTimeEnd: variable -> {
-				const decl = variable.forceLock();
-				discard try this.interpret(decl.destructor_call);
+				discard try this.interpret(variable.destructor_call);
 				return Ok;
 			}
 			else -> {
@@ -172,7 +169,7 @@ struct Interpreter {
 				this.pushStackFrame();
 
 				for i in 0u..args.size() {
-					this.setVariable(WeakPtr!<VarDecl>(function.variables[i]), args[i]);
+					this.setVariable(function.variables[i], args[i]);
 				}
 
 				discard this.interpret(stmt);

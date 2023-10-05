@@ -7,7 +7,6 @@ import std/io;
 import std/list;
 import std/map;
 import std/set;
-import std/shared;
 import std/shared_list;
 import std/string;
 
@@ -54,7 +53,7 @@ variant Symbol {
 	case EnumCase: uint;
 	case VariantCase: uint;
 	case TemplateParameter: TemplateParameter;
-	case Variable: WeakPtr!<VarDecl>;
+	case Variable: SharedHandle!<VarDecl>;
 
 	func toString(this: &Symbol) -> String {
 		match this {
@@ -65,7 +64,7 @@ variant Symbol {
 			case EnumCase: value -> return "enum case";
 			case VariantCase: value -> return "variant case";
 			case TemplateParameter: value -> return "template parameter " + value.toString();
-			case Variable: value -> return "variable " + value.forceLock().signature();
+			case Variable: value -> return "variable " + value.signature();
 		}
 	}
 }
@@ -80,8 +79,8 @@ enum ScopeKind {
 
 struct Scope {
 	var kind: ScopeKind;
-	var variables: List!<WeakPtr!<VarDecl>>;
-	var variables_by_name: Map!<String, WeakPtr!<VarDecl>>;
+	var variables: List!<SharedHandle!<VarDecl>>;
+	var variables_by_name: Map!<String, SharedHandle!<VarDecl>>;
 
 	func constructor(this: &&Scope, kind: ScopeKind) -> void {
 		this.kind := kind;
@@ -128,13 +127,13 @@ struct TCContext {
 	var scope_stack: List!<Scope>;
 	var current_return_type: Type;
 	var active_member_variables: Set!<uint>; // used to track (de-)initialized member variables in con/de-structors
-	var return_variable: WeakPtr!<VarDecl>;
+	var return_variable: SharedHandle!<VarDecl>;
 
 	// context for checking match expressions
 	var match_value: Expr;
 	var match_type: Type;
 	var yield_type: Type;
-	var yield_var: WeakPtr!<VarDecl>;
+	var yield_var: SharedHandle!<VarDecl>;
 
 	func constructor(this: &&TCContext, program: &&Program, interpreter: &&Interpreter) -> void {
 		this.program := &&program;
@@ -170,12 +169,11 @@ struct TCContext {
 		this.scope_stack.removeLast();
 	}
 
-	func addVariableToCurrentScope(this: &&TCContext, variable: WeakPtr!<VarDecl>) -> void {
+	func addVariableToCurrentScope(this: &&TCContext, variable: SharedHandle!<VarDecl>) -> void {
 		this.scope_stack[this.scope_stack.size() - 1].variables.append(variable);
 
-		const name = variable.forceLock().name;
-		if name != ""{
-			this.scope_stack[this.scope_stack.size() - 1].variables_by_name[name] = variable;
+		if variable.name != ""{
+			this.scope_stack[this.scope_stack.size() - 1].variables_by_name[variable.name] = variable;
 		}
 	}
 
@@ -199,7 +197,7 @@ struct TCContext {
 		return false;
 	}
 
-	func getVariableByName(this: &&TCContext, name: String) -> Optional!<WeakPtr!<VarDecl>> {
+	func getVariableByName(this: &&TCContext, name: String) -> Optional!<SharedHandle!<VarDecl>> {
 		for i in 0u..this.scope_stack.size() {
 			const tmp = this.scope_stack[this.scope_stack.size() - i - 1].variables_by_name.get(name);
 			if tmp is Some {
@@ -235,8 +233,7 @@ struct TCContext {
 		const variables = this.scope_stack[this.scope_stack.size() - 1].variables;
 		for i in 0u..variables.size() {
 			const variable = variables[variables.size() - i - 1];
-			const decl = variable.forceLock();
-			if decl.type.reference_kind == None {
+			if variable.type.reference_kind == None {
 				result.append(Stmt::LifeTimeEnd(variable, Span()));
 			}
 		}
@@ -682,14 +679,12 @@ struct TCContext {
 			case Unchecked: parsed_function -> match parsed_function.body {
 				case Garbage -> {} // do nothing
 				case Extern -> {
-					function.variables.clear();
 					function.body = FunctionBody::Extern;
 					if function.extern_name == "" {
 						function.extern_name = function.name;
 					}
 				}
 				case Default -> {
-					function.variables.clear();
 					function.body = function.getDefaultFunctionBody();
 					match function.body {
 						case Builtin: builtin_function -> this.validateBuiltinFunctionDecl(builtin_function, function.signature(), function.signature_span);
@@ -813,7 +808,7 @@ struct TCContext {
 		this.scope_stack.clear();
 		this.current_return_type = decl.return_type;
 		this.active_member_variables.clear();
-		this.return_variable = WeakPtr!<VarDecl>();
+		this.return_variable = SharedHandle!<VarDecl>();
 
 		this.pushScope(ScopeKind::Function);
 
@@ -838,14 +833,13 @@ struct TCContext {
 			// create a local copy of all parameters passed by value
 			if parameter.type.reference_kind == None {
 				var copy = decl.createVariable(decl.signature_span, parameter.name, parameter.type, false);
-				const parameter_expr = Expr::VarInvoke(WeakPtr!<VarDecl>(parameter), decl.signature_span, parameter.type);
+				const parameter_expr = Expr::VarInvoke(parameter, decl.signature_span, parameter.type);
 
 				if decl.is_copy_constructor {
 					// the "other" parameter in copy a constructor can't be deep copied (would result in recursion),
 					// but it can safely be shallow copied because no other parameters can reference the same object
-					var var_decl = copy.forceLock();
-					var_decl.constructor_call = Expr::ShallowCopy(ShallowCopyExpr(
-						Expr::VarInvoke(copy, decl.signature_span, var_decl.type.varRef()),
+					copy.constructor_call = Expr::ShallowCopy(ShallowCopyExpr(
+						Expr::VarInvoke(copy, decl.signature_span, copy.type.varRef()),
 						parameter_expr,
 					), decl.signature_span, this.program.void_type);
 				} else {
@@ -856,7 +850,7 @@ struct TCContext {
 				this.addVariableToCurrentScope(copy);
 				body.children.append(Stmt::LifeTimeStart(copy, decl.signature_span));
 			} else {
-				this.addVariableToCurrentScope(WeakPtr!<VarDecl>(parameter));
+				this.addVariableToCurrentScope(parameter);
 			}
 		}
 
@@ -895,7 +889,7 @@ struct TCContext {
 				}
 
 				const this_var_invoke_expr = Expr::VarInvoke(
-					WeakPtr!<VarDecl>(decl.variables[0u]),
+					decl.variables[0u],
 					decl.signature_span,
 					decl.variables[0u].type
 				);
@@ -1157,10 +1151,9 @@ struct TCContext {
 		}
 
 		if !name.startsWith("#") {
-			if const variable = this.getVariableByName(name) {
-				const prev_decl = variable.forceLock();
+			if const other = this.getVariableByName(name) {
 				this.error("redefinition of variable '" + name + "'", span);
-				this.info("previously declared here:", prev_decl.span);
+				this.info("previously declared here:", other.span);
 			}
 		}
 
@@ -1179,44 +1172,40 @@ struct TCContext {
 		return result;
 	}
 
-	func createConstructorCall(this: &&TCContext, variable: WeakPtr!<VarDecl>, initializer: List!<Expr>) -> void {
-		var decl = variable.forceLock();
-
-		if decl.type.reference_kind == None {
+	func createConstructorCall(this: &&TCContext, variable: SharedHandle!<VarDecl>, initializer: List!<Expr>) -> void {
+		if variable.type.reference_kind == None {
 			var parameters: List!<Expr>;
-			parameters.append(Expr::VarInvoke(variable, decl.span, decl.type.varRef()));
+			parameters.append(Expr::VarInvoke(variable, variable.span, variable.type.varRef()));
 			parameters.append(initializer);
 
-			decl.constructor_call = this.checkCall(Name("constructor"), parameters, false, true, CallKind::MemberCall, decl.span);
+			variable.constructor_call = this.checkCall(Name("constructor"), parameters, false, true, CallKind::MemberCall, variable.span);
 		} else {
 			if initializer.size() != 1 {
-				this.error("reference variables must be initialized with a single value", decl.span);
+				this.error("reference variables must be initialized with a single value", variable.span);
 				return;
 			}
 
-			if initializer[0u].type.base() != decl.type.base() || initializer[0u].type.reference_kind < decl.type.reference_kind {
-				this.error("initializer has invalid type: expected " + decl.type.signature() + " but got " + initializer[0u].type.signature(), decl.span);
+			if initializer[0u].type.base() != variable.type.base() || initializer[0u].type.reference_kind < variable.type.reference_kind {
+				this.error("initializer has invalid type: expected " + variable.type.signature() + " but got " + initializer[0u].type.signature(), variable.span);
 				return;
 			}
 
-			const object = Expr::VarInvoke(variable, decl.span, decl.type);
-			decl.constructor_call = Expr::ShallowCopy(
+			const object = Expr::VarInvoke(variable, variable.span, variable.type);
+			variable.constructor_call = Expr::ShallowCopy(
 				ShallowCopyExpr(object, initializer[0u]),
-				decl.span, this.program.void_type
+				variable.span, this.program.void_type
 			);
 		}
 	}
 
-	func createDestructorCall(this: &&TCContext, variable: WeakPtr!<VarDecl>) -> void {
-		var decl = variable.forceLock();
-
-		if decl.type.reference_kind == None {
+	func createDestructorCall(this: &&TCContext, variable: SharedHandle!<VarDecl>) -> void {
+		if variable.type.reference_kind == None {
 			var parameters: List!<Expr>;
-			parameters.append(Expr::VarInvoke(variable, decl.span, decl.type.varRef()));
+			parameters.append(Expr::VarInvoke(variable, variable.span, variable.type.varRef()));
 
-			decl.destructor_call = this.checkCall(Name("destructor"), parameters, false, false, CallKind::MemberCall, decl.span);
+			variable.destructor_call = this.checkCall(Name("destructor"), parameters, false, false, CallKind::MemberCall, variable.span);
 		} else {
-			decl.destructor_call = Expr::Undefined(decl.span, Type::unknown());
+			variable.destructor_call = Expr::Undefined(variable.span, Type::unknown());
 		}
 	}
 
@@ -1507,10 +1496,9 @@ struct TCContext {
 		result.children.append(Stmt::Expr(get_iterator_call, get_iterator_call.span));
 
 		const iterator_var = (removeDereference(get_iterator_call) as Call).value().result_var;
-		const iterator_var_decl = iterator_var.forceLock();
 		const iterator_var_expr = Expr::Dereference(
-			Box!<Expr>(Expr::VarInvoke(iterator_var, parsed_stmt.range.span, iterator_var_decl.type.varRef())),
-			parsed_stmt.range.span, iterator_var_decl.type
+			Box!<Expr>(Expr::VarInvoke(iterator_var, parsed_stmt.range.span, iterator_var.type.varRef())),
+			parsed_stmt.range.span, iterator_var.type
 		);
 
 		this.pushScope(ScopeKind::Expr);
@@ -2000,23 +1988,21 @@ struct TCContext {
 		return Expr::Undefined(span, Type::unknown());
 	}
 
-	func createVarInvokeExpr(this: &&TCContext, variable: WeakPtr!<VarDecl>, span: Span) -> Expr {
-		const decl = variable.forceLock();
-
+	func createVarInvokeExpr(this: &&TCContext, variable: SharedHandle!<VarDecl>, span: Span) -> Expr {
 		var result = Expr::Undefined(Span(), Type::unknown());
-		if decl.type.isUnknown() {
+		if variable.type.isUnknown() {
 			return result;
 		}
 
-		match decl.type.reference_kind {
-			case Const | Var -> result = Expr::VarInvoke(variable, span, decl.type);
-			else -> match decl.is_const {
-				case true -> result = Expr::VarInvoke(variable, span, decl.type.constRef());
-				case false -> result = Expr::VarInvoke(variable, span, decl.type.varRef());
+		match variable.type.reference_kind {
+			case Const | Var -> result = Expr::VarInvoke(variable, span, variable.type);
+			else -> match variable.is_const {
+				case true -> result = Expr::VarInvoke(variable, span, variable.type.constRef());
+				case false -> result = Expr::VarInvoke(variable, span, variable.type.varRef());
 			}
 		}
 
-		return Expr::Dereference(Box!<Expr>(result), span, decl.type.base());
+		return Expr::Dereference(Box!<Expr>(result), span, variable.type.base());
 	}
 
 	func checkArrayExpr(this: &&TCContext, parsed_elements: List!<ParsedExpr>, span: Span, expected_type: Type) -> Expr {
@@ -2107,7 +2093,7 @@ struct TCContext {
 			this.error("value in match statement has invalid type: expected integral type or variant but got '" + this.match_value.type.signature() + "'", this.match_value.span);
 		}
 
-		var match_value_var = WeakPtr!<VarDecl>();
+		var match_value_var = SharedHandle!<VarDecl>();
 		if value_type_decl.body is Variant {
 			this.match_value = removeDereference(this.match_value);
 
@@ -2140,7 +2126,7 @@ struct TCContext {
 
 		this.match_type = this.match_value.type;
 		this.yield_type = expected_type;
-		this.yield_var = WeakPtr!<VarDecl>();
+		this.yield_var = SharedHandle!<VarDecl>();
 
 		this.pushScope(ScopeKind::Match);
 
@@ -2153,9 +2139,9 @@ struct TCContext {
 
 		var result_type = this.program.void_type;
 		var does_yield = false;
-		if const result_var = this.yield_var.lock() {
+		if this.yield_var.isAlive() {
 			this.addVariableToCurrentScope(this.yield_var);
-			result_type = result_var.type.constRef();
+			result_type = this.yield_var.type.constRef();
 			does_yield = true;
 		}
 
@@ -3672,7 +3658,7 @@ struct TCContext {
 			return Expr::Undefined(span, Type::unknown());
 		}
 
-		var result_var: WeakPtr!<VarDecl>;
+		var result_var: SharedHandle!<VarDecl>;
 		if return_kind == Variable {
 			if !this.current_function.isAlive() {
 				this.todo("implement comptime calls, that return a non-primitive value", span);
@@ -3777,8 +3763,7 @@ struct TCContext {
 					return;
 				}
 
-				const object_decl = object.forceLock();
-				if object_decl.id != 0 { // this parameter
+				if object.id != 0 { // this parameter
 					return;
 				}
 
@@ -3797,12 +3782,11 @@ struct TCContext {
 				}
 			}
 			case VarInvoke: variable -> {
-				const object_decl = variable.forceLock();
-				if object_decl.id != 0 { // this parameter
+				if variable.id != 0 { // this parameter
 					return;
 				}
 
-				const object_type_decl = object_decl.type.decl;
+				const object_type_decl = variable.type.decl;
 				if function_name == "constructor" {
 					for variable in object_type_decl.member_variables {
 						if this.active_member_variables.contains(variable.id) {

@@ -30,10 +30,7 @@ func eliminateCallResultCopies(stmt: &&Stmt) -> void {
 		case Continue -> {}
 		case Yield -> {}
 		case Return: &&expr -> expr.eliminateCallResultCopies();
-		case LifeTimeStart: variable -> {
-			var var_decl = variable.forceLock();
-			var_decl.constructor_call.eliminateCallResultCopies();
-		}
+		case LifeTimeStart: variable -> variable.constructor_call.eliminateCallResultCopies();
 		case LifeTimeEnd -> {}
 	}
 }
@@ -97,10 +94,11 @@ func eliminateCallResultCopies(expr: &&Expr) -> void {
 		return;
 	}
 
-	var old_result_var = rhs_call.result_var.lock() else {
+	if rhs_call.result_var.isEmpty() {
 		return;
 	}
 
+	const old_result_var = rhs_call.result_var;
 	old_result_var.destructor_call = Expr::Undefined(old_result_var.destructor_call.span, Type::unknown());
 	old_result_var.is_unused = true;
 

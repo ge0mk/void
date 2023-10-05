@@ -5,7 +5,6 @@ import std/io;
 import std/map;
 import std/range;
 import std/set;
-import std/shared;
 import std/shared_list;
 import std/string;
 
@@ -89,7 +88,7 @@ struct CGContext {
 
 	var builder: llvm::BuilderRef;
 	var current_function: llvm::ValueRef;
-	var variables: Map!<WeakPtr!<VarDecl>, llvm::ValueRef>;
+	var variables: Map!<SharedHandle!<VarDecl>, llvm::ValueRef>;
 
 	var break_target: llvm::BasicBlockRef;
 	var continue_target: llvm::BasicBlockRef;
@@ -159,9 +158,9 @@ struct CGContext {
 		}
 	}
 
-	func getVariable(this: &CGContext, variable: WeakPtr!<VarDecl>) -> llvm::ValueRef {
+	func getVariable(this: &CGContext, variable: SharedHandle!<VarDecl>) -> llvm::ValueRef {
 		const impl = this.variables.get(variable) else {
-			panic("invalid codegen for variable '" + variable.forceLock().name + "'");
+			panic("invalid codegen for variable '" + variable.name + "'");
 		}
 
 		return impl;
@@ -699,72 +698,74 @@ struct CGContext {
 		this.builder.positionAtEnd(entry_block);
 
 		// initialize function parameters & variables
-		for variable in function.variables {
-			if variable.type.isUnknown() {
-				this.error("variable '" + variable.name + "' has unknown type", variable.span);
-				continue;
-			}
+		if function.body is Stmt {
+			for variable in function.variables {
+				if variable.type.isUnknown() {
+					this.error("variable '" + variable.name + "' has unknown type", variable.span);
+					continue;
+				}
 
-			if variable.is_parameter {
-				if function == this.program.main_function {
-					var args = llvm::constNull(this.getType(function.parameter_types[0u]));
-					args = this.builder.buildInsertValue(args, this.current_function.getParam(0u), 0u, "");
-					args = this.builder.buildInsertValue(args, this.current_function.getParam(1u), 1u, "");
-					this.variables.set(WeakPtr!<VarDecl>(variable), args);
+				if variable.is_parameter {
+					if function == this.program.main_function {
+						var args = llvm::constNull(this.getType(function.parameter_types[0u]));
+						args = this.builder.buildInsertValue(args, this.current_function.getParam(0u), 0u, "");
+						args = this.builder.buildInsertValue(args, this.current_function.getParam(1u), 1u, "");
+						this.variables.set(variable, args);
+					} else {
+						const parameter = this.current_function.getParam(variable.id);
+						this.variables.set(variable, parameter);
+
+						if this.program.options.generate_debug_info {
+							const di_variable = this.di_builder.createParameterVariable(
+								this.di_scope_stack.last().value(),
+								variable.name,
+								variable.id + 1, // ArgNo starts counting at 1
+								this.di_files[function.span.file as uint],
+								variable.span.line as uint,
+								this.getDIType(variable.type),
+								false,
+								LLVMDIFlags::LLVMDIFlagZero
+							);
+
+							this.di_builder.insertDeclareAtEnd(
+								parameter,
+								di_variable,
+								this.di_builder.createExpression(vptr!<u64>::null(), 0u),
+								this.getDebugLocation(variable.span),
+								entry_block
+							);
+						}
+					}
 				} else {
-					const parameter = this.current_function.getParam(variable.id);
-					this.variables.set(WeakPtr!<VarDecl>(variable), parameter);
+					this.setCurrentDebugLocation(variable.span);
+					const address = this.builder.buildAlloca(this.getType(variable.type), variable.name);
+					this.variables.set(variable, address);
 
 					if this.program.options.generate_debug_info {
-						const di_variable = this.di_builder.createParameterVariable(
+						var alignment_in_bits = this.data_layout.getPreferredAlignmentOfType(this.getType(variable.type));
+
+						const di_variable = this.di_builder.createAutoVariable(
 							this.di_scope_stack.last().value(),
 							variable.name,
-							variable.id + 1, // ArgNo starts counting at 1
 							this.di_files[function.span.file as uint],
 							variable.span.line as uint,
 							this.getDIType(variable.type),
 							false,
-							LLVMDIFlags::LLVMDIFlagZero
+							LLVMDIFlags::LLVMDIFlagZero,
+							alignment_in_bits
 						);
 
 						this.di_builder.insertDeclareAtEnd(
-							parameter,
+							address,
 							di_variable,
 							this.di_builder.createExpression(vptr!<u64>::null(), 0u),
 							this.getDebugLocation(variable.span),
 							entry_block
 						);
 					}
+
+					this.builder.setCurrentDebugLocation2(MetaDataRef());
 				}
-			} else {
-				this.setCurrentDebugLocation(variable.span);
-				const address = this.builder.buildAlloca(this.getType(variable.type), variable.name);
-				this.variables.set(WeakPtr!<VarDecl>(variable), address);
-
-				if this.program.options.generate_debug_info {
-					var alignment_in_bits = this.data_layout.getPreferredAlignmentOfType(this.getType(variable.type));
-
-					const di_variable = this.di_builder.createAutoVariable(
-						this.di_scope_stack.last().value(),
-						variable.name,
-						this.di_files[function.span.file as uint],
-						variable.span.line as uint,
-						this.getDIType(variable.type),
-						false,
-						LLVMDIFlags::LLVMDIFlagZero,
-						alignment_in_bits
-					);
-
-					this.di_builder.insertDeclareAtEnd(
-						address,
-						di_variable,
-						this.di_builder.createExpression(vptr!<u64>::null(), 0u),
-						this.getDebugLocation(variable.span),
-						entry_block
-					);
-				}
-
-				this.builder.setCurrentDebugLocation2(MetaDataRef());
 			}
 		}
 
@@ -1732,16 +1733,14 @@ struct CGContext {
 				}
 			}
 			case LifeTimeStart: variable -> {
-				const var_decl = variable.forceLock();
-				if !(var_decl.destructor_call is Undefined) {
+				if !(variable.destructor_call is Undefined) {
 					this.codegenLifeTimeStart(this.getVariable(variable));
 				}
-				discard this.codegenExpr(var_decl.constructor_call);
+				discard this.codegenExpr(variable.constructor_call);
 			}
 			case LifeTimeEnd: variable -> {
-				const var_decl = variable.forceLock();
-				discard this.codegenExpr(var_decl.destructor_call);
-				if !(var_decl.destructor_call is Undefined) {
+				discard this.codegenExpr(variable.destructor_call);
+				if !(variable.destructor_call is Undefined) {
 					this.codegenLifeTimeEnd(this.getVariable(variable));
 				}
 			}
@@ -1893,12 +1892,11 @@ struct CGContext {
 			}
 			case Call: call_expr -> return this.codegenCall(call_expr, expr.span);
 			case VarInvoke: variable -> {
-				const decl = variable.forceLock();
-				if decl.type.reference_kind == None || decl.is_parameter {
+				if variable.type.reference_kind == None || variable.is_parameter {
 					return this.getVariable(variable);
 				} else {
 					this.setCurrentDebugLocation(span);
-					return this.builder.buildLoad2(this.getType(decl.type), this.getVariable(variable), "");
+					return this.builder.buildLoad2(this.getType(variable.type), this.getVariable(variable), "");
 				}
 			}
 			case MemberVarInvoke: member_var_invoke_expr -> {
@@ -1967,10 +1965,10 @@ struct CGContext {
 
 	func codegenCall(this: &&CGContext, function: SharedHandle!<FunctionDecl>, parameters: List!<llvm::ValueRef>, return_kind: ReturnKind, span: Span) -> llvm::ValueRef {
 		assert(return_kind == ReturnKind::None || return_kind == ReturnKind::Value);
-		return this.codegenCall(function, parameters, return_kind, WeakPtr!<VarDecl>(), span);
+		return this.codegenCall(function, parameters, return_kind, SharedHandle!<VarDecl>(), span);
 	}
 
-	func codegenCall(this: &&CGContext, function: SharedHandle!<FunctionDecl>, parameters: List!<llvm::ValueRef>, return_kind: ReturnKind, result_var: WeakPtr!<VarDecl>, span: Span) -> llvm::ValueRef {
+	func codegenCall(this: &&CGContext, function: SharedHandle!<FunctionDecl>, parameters: List!<llvm::ValueRef>, return_kind: ReturnKind, result_var: SharedHandle!<VarDecl>, span: Span) -> llvm::ValueRef {
 		this.setCurrentDebugLocation(span);
 
 		match function.body {

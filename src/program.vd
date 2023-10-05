@@ -564,10 +564,17 @@ struct Namespace {
 		this.full_name := full_name;
 	}
 
-	func constructor(this: &&Namespace, other: Namespace) -> void = default;
-	func destructor(this: &&Namespace) -> void = default;
+	func constructor(this: &&Namespace, other: Namespace) -> void {
+		this.name := other.name;
+		this.full_name := other.full_name;
+		this.template_parameters := other.template_parameters;
 
-	operator =(this: &&Namespace, other: Namespace) -> void = default;
+		this.parent := other.parent;
+
+		this.state := other.state;
+	}
+
+	func destructor(this: &&Namespace) -> void = default;
 
 	func signature(this: &Namespace) -> String {
 		if this.parent.isAlive() {
@@ -710,8 +717,6 @@ struct TypeDecl {
 
 	func constructor(this: &&TypeDecl, other: TypeDecl) -> void = default;
 	func destructor(this: &&TypeDecl) -> void = default;
-
-	operator =(this: &&TypeDecl, other: TypeDecl) -> void = default;
 
 	func dump(this: &TypeDecl, out: &&TreeFormatter, is_last: bool) -> void {
 		match this.body {
@@ -1042,8 +1047,8 @@ struct FunctionDecl {
 	var parameter_types: List!<Type>;
 	var return_type: Type;
 
-	var variables: List!<SharedPtr!<VarDecl>>;
-	var parameters: List!<SharedPtr!<VarDecl>>;
+	var variables: SharedList!<VarDecl>;
+	var parameters: List!<SharedHandle!<VarDecl>>;
 
 	var is_copy_constructor: bool;
 
@@ -1053,10 +1058,13 @@ struct FunctionDecl {
 		this.body := body;
 	}
 
-	func constructor(this: &&FunctionDecl, other: FunctionDecl) -> void = default;
-	func destructor(this: &&FunctionDecl) -> void = default;
+	func constructor(this: &&FunctionDecl, other: FunctionDecl) -> void {
+		this.name := other.name;
+		this.template_parameters := other.template_parameters;
+		this.body := other.body;
+	}
 
-	operator =(this: &&FunctionDecl, other: FunctionDecl) -> void = default;
+	func destructor(this: &&FunctionDecl) -> void = default;
 
 	func dump(this: &FunctionDecl, out: &&TreeFormatter, is_last: bool) -> void {
 		out.push("FunctionDecl", is_last);
@@ -1120,15 +1128,12 @@ struct FunctionDecl {
 	}
 
 	func createParameter(this: &&FunctionDecl, span: Span, name: String, type: Type) -> void {
-		const decl = SharedPtr!<VarDecl>::new(VarDecl(span, this.variables.size(), name, type, type.reference_kind != Var, true));
-		this.variables.append(decl);
-		this.parameters.append(decl);
+		const variable = this.variables.append(VarDecl(span, this.variables.size(), name, type, type.reference_kind != Var, true));
+		this.parameters.append(variable);
 	}
 
-	func createVariable(this: &&FunctionDecl, span: Span, name: String, type: Type, is_const: bool) -> WeakPtr!<VarDecl> {
-		const decl = SharedPtr!<VarDecl>::new(VarDecl(span, this.variables.size(), name, type, is_const, false));
-		this.variables.append(decl);
-		return WeakPtr!<VarDecl>(decl);
+	func createVariable(this: &&FunctionDecl, span: Span, name: String, type: Type, is_const: bool) -> SharedHandle!<VarDecl> {
+		return this.variables.append(VarDecl(span, this.variables.size(), name, type, is_const, false));
 	}
 
 	func isIncompleteTemplate(this: &FunctionDecl) -> bool {
@@ -1684,8 +1689,8 @@ variant Stmt {
 
 	case Return: Expr;
 
-	case LifeTimeStart: WeakPtr!<VarDecl>;
-	case LifeTimeEnd: WeakPtr!<VarDecl>;
+	case LifeTimeStart: SharedHandle!<VarDecl>;
+	case LifeTimeEnd: SharedHandle!<VarDecl>;
 
 	func dump(this: &Stmt, out: &&TreeFormatter, is_last: bool) -> void {
 		match this {
@@ -1742,14 +1747,12 @@ variant Stmt {
 				out.pop();
 			}
 			case LifeTimeStart: variable -> {
-				const decl = variable.forceLock();
-				decl.dump(&&out, is_last);
+				variable.dump(&&out, is_last);
 			}
 			case LifeTimeEnd: variable -> {
 				out.push("LifeTimeEnd", is_last);
-				const decl = variable.forceLock();
-				out.value(decl.name);
-				out.span(decl.span);
+				out.value(variable.name);
+				out.span(variable.span);
 				out.pop();
 			}
 		}
@@ -1909,7 +1912,7 @@ variant Expr {
 	case Call: CallExpr;
 	case Match: MatchExpr;
 
-	case VarInvoke: WeakPtr!<VarDecl>;
+	case VarInvoke: SharedHandle!<VarDecl>;
 	case MemberVarInvoke: MemberVarInvokeExpr;
 
 	case Dereference: Box!<Expr>;
@@ -1991,8 +1994,8 @@ variant Expr {
 				out.attribute(call_expr.return_kind.toString());
 				out.span(this.span);
 
-				if const result_var = call_expr.result_var.lock() {
-					result_var.dump(&&out, call_expr.parameters.isEmpty());
+				if call_expr.result_var.isAlive() {
+					call_expr.result_var.dump(&&out, call_expr.parameters.isEmpty());
 				}
 
 				for i in 0u..call_expr.parameters.size() {
@@ -2007,8 +2010,8 @@ variant Expr {
 				out.span(this.span);
 
 				match_expr.value.dump(&&out, false);
-				if const yield_var = match_expr.yield_var.lock() {
-					yield_var.dump(&&out, false);
+				if match_expr.yield_var.isAlive() {
+					match_expr.yield_var.dump(&&out, false);
 				}
 
 				for i in 0u..match_expr.cases.size() {
@@ -2023,8 +2026,7 @@ variant Expr {
 			}
 			case VarInvoke: variable -> {
 				out.push("VarInvokeExpr", is_last);
-				const decl = variable.forceLock();
-				out.value(("#" if decl.is_parameter else "") + decl.name);
+				out.value(("#" if variable.is_parameter else "") + variable.name);
 				out.attribute(this.type.signature());
 				out.span(this.span);
 				out.pop();
@@ -2088,11 +2090,11 @@ enum ReturnKind {
 struct CallExpr {
 	var function: SharedHandle!<FunctionDecl>;
 	var parameters: List!<Expr>;
-	var result_var: WeakPtr!<VarDecl>;
+	var result_var: SharedHandle!<VarDecl>;
 	var return_kind: ReturnKind;
 	var is_copy_constructor_call: bool;
 
-	func constructor(this: &&CallExpr, function: SharedHandle!<FunctionDecl>, parameters: List!<Expr>, result_var: WeakPtr!<VarDecl>, return_kind: ReturnKind, is_copy_constructor_call: bool) -> void {
+	func constructor(this: &&CallExpr, function: SharedHandle!<FunctionDecl>, parameters: List!<Expr>, result_var: SharedHandle!<VarDecl>, return_kind: ReturnKind, is_copy_constructor_call: bool) -> void {
 		this.function := function;
 		this.parameters := parameters;
 		this.result_var := result_var;
@@ -2112,7 +2114,7 @@ struct MatchExpr {
 	var value: Box!<Expr>;
 	var cases: List!<CaseStmt>;
 	var else_case: Optional!<Box!<Stmt>>;
-	var yield_var: WeakPtr!<VarDecl>;
+	var yield_var: SharedHandle!<VarDecl>;
 
 	func constructor(this: &&MatchExpr) -> void {
 		this.value := Expr::Undefined(Span(), Type::unknown());
