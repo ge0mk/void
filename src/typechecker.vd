@@ -3422,8 +3422,9 @@ struct TCContext {
 
 	func doesConceptAcceptTemplateParameter(this: &&TCContext, concept: SharedHandle!<Concept>, parameter: TemplateParameter) -> bool {
 		match concept.operator unwrap() {
-			case IntLiteral -> return parameter is Integer;
-			case StringLiteral -> return parameter is String;
+			case Boolean -> return parameter is Boolean;
+			case Integer -> return parameter is Integer;
+			case String -> return parameter is String;
 			case Any -> return parameter is Type;
 		}
 	}

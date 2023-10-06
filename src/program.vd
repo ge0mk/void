@@ -61,6 +61,7 @@ struct Program {
 	var concepts_by_name: Map!<String, SharedHandle!<Concept>>;
 
 	var any_concept: SharedHandle!<Concept>;
+	var bool_concept: SharedHandle!<Concept>;
 	var int_concept: SharedHandle!<Concept>;
 	var uint_concept: SharedHandle!<Concept>;
 	var string_concept: SharedHandle!<Concept>;
@@ -448,16 +449,19 @@ variant Concept {
 	var name: String;
 
 	case Any;
-	case IntLiteral: Type; // for template parameters, that accept int literals
-	case StringLiteral;
+	case Boolean;
+	case Integer: bool;
+	case String;
 
 	func dump(this: &Concept, out: &&TreeFormatter, is_last: bool) -> void {
 		out.push("Concept", is_last);
 		out.attribute(this.name);
 
 		match this {
-			case IntLiteral: type -> out.value(type.signature());
-			else -> {}
+			case Any -> out.value("Any");
+			case Boolean -> out.value("Boolean");
+			case Integer: is_signed -> out.value("Integer " + ("signed" if is_signed else "unsigned"));
+			case String -> out.value("String");
 		}
 
 		out.pop();
@@ -519,6 +523,7 @@ struct TemplateParameterDecl {
 
 variant TemplateParameter {
 	case Type: Type;
+	case Boolean: bool;
 	case Integer: int;
 	case String: String;
 	case Garbage;
@@ -526,7 +531,8 @@ variant TemplateParameter {
 	func toString(this: TemplateParameter) -> String {
 		match this {
 			case Type: t -> return t.signature();
-			case Integer: i -> return format(i);
+			case Boolean: v -> return format(v);
+			case Integer: v -> return format(v);
 			case String: s -> return "\"" + s + "\"";
 			case Garbage -> return "<garbage>";
 		}

@@ -10,7 +10,10 @@ import span;
 
 func createCoreDecls(program: &&Program, dest_namespace: SharedHandle!<Namespace>) -> void {
 	program.any_concept = program.createConcept(Concept::Any("type"));
-	program.string_concept = program.createConcept(Concept::StringLiteral("String"));
+	program.bool_concept = program.createConcept(Concept::Boolean("bool"));
+	program.int_concept = program.createConcept(Concept::Integer(true, "int"));
+	program.uint_concept = program.createConcept(Concept::Integer(false, "uint"));
+	program.string_concept = program.createConcept(Concept::String("String"));
 
 	program.void_type = Type(program.createType(dest_namespace, "void", TypeBody::Void));
 	program.never_type = Type(program.createType(dest_namespace, "never", TypeBody::Void));
@@ -245,10 +248,8 @@ func createPtrSizedIntType(program: &&Program, dest_namespace: SharedHandle!<Nam
 
 	if is_signed {
 		program.int_type = type;
-		program.int_concept = program.createConcept(Concept::IntLiteral(type, "int"));
 	} else {
 		program.uint_type = type;
-		program.uint_concept = program.createConcept(Concept::IntLiteral(type, "uint"));
 	}
 
 	createBasicFunctions(&&program, type, type_namespace);
