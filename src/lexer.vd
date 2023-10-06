@@ -2,6 +2,7 @@ import std/core;
 import std/format;
 import std/io;
 import std/list;
+import std/map;
 import std/string;
 
 import span;
@@ -175,6 +176,10 @@ enum TokenType {
 	case Unknown;
 	case EndOfFile;
 
+	func constructor(this: &&TokenType) -> void {
+		this.constructor(TokenType::Unknown);
+	}
+
 	func toString(this: TokenType) -> String {
 		match this {
 			case Identifier -> return "<identifier>";
@@ -346,6 +351,8 @@ func dump(tokens: &List!<Token>) -> String {
 struct Lexer {
 	var src: String;
 
+	var keywords: Map!<String, TokenType>;
+
 	var index: uint;
 	var line_start: uint;
 	var line: u32;
@@ -353,6 +360,47 @@ struct Lexer {
 
 	func constructor(this: &&Lexer, src: String, file_id: u16) -> void {
 		this.src := src;
+
+		this.keywords := ();
+		this.keywords["as"] = TokenType::KeywordAs;
+		this.keywords["break"] = TokenType::KeywordBreak;
+		this.keywords["case"] = TokenType::KeywordCase;
+		this.keywords["comptime"] = TokenType::KeywordComptime;
+		this.keywords["const"] = TokenType::KeywordConst;
+		this.keywords["continue"] = TokenType::KeywordContinue;
+		this.keywords["default"] = TokenType::KeywordDefault;
+		this.keywords["discard"] = TokenType::KeywordDiscard;
+		this.keywords["do"] = TokenType::KeywordDo;
+		this.keywords["else"] = TokenType::KeywordElse;
+		this.keywords["enum"] = TokenType::KeywordEnum;
+		this.keywords["extern"] = TokenType::KeywordExtern;
+		this.keywords["false"] = TokenType::KeywordFalse;
+		this.keywords["for"] = TokenType::KeywordFor;
+		this.keywords["func"] = TokenType::KeywordFunc;
+		this.keywords["if"] = TokenType::KeywordIf;
+		this.keywords["import"] = TokenType::KeywordImport;
+		this.keywords["in"] = TokenType::KeywordIn;
+		this.keywords["is"] = TokenType::KeywordIs;
+		this.keywords["match"] = TokenType::KeywordMatch;
+		this.keywords["must"] = TokenType::KeywordMust;
+		this.keywords["namespace"] = TokenType::KeywordNamespace;
+		this.keywords["operator"] = TokenType::KeywordOperator;
+		this.keywords["pragma"] = TokenType::KeywordPragma;
+		this.keywords["private"] = TokenType::KeywordPrivate;
+		this.keywords["public"] = TokenType::KeywordPublic;
+		this.keywords["return"] = TokenType::KeywordReturn;
+		this.keywords["struct"] = TokenType::KeywordStruct;
+		this.keywords["template"] = TokenType::KeywordTemplate;
+		this.keywords["throw"] = TokenType::KeywordThrow;
+		this.keywords["true"] = TokenType::KeywordTrue;
+		this.keywords["try"] = TokenType::KeywordTry;
+		this.keywords["unsafe"] = TokenType::KeywordUnsafe;
+		this.keywords["unwrap"] = TokenType::KeywordUnwrap;
+		this.keywords["var"] = TokenType::KeywordVar;
+		this.keywords["variant"] = TokenType::KeywordVariant;
+		this.keywords["while"] = TokenType::KeywordWhile;
+		this.keywords["yield"] = TokenType::KeywordYield;
+
 		this.index := 0;
 		this.line_start := 0;
 		this.line := 0;
@@ -808,84 +856,9 @@ struct Lexer {
 		const name = this.src.substring(start..this.index);
 		const span = this.span(start, this.index);
 
-		if name == "as" {
-			return Token(TokenType::KeywordAs, span);
-		} else if name == "break" {
-			return Token(TokenType::KeywordBreak, span);
-		} else if name == "case" {
-			return Token(TokenType::KeywordCase, span);
-		} else if name == "comptime" {
-			return Token(TokenType::KeywordComptime, span);
-		} else if name == "const" {
-			return Token(TokenType::KeywordConst, span);
-		} else if name == "continue" {
-			return Token(TokenType::KeywordContinue, span);
-		} else if name == "default" {
-			return Token(TokenType::KeywordDefault, span);
-		} else if name == "discard" {
-			return Token(TokenType::KeywordDiscard, span);
-		} else if name == "do" {
-			return Token(TokenType::KeywordDo, span);
-		} else if name == "else" {
-			return Token(TokenType::KeywordElse, span);
-		} else if name == "enum" {
-			return Token(TokenType::KeywordEnum, span);
-		} else if name == "extern" {
-			return Token(TokenType::KeywordExtern, span);
-		} else if name == "false" {
-			return Token(TokenType::KeywordFalse, span);
-		} else if name == "for" {
-			return Token(TokenType::KeywordFor, span);
-		} else if name == "func" {
-			return Token(TokenType::KeywordFunc, span);
-		} else if name == "if" {
-			return Token(TokenType::KeywordIf, span);
-		} else if name == "import" {
-			return Token(TokenType::KeywordImport, span);
-		} else if name == "in" {
-			return Token(TokenType::KeywordIn, span);
-		} else if name == "is" {
-			return Token(TokenType::KeywordIs, span);
-		} else if name == "match" {
-			return Token(TokenType::KeywordMatch, span);
-		} else if name == "must" {
-			return Token(TokenType::KeywordMust, span);
-		} else if name == "namespace" {
-			return Token(TokenType::KeywordNamespace, span);
-		} else if name == "operator" {
-			return Token(TokenType::KeywordOperator, span);
-		} else if name == "pragma" {
-			return Token(TokenType::KeywordPragma, span);
-		} else if name == "private" {
-			return Token(TokenType::KeywordPrivate, span);
-		} else if name == "public" {
-			return Token(TokenType::KeywordPublic, span);
-		} else if name == "return" {
-			return Token(TokenType::KeywordReturn, span);
-		} else if name == "struct" {
-			return Token(TokenType::KeywordStruct, span);
-		} else if name == "template" {
-			return Token(TokenType::KeywordTemplate, span);
-		} else if name == "throw" {
-			return Token(TokenType::KeywordThrow, span);
-		} else if name == "true" {
-			return Token(TokenType::KeywordTrue, span);
-		} else if name == "try" {
-			return Token(TokenType::KeywordTry, span);
-		} else if name == "unsafe" {
-			return Token(TokenType::KeywordUnsafe, span);
-		} else if name == "unwrap" {
-			return Token(TokenType::KeywordUnwrap, span);
-		} else if name == "var" {
-			return Token(TokenType::KeywordVar, span);
-		} else if name == "variant" {
-			return Token(TokenType::KeywordVariant, span);
-		} else if name == "while" {
-			return Token(TokenType::KeywordWhile, span);
-		} else if name == "yield" {
-			return Token(TokenType::KeywordYield, span);
-		} else {
-			return Token(TokenType::Identifier, TokenData::Identifier(name), span);
+		match this.keywords.get(name) {
+			case Some: token -> return Token(token, span);
+			else -> return Token(TokenType::Identifier, TokenData::Identifier(name), span);
 		}
 	}
 
