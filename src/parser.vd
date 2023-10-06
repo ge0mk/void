@@ -189,6 +189,7 @@ struct Parser {
 			| KeywordVariant
 			| KeywordTemplate
 			| AtSign -> return this.parseDecl();
+			case KeywordAlias -> return this.parseAlias();
 			case LCurly -> {
 				const compound = this.parseCompoundStmt();
 				return ParsedStmt::Compound(compound, compound.span, false);
@@ -714,6 +715,26 @@ struct Parser {
 		discard this.accept(TokenType::Semicolon);
 		const decl = ParsedCaseDecl(start..this.previousSpan(), name, payload, id);
 		return ParsedStmt::CaseDecl(decl, decl.span, true);
+	}
+
+	func parseAlias(this: &&Parser) -> ParsedStmt {
+		const start = this.currentSpan();
+		if !this.expect(TokenType::KeywordAlias) {
+			return ParsedStmt::Garbage(start, false);
+		}
+
+		const name = this.expectIdentifier() else {
+			return ParsedStmt::Garbage(start..this.previousSpan(), false);
+		}
+
+		if !this.expect(TokenType::Assign) {
+			return ParsedStmt::Garbage(start..this.previousSpan(), false);
+		}
+
+		const type = this.parseType();
+
+		discard this.accept(TokenType::Semicolon);
+		return ParsedStmt::Alias((name: name, type: type), start..this.previousSpan(), true);
 	}
 
 	func parseCompoundStmt(this: &&Parser) -> ParsedCompoundStmt {

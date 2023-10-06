@@ -1,0 +1,7 @@
+import std/core;
+
+alias Foo = std::core::Error;
+
+func main() -> void {
+	assert(Foo::EINVAL == Error::EINVAL);
+}

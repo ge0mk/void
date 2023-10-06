@@ -135,6 +135,7 @@ enum TokenType {
 	case DoubleQuestionMarkAssign;	// ??=
 
 	// keywords
+	case KeywordAlias;
 	case KeywordAs;
 	case KeywordBreak;
 	case KeywordCase;
@@ -234,6 +235,7 @@ enum TokenType {
 			case PipeAssign -> return "<token> |=";
 			case CaretAssign -> return "<token> ^=";
 			case DoubleQuestionMarkAssign -> return "<token> ??=";
+			case KeywordAlias -> return "<keyword> alias";
 			case KeywordAs -> return "<keyword> as";
 			case KeywordBreak -> return "<keyword> break";
 			case KeywordCase -> return "<keyword> case";
@@ -362,6 +364,7 @@ struct Lexer {
 		this.src := src;
 
 		this.keywords := ();
+		this.keywords["alias"] = TokenType::KeywordAlias;
 		this.keywords["as"] = TokenType::KeywordAs;
 		this.keywords["break"] = TokenType::KeywordBreak;
 		this.keywords["case"] = TokenType::KeywordCase;

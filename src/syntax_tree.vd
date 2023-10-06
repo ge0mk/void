@@ -539,6 +539,7 @@ variant ParsedStmt {
 	case Namespace: ParsedNamespace;
 	case TypeDecl: ParsedTypeDecl;
 	case FunctionDecl: ParsedFunctionDecl;
+	case Alias: (name: String, type: ParsedType);
 
 	case VarDecl: ParsedVarDecl;
 	case CaseDecl: ParsedCaseDecl;
@@ -584,6 +585,13 @@ variant ParsedStmt {
 			case Namespace: decl -> return decl.dump(&&out, is_last);
 			case TypeDecl: decl -> return decl.dump(&&out, is_last);
 			case FunctionDecl: decl -> return decl.dump(&&out, is_last);
+			case Alias: data -> {
+				out.push("Alias", is_last);
+				out.value(data.name);
+				out.span(this.span);
+				data.type.dump(&&out, true);
+				out.pop();
+			}
 			case VarDecl: decl -> return decl.dump(&&out, is_last);
 			case CaseDecl: decl -> return decl.dump(&&out, is_last);
 			case Compound: stmt -> return stmt.dump(&&out, is_last);

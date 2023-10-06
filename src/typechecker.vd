@@ -1095,6 +1095,14 @@ struct TCContext {
 			case FunctionDecl: parsed_function_decl -> {
 				discard this.checkFunctionDecl(parsed_function_decl);
 			}
+			case Alias: data -> {
+				const target = this.checkTypeUsage(data.type, false);
+				if target.reference_kind != None {
+					this.error("aliases to reference types aren't allowed", parsed_stmt.span);
+				} else if !target.isUnknown() {
+					this.current_namespace.aliases[data.name] = target.decl.linked_namespace;
+				}
+			}
 			case VarDecl: parsed_var_decl -> {
 				if parsed_stmt.is_comptime {
 					for stmt in this.checkVarDecl(parsed_var_decl, true) {
@@ -3045,6 +3053,12 @@ struct TCContext {
 					result.add(this.createTemplateInstance(child, name.template_parameters, name.span));
 				} else {
 					result.add(child);
+				}
+			}
+
+			if name.template_parameters.isEmpty() {
+				if const target = n.aliases.get(name.name) {
+					result.add(target);
 				}
 			}
 		}

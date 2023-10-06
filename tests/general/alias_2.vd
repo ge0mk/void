@@ -1,0 +1,12 @@
+import std/core;
+import std/list;
+import std/string;
+
+alias StringList = List!<String>;
+
+func main() -> void {
+	var x: StringList;
+	x.append("hello");
+	x.append("world");
+	assert(" ".join(x) == "hello world");
+}
