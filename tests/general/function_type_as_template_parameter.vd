@@ -1,0 +1,8 @@
+import std/core;
+
+template <T: type>
+func foo() -> void {}
+
+func main() -> void {
+	foo!<(int) -> int>();
+}

@@ -2047,6 +2047,7 @@ struct TCContext {
 			case Dict: elements -> return this.checkDictExpr(elements, expected_type, is_comptime, parsed_expr.span);
 			case Match: match_expr -> return this.checkMatchExpr(match_expr, expected_type, is_comptime, parsed_expr.span);
 			case FunctionRef: data -> return this.checkFunctionRefExpr(data.name, data.parameter_types, parsed_expr.span);
+			case Type: parsed_type -> return Expr::TypeRef(this.checkTypeUsage(parsed_type, false), parsed_expr.span, Type::unknown());
 			case Garbage -> return Expr::Undefined(parsed_expr.span, Type::unknown());
 		}
 	}

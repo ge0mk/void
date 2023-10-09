@@ -1029,7 +1029,7 @@ struct Parser {
 				const element_type = Box!<ParsedType>(this.parseType());
 
 				if this.accept(TokenType::Comma) {
-					const size = this.parseExpr();
+					const size = Box!<ParsedExpr>(this.parseExpr());
 					discard this.expect(TokenType::RSquare);
 					return ParsedType::Array((element_type: element_type, size: size), start..this.previousSpan());
 				} else {
@@ -1517,14 +1517,14 @@ struct Parser {
 		}
 
 		var elements: List!<ParsedTupleElement>;
-
-		var error = false;
+		var is_named = false;
 		while !this.accept(TokenType::RParen) {
 			const element_start = this.currentSpan();
 
 			var name = "";
 			if this.current() is Identifier && this.peek() is Colon {
 				name = (this.tokens[this.index].data as Identifier).value();
+				is_named = true;
 				this.index += 2;
 			}
 
@@ -1534,21 +1534,39 @@ struct Parser {
 
 			if !(this.current() is RParen) {
 				if !this.expect(TokenType::Comma) {
-					error = true;
+					this.recover(TokenType::RParen);
 					break;
 				}
 			}
 		}
 
-		if error {
-			this.recover(TokenType::RParen);
+		if !is_named {
+			if this.accept(TokenType::Arrow) {
+				var is_valid_function_type = true;
+
+				var parameter_types: List!<ParsedType>;
+				for e in elements {
+					match e.value.toType() {
+						case Some: t -> parameter_types.append(t);
+						case None -> {
+							is_valid_function_type = false;
+							break;
+						}
+					}
+				}
+
+				const return_type = Box!<ParsedType>(this.parseType());
+				const function_type = ParsedType::Function((
+					parameter_types: parameter_types,
+					return_type: return_type
+				), start..this.previousSpan());
+				return ParsedExpr::Type(function_type, start..this.previousSpan());
+			}
 		}
 
 		const end = this.previousSpan();
-		if elements.size() == 1 {
-			if elements[0u].name == "" {
-				return ParsedExpr::Paren(Box!<ParsedExpr>(elements[0u].value), start..end);
-			}
+		if elements.size() == 1 && !is_named {
+			return ParsedExpr::Paren(Box!<ParsedExpr>(elements[0u].value), start..end);
 		}
 
 		return ParsedExpr::Tuple(elements, start..end);

@@ -401,7 +401,7 @@ variant ParsedType {
 	case Optional: Box!<ParsedType>;
 	case Tuple: List!<(name: String, type: ParsedType)>;
 	case List: Box!<ParsedType>;
-	case Array: (element_type: Box!<ParsedType>, size: ParsedExpr);
+	case Array: (element_type: Box!<ParsedType>, size: Box!<ParsedExpr>);
 	case Dict: (key_type: Box!<ParsedType>, value_type: Box!<ParsedType>);
 	case Function: (parameter_types: List!<ParsedType>, return_type: Box!<ParsedType>);
 	case Garbage;
@@ -918,7 +918,9 @@ variant ParsedExpr {
 	case Dict: List!<ParsedDictElement>;
 
 	case Match: ParsedMatchExpr;
+
 	case FunctionRef: (name: ParsedName, parameter_types: List!<ParsedType>);
+	case Type: ParsedType;
 
 	case Garbage;
 
@@ -1031,6 +1033,12 @@ variant ParsedExpr {
 
 				out.pop();
 			}
+			case Type: parsed_type -> {
+				out.push("TypeExpr", is_last);
+				out.span(this.span);
+				parsed_type.dump(&&out, true);
+				out.pop();
+			}
 			case Garbage -> {
 				out.push("GarbageExpr", is_last);
 				out.span(this.span);
@@ -1069,6 +1077,7 @@ variant ParsedExpr {
 
 				return Some(ParsedType::Tuple(result, this.span));
 			}
+			case Type: parsed_type -> return Some(parsed_type);
 			// TODO: Array, List & Dict types
 			else -> return None;
 		}
