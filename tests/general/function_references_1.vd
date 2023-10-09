@@ -9,5 +9,5 @@ func bar(v: int) -> int {
 }
 
 func main() -> void {
-	//assert(foo(&func bar(int)) == 5);
+	assert(foo(func bar(int)) == 5);
 }

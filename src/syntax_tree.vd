@@ -907,8 +907,8 @@ variant ParsedExpr {
 	case String: StringLiteral;
 	case Number: NumberLiteral;
 	case Bool: bool;
-
 	case Name: ParsedName;
+
 	case Operator: ParsedOperatorExpr;
 
 	case Paren: Box!<ParsedExpr>;
@@ -918,6 +918,7 @@ variant ParsedExpr {
 	case Dict: List!<ParsedDictElement>;
 
 	case Match: ParsedMatchExpr;
+	case FunctionRef: (name: ParsedName, parameter_types: List!<ParsedType>);
 
 	case Garbage;
 
@@ -1016,6 +1017,17 @@ variant ParsedExpr {
 
 				match_expr.value.dump(&&out, false);
 				match_expr.body.dump(&&out, true);
+
+				out.pop();
+			}
+			case FunctionRef: data -> {
+				out.push("FunctionRefExpr", is_last);
+				out.span(this.span);
+
+				data.name.dump(&&out, false);
+				for t in data.parameter_types {
+					t.dump(&&out, false);
+				}
 
 				out.pop();
 			}

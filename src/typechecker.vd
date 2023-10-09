@@ -2046,6 +2046,7 @@ struct TCContext {
 			case Tuple: elements -> return this.checkTupleExpr(elements, expected_type, is_comptime, parsed_expr.span);
 			case Dict: elements -> return this.checkDictExpr(elements, expected_type, is_comptime, parsed_expr.span);
 			case Match: match_expr -> return this.checkMatchExpr(match_expr, expected_type, is_comptime, parsed_expr.span);
+			case FunctionRef: data -> return this.checkFunctionRefExpr(data.name, data.parameter_types, parsed_expr.span);
 			case Garbage -> return Expr::Undefined(parsed_expr.span, Type::unknown());
 		}
 	}
@@ -2397,6 +2398,29 @@ struct TCContext {
 		} else {
 			return Expr::Dereference(Box!<Expr>(result), result.span, result_type.base());
 		}
+	}
+
+	func checkFunctionRefExpr(this: &&TCContext, parsed_name: ParsedName, parsed_parameter_types: List!<ParsedType>, span: Span) -> Expr {
+		const checked_name = this.checkName(parsed_name);
+		var parameter_types: List!<Type>;
+		for t in parsed_parameter_types {
+			parameter_types.append(this.checkTypeUsage(t, false));
+		}
+
+		const candidates = this.lookupFunction(
+			checked_name,
+			SharedHandle!<TypeDecl>(),
+			parameter_types,
+			ReferenceKind::None if parameter_types.isEmpty() else parameter_types[0u].reference_kind,
+			false, false,
+			span
+		);
+
+		if !this.validateFunctionCanditates(candidates, checked_name, parameter_types, span) {
+			return Expr::Undefined(span, Type::unknown());
+		}
+
+		return Expr::FunctionRef(candidates[0u], span, this.getFunctionType(parameter_types, candidates[0u].return_type, span));
 	}
 
 	func checkNameExpr(this: &&TCContext, parsed_name: ParsedName, expected_type: Type, is_comptime: bool, span: Span) -> Expr {
@@ -3765,13 +3789,12 @@ struct TCContext {
 				return this.getType(Name("Tuple", template_parameters), parsed_type.span);
 			}
 			case Function: function_type -> {
-				var template_parameters: List!<TemplateParameter>;
-				template_parameters.append(TemplateParameter::Type(this.checkTypeUsage(function_type.return_type, quiet)));
-				for parameter_type in function_type.parameter_types {
-					template_parameters.append(TemplateParameter::Type(this.checkTypeUsage(parameter_type, quiet)));
+				var parameter_types: List!<Type>;
+				for t in function_type.parameter_types {
+					parameter_types.append(this.checkTypeUsage(t, quiet));
 				}
 
-				return this.getType(Name("function", template_parameters), parsed_type.span);
+				return this.getFunctionType(parameter_types, this.checkTypeUsage(function_type.return_type, quiet), parsed_type.span);
 			}
 			case Garbage -> return Type::unknown();
 			else -> {
@@ -3779,6 +3802,16 @@ struct TCContext {
 				return Type::unknown();
 			}
 		}
+	}
+
+	func getFunctionType(this: &&TCContext, parameter_types: List!<Type>, return_type: Type, span: Span) -> Type {
+		var template_parameters: List!<TemplateParameter>;
+		template_parameters.append(TemplateParameter::Type(return_type));
+		for t in parameter_types {
+			template_parameters.append(TemplateParameter::Type(t));
+		}
+
+		return this.getType(Name("function", template_parameters), span);
 	}
 
 	func checkCall(this: &&TCContext, name: Name, arguments: List!<Expr>, allow_unwrapping_this: bool, allow_unwrapping: bool, kind: CallKind, is_comptime: bool, span: Span) -> Expr {
