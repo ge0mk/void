@@ -42,6 +42,8 @@ func createCoreDecls(program: &&Program, dest_namespace: SharedHandle!<Namespace
 	createPtrTypeTemplate(&&program, dest_namespace, true);
 	createPtrTypeTemplate(&&program, dest_namespace, false);
 
+	createFunctionTypeTemplate(&&program, dest_namespace);
+
 	createFloatTypeTemplate(&&program, dest_namespace);
 
 	createTupleTypeTemplate(&&program, dest_namespace);
@@ -361,6 +363,37 @@ func createPtrTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Nam
 	discard program.createBinaryFunction(type_namespace, "operator <=>", type, program.vptr_type, program.int_type, InlineBuiltinFunction::UIntOpCmp(type));
 
 	return type;
+}
+
+func createFunctionTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>) -> void {
+	var template_parameters: List!<TemplateParameterDecl>;
+	template_parameters.append(TemplateParameterDecl("ReturnType", program.any_concept, false));
+	template_parameters.append(TemplateParameterDecl("ParameterTypes", program.any_concept, true));
+	discard program.createType(dest_namespace, "function", template_parameters, TypeBody::Function((parameter_types: List!<Type>(), return_type: Type::unknown())));
+}
+
+func createFunctionTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, parameter_types: List!<Type>, return_type: Type) -> SharedHandle!<TypeDecl> {
+	var template_parameters: List!<TemplateParameterDecl>;
+	template_parameters.append(TemplateParameterDecl("ReturnType", program.any_concept, false, TemplateParameter::Type(return_type)));
+	for t in parameter_types {
+		template_parameters.append(TemplateParameterDecl("ParameterTypes", program.any_concept, false, TemplateParameter::Type(t)));
+	}
+
+	var type_decl = program.createType(dest_namespace, "function", template_parameters, TypeBody::Function((parameter_types: parameter_types, return_type: return_type)));
+	const type = Type(type_decl, ReferenceKind::None);
+
+	const type_namespace = type_decl.linked_namespace;
+
+	type.decl.copy_constructor = program.createBinaryFunction(type_namespace, "constructor", type.varRef(), type, program.void_type, InlineBuiltinFunction::BitStoreValue(type));
+	type.decl.destructor = program.createUnaryFunction(type_namespace, "destructor", type.varRef(), program.void_type, InlineBuiltinFunction::NoOp(type));
+	type.decl.op_assign = program.createBinaryFunction(type_namespace, "operator =", type.varRef(), type, program.void_type, InlineBuiltinFunction::BitStoreValue(type));
+	createIntComparisonOperators(&&program, type, type_namespace, false);
+
+	var call_operator_parameter_types = parameter_types;
+	call_operator_parameter_types.insert(0u, type);
+	discard program.createFunction(type_namespace, "operator ()", call_operator_parameter_types, return_type, InlineBuiltinFunction::FunctionPointerCall(type));
+
+	return type_decl;
 }
 
 func createFloatTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>) -> void {

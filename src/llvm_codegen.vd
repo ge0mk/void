@@ -163,7 +163,7 @@ struct CGContext {
 				case 64 -> type.llvm_type = this.llvm_context.getDoubleType();
 				else -> this.error("invalid size for float type: " + format(bits), type.span);
 			}
-			case Pointer -> type.llvm_type = this.ptr_type;
+			case Pointer | Function -> type.llvm_type = this.ptr_type;
 			case Array: array_type -> type.llvm_type = this.llvm_context.getArrayType(this.getType(array_type.element_type), array_type.size);
 			case Tuple | Struct -> {
 				type.llvm_type = this.llvm_context.createNamedStruct(name);
@@ -259,6 +259,20 @@ struct CGContext {
 
 				type.llvm_di.replaceAllUsesWith(di_type);
 				type.llvm_di = di_type;
+			}
+			case Function: function_type -> {
+				var di_return_and_parameter_types: List!<MetaDataRef>;
+
+				di_return_and_parameter_types.append(this.getDIType(function_type.return_type));
+				for parameter_type in function_type.parameter_types {
+					di_return_and_parameter_types.append(this.getDIType(parameter_type));
+				}
+
+				type.llvm_di = this.di_builder.createSubroutineType(
+					this.program.files[type.span.file as uint].llvm_di_file,
+					di_return_and_parameter_types,
+					LLVMDIFlags::LLVMDIFlagZero
+				);
 			}
 			case Array: array_type -> {
 				type.llvm_di = this.di_builder.createReplaceableCompositeType(dwarf::Tag::Unspecified_type, di_name, parent_namespace, di_file, line, 0u32, size_in_bits, alignment_in_bits, LLVMDIFlags::LLVMDIFlagZero, type.signature());
@@ -1436,6 +1450,20 @@ struct CGContext {
 				var indices: List!<ValueRef>;
 				indices.append(parameters[1u]);
 				return this.builder.buildGEP2(pointee_type, parameters[0u], indices, "");
+			}
+
+			case FunctionPointerCall -> {
+				const function_type = (function.base_type.decl.body as Function).value();
+
+				const return_type = this.getType(function_type.return_type);
+				var parameter_types: List!<TypeRef>;
+				for p in function_type.parameter_types {
+					parameter_types.append(this.getType(p));
+				}
+				const llvm_function_type = this.llvm_context.getFunctionType(return_type, parameter_types, false);
+
+				const call_parameters = List!<ValueRef>(parameters[1u..parameters.size()]);
+				return this.builder.buildCall2(llvm_function_type, parameters[0u], call_parameters, "");
 			}
 
 			case IntCast: target -> {

@@ -902,8 +902,11 @@ struct TypeDecl {
 				out.attribute("const" if pointer_type.is_const else "var");
 				out.value(pointer_type.pointee_type.signature());
 			}
+			case Function -> {
+				out.push("FunctionTypeDecl", is_last);
+			}
 			case Tuple -> {
-				out.push("Tuple", is_last);
+				out.push("TupleTypeDecl", is_last);
 			}
 			case Array: array_type -> {
 				out.push("ArrayTypeDecl", is_last);
@@ -1179,6 +1182,7 @@ struct Type {
 			| UInt
 			| Float
 			| Pointer
+			| Function
 			| Enum -> return true;
 			else -> return false;
 		}
@@ -1340,6 +1344,8 @@ variant TypeBody {
 	case Float: uint;
 
 	case Pointer: (pointee_type: Type, is_const: bool);
+	case Function: (parameter_types: List!<Type>, return_type: Type);
+
 	case Tuple;
 
 	case Array: (element_type: Type, size: uint);
@@ -1639,6 +1645,8 @@ variant InlineBuiltinFunction {
 	case PointerOffset;
 	case PointerOpIndex;
 
+	case FunctionPointerCall;
+
 	// base type is source type, attached type target
 	case IntCast: Type;
 	case FloatCast: Type;
@@ -1729,6 +1737,7 @@ variant InlineBuiltinFunction {
 			case PointerDiff -> return "PointerDiff";
 			case PointerOffset -> return "PointerOffset";
 			case PointerOpIndex -> return "PointerOpIndex";
+			case FunctionPointerCall -> return "FunctionPointerCall";
 			case IntCast -> return "IntCast";
 			case FloatCast -> return "FloatCast";
 			case IntToFloat -> return "IntToFloat";

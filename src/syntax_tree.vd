@@ -403,6 +403,7 @@ variant ParsedType {
 	case List: Box!<ParsedType>;
 	case Array: (element_type: Box!<ParsedType>, size: ParsedExpr);
 	case Dict: (key_type: Box!<ParsedType>, value_type: Box!<ParsedType>);
+	case Function: (parameter_types: List!<ParsedType>, return_type: Box!<ParsedType>);
 	case Garbage;
 
 	func dump(this: &ParsedType, out: &&TreeFormatter, is_last: bool) -> void {
@@ -451,6 +452,14 @@ variant ParsedType {
 				out.span(this.span);
 				dict_type.key_type.dump(&&out, true);
 				dict_type.value_type.dump(&&out, true);
+			}
+			case Function: function_type -> {
+				out.push("FunctionType", is_last);
+				out.span(this.span);
+				for t in function_type.parameter_types {
+					t.dump(&&out, false);
+				}
+				function_type.return_type.dump(&&out, true);
 			}
 			case Garbage -> {
 				out.push("GarbageType", is_last);

@@ -2539,7 +2539,7 @@ struct TCContext {
 							const matching_symbols = this.lookupSymbol(
 								checked_name,
 								expected_type.decl,
-								SymbolLookupFilter::Types | CaseDecls,
+								SymbolLookupFilter::Types | CaseDecls | Variables,
 								span
 							);
 
@@ -2564,6 +2564,17 @@ struct TCContext {
 											Type(parent_type),
 											template_parameters,
 											arguments,
+											is_comptime,
+											span
+										);
+									}
+									case Variable: variable -> {
+										arguments.insert(0u, this.checkExpr(function, Type::unknown(), is_comptime));
+										return this.checkCall(
+											Name("operator ()"),
+											arguments,
+											true, true,
+											CallKind::MemberCall,
 											is_comptime,
 											span
 										);
@@ -3494,6 +3505,15 @@ struct TCContext {
 
 					type_instance = this.program.createPtrTypeInstance(base.parent, pointer_type.is_const, pointee_type).decl;
 				}
+				case Function -> {
+					const return_type = (template_parameters[0u] as Type).value();
+					var parameter_types: List!<Type>;
+					for i in 1u..template_parameters.size() {
+						parameter_types.append((template_parameters[1u] as Type).value());
+					}
+
+					type_instance = this.program.createFunctionTypeInstance(base.parent, parameter_types, return_type);
+				}
 				case Array -> {
 					const element_type = (template_parameters[0u] as Type).value();
 					const size = (template_parameters[1u] as Integer).value();
@@ -3525,7 +3545,7 @@ struct TCContext {
 
 					type_instance = this.program.createTupleTypeInstance(base.parent, names, elements);
 				}
-				else -> {
+				case Struct | Enum | Variant -> {
 					type_instance = this.checkTypeDecl(
 						base.name,
 						getTemplateParameterDecls(base.template_parameters, template_parameters),
@@ -3538,6 +3558,10 @@ struct TCContext {
 
 					type_instance.parsed_id_type = base_type.parsed_id_type;
 					type_instance.parsed_annotations = base_type.parsed_annotations;
+				}
+				else -> {
+					this.error("can't create template instance of type " + base.signature(), base.name_span);
+					abort();
 				}
 			}
 
@@ -3739,6 +3763,15 @@ struct TCContext {
 				}
 
 				return this.getType(Name("Tuple", template_parameters), parsed_type.span);
+			}
+			case Function: function_type -> {
+				var template_parameters: List!<TemplateParameter>;
+				template_parameters.append(TemplateParameter::Type(this.checkTypeUsage(function_type.return_type, quiet)));
+				for parameter_type in function_type.parameter_types {
+					template_parameters.append(TemplateParameter::Type(this.checkTypeUsage(parameter_type, quiet)));
+				}
+
+				return this.getType(Name("function", template_parameters), parsed_type.span);
 			}
 			case Garbage -> return Type::unknown();
 			else -> {

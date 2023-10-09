@@ -1,0 +1,13 @@
+import std/core;
+
+func foo(cb: (int) -> int) -> int {
+	return cb(2);
+}
+
+func bar(v: int) -> int {
+	return v + 3;
+}
+
+func main() -> void {
+	//assert(foo(&func bar(int)) == 5);
+}

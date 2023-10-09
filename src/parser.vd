@@ -988,11 +988,14 @@ struct Parser {
 			}
 			case LParen -> {
 				this.next();
+				var is_named = false;
+				var types: List!<ParsedType>;
 				var elements: List!<(name: String, type: ParsedType)>;
 
 				while !this.accept(TokenType::RParen) {
 					var name = "";
 					if this.peek() is Colon {
+						is_named = true;
 						match this.expectIdentifier() {
 							case Some: id -> {
 								name = id;
@@ -1003,6 +1006,7 @@ struct Parser {
 					}
 
 					const type = this.parseType();
+					types.append(type);
 					elements.append((name: name, type: type));
 
 					if !(this.current() is RParen) {
@@ -1013,7 +1017,12 @@ struct Parser {
 					}
 				}
 
-				return ParsedType::Tuple(elements, start..this.previousSpan());
+				if this.accept(TokenType::Arrow) {
+					const return_type = Box!<ParsedType>(this.parseType());
+					return ParsedType::Function((parameter_types: types, return_type: return_type), start..this.previousSpan());
+				} else {
+					return ParsedType::Tuple(elements, start..this.previousSpan());
+				}
 			}
 			case LSquare -> {
 				this.next();
