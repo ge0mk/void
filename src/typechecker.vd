@@ -2048,6 +2048,7 @@ struct TCContext {
 			case Match: match_expr -> return this.checkMatchExpr(match_expr, expected_type, is_comptime, parsed_expr.span);
 			case FunctionRef: data -> return this.checkFunctionRefExpr(data.name, data.parameter_types, parsed_expr.span);
 			case Type: parsed_type -> return Expr::TypeRef(this.checkTypeUsage(parsed_type, false), parsed_expr.span, Type::unknown());
+			case AnonymousFunction: parsed_function_decl -> return this.checkAnonymousFunctionExpr(parsed_function_decl);
 			case Garbage -> return Expr::Undefined(parsed_expr.span, Type::unknown());
 		}
 	}
@@ -2422,6 +2423,17 @@ struct TCContext {
 		}
 
 		return Expr::FunctionRef(candidates[0u], span, this.getFunctionType(parameter_types, candidates[0u].return_type, span));
+	}
+
+	func checkAnonymousFunctionExpr(this: &&TCContext, parsed_function: ParsedFunctionDecl) -> Expr {
+		const function = this.checkFunctionDecl(parsed_function, List!<TemplateParameterDecl>(), false);
+		this.checkFunctionSignature(function);
+
+		return Expr::FunctionRef(
+			function,
+			parsed_function.span,
+			this.getFunctionType(function.parameter_types, function.return_type, parsed_function.span)
+		);
 	}
 
 	func checkNameExpr(this: &&TCContext, parsed_name: ParsedName, expected_type: Type, is_comptime: bool, span: Span) -> Expr {

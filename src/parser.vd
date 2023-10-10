@@ -609,6 +609,10 @@ struct Parser {
 			else -> return None;
 		}
 
+		return this.parseFunctionSignature(name, start);
+	}
+
+	func parseFunctionSignature(this: &&Parser, name: String, start: Span) -> Optional!<ParsedFunctionSignature> {
 		if !this.expect(TokenType::LParen) {
 			return None;
 		}
@@ -1638,29 +1642,43 @@ struct Parser {
 			return ParsedExpr::Garbage(start);
 		}
 
-		const name = this.parseName();
+		if this.current() is LParen {
+			const signature = this.parseFunctionSignature("", this.currentSpan()) else {
+				return ParsedExpr::Garbage(this.currentSpan());
+			}
 
-		var parameter_types: List!<ParsedType>;
+			var decl = ParsedFunctionDecl(List!<ParsedAnnotation>(), List!<ParsedTemplateParameterDecl>(), false, signature);
+			this.pushScope(ParserScope::FunctionDecl);
+			decl.body = ParsedFunctionBody::Compound(this.parseCompoundStmt());
+			this.popScope();
+			decl.span = start..this.previousSpan();
 
-		if !this.expect(TokenType::LParen) {
-			return ParsedExpr::Garbage(start);
-		}
+			return ParsedExpr::AnonymousFunction(decl, decl.span);
+		} else {
+			const name = this.parseName();
 
-		while !this.accept(TokenType::RParen) {
-			parameter_types.append(this.parseType());
+			var parameter_types: List!<ParsedType>;
 
-			if !(this.current() is RParen) {
-				if !this.expect(TokenType::Comma) {
-					this.recover(TokenType::RParen);
-					break;
+			if !this.expect(TokenType::LParen) {
+				return ParsedExpr::Garbage(start);
+			}
+
+			while !this.accept(TokenType::RParen) {
+				parameter_types.append(this.parseType());
+
+				if !(this.current() is RParen) {
+					if !this.expect(TokenType::Comma) {
+						this.recover(TokenType::RParen);
+						break;
+					}
 				}
 			}
-		}
 
-		return ParsedExpr::FunctionRef((
-			name: name,
-			parameter_types: parameter_types
-		), start..this.previousSpan());
+			return ParsedExpr::FunctionRef((
+				name: name,
+				parameter_types: parameter_types
+			), start..this.previousSpan());
+		}
 	}
 
 	func parseOperand(this: &&Parser) -> ParsedExpr {

@@ -922,6 +922,8 @@ variant ParsedExpr {
 	case FunctionRef: (name: ParsedName, parameter_types: List!<ParsedType>);
 	case Type: ParsedType;
 
+	case AnonymousFunction: ParsedFunctionDecl;
+
 	case Garbage;
 
 	func dump(this: &ParsedExpr, out: &&TreeFormatter, is_last: bool) -> void {
@@ -1037,6 +1039,12 @@ variant ParsedExpr {
 				out.push("TypeExpr", is_last);
 				out.span(this.span);
 				parsed_type.dump(&&out, true);
+				out.pop();
+			}
+			case AnonymousFunction: function_decl -> {
+				out.push("AnonymousFunctionExpr", is_last);
+				out.span(this.span);
+				function_decl.dump(&&out, true);
 				out.pop();
 			}
 			case Garbage -> {
