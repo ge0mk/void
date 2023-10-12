@@ -85,7 +85,7 @@ func eliminateCallResultCopies(expr: &&Expr) -> void {
 	}
 
 	const lhs = call.parameters[0u];
-	const rhs = removeDereference(call.parameters[1u]);
+	const rhs = call.parameters[1u].removeDereference();
 	var rhs_call = rhs as Call else {
 		return;
 	}

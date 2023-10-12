@@ -1637,7 +1637,7 @@ struct TCContext {
 
 		result.children.append(Stmt::Expr(get_iterator_call, get_iterator_call.span));
 
-		const iterator_var = (removeDereference(get_iterator_call) as Call).value().result_var;
+		const iterator_var = (get_iterator_call.removeDereference() as Call).value().result_var;
 		const iterator_var_expr = Expr::Dereference(
 			Box!<Expr>(Expr::VarInvoke(iterator_var, parsed_stmt.range.span, iterator_var.type.varRef())),
 			parsed_stmt.range.span, iterator_var.type
@@ -1664,7 +1664,7 @@ struct TCContext {
 		}
 
 		if parsed_stmt.capture_kind != None {
-			next_value = removeDereference(next_value);
+			next_value = next_value.removeDereference();
 			if next_value.type.reference_kind == None {
 				this.error("can't take reference of constant", next_value.span);
 			} else if next_value.type.reference_kind == Const && parsed_stmt.capture_kind == Var {
@@ -1803,7 +1803,7 @@ struct TCContext {
 			var capture_type = capture_init.type;
 			capture_type.reference_kind = parsed_stmt.capture_kind;
 			if parsed_stmt.capture_kind != None {
-				capture_init = removeDereference(capture_init);
+				capture_init = capture_init.removeDereference();
 			}
 
 			const variable = this.current_function.createVariable(span, parsed_stmt.capture_name.value(), capture_type, capture_type.reference_kind != Var, false);
@@ -1879,7 +1879,7 @@ struct TCContext {
 					);
 
 					if this.current_return_type.reference_kind != None {
-						value = removeDereference(value);
+						value = value.removeDereference();
 						value.type.reference_kind = this.current_return_type.reference_kind;
 					}
 				}
@@ -2268,7 +2268,7 @@ struct TCContext {
 
 		var match_value_var = SharedHandle!<VarDecl>();
 		if value_type_decl.body is Variant {
-			this.match_value = removeDereference(this.match_value);
+			this.match_value = this.match_value.removeDereference();
 
 			match this.match_value {
 				case Call: call_expr -> match_value_var = call_expr.result_var;
@@ -2277,8 +2277,14 @@ struct TCContext {
 			}
 
 			if !match_value_var.isAlive() && !(this.match_value is VarInvoke) {
-				this.match_value = this.createTemporaryVariable(this.match_value.type, List!<TemplateParameter>(), List!<Expr>(1u, this.match_value), is_comptime, this.match_value.span);
-				this.match_value = removeDereference(this.match_value);
+				this.match_value = this.createTemporaryVariable(
+					this.match_value.type,
+					List!<TemplateParameter>(),
+					List!<Expr>(1u, this.match_value),
+					is_comptime,
+					this.match_value.span
+				).removeDereference();
+
 				match this.match_value {
 					case Call: call_expr -> match_value_var = call_expr.result_var;
 					case ShallowCopy: shallow_copy_expr -> match shallow_copy_expr.destination.operator unwrap() {
@@ -2294,7 +2300,7 @@ struct TCContext {
 		var match_expr = MatchExpr(this.match_value);
 
 		if match_value_var.isAlive() {
-			this.match_value = removeDereference(this.createVarInvokeExpr(match_value_var, this.match_value.span));
+			this.match_value = this.createVarInvokeExpr(match_value_var, this.match_value.span).removeDereference();
 		}
 
 		this.match_type = this.match_value.type;
@@ -2505,7 +2511,7 @@ struct TCContext {
 	func checkOperatorExpr(this: &&TCContext, parsed_expr: ParsedOperatorExpr, expected_type: Type, is_comptime: bool, span: Span) -> Expr {
 		match parsed_expr.op {
 			case Initialize -> {
-				var lhs = removeDereference(this.checkExpr(parsed_expr.operands[0u], Type::unknown(), is_comptime));
+				var lhs = this.checkExpr(parsed_expr.operands[0u], Type::unknown(), is_comptime).removeDereference();
 				if lhs.type.isUnknown() {
 					return Expr::Undefined(span, Type::unknown());
 				}
@@ -2562,7 +2568,7 @@ struct TCContext {
 				match function {
 					case Name: name -> {
 						const checked_name = this.checkName(name);
-						const parameter_types = getExprListTypes(arguments);
+						const parameter_types = getExprListTypes(&arguments);
 						const matching_functions = this.lookupFunction(
 							checked_name,
 							SharedHandle!<TypeDecl>(),
@@ -2644,8 +2650,8 @@ struct TCContext {
 								const candidates = this.lookupFunction(
 									name,
 									object.type.decl,
-									getExprListTypes(arguments),
-									removeDereference(object).type.reference_kind,
+									getExprListTypes(&arguments),
+									object.removeDereference().type.reference_kind,
 									true, true, span
 								);
 
@@ -2657,7 +2663,7 @@ struct TCContext {
 									}
 								}
 
-								if !this.validateFunctionCanditates(candidates, name, getExprListTypes(arguments), span) {
+								if !this.validateFunctionCanditates(candidates, name, getExprListTypes(&arguments), span) {
 									return Expr::Undefined(span, Type::unknown());
 								}
 
@@ -2687,7 +2693,7 @@ struct TCContext {
 				span
 			);
 			case ConstRef -> {
-				var base = removeDereference(this.checkExpr(parsed_expr.operands[0u], Type::unknown(), is_comptime));
+				var base = this.checkExpr(parsed_expr.operands[0u], Type::unknown(), is_comptime).removeDereference();
 				if base is Undefined {
 					return Expr::Undefined(span, Type::unknown());
 				}
@@ -2701,7 +2707,7 @@ struct TCContext {
 				return base;
 			}
 			case VarRef -> {
-				var base = removeDereference(this.checkExpr(parsed_expr.operands[0u], Type::unknown(), is_comptime));
+				var base = this.checkExpr(parsed_expr.operands[0u], Type::unknown(), is_comptime).removeDereference();
 				if base is Undefined {
 					return Expr::Undefined(span, Type::unknown());
 				}
@@ -2754,7 +2760,7 @@ struct TCContext {
 	}
 
 	func checkMemberAccessExpr(this: &&TCContext, raw_object: Expr, member_name: String, is_comptime: bool, span: Span) -> Expr {
-		var object = removeDereference(raw_object);
+		var object = raw_object.removeDereference();
 		if object is Undefined {
 			return Expr::Undefined(span, Type::unknown());
 		}
@@ -2762,10 +2768,10 @@ struct TCContext {
 		var type_decl = object.type.decl;
 		if type_decl.getMemberVariable(member_name) is None && !type_decl.unwrapped_type.isEmpty() {
 			if type_decl.unwrapped_type.getMemberVariable(member_name) is Some {
-				object = removeDereference(this.checkCall(
+				object = this.checkCall(
 					Name("operator unwrap"),
 					List!<Expr>(1u, object), false, false, CallKind::MemberCall, is_comptime, span
-				));
+				).removeDereference();
 
 				type_decl = type_decl.unwrapped_type;
 			}
@@ -2781,7 +2787,7 @@ struct TCContext {
 			result_type.reference_kind = object.type.reference_kind;
 		}
 
-		return addDereference(Expr::MemberVarInvoke(MemberVarInvokeExpr(object, member_variable.id), span, result_type));
+		return Expr::MemberVarInvoke(MemberVarInvokeExpr(object, member_variable.id), span, result_type).addDereference();
 	}
 
 	func checkValidateExpr(this: &&TCContext, parsed_value: ParsedExpr, op: Operator, is_comptime: bool, span: Span) -> Expr {
@@ -3834,14 +3840,14 @@ struct TCContext {
 			}
 		}
 
-		const parameter_types = getExprListTypes(arguments);
+		const parameter_types = getExprListTypes(&arguments);
 
 		var parent_type = SharedHandle!<TypeDecl>();
 		var first_arg_max_ref_kind = ReferenceKind::None;
 
 		if kind == MemberCall || kind == Operator {
 			parent_type = arguments[0u].type.decl;
-			first_arg_max_ref_kind = removeDereference(arguments[0u]).type.reference_kind;
+			first_arg_max_ref_kind = arguments[0u].removeDereference().type.reference_kind;
 		} else if !arguments.isEmpty() {
 			first_arg_max_ref_kind = arguments[0u].type.reference_kind;
 		}
@@ -3911,11 +3917,11 @@ struct TCContext {
 			}
 
 			if i == 0 && required_parameter_types[i].reference_kind != None {
-				result[i] = removeDereference(result[i]);
+				result[i] = result[i].removeDereference();
 			}
 
 			if result[i] is Dereference {
-				const variable = removeDereference(result[i]) as VarInvoke else {
+				const variable = result[i].removeDereference() as VarInvoke else {
 					continue;
 				}
 
@@ -4010,7 +4016,7 @@ struct TCContext {
 			result = this.interpret(result);
 		}
 
-		return addDereference(result);
+		return result.addDereference();
 	}
 
 	func createTemporaryVariable(this: &&TCContext, type: Type, template_parameters: List!<TemplateParameter>, parsed_arguments: List!<ParsedExpr>, is_comptime: bool, span: Span) -> Expr {
@@ -4043,7 +4049,7 @@ struct TCContext {
 			var constructor_arguments: List!<Expr>;
 			constructor_arguments.append(Expr::VarInvoke(variable, span, type.varRef()));
 			constructor_arguments.append(checked_arguments);
-			const parameter_types = getExprListTypes(constructor_arguments);
+			const parameter_types = getExprListTypes(&constructor_arguments);
 
 			const candidates = this.lookupFunction(Name("constructor", template_parameters), type.decl, parameter_types, ReferenceKind::Var, false, true, span);
 			if !this.validateFunctionCanditates(candidates, Name("constructor", template_parameters), parameter_types, span) {
@@ -4056,7 +4062,7 @@ struct TCContext {
 				return Expr::Undefined(span, Type::unknown());
 			}
 
-			return addDereference(Expr::Call(
+			return Expr::Call(
 				CallExpr(
 					candidates[0u],
 					unwrapped_arguments,
@@ -4064,7 +4070,7 @@ struct TCContext {
 					ReturnKind::Parameter,
 					constructor_decl.is_copy_constructor
 				), span, type.constRef()
-			));
+			).addDereference();
 		} else {
 			if checked_arguments.size() != 1 {
 				this.error("invalid arguments for temporary variable of reference type", span);

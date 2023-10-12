@@ -1946,7 +1946,7 @@ struct CompoundStmt {
 
 	func constructor(this: &&CompoundStmt, span: Span) -> void {
 		this.span := span;
-		this.children := SharedPtr!<List!<Stmt>>::new(List!<Stmt>());
+		this.children := List!<Stmt>();
 	}
 
 	func constructor(this: &&CompoundStmt, other: CompoundStmt) -> void = default;
@@ -2248,7 +2248,7 @@ enum ReturnKind {
 
 struct CallExpr {
 	var function: SharedHandle!<FunctionDecl>;
-	var parameters: List!<Expr>;
+	var parameters: SharedPtr!<List!<Expr>>;
 	var result_var: SharedHandle!<VarDecl>;
 	var return_kind: ReturnKind;
 	var is_copy_constructor_call: bool;
@@ -2325,21 +2325,21 @@ struct ShallowCopyExpr {
 	operator ==(this: ShallowCopyExpr, other: ShallowCopyExpr) -> bool = default;
 }
 
-func addDereference(this: Expr) -> Expr {
+func addDereference(this: &Expr) -> Expr {
 	match this.type.reference_kind {
 		case None -> return this;
 		else -> return Expr::Dereference(Box!<Expr>(this), this.span, this.type.base());
 	}
 }
 
-func removeDereference(this: Expr) -> Expr {
+func removeDereference(this: &Expr) -> Expr {
 	match this {
-		case Dereference: base -> return base.operator unwrap();
+		case Dereference: &base -> return base.operator unwrap();
 		else -> return this;
 	}
 }
 
-func getExprListTypes(expressions: List!<Expr>) -> List!<Type> {
+func getExprListTypes(expressions: &List!<Expr>) -> List!<Type> {
 	var types: List!<Type>;
 	for expr in expressions {
 		types.append(expr.type);

@@ -99,7 +99,7 @@ struct ParsedNamespace {
 		this.annotations := annotations;
 		this.template_parameters := template_parameters;
 		this.name := name;
-		this.children := SharedPtr!<List!<ParsedStmt>>::new(List!<ParsedStmt>());
+		this.children := List!<ParsedStmt>();
 	}
 
 	func constructor(this: &&ParsedNamespace, other: ParsedNamespace) -> void = default;
@@ -151,7 +151,7 @@ struct ParsedTypeDecl {
 		this.annotations := annotations;
 		this.template_parameters := template_parameters;
 		this.kind := Garbage;
-		this.children := SharedPtr!<List!<ParsedStmt>>::new(List!<ParsedStmt>());
+		this.children := List!<ParsedStmt>();
 	}
 
 	func constructor(this: &&ParsedTypeDecl, other: ParsedTypeDecl) -> void = default;
@@ -751,7 +751,7 @@ struct ParsedCompoundStmt {
 
 	func constructor(this: &&ParsedCompoundStmt, span: Span) -> void {
 		this.span := span;
-		this.children := SharedPtr!<List!<ParsedStmt>>::new(List!<ParsedStmt>());
+		this.children := List!<ParsedStmt>();
 	}
 
 	func constructor(this: &&ParsedCompoundStmt, other: ParsedCompoundStmt) -> void = default;
@@ -1108,17 +1108,17 @@ variant ParsedExpr {
 
 struct ParsedOperatorExpr {
 	var op: Operator;
-	var operands: List!<ParsedExpr>;
+	var operands: SharedPtr!<List!<ParsedExpr>>;
 
 	func constructor(this: &&ParsedOperatorExpr, op: Operator, operand: ParsedExpr) -> void {
 		this.op := op;
-		this.operands := ();
+		this.operands := List!<ParsedExpr>();
 		this.operands.append(operand);
 	}
 
 	func constructor(this: &&ParsedOperatorExpr, lhs: ParsedExpr, op: Operator, rhs: ParsedExpr) -> void {
 		this.op := op;
-		this.operands := ();
+		this.operands := List!<ParsedExpr>();
 		this.operands.append(lhs);
 		this.operands.append(rhs);
 	}
