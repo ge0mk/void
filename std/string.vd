@@ -10,32 +10,54 @@ struct String {
 	var data: vptr!<byte>;
 	var size: uint;
 	var capacity: uint;
-	var is_owner: bool;
+	var short_size_and_flags: uint;
 
-	func constructor(this: &&String) -> void = default;
+	comptime const short_capacity = 31u;
 
-	func constructor(this: &&String, other: String) -> void {
-		this.data := libc::stdlib::malloc(other.size() * sizeOf!<byte>()) as vptr!<byte>;
-		memcpy!<byte>(this.data, other.data(), other.size());
-		this.size := other.size();
-		this.capacity := other.size();
-		this.is_owner := true;
+	func constructor(this: &&String) -> void {
+		this.data := ();
+		this.size := ();
+		this.capacity := ();
+		this.short_size_and_flags := 3u<<62; // set short & owner bits to true
 	}
 
-	func constructor(this: &&String, size: uint, fill_char: byte) -> void {
-		this.data := libc::stdlib::malloc(size * sizeOf!<byte>()) as vptr!<byte>;
-		memset!<byte>(this.data, fill_char, size);
-		this.size := size;
-		this.capacity := size;
-		this.is_owner := true;
+	func constructor(this: &&String, other: String) -> void {
+		if other.isShort() {
+			this.data := other.data;
+			this.size := other.size;
+			this.capacity := other.capacity;
+			this.short_size_and_flags := other.short_size_and_flags;
+		} else {
+			this.constructor(other.bytes());
+		}
+	}
+
+	func constructor(this: &&String, count: uint, fill_char: byte) -> void {
+		this.constructor();
+
+		if count > short_capacity {
+			this._setIsShort(false);
+			this.data = libc::stdlib::malloc(count * sizeOf!<byte>()) as vptr!<byte>;
+		}
+
+		this._setSize(count);
+		this._setCapacity(count);
+
+		this._fill(0u, fill_char);
 	}
 
 	func constructor(this: &&String, bytes: Range!<byte>) -> void {
-		this.data := libc::stdlib::malloc(bytes.size() * sizeOf!<byte>()) as vptr!<byte>;
-		memcpy!<byte>(this.data, bytes.data(), bytes.size());
-		this.size := bytes.size();
-		this.capacity := bytes.size();
-		this.is_owner := true;
+		this.constructor();
+
+		if bytes.size() > short_capacity {
+			this._setIsShort(false);
+			this.data = libc::stdlib::malloc(bytes.size() * sizeOf!<byte>()) as vptr!<byte>;
+		}
+
+		memcpy!<byte>(this.vdata(), bytes.data(), bytes.size());
+
+		this._setSize(bytes.size());
+		this._setCapacity(bytes.size());
 	}
 
 	func fromCString(data: cptr!<byte>) -> String {
@@ -48,30 +70,66 @@ struct String {
 
 	operator =(this: &&String, other: String) -> void {
 		this.grow(other.size());
-		memcpy!<byte>(this.data, other.data(), other.size());
-		this.size = other.size();
+		memcpy!<byte>(this.vdata(), other.data(), other.size());
+		this._setSize(other.size());
 	}
 
 	func destructor(this: &&String) -> void {
-		if this.is_owner {
+		if this.isOwner() && !this.isShort() {
 			libc::stdlib::free(this.data as vptr);
 		}
 	}
 
-	func data(this: &String) -> cptr!<byte> {
-		return this.data as cptr!<byte>;
+	func shortSize(this: &String) -> uint {
+		return (this.short_size_and_flags >> 56) & 0b111111;
+	}
+
+	func isOwner(this: &String) -> bool {
+		return (this.short_size_and_flags >> 62) as bool;
+	}
+
+	func isShort(this: &String) -> bool {
+		return (this.short_size_and_flags >> 63) as bool;
 	}
 
 	func size(this: &String) -> uint {
-		return this.size;
+		if this.isShort() {
+			return this.shortSize();
+		} else {
+			return this.size;
+		}
+	}
+
+	func capacity(this: &String) -> uint {
+		if this.isShort() {
+			return short_capacity;
+		} else {
+			return this.capacity;
+		}
+	}
+
+	func data(this: &String) -> cptr!<byte> {
+		if this.isShort() {
+			return cptr!<vptr!<byte>>::addressOf(&this.data) as cptr!<byte>;
+		} else {
+			return this.data as cptr!<byte>;
+		}
+	}
+
+	func vdata(this: &&String) -> vptr!<byte> {
+		if this.isShort() {
+			return vptr!<vptr!<byte>>::addressOf(&&this.data) as vptr!<byte>;
+		} else {
+			return this.data as vptr!<byte>;
+		}
 	}
 
 	func isEmpty(this: &String) -> bool {
-		return this.size == 0u;
+		return this.size() == 0u;
 	}
 
 	func bytes(this: &String) -> Range!<byte> {
-		return Range!<byte>(this.data as cptr!<byte>, this.size);
+		return Range!<byte>(this.data(), this.size());
 	}
 
 	operator [](this: &String, index: uint) -> &byte {
@@ -79,7 +137,7 @@ struct String {
 			panic(Error::EBOUNDS);
 		}
 
-		return &this.data[index];
+		return &this.data()[index];
 	}
 
 	operator [](this: &&String, index: uint) -> &&byte {
@@ -87,7 +145,7 @@ struct String {
 			panic(Error::EBOUNDS);
 		}
 
-		return &&this.data[index];
+		return &&this.vdata()[index];
 	}
 
 	operator [](this: &String, range: NumericRange!<uint>) -> Range!<byte> {
@@ -99,7 +157,7 @@ struct String {
 			panic(Error::EINVAL);
 		}
 
-		return Range!<byte>(this.data as cptr!<byte> + range.start, range.end - range.start);
+		return Range!<byte>(this.data() + range.start, range.end - range.start);
 	}
 
 	func substring(this: &String, range: NumericRange!<uint>) -> String {
@@ -111,18 +169,17 @@ struct String {
 			return None;
 		}
 
-		return Some(this.data[index]);
+		return Some(this.data()[index]);
 	}
 
 	func clear(this: &&String) -> void {
-		this.size = 0u;
+		this._setSize(0u);
 	}
 
 	func append(this: &&String, value: byte) -> void {
 		this.grow();
-
-		this.data[this.size] = value;
-		this.size += 1u;
+		this.vdata()[this.size()] = value;
+		this._setSize(this.size() + 1);
 	}
 
 	func append(this: &&String, other: String) -> void {
@@ -130,22 +187,21 @@ struct String {
 	}
 
 	func append(this: &&String, bytes: Range!<byte>) -> void {
-		this.grow(this.size + bytes.size());
-
-		memcpy!<byte>(this.data + this.size, bytes.data() as cptr!<byte>, bytes.size());
-		this.size += bytes.size();
+		this.grow(this.size() + bytes.size());
+		this._copy(this.size(), bytes.data(), bytes.size());
+		this._setSize(this.size() + bytes.size());
 	}
 
 	func insert(this: &&String, index: uint, value: byte) -> void {
-		if index > this.size {
+		if index > this.size() {
 			panic(Error::EBOUNDS);
 		}
 
 		this.grow();
-		memmove!<byte>(this.data + index + 1, this.data as cptr!<byte> + index, this.size - index);
+		this._move(index + 1, index);
 
-		this.data[index] = value;
-		this.size += 1u;
+		this.vdata()[index] = value;
+		this._setSize(this.size() + 1);
 	}
 
 	func insert(this: &&String, index: uint, other: String) -> void {
@@ -153,27 +209,27 @@ struct String {
 	}
 
 	func insert(this: &&String, index: uint, bytes: Range!<byte>) -> void {
-		if index > this.size {
+		if index > this.size() {
 			panic(Error::EBOUNDS);
 		}
 
-		this.grow(this.size + bytes.size());
-		memmove!<byte>(this.data + index + bytes.size(), this.data as cptr!<byte> + index, this.size - index);
-		memcpy!<byte>(this.data + index, bytes.data(), bytes.size());
-		this.size += bytes.size();
+		this.grow(this.size() + bytes.size());
+		this._move(index + bytes.size(), index);
+		this._copy(index, bytes.data(), bytes.size());
+		this._setSize(this.size() + bytes.size());
 	}
 
 	func remove(this: &&String, index: uint) -> void {
-		if index >= this.size {
+		if index >= this.size() {
 			panic(Error::EBOUNDS);
 		}
 
-		this.size -= 1u;
-		memmove!<byte>(this.data + index, this.data as cptr!<byte> + index + 1, this.size - index);
+		this._move(index, index + 1);
+		this._setSize(this.size() - 1);
 	}
 
 	func remove(this: &&String, range: NumericRange!<uint>) -> void {
-		if range.start > this.size || range.end > this.size {
+		if range.start > this.size() || range.end > this.size() {
 			panic(Error::EBOUNDS);
 		}
 
@@ -181,74 +237,59 @@ struct String {
 			panic(Error::EINVAL);
 		}
 
-		this.size -= range.end - range.start;
-		memmove!<byte>(this.data + range.start, this.data as cptr!<byte> + range.end, this.size - range.start);
+		this._move(range.start, range.end);
+		this._setSize(this.size() - (range.end - range.start));
 	}
 
 	func find(this: &String, start: uint, value: byte) -> Optional!<uint> {
-		if start >= this.size {
+		if start >= this.size() {
 			return None;
 		}
 
-		const pos = libc::string::memchr(this.data as cptr!<byte> + start, value as i32, this.size - start);
+		const pos = libc::string::memchr(this.data() + start, value as i32, this.size() - start);
 		if pos == cptr::null() {
 			return None;
 		}
 
-		return Some((pos - this.data as cptr!<byte>) as uint);
-	}
-
-	func find(this: &String, value: byte) -> Optional!<uint> {
-		const pos = libc::string::memchr(this.data as cptr!<byte>, value as i32, this.size);
-		if pos == cptr::null() {
-			return None;
-		}
-
-		return Some((pos - this.data as cptr!<byte>) as uint);
+		return Some((pos - this.data()) as uint);
 	}
 
 	func find(this: &String, start: uint, needle: String) -> Optional!<uint> {
-		if start >= this.size {
+		if start >= this.size() {
 			return None;
 		}
 
-		const pos = libc::string::memmem(this.data as cptr!<byte> + start, this.size - start, needle.data(), needle.size());
+		const pos = libc::string::memmem(this.data() + start, this.size() - start, needle.data(), needle.size());
 		if pos == cptr::null() {
 			return None;
 		}
 
-		return Some((pos - this.data as cptr!<byte>) as uint);
-	}
-
-	func find(this: &String, needle: String) -> Optional!<uint> {
-		const pos = libc::string::memmem(this.data as cptr!<byte>, this.size, needle.data(), needle.size());
-		if pos == cptr::null() {
-			return None;
-		}
-
-		return Some((pos - this.data as cptr!<byte>) as uint);
+		return Some((pos - this.data()) as uint);
 	}
 
 	func rfind(this: &String, end: uint, value: byte) -> Optional!<uint> {
-		if end >= this.size {
+		if end >= this.size() {
 			return None;
 		}
 
-		const pos = libc::string::memrchr(this.data as cptr!<byte>, value as i32, this.size - end);
+		const pos = libc::string::memrchr(this.data(), value as i32, this.size() - end);
 		if pos == cptr::null() {
 			return None;
 		}
 
-		return Some((pos - this.data as cptr!<byte>) as uint);
+		return Some((pos - this.data()) as uint);
+	}
+
+	func find(this: &String, value: byte) -> Optional!<uint> {
+		return this.find(0u, value);
+	}
+
+	func find(this: &String, needle: String) -> Optional!<uint> {
+		return this.find(0u, needle);
 	}
 
 	func rfind(this: &String, value: byte) -> Optional!<uint> {
-		const pos = libc::string::memrchr(this.data as cptr!<byte>, value as i32, this.size);
-		if pos == cptr::null() {
-			return None;
-		}
-
-		return Some((pos - this.data as cptr!<byte>) as uint);
+		return this.rfind(0u, value);
 	}
 
 	func contains(this: &String, value: byte) -> bool {
@@ -260,7 +301,7 @@ struct String {
 	}
 
 	func replace(this: &&String, range: NumericRange!<uint>, with: String) -> void {
-		if range.start > this.size || range.end > this.size {
+		if range.start > this.size() || range.end > this.size() {
 			panic(Error::EBOUNDS);
 		}
 
@@ -271,16 +312,16 @@ struct String {
 		const difference = with.size() as int - range.size() as int;
 		const count = (difference if difference >= 0 else -difference) as uint;
 		if difference > 0 {
-			this.grow(this.size + count);
+			this.grow(this.size() + count);
 		}
 
-		memmove!<byte>(this.data + range.end + difference, this.data as cptr!<byte> + range.end, this.size - range.end);
-		memcpy!<byte>(this.data + range.start, with.data(), with.size());
+		this._move((range.end as int + difference) as uint, range.end);
+		this._copy(range.start, with.data(), with.size());
 
 		if difference < 0 {
-			this.size -= count;
+			this._setSize(this.size() - count);
 		} else {
-			this.size += count;
+			this._setSize(this.size() + count);
 		}
 	}
 
@@ -321,7 +362,7 @@ struct String {
 			segment_start = segment_end.value() + 1u;
 			segment_end = this.find(segment_start, separator);
 		}
-		const segment = this[segment_start..this.size];
+		const segment = this[segment_start..this.size()];
 		result.append(String(segment));
 
 		return result;
@@ -340,7 +381,7 @@ struct String {
 			segment_start = segment_end.value() + separator.size();
 			segment_end = this.find(segment_start, separator);
 		}
-		const segment = this[segment_start..this.size];
+		const segment = this[segment_start..this.size()];
 		result.append(String(segment));
 
 		return result;
@@ -358,61 +399,47 @@ struct String {
 	}
 
 	func startsWith(this: &String, other: String) -> bool {
-		if this.size < other.size {
+		if this.size() < other.size() {
 			return false;
 		}
 
-		for index in 0u..other.size {
-			if this.data[index] != other.data[index] {
-				return false;
-			}
-		}
-
-		return true;
+		return this._cmp(0u, other.data(), other.size()) == 0;
 	}
 
 	func endsWith(this: &String, other: String) -> bool {
-		if this.size < other.size {
+		if this.size() < other.size() {
 			return false;
 		}
 
-		const offset = this.size - other.size;
-		for index in 0u..other.size {
-			if this.data[index + offset] != other.data[index] {
-				return false;
-			}
-		}
-
-		return true;
+		const offset = this.size() - other.size();
+		return this._cmp(offset, other.data(), other.size()) == 0;
 	}
 
 	operator ==(this: String, other: String) -> bool {
-		if this.size != other.size {
+		if this.size() != other.size() {
 			return false;
 		}
 
-		return strncmp(this.data(), other.data(), this.size) == 0;
+		return this._cmp(0u, other.data(), this.size()) == 0;
 	}
 
 	operator <=>(this: String, other: String) -> int {
-		const r = strncmp(this.data(), other.data(), uint::min(this.size, other.size));
+		const r = this._cmp(0u, other.data(), uint::min(this.size(), other.size()));
 		if r == 0 {
-			return this.size <=> other.size;
+			return this.size() <=> other.size();
 		} else {
-			return r as int;
+			return r;
 		}
 	}
 
-	operator +(this: String, value: byte) -> String {
-		var result = this;
-		result.append(value);
-		return result;
+	operator +(lhs: String, rhs: byte) -> String {
+		lhs.append(rhs);
+		return lhs;
 	}
 
-	operator +(this: String, other: String) -> String {
-		var result = this;
-		result.append(other);
-		return result;
+	operator +(lhs: String, rhs: String) -> String {
+		lhs.append(rhs);
+		return lhs;
 	}
 
 	operator +=(this: &&String, value: byte) -> void {
@@ -425,22 +452,22 @@ struct String {
 
 	// ensure that memory for at least one more element is available
 	func grow(this: &&String) -> void {
-		if this.size < this.capacity {
+		if this.size() < this.capacity() {
 			return;
 		}
 
-		this.grow(this.size * 3u / 2u + 1u);
+		this.grow(this.size() * 3u / 2u + 1u);
 	}
 
 	// ensure that memory for at least 'new_capacity' elements is available
 	func grow(this: &&String, new_capacity: uint) -> void {
-		const old_capacity = this.capacity;
-		if old_capacity >= new_capacity && this.is_owner {
+		const old_capacity = this.capacity();
+		if old_capacity >= new_capacity && this.isOwner() {
 			return;
 		}
 
 		var new_data = vptr::null() as vptr!<byte>;
-		if this.data == vptr::null() || !this.is_owner {
+		if !this.isOwner() || this.isShort() {
 			new_data = libc::stdlib::malloc(new_capacity * sizeOf!<byte>()) as vptr!<byte>;
 		} else {
 			new_data = libc::stdlib::realloc(this.data as vptr, new_capacity * sizeOf!<byte>()) as vptr!<byte>;
@@ -450,17 +477,58 @@ struct String {
 			panic(Error::ENOMEM);
 		}
 
-		if !this.is_owner {
-			memcpy!<byte>(new_data, this.data as cptr!<byte>, old_capacity);
-			this.is_owner = true;
+		const size = this.size();
+
+		if !this.isOwner() || this.isShort() {
+			memcpy!<byte>(new_data, this.data(), old_capacity);
+			this._setIsOwner(true);
+			this._setIsShort(false);
 		}
 
-		if new_capacity > old_capacity {
-			memset!<byte>(new_data + old_capacity, '\0'b, new_capacity - old_capacity);
-		}
+		memset!<byte>(new_data + old_capacity, '\0'b, new_capacity - old_capacity);
 
 		this.data = new_data;
-		this.capacity = new_capacity;
+		this._setSize(size);
+		this._setCapacity(new_capacity);
+	}
+
+	func _setSize(this: &&String, value: uint) -> void {
+		if this.isShort() {
+			this.short_size_and_flags = (this.short_size_and_flags & ~(0b111111u << 56)) | (value << 56);
+		} else {
+			this.size = value;
+		}
+	}
+
+	func _setCapacity(this: &&String, value: uint) -> void {
+		if !this.isShort() {
+			this.capacity = value;
+		}
+	}
+
+	func _setIsOwner(this: &&String, value: bool) -> void {
+		this.short_size_and_flags = this.short_size_and_flags & ~(1u << 62) | (value as uint << 62);
+	}
+
+	func _setIsShort(this: &&String, value: bool) -> void {
+		this.short_size_and_flags = this.short_size_and_flags & ~(1u << 63) | (value as uint << 63);
+	}
+
+	func _fill(this: &&String, start: uint, fill_char: byte) -> void {
+		memset!<byte>(this.vdata() + start, fill_char, this.size() - start);
+	}
+
+	func _move(this: &&String, dst: uint, src: uint) -> void {
+		const data = this.vdata();
+		memmove!<byte>(data + dst, data as cptr!<byte> + src, this.size() - src);
+	}
+
+	func _copy(this: &&String, dst: uint, src: cptr!<byte>, length: uint) -> void {
+		memcpy!<byte>(this.vdata() + dst, src, length);
+	}
+
+	func _cmp(this: &String, offset: uint, other_data: cptr!<byte>, length: uint) -> int {
+		return strncmp(this.data() + offset, other_data, length) as int;
 	}
 }
 

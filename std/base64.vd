@@ -62,11 +62,11 @@ func decode(str: String) -> String {
 	}
 
 	if str[str.size() - 1] == '='b {
-		result.size--;
+		result.remove(result.size() - 1);
 	}
 
 	if str[str.size() - 2] == '='b {
-		result.size--;
+		result.remove(result.size() - 1);
 	}
 
 	return result;

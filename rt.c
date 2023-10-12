@@ -40,31 +40,22 @@ FILE* get_stderr() {
 	return stderr;
 }
 
-typedef struct {
-	void *data;
-	uint64_t size;
-} Range;
-
-extern int64_t void_main(Range arg_range);
+extern int64_t void_main(void *data, uint64_t size);
 
 int main(int argc, char *argv[]) {
 	struct {
 		char *data;
 		uint64_t size;
 		uint64_t capacity;
-		bool is_owner;
+		uint64_t short_size_and_flags;
 	} args[argc];
 
 	for(int i = 0; i < argc; i++) {
 		args[i].data = argv[i];
 		args[i].size = strlen(argv[i]);
 		args[i].capacity = 0;
-		args[i].is_owner = false;
+		args[i].short_size_and_flags = 0;
 	}
 
-	Range arg_range;
-	arg_range.data = &args;
-	arg_range.size = argc;
-
-	return void_main(arg_range);
+	return void_main(&args, argc);
 }
