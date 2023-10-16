@@ -63,9 +63,11 @@ generate-bootstrap-files: build/stage2
 	-@mkdir bootstrap -p
 	-@cp -f build/bootstrap* bootstrap/
 
+update-stage0.ll: build/stage2
+	build/stage2 src/main.vd -o stage0 -c -m -O
+
 update-stage0:
-	-@$(MAKE) --no-print-directory generate-bootstrap-files
-	-@cp -f build/bootstrap.ll build/stage0.ll
+	-@$(MAKE) --no-print-directory update-stage0.ll
 	-@$(MAKE) --no-print-directory stage0
 
 .PHONY: \
@@ -74,7 +76,8 @@ update-stage0:
 	stage0 test-stage0 \
 	stage1 test-stage1 \
 	stage2 test-stage2 \
-	generate-bootstrap-files update-stage0
+	generate-bootstrap-files \
+	update-stage0.ll update-stage0
 
 # llvm libraries:
 # llvm-config --libs --link-static core analysis target bitwriter
