@@ -67,7 +67,7 @@ struct SharedList {
 		}
 	}
 
-	func append(this: &&SharedList!<T>, value: T) -> SharedHandle!<T> {
+	func append(this: &&SharedList!<T>, @[shallow] value: T) -> SharedHandle!<T> {
 		var data = libc::stdlib::malloc(sizeOf!<T>()) as vptr!<T>;
 		data[0u].constructor(value);
 		this.elements.append(SharedHandle!<T>(data));

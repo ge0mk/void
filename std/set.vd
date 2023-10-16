@@ -73,7 +73,7 @@ struct Set {
 		return RangeIterator!<T>(this.data as cptr!<T>, this.data as cptr!<T> + this.size);
 	}
 
-	func getInsertPos(this: &Set!<T>, value: T, exact_match: &&bool) -> uint {
+	func getInsertPos(this: &Set!<T>, @[shallow] value: T, exact_match: &&bool) -> uint {
 		var min = 0u;
 		var max = this.size;
 		var index = this.size / 2u;
@@ -94,13 +94,13 @@ struct Set {
 		return index;
 	}
 
-	func contains(this: &Set!<T>, value: T) -> bool {
+	func contains(this: &Set!<T>, @[shallow] value: T) -> bool {
 		var exact_match = false;
 		discard this.getInsertPos(value, &&exact_match);
 		return exact_match;
 	}
 
-	func add(this: &&Set!<T>, value: T) -> void {
+	func add(this: &&Set!<T>, @[shallow] value: T) -> void {
 		var exact_match = false;
 		const index = this.getInsertPos(value, &&exact_match);
 		if exact_match {
@@ -121,13 +121,13 @@ struct Set {
 		}
 	}
 
-	func add(this: &&Set!<T>, other: Set!<T>) -> void {
+	func add(this: &&Set!<T>, @[shallow] other: Set!<T>) -> void {
 		for value in other {
 			this.add(value);
 		}
 	}
 
-	func remove(this: &&Set!<T>, value: T) -> void {
+	func remove(this: &&Set!<T>, @[shallow] value: T) -> void {
 		var exact_match = false;
 		const index = this.getInsertPos(value, &&exact_match);
 		if !exact_match {
@@ -145,7 +145,7 @@ struct Set {
 		}
 	}
 
-	func remove(this: &&Set!<T>, other: Set!<T>) -> void {
+	func remove(this: &&Set!<T>, @[shallow] other: Set!<T>) -> void {
 		for value in other {
 			this.remove(value);
 		}
@@ -158,7 +158,7 @@ struct Set {
 		this.size = 0u;
 	}
 
-	operator ==(this: Set!<T>, other: Set!<T>) -> bool {
+	operator ==(@[shallow] this: Set!<T>, @[shallow] other: Set!<T>) -> bool {
 		if this.size() != other.size() {
 			return false;
 		}
@@ -173,22 +173,20 @@ struct Set {
 	}
 
 	// union
-	operator |(this: Set!<T>, other: Set!<T>) -> Set!<T> {
-		var result = this;
-
-		for element in other {
-			result.add(element);
+	operator |(lhs: Set!<T>, @[shallow] rhs: Set!<T>) -> Set!<T> {
+		for element in rhs {
+			lhs.add(element);
 		}
 
-		return result;
+		return lhs;
 	}
 
 	// intersection
-	operator &(this: Set!<T>, other: Set!<T>) -> Set!<T> {
+	operator &(@[shallow] lhs: Set!<T>, @[shallow] rhs: Set!<T>) -> Set!<T> {
 		var result = Set!<T>();
 
-		for element in this {
-			if other.contains(element) {
+		for element in lhs {
+			if rhs.contains(element) {
 				result.add(element);
 			}
 		}
@@ -197,11 +195,11 @@ struct Set {
 	}
 
 	// difference
-	operator -(this: Set!<T>, other: Set!<T>) -> Set!<T> {
+	operator -(@[shallow] lhs: Set!<T>, @[shallow] rhs: Set!<T>) -> Set!<T> {
 		var result = Set!<T>();
 
-		for element in this {
-			if !other.contains(element) {
+		for element in lhs {
+			if !rhs.contains(element) {
 				result.add(element);
 			}
 		}
@@ -210,17 +208,17 @@ struct Set {
 	}
 
 	// symetric difference
-	operator ^(this: Set!<T>, other: Set!<T>) -> Set!<T> {
+	operator ^(@[shallow] lhs: Set!<T>, @[shallow] rhs: Set!<T>) -> Set!<T> {
 		var result = Set!<T>();
 
-		for element in this {
-			if !other.contains(element) {
+		for element in lhs {
+			if !rhs.contains(element) {
 				result.add(element);
 			}
 		}
 
-		for element in other {
-			if !this.contains(element) {
+		for element in rhs {
+			if !lhs.contains(element) {
 				result.add(element);
 			}
 		}

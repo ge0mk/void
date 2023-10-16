@@ -182,7 +182,7 @@ struct String {
 		this._setSize(this.size() + 1);
 	}
 
-	func append(this: &&String, other: String) -> void {
+	func append(this: &&String, @[shallow] other: String) -> void {
 		this.append(other.bytes());
 	}
 
@@ -204,7 +204,7 @@ struct String {
 		this._setSize(this.size() + 1);
 	}
 
-	func insert(this: &&String, index: uint, other: String) -> void {
+	func insert(this: &&String, index: uint, @[shallow] other: String) -> void {
 		this.insert(index, other.bytes());
 	}
 
@@ -254,7 +254,7 @@ struct String {
 		return Some((pos - this.data()) as uint);
 	}
 
-	func find(this: &String, start: uint, needle: String) -> Optional!<uint> {
+	func find(this: &String, start: uint, @[shallow] needle: String) -> Optional!<uint> {
 		if start >= this.size() {
 			return None;
 		}
@@ -284,7 +284,7 @@ struct String {
 		return this.find(0u, value);
 	}
 
-	func find(this: &String, needle: String) -> Optional!<uint> {
+	func find(this: &String, @[shallow] needle: String) -> Optional!<uint> {
 		return this.find(0u, needle);
 	}
 
@@ -296,11 +296,11 @@ struct String {
 		return this.find(value) is Some;
 	}
 
-	func contains(this: &String, needle: String) -> bool {
+	func contains(this: &String, @[shallow] needle: String) -> bool {
 		return this.find(needle) is Some;
 	}
 
-	func replace(this: &&String, range: NumericRange!<uint>, with: String) -> void {
+	func replace(this: &&String, range: NumericRange!<uint>, @[shallow] with: String) -> void {
 		if range.start > this.size() || range.end > this.size() {
 			panic(Error::EBOUNDS);
 		}
@@ -325,7 +325,7 @@ struct String {
 		}
 	}
 
-	func replace(this: &&String, pattern: byte, with: String) -> void {
+	func replace(this: &&String, @[shallow] pattern: byte, @[shallow] with: String) -> void {
 		var start = 0u;
 		var pos = this.find(start, pattern);
 
@@ -337,7 +337,7 @@ struct String {
 		}
 	}
 
-	func replace(this: &&String, pattern: String, with: String) -> void {
+	func replace(this: &&String, @[shallow] pattern: String, @[shallow] with: String) -> void {
 		var start = 0u;
 		var pos = this.find(start, pattern);
 
@@ -368,7 +368,7 @@ struct String {
 		return result;
 	}
 
-	func split(this: &String, separator: String) -> List!<String> {
+	func split(this: &String, @[shallow] separator: String) -> List!<String> {
 		var result = List!<String>();
 
 		var segment_start = 0u;
@@ -387,7 +387,7 @@ struct String {
 		return result;
 	}
 
-	func join(separator: String, segments: List!<String>) -> String {
+	func join(separator: String, @[shallow] segments: List!<String>) -> String {
 		var result = String();
 		for i in 0u..segments.size() {
 			if i != 0 {
@@ -398,7 +398,7 @@ struct String {
 		return result;
 	}
 
-	func startsWith(this: &String, other: String) -> bool {
+	func startsWith(this: &String, @[shallow] other: String) -> bool {
 		if this.size() < other.size() {
 			return false;
 		}
@@ -406,7 +406,7 @@ struct String {
 		return this._cmp(0u, other.data(), other.size()) == 0;
 	}
 
-	func endsWith(this: &String, other: String) -> bool {
+	func endsWith(this: &String, @[shallow] other: String) -> bool {
 		if this.size() < other.size() {
 			return false;
 		}
@@ -415,7 +415,7 @@ struct String {
 		return this._cmp(offset, other.data(), other.size()) == 0;
 	}
 
-	operator ==(this: String, other: String) -> bool {
+	operator ==(this: String, @[shallow] other: String) -> bool {
 		if this.size() != other.size() {
 			return false;
 		}
@@ -423,7 +423,7 @@ struct String {
 		return this._cmp(0u, other.data(), this.size()) == 0;
 	}
 
-	operator <=>(this: String, other: String) -> int {
+	operator <=>(this: String, @[shallow] other: String) -> int {
 		const r = this._cmp(0u, other.data(), uint::min(this.size(), other.size()));
 		if r == 0 {
 			return this.size() <=> other.size();
@@ -437,7 +437,7 @@ struct String {
 		return lhs;
 	}
 
-	operator +(lhs: String, rhs: String) -> String {
+	operator +(lhs: String, @[shallow] rhs: String) -> String {
 		lhs.append(rhs);
 		return lhs;
 	}
@@ -446,7 +446,7 @@ struct String {
 		this.append(value);
 	}
 
-	operator +=(this: &&String, other: String) -> void {
+	operator +=(this: &&String, @[shallow] other: String) -> void {
 		this.append(other);
 	}
 

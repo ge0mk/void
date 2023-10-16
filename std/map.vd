@@ -102,7 +102,7 @@ struct Map {
 		return MapIterator!<Tkey, Tvalue>(this.keys as cptr!<Tkey>, this.values as cptr!<Tvalue>, this.keys as cptr!<Tkey> + this.size());
 	}
 
-	operator ==(this: Map!<Tkey, Tvalue>, other: Map!<Tkey, Tvalue>) -> bool {
+	operator ==(@[shallow] this: Map!<Tkey, Tvalue>, @[shallow] other: Map!<Tkey, Tvalue>) -> bool {
 		if this.size() != other.size() {
 			return false;
 		}
@@ -120,7 +120,7 @@ struct Map {
 		return true;
 	}
 
-	func getInsertPos(this: &Map!<Tkey, Tvalue>, key: Tkey, exact_match: &&bool) -> uint {
+	func getInsertPos(this: &Map!<Tkey, Tvalue>, @[shallow] key: Tkey, exact_match: &&bool) -> uint {
 		var min = 0u;
 		var max = this.size;
 		var index = this.size / 2u;
@@ -141,13 +141,13 @@ struct Map {
 		return index;
 	}
 
-	func contains(this: &Map!<Tkey, Tvalue>, key: Tkey) -> bool {
+	func contains(this: &Map!<Tkey, Tvalue>, @[shallow] key: Tkey) -> bool {
 		var exact_match = false;
 		discard this.getInsertPos(key, &&exact_match);
 		return exact_match;
 	}
 
-	func set(this: &&Map!<Tkey, Tvalue>, key: Tkey, value: Tvalue) -> void {
+	func set(this: &&Map!<Tkey, Tvalue>, @[shallow] key: Tkey, @[shallow] value: Tvalue) -> void {
 		var exact_match = false;
 		const index = this.getInsertPos(key, &&exact_match);
 		if exact_match {
@@ -165,7 +165,7 @@ struct Map {
 		this.size += 1u;
 	}
 
-	func get(this: &Map!<Tkey, Tvalue>, key: Tkey) -> Optional!<Tvalue> {
+	func get(this: &Map!<Tkey, Tvalue>, @[shallow] key: Tkey) -> Optional!<Tvalue> {
 		var exact_match = false;
 		const index = this.getInsertPos(key, &&exact_match);
 		if exact_match {
@@ -175,7 +175,7 @@ struct Map {
 		return None;
 	}
 
-	func getOrDefault(this: &Map!<Tkey, Tvalue>, key: Tkey) -> Tvalue {
+	func getOrDefault(this: &Map!<Tkey, Tvalue>, @[shallow] key: Tkey) -> Tvalue {
 		var exact_match = false;
 		const index = this.getInsertPos(key, &&exact_match);
 		if exact_match {
@@ -186,7 +186,7 @@ struct Map {
 		return d;
 	}
 
-	func remove(this: &&Map!<Tkey, Tvalue>, key: Tkey) -> void {
+	func remove(this: &&Map!<Tkey, Tvalue>, @[shallow] key: Tkey) -> void {
 		var exact_match = false;
 		const index = this.getInsertPos(key, &&exact_match);
 		if !exact_match {
@@ -201,7 +201,7 @@ struct Map {
 		memmove!<Tvalue>(this.values + index, this.values as cptr!<Tvalue> + index + 1, this.size - index);
 	}
 
-	operator [](this: &&Map!<Tkey, Tvalue>, key: Tkey) -> &&Tvalue {
+	operator [](this: &&Map!<Tkey, Tvalue>, @[shallow] key: Tkey) -> &&Tvalue {
 		var exact_match = false;
 		const index = this.getInsertPos(key, &&exact_match);
 		if exact_match {

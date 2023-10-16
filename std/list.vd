@@ -57,7 +57,7 @@ struct List {
 		this.size = range.size();
 	}
 
-	func constructor(this: &&List!<T>, size: uint, value: T) -> void {
+	func constructor(this: &&List!<T>, size: uint, @[shallow] value: T) -> void {
 		this.data := vptr::null() as vptr!<T>;
 		this.size := 0;
 		this.capacity := 0;
@@ -168,7 +168,7 @@ struct List {
 		return VRangeIterator!<T>(this.data, this.data + this.size);
 	}
 
-	func find(this: &List!<T>, value: T) -> Optional!<uint> {
+	func find(this: &List!<T>, @[shallow] value: T) -> Optional!<uint> {
 		for index in 0u..this.size() {
 			if this.data[index] == value {
 				return Some(index);
@@ -178,7 +178,7 @@ struct List {
 		return None;
 	}
 
-	func contains(this: &List!<T>, value: T) -> bool {
+	func contains(this: &List!<T>, @[shallow] value: T) -> bool {
 		return this.find(value) is Some;
 	}
 
@@ -210,9 +210,8 @@ struct List {
 		return true;
 	}
 
-	func append(this: &&List!<T>, value: T) -> void {
+	func append(this: &&List!<T>, @[shallow] value: T) -> void {
 		this.grow();
-
 		this.data[this.size].constructor(value);
 		this.size += 1u;
 	}
@@ -228,11 +227,11 @@ struct List {
 		this.size += values.size();
 	}
 
-	func append(this: &&List!<T>, values: List!<T>) -> void {
+	func append(this: &&List!<T>, @[shallow] values: List!<T>) -> void {
 		this.append(values.range());
 	}
 
-	func insert(this: &&List!<T>, index: uint, value: T) -> void {
+	func insert(this: &&List!<T>, index: uint, @[shallow] value: T) -> void {
 		if index > this.size() {
 			panic(Error::EBOUNDS);
 		}
@@ -260,7 +259,7 @@ struct List {
 		this.size += values.size();
 	}
 
-	func insert(this: &&List!<T>, index: uint, values: List!<T>) -> void {
+	func insert(this: &&List!<T>, index: uint, @[shallow] values: List!<T>) -> void {
 		this.insert(index, values.range());
 	}
 
@@ -306,7 +305,7 @@ struct List {
 		this.size = 0u;
 	}
 
-	operator ==(this: List!<T>, other: List!<T>) -> bool {
+	operator ==(@[shallow] this: List!<T>, @[shallow] other: List!<T>) -> bool {
 		if this.size() != other.size() {
 			return false;
 		}
@@ -320,23 +319,21 @@ struct List {
 		return true;
 	}
 
-	operator +(this: List!<T>, value: T) -> List!<T> {
-		var tmp = this;
-		tmp.append(value);
-		return tmp;
+	operator +(lhs: List!<T>, @[shallow] rhs: T) -> List!<T> {
+		lhs.append(rhs);
+		return lhs;
 	}
 
-	operator +(this: List!<T>, other: List!<T>) -> List!<T> {
-		var tmp = this;
-		tmp.append(other);
-		return tmp;
+	operator +(lhs: List!<T>, @[shallow] rhs: List!<T>) -> List!<T> {
+		lhs.append(rhs);
+		return lhs;
 	}
 
-	operator +=(this: &&List!<T>, value: T) -> void {
+	operator +=(this: &&List!<T>, @[shallow] value: T) -> void {
 		this.append(value);
 	}
 
-	operator +=(this: &&List!<T>, other: List!<T>) -> void {
+	operator +=(this: &&List!<T>, @[shallow] other: List!<T>) -> void {
 		this.append(other);
 	}
 

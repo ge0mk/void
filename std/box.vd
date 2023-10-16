@@ -5,13 +5,13 @@ template <T: type>
 struct Box {
 	var data: vptr!<T>;
 
-	func constructor(this: &&Box!<T>, value: T) -> void {
+	func constructor(this: &&Box!<T>, @[shallow] value: T) -> void {
 		this.data := libc::stdlib::malloc(sizeOf!<T>()) as vptr!<T>;
 		assert(this.data != vptr::null());
 		this.data.value().constructor(value);
 	}
 
-	func constructor(this: &&Box!<T>, other: Box!<T>) -> void {
+	func constructor(this: &&Box!<T>, @[shallow] other: Box!<T>) -> void {
 		this.data := libc::stdlib::malloc(sizeOf!<T>()) as vptr!<T>;
 		assert(this.data != vptr::null());
 		this.data.value().constructor(other.data.value());
@@ -22,19 +22,19 @@ struct Box {
 		libc::stdlib::free(this.data as vptr);
 	}
 
-	operator =(this: &&Box!<T>, other: Box!<T>) -> void {
+	operator =(this: &&Box!<T>, @[shallow] other: Box!<T>) -> void {
 		this.data.value() = other.data.value();
 	}
 
-	operator ==(this: Box!<T>, other: Box!<T>) -> bool {
+	operator ==(@[shallow] this: Box!<T>, @[shallow] other: Box!<T>) -> bool {
 		return this.data.value() == other.data.value();
 	}
 
-	operator ==(this: Box!<T>, other: T) -> bool {
+	operator ==(@[shallow] this: Box!<T>, @[shallow] other: T) -> bool {
 		return this.data.value() == other;
 	}
 
-	operator unwrap(this: Box!<T>) -> T {
+	operator unwrap(@[shallow] this: Box!<T>) -> T {
 		return this.data.value();
 	}
 
