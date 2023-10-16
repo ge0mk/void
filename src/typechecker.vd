@@ -1017,13 +1017,7 @@ struct TCContext {
 			}
 		}
 
-		var result = Stmt::Compound(body, body.span);
-
-		if this.program.options.optimized_build {
-			result.eliminateCallResultCopies();
-		}
-
-		decl.body = FunctionBody::Stmt(result);
+		decl.body = FunctionBody::Stmt(Stmt::Compound(body, body.span));
 
 		this.popScope();
 
@@ -4007,10 +4001,11 @@ struct TCContext {
 				function,
 				unwrapped_arguments,
 				result_var,
-				return_kind,
-				function.is_copy_constructor
+				return_kind
 			), span, result_type
 		);
+
+		this.optimizeCallExpr(&&result);
 
 		if should_be_comptime && !is_comptime {
 			result = this.interpret(result);
@@ -4062,15 +4057,18 @@ struct TCContext {
 				return Expr::Undefined(span, Type::unknown());
 			}
 
-			return Expr::Call(
+			var constructor_call = Expr::Call(
 				CallExpr(
 					candidates[0u],
 					unwrapped_arguments,
 					variable,
-					ReturnKind::Parameter,
-					constructor_decl.is_copy_constructor
+					ReturnKind::Parameter
 				), span, type.constRef()
-			).addDereference();
+			);
+
+			this.optimizeCallExpr(&&constructor_call);
+
+			return constructor_call.addDereference();
 		} else {
 			if checked_arguments.size() != 1 {
 				this.error("invalid arguments for temporary variable of reference type", span);
@@ -4146,5 +4144,13 @@ struct TCContext {
 			}
 			else -> {}
 		}
+	}
+
+	func optimizeCallExpr(this: &&TCContext, call_expr: &&Expr) -> void {
+		if !this.program.options.optimized_build {
+			return;
+		}
+
+		eliminateCallResultCopies(&&call_expr);
 	}
 }

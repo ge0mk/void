@@ -2251,14 +2251,12 @@ struct CallExpr {
 	var parameters: SharedPtr!<List!<Expr>>;
 	var result_var: SharedHandle!<VarDecl>;
 	var return_kind: ReturnKind;
-	var is_copy_constructor_call: bool;
 
-	func constructor(this: &&CallExpr, function: SharedHandle!<FunctionDecl>, parameters: List!<Expr>, result_var: SharedHandle!<VarDecl>, return_kind: ReturnKind, is_copy_constructor_call: bool) -> void {
+	func constructor(this: &&CallExpr, function: SharedHandle!<FunctionDecl>, parameters: List!<Expr>, result_var: SharedHandle!<VarDecl>, return_kind: ReturnKind) -> void {
 		this.function := function;
 		this.parameters := parameters;
 		this.result_var := result_var;
 		this.return_kind := return_kind;
-		this.is_copy_constructor_call := is_copy_constructor_call;
 	}
 
 	func constructor(this: &&CallExpr, other: CallExpr) -> void = default;
