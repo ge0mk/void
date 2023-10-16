@@ -2319,14 +2319,6 @@ func removeDereference(this: &Expr) -> Expr {
 	}
 }
 
-func getExprListTypes(expressions: &List!<Expr>) -> List!<Type> {
-	var types: List!<Type>;
-	for expr in expressions {
-		types.append(expr.type);
-	}
-	return types;
-}
-
 func format(template_parameters: List!<TemplateParameterDecl>) -> String {
 	if template_parameters.isEmpty() {
 		return "";

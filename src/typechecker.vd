@@ -2432,7 +2432,6 @@ struct TCContext {
 			checked_name,
 			SharedHandle!<TypeDecl>(),
 			parameter_types,
-			ReferenceKind::None if parameter_types.isEmpty() else parameter_types[0u].reference_kind,
 			false, false,
 			span
 		);
@@ -2581,12 +2580,11 @@ struct TCContext {
 				match function {
 					case Name: name -> {
 						const checked_name = this.checkName(name);
-						const parameter_types = getExprListTypes(&arguments);
+						const argument_types = getArgumentTypes(arguments, false);
 						const matching_functions = this.lookupFunction(
 							checked_name,
 							SharedHandle!<TypeDecl>(),
-							parameter_types,
-							ReferenceKind::None if parameter_types.isEmpty() else parameter_types[0u].reference_kind,
+							argument_types,
 							true, true,
 							span
 						);
@@ -2643,7 +2641,7 @@ struct TCContext {
 							}
 						}
 
-						if !this.validateFunctionCanditates(matching_functions, checked_name, parameter_types, span) {
+						if !this.validateFunctionCanditates(matching_functions, checked_name, argument_types, span) {
 							return Expr::Undefined(span, Type::unknown());
 						}
 
@@ -2663,8 +2661,7 @@ struct TCContext {
 								const candidates = this.lookupFunction(
 									name,
 									object.type.decl,
-									getExprListTypes(&arguments),
-									object.removeDereference().type.reference_kind,
+									getArgumentTypes(arguments, true),
 									true, true, span
 								);
 
@@ -2676,7 +2673,7 @@ struct TCContext {
 									}
 								}
 
-								if !this.validateFunctionCanditates(candidates, name, getExprListTypes(&arguments), span) {
+								if !this.validateFunctionCanditates(candidates, name, getArgumentTypes(arguments, true), span) {
 									return Expr::Undefined(span, Type::unknown());
 								}
 
@@ -3345,12 +3342,12 @@ struct TCContext {
 		}
 	}
 
-	func lookupFunction(this: &&TCContext, name: Name, parent_type: SharedHandle!<TypeDecl>, parameter_types: List!<Type>, first_arg_max_ref_kind: ReferenceKind, allow_unwrapping_this: bool, allow_unwrapping: bool, span: Span) -> List!<SharedHandle!<FunctionDecl>> {
+	func lookupFunction(this: &&TCContext, name: Name, parent_type: SharedHandle!<TypeDecl>, parameter_types: List!<Type>, allow_unwrapping_this: bool, allow_unwrapping: bool, span: Span) -> List!<SharedHandle!<FunctionDecl>> {
 		var candidates: List!<SharedHandle!<FunctionDecl>>;
 		for s in this.lookupSymbol(name, parent_type, SymbolLookupFilter::Functions, span) {
 			candidates.append((s as Function).value());
 		}
-		return this.selectMatchingFunctions(candidates, parameter_types, first_arg_max_ref_kind, allow_unwrapping_this, allow_unwrapping);
+		return this.selectMatchingFunctions(candidates, parameter_types, allow_unwrapping_this, allow_unwrapping);
 	}
 
 	func getNumericTypeBits(name: String) -> Optional!<uint> {
@@ -3372,13 +3369,13 @@ struct TCContext {
 		return Some(number.toInt() as uint);
 	}
 
-	func selectMatchingFunctions(this: &&TCContext, candidates: List!<SharedHandle!<FunctionDecl>>, parameter_types: List!<Type>, first_arg_max_ref_kind: ReferenceKind, allow_unwrapping_this: bool, allow_unwrapping: bool) -> List!<SharedHandle!<FunctionDecl>> {
+	func selectMatchingFunctions(this: &&TCContext, candidates: List!<SharedHandle!<FunctionDecl>>, parameter_types: List!<Type>, allow_unwrapping_this: bool, allow_unwrapping: bool) -> List!<SharedHandle!<FunctionDecl>> {
 		var result: List!<SharedHandle!<FunctionDecl>>;
 		result.grow(4u);
 
 		var most_matching_parameters = 0;
 		for function in candidates {
-			const matching_parameters = function.getMatchingParameterCount(&parameter_types, first_arg_max_ref_kind, allow_unwrapping_this, allow_unwrapping);
+			const matching_parameters = function.getMatchingParameterCount(parameter_types, allow_unwrapping_this, allow_unwrapping);
 
 			if matching_parameters < most_matching_parameters {
 				continue;
@@ -3496,7 +3493,7 @@ struct TCContext {
 		}
 	}
 
-	func getMatchingParameterCount(function: &FunctionDecl, parameter_types: &List!<Type>, first_arg_max_ref_kind: ReferenceKind, allow_unwrapping_this: bool, allow_unwrapping: bool) -> int {
+	func getMatchingParameterCount(function: &FunctionDecl, parameter_types: List!<Type>, allow_unwrapping_this: bool, allow_unwrapping: bool) -> int {
 		if function.parameter_types.size() != parameter_types.size() {
 			return -1;
 		}
@@ -3506,15 +3503,8 @@ struct TCContext {
 			const required_parameter_type = parameter_types[i];
 			const function_parameter_type = function.parameter_types[i];
 
-			if i == 0 {
-				if function_parameter_type.reference_kind > first_arg_max_ref_kind
-				|| function_parameter_type.reference_kind < required_parameter_type.reference_kind {
-					return -1;
-				}
-			} else {
-				if required_parameter_type.reference_kind != function_parameter_type.reference_kind {
-					return -1;
-				}
+			if function_parameter_type.reference_kind > required_parameter_type.reference_kind {
+				return -1;
 			}
 
 			if required_parameter_type.decl == function_parameter_type.decl {
@@ -3849,39 +3839,34 @@ struct TCContext {
 			}
 		}
 
-		const parameter_types = getExprListTypes(&arguments);
+		const argument_types = getArgumentTypes(arguments, kind == MemberCall || kind == Operator);
 
 		var parent_type = SharedHandle!<TypeDecl>();
-		var first_arg_max_ref_kind = ReferenceKind::None;
-
 		if kind == MemberCall || kind == Operator {
 			parent_type = arguments[0u].type.decl;
-			first_arg_max_ref_kind = arguments[0u].removeDereference().type.reference_kind;
-		} else if !arguments.isEmpty() {
-			first_arg_max_ref_kind = arguments[0u].type.reference_kind;
 		}
 
-		var candidates = this.lookupFunction(name, parent_type, parameter_types, first_arg_max_ref_kind, allow_unwrapping_this, allow_unwrapping, span);
+		var candidates = this.lookupFunction(name, parent_type, argument_types, allow_unwrapping_this, allow_unwrapping, span);
 
 		var negate_result = false;
 		var compare_result_zero = false;
 		const name_str = name.toString();
 		if candidates.isEmpty() && kind == Operator {
 			if name_str == "operator ==" {
-				candidates = this.lookupFunction(Name("operator !="), parent_type, parameter_types, first_arg_max_ref_kind, allow_unwrapping_this, allow_unwrapping, span);
+				candidates = this.lookupFunction(Name("operator !="), parent_type, argument_types, allow_unwrapping_this, allow_unwrapping, span);
 				negate_result = true;
 			} else if name_str == "operator !=" {
-				candidates = this.lookupFunction(Name("operator =="), parent_type, parameter_types, first_arg_max_ref_kind, allow_unwrapping_this, allow_unwrapping, span);
+				candidates = this.lookupFunction(Name("operator =="), parent_type, argument_types, allow_unwrapping_this, allow_unwrapping, span);
 				negate_result = true;
 			}
 
 			if candidates.isEmpty() && isComparisonOperator(name_str) {
-				candidates = this.lookupFunction(Name("operator <=>"), parent_type, parameter_types, first_arg_max_ref_kind, allow_unwrapping_this, allow_unwrapping, span);
+				candidates = this.lookupFunction(Name("operator <=>"), parent_type, argument_types, allow_unwrapping_this, allow_unwrapping, span);
 				compare_result_zero = true;
 			}
 		}
 
-		if !this.validateFunctionCanditates(candidates, name, parameter_types, span) {
+		if !this.validateFunctionCanditates(candidates, name, argument_types, span) {
 			return Expr::Undefined(span, Type::unknown());
 		}
 
@@ -3925,7 +3910,7 @@ struct TCContext {
 				);
 			}
 
-			if i == 0 && required_parameter_types[i].reference_kind != None {
+			if required_parameter_types[i].reference_kind != None {
 				result[i] = result[i].removeDereference();
 			}
 
@@ -4059,10 +4044,10 @@ struct TCContext {
 			var constructor_arguments: List!<Expr>;
 			constructor_arguments.append(Expr::VarInvoke(variable, span, type.varRef()));
 			constructor_arguments.append(checked_arguments);
-			const parameter_types = getExprListTypes(&constructor_arguments);
+			const argument_types = getArgumentTypes(constructor_arguments, true);
 
-			const candidates = this.lookupFunction(Name("constructor", template_parameters), type.decl, parameter_types, ReferenceKind::Var, false, true, span);
-			if !this.validateFunctionCanditates(candidates, Name("constructor", template_parameters), parameter_types, span) {
+			const candidates = this.lookupFunction(Name("constructor", template_parameters), type.decl, argument_types, false, true, span);
+			if !this.validateFunctionCanditates(candidates, Name("constructor", template_parameters), argument_types, span) {
 				return Expr::Undefined(span, Type::unknown());
 			}
 
@@ -4167,5 +4152,25 @@ struct TCContext {
 		}
 
 		eliminateCallResultCopies(&&call_expr);
+	}
+
+	func getArgumentTypes(arguments: List!<Expr>, is_member_call: bool) -> List!<Type> {
+		var types: List!<Type>;
+		types.grow(arguments.size());
+
+		for i in 0u..arguments.size() {
+			match arguments[i] {
+				case Dereference: base -> {
+					if is_member_call && i == 0 {
+						types.append(base.type);
+					} else {
+						types.append(Type(base.type.decl, ReferenceKind::Const));
+					}
+				}
+				else -> types.append(arguments[i].type);
+			}
+		}
+
+		return types;
 	}
 }
