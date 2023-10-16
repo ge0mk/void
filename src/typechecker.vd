@@ -3739,7 +3739,13 @@ struct TCContext {
 
 		result.segments.grow(parsed_name.segments.size());
 		for segment in parsed_name.segments {
-			result.segments.append(NameSegment(segment.span, segment.name, this.checkTemplateParameterList(segment.template_parameters)));
+			var template_parameters: List!<TemplateParameter>;
+			template_parameters.grow(segment.template_parameters.size());
+			for parameter in segment.template_parameters {
+				template_parameters.append(this.checkTemplateParameter(parameter));
+			}
+
+			result.segments.append(NameSegment(segment.span, segment.name, template_parameters));
 		}
 
 		return result;
@@ -3762,16 +3768,6 @@ struct TCContext {
 		}
 
 		return TemplateParameter::Garbage;
-	}
-
-	func checkTemplateParameterList(this: &&TCContext, parameters: List!<ParsedExpr>) -> List!<TemplateParameter> {
-		var result: List!<TemplateParameter>;
-
-		for parameter in parameters {
-			result.append(this.checkTemplateParameter(parameter));
-		}
-
-		return result;
 	}
 
 	func checkTypeUsage(this: &&TCContext, parsed_type: ParsedType, quiet: bool) -> Type {

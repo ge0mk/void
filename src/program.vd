@@ -559,12 +559,8 @@ struct NameSegment {
 	func destructor(this: &&NameSegment) -> void = default;
 
 	operator =(this: &&NameSegment, other: NameSegment) -> void = default;
-	operator ==(this: NameSegment, other: NameSegment) -> bool {
+	operator ==(@[shallow] this: NameSegment, @[shallow] other: NameSegment) -> bool {
 		return this.name == other.name && this.template_parameters == other.template_parameters;
-	}
-
-	func toString(this: &NameSegment) -> String {
-		return this.name + format(this.template_parameters);
 	}
 }
 
@@ -590,9 +586,9 @@ struct Name {
 	func destructor(this: &&Name) -> void = default;
 
 	operator =(this: &&Name, other: Name) -> void = default;
-	operator ==(this: Name, other: Name) -> bool = default;
+	operator ==(@[shallow] this: Name, @[shallow] other: Name) -> bool = default;
 
-	operator +(this: Name, segment: NameSegment) -> Name {
+	operator +(@[shallow] this: Name, @[shallow] segment: NameSegment) -> Name {
 		var result = this;
 		result.segments.append(segment);
 		return result;
@@ -615,7 +611,8 @@ struct Name {
 			if i != 0 {
 				result += "::";
 			}
-			result += this.segments[i].toString();
+			result += this.segments[i].name;
+			result += format(this.segments[i].template_parameters);
 		}
 
 		return result;
@@ -1065,10 +1062,6 @@ struct Type {
 		return Type(SharedHandle!<TypeDecl>(), ReferenceKind::None);
 	}
 
-	func hasSameBaseTypeAs(this: &Type, other: Type) -> bool {
-		return this.decl == other.decl;
-	}
-
 	func isUnknown(this: &Type) -> bool {
 		return this.decl.isEmpty();
 	}
@@ -1379,12 +1372,8 @@ struct MemberVarDecl {
 
 	operator =(this: &&MemberVarDecl, other: MemberVarDecl) -> void = default;
 
-	operator ==(this: MemberVarDecl, other: MemberVarDecl) -> bool {
+	operator ==(@[shallow] this: MemberVarDecl, @[shallow] other: MemberVarDecl) -> bool {
 		return this.id == other.id;
-	}
-
-	operator <=>(this: MemberVarDecl, other: MemberVarDecl) -> int {
-		return this.id <=> other.id;
 	}
 
 	func dump(this: &MemberVarDecl, out: &&TreeFormatter, is_last: bool) -> void {
@@ -1414,12 +1403,8 @@ struct EnumCaseDecl {
 
 	operator =(this: &&EnumCaseDecl, other: EnumCaseDecl) -> void = default;
 
-	operator ==(this: EnumCaseDecl, other: EnumCaseDecl) -> bool {
+	operator ==(@[shallow] this: EnumCaseDecl, @[shallow] other: EnumCaseDecl) -> bool {
 		return this.id == other.id;
-	}
-
-	operator <=>(this: EnumCaseDecl, other: EnumCaseDecl) -> int {
-		return this.id <=> other.id;
 	}
 
 	func dump(this: &EnumCaseDecl, out: &&TreeFormatter, is_last: bool) -> void {
@@ -1450,12 +1435,8 @@ struct VariantCaseDecl {
 
 	operator =(this: &&VariantCaseDecl, other: VariantCaseDecl) -> void = default;
 
-	operator ==(this: VariantCaseDecl, other: VariantCaseDecl) -> bool {
+	operator ==(@[shallow] this: VariantCaseDecl, @[shallow] other: VariantCaseDecl) -> bool {
 		return this.id == other.id;
-	}
-
-	operator <=>(this: VariantCaseDecl, other: VariantCaseDecl) -> int {
-		return this.id <=> other.id;
 	}
 
 	func dump(this: &VariantCaseDecl, out: &&TreeFormatter, is_last: bool) -> void {
@@ -1522,12 +1503,8 @@ struct VarDecl {
 
 	operator =(this: &&VarDecl, other: VarDecl) -> void = default;
 
-	operator ==(this: VarDecl, other: VarDecl) -> bool {
+	operator ==(@[shallow] this: VarDecl, @[shallow] other: VarDecl) -> bool {
 		return this.id == other.id;
-	}
-
-	operator <=>(this: VarDecl, other: VarDecl) -> int {
-		return this.id <=> other.id;
 	}
 
 	func dump(this: &VarDecl, out: &&TreeFormatter, is_last: bool) -> void {
@@ -1959,7 +1936,7 @@ struct CompoundStmt {
 
 	operator =(this: &&CompoundStmt, other: CompoundStmt) -> void = default;
 
-	operator ==(this: CompoundStmt, other: CompoundStmt) -> bool {
+	operator ==(@[shallow] this: CompoundStmt, @[shallow] other: CompoundStmt) -> bool {
 		return this.children.data == other.children.data;
 	}
 
