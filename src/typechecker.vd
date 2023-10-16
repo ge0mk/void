@@ -670,6 +670,13 @@ struct TCContext {
 
 			for annotation in parameter.annotations {
 				match annotation {
+					case Flag -> {
+						if annotation.name == "shallow" {
+							function.parameters[function.parameters.size() - 1].is_shallow_parameter = true;
+						} else {
+							this.error("invalid function parameter annotation", annotation.span);
+						}
+					}
 					else -> {
 						this.error("invalid function parameter annotation", annotation.span);
 					}
@@ -721,6 +728,10 @@ struct TCContext {
 				if function.parameter_types[0u] == type.varRef() && function.parameter_types[1u] == type {
 					parent_type.copy_constructor = function;
 					function.is_copy_constructor = true;
+
+					// the "other" parameter in copy a constructor can't be deep copied (would result in recursion),
+					// but it can safely be shallow copied because no other parameters can reference the same object
+					function.parameters[1u].is_shallow_parameter = true;
 				}
 			} else if function.name == "destructor" && function.parameter_types.size() == 1 {
 				if function.parameter_types[0u] == type.varRef() {
@@ -928,13 +939,13 @@ struct TCContext {
 				var copy = decl.createVariable(decl.signature_span, parameter.name, parameter.type, false, false);
 				const parameter_expr = Expr::VarInvoke(parameter, decl.signature_span, parameter.type);
 
-				if decl.is_copy_constructor {
-					// the "other" parameter in copy a constructor can't be deep copied (would result in recursion),
-					// but it can safely be shallow copied because no other parameters can reference the same object
+				if parameter.is_shallow_parameter {
 					copy.constructor_call = Expr::ShallowCopy(ShallowCopyExpr(
 						Expr::VarInvoke(copy, decl.signature_span, copy.type.varRef()),
 						parameter_expr,
 					), decl.signature_span, this.program.void_type);
+
+					copy.is_const = true;
 				} else {
 					this.createConstructorCall(copy, List!<Expr>(1u, parameter_expr));
 					this.createDestructorCall(copy);

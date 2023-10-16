@@ -1495,6 +1495,9 @@ struct VarDecl {
 	// comptime only
 	var value: Expr;
 
+	// parameters only
+	var is_shallow_parameter: bool;
+
 	func constructor(this: &&VarDecl, span: Span, id: uint, name: String, type: Type, is_const: bool, is_parameter: bool, is_comptime: bool) -> void {
 		this.span := span;
 
@@ -1510,6 +1513,8 @@ struct VarDecl {
 		this.destructor_call := Expr::Undefined(Span(), Type::unknown());
 
 		this.value := Expr::Undefined(Span(), Type::unknown());
+
+		this.is_shallow_parameter = false;
 	}
 
 	func constructor(this: &&VarDecl, other: VarDecl) -> void = default;

@@ -1,0 +1,29 @@
+import std/core;
+
+struct Foo {
+	var x: &&int;
+
+	func constructor(this: &&Foo, x: &&int) -> void {
+		this.x := &&x;
+	}
+
+	func constructor(this: &&Foo, other: Foo) -> void {
+		this.x := &&other.x;
+		this.x++;
+	}
+
+	func destructor(this: &&Foo) -> void = default;
+}
+
+func shallow_copy_param(@[shallow] foo: Foo) -> void {}
+
+func deep_copy_param(foo: Foo) -> void {}
+
+func main() -> void {
+	var x = 0;
+	shallow_copy_param(Foo(&&x));
+	assert(x == 0);
+
+	deep_copy_param(Foo(&&x));
+	assert(x == 1);
+}
