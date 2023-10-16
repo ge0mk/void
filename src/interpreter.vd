@@ -62,7 +62,7 @@ struct Interpreter {
 		return last_stack_frame.variables.get(last_stack_frame.return_variable) ?? Expr::Void(Span(), this.program.void_type);
 	}
 
-	func setVariable(this: &&Interpreter, variable: SharedHandle!<VarDecl>, value: Expr) -> void {
+	func setVariable(this: &&Interpreter, variable: SharedHandle!<VarDecl>, value: &Expr) -> void {
 		if variable.is_comptime {
 			variable.value = value;
 		} else {
@@ -78,7 +78,7 @@ struct Interpreter {
 		}
 	}
 
-	func interpret(this: &&Interpreter, stmt: Stmt) -> Result!<void, ControlFlow> {
+	func interpret(this: &&Interpreter, stmt: &Stmt) -> Result!<void, ControlFlow> {
 		match stmt {
 			case Empty -> return Ok;
 			case Compound: compound_stmt -> return this.interpret(compound_stmt);
@@ -150,7 +150,7 @@ struct Interpreter {
 		}
 	}
 
-	func interpret(this: &&Interpreter, stmt: CompoundStmt) -> Result!<void, ControlFlow> {
+	func interpret(this: &&Interpreter, stmt: &CompoundStmt) -> Result!<void, ControlFlow> {
 		for child in stmt.children {
 			try this.interpret(child);
 		}
@@ -158,7 +158,7 @@ struct Interpreter {
 		return Ok;
 	}
 
-	func interpret(this: &&Interpreter, expr: Expr) -> Result!<Expr, ControlFlow> {
+	func interpret(this: &&Interpreter, expr: &Expr) -> Result!<Expr, ControlFlow> {
 		var result = Expr::Undefined(expr.span, Type::unknown());
 
 		match expr {
@@ -192,7 +192,7 @@ struct Interpreter {
 		return Ok(result);
 	}
 
-	func interpret(this: &&Interpreter, function: SharedHandle!<FunctionDecl>, args: List!<Expr>, error_span: Span) -> Expr {
+	func interpret(this: &&Interpreter, function: SharedHandle!<FunctionDecl>, args: &List!<Expr>, error_span: Span) -> Expr {
 		match function.body {
 			case Extern -> {
 				this.todo("interpret calls to extern functions", error_span);
@@ -218,7 +218,7 @@ struct Interpreter {
 		}
 	}
 
-	func interpret(this: &&Interpreter, function: InlineBuiltinFunction, return_type: Type, args: List!<Expr>, span: Span) -> Expr {
+	func interpret(this: &&Interpreter, function: InlineBuiltinFunction, return_type: Type, args: &List!<Expr>, span: Span) -> Expr {
 		match function {
 			case NoOp -> {}
 			case BitStoreNull -> {
@@ -377,7 +377,7 @@ struct Interpreter {
 		return Expr::Void(Span(), this.program.void_type);
 	}
 
-	func interpret(this: &&Interpreter, function: BuiltinFunction, return_type: Type, args: List!<Expr>, error_span: Span) -> Expr {
+	func interpret(this: &&Interpreter, function: BuiltinFunction, return_type: Type, args: &List!<Expr>, error_span: Span) -> Expr {
 		match function {
 			else -> {
 				this.todo("finish interpretation of builtin functions", error_span);
@@ -386,7 +386,7 @@ struct Interpreter {
 		}
 	}
 
-	func compileAndRun(this: &&Interpreter, expr: Expr, cleanup: List!<Stmt>) -> Expr {
+	func compileAndRun(this: &&Interpreter, expr: &Expr, cleanup: &List!<Stmt>) -> Expr {
 		var result = Expr::Undefined(expr.span, expr.type);
 
 		this.todo("finish interpretation of expressions using llvm", expr.span);

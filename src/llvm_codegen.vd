@@ -1215,7 +1215,7 @@ struct CGContext {
 		}
 	}
 
-	func codegenInlineBuiltinFunctionCall(this: &&CGContext, function: InlineBuiltinFunction, parameters: List!<ValueRef>) -> ValueRef {
+	func codegenInlineBuiltinFunctionCall(this: &&CGContext, function: InlineBuiltinFunction, parameters: &List!<ValueRef>) -> ValueRef {
 		match function {
 			case NoOp -> return ValueRef();
 
@@ -1556,7 +1556,7 @@ struct CGContext {
 		}
 	}
 
-	func codegenStmt(this: &&CGContext, stmt: Stmt) -> void {
+	func codegenStmt(this: &&CGContext, stmt: &Stmt) -> void {
 		match stmt {
 			case Compound: compound_stmt -> this.codegenCompoundStmt(compound_stmt);
 			case Expr: expr -> {
@@ -1606,13 +1606,13 @@ struct CGContext {
 		}
 	}
 
-	func codegenCompoundStmt(this: &&CGContext, compound_stmt: CompoundStmt) -> void {
+	func codegenCompoundStmt(this: &&CGContext, compound_stmt: &CompoundStmt) -> void {
 		for stmt in compound_stmt.children {
 			this.codegenStmt(stmt);
 		}
 	}
 
-	func codegenIfStmt(this: &&CGContext, if_stmt: IfStmt, span: Span) -> void {
+	func codegenIfStmt(this: &&CGContext, if_stmt: &IfStmt, span: Span) -> void {
 		const condition = this.codegenExpr(if_stmt.condition);
 		for stmt in if_stmt.condition_cleanup {
 			discard this.codegenStmt(stmt);
@@ -1651,7 +1651,7 @@ struct CGContext {
 		}
 	}
 
-	func codegenWhileStmt(this: &&CGContext, while_stmt: WhileStmt, span: Span) -> void {
+	func codegenWhileStmt(this: &&CGContext, while_stmt: &WhileStmt, span: Span) -> void {
 		const cond_block = this.llvm_context.appendBasicBlock(this.current_function, "cond");
 		const loop_block = this.llvm_context.appendBasicBlock(this.current_function, "loop");
 		const cont_block = this.llvm_context.appendBasicBlock(this.current_function, "cont");
@@ -1717,7 +1717,7 @@ struct CGContext {
 		return result;
 	}
 
-	func codegenExpr(this: &&CGContext, expr: Expr) -> ValueRef {
+	func codegenExpr(this: &&CGContext, expr: &Expr) -> ValueRef {
 		const span = expr.span;
 
 		match expr {
@@ -1811,7 +1811,7 @@ struct CGContext {
 		}
 	}
 
-	func codegenCall(this: &&CGContext, call_expr: CallExpr, span: Span) -> ValueRef {
+	func codegenCall(this: &&CGContext, call_expr: &CallExpr, span: Span) -> ValueRef {
 		var parameters: List!<ValueRef>;
 		for parameter in call_expr.parameters {
 			parameters.append(this.codegenExpr(parameter));
@@ -1820,12 +1820,12 @@ struct CGContext {
 		return this.codegenCall(call_expr.function, parameters, call_expr.return_kind, call_expr.result_var, span);
 	}
 
-	func codegenCall(this: &&CGContext, function: SharedHandle!<FunctionDecl>, parameters: List!<ValueRef>, return_kind: ReturnKind, span: Span) -> ValueRef {
+	func codegenCall(this: &&CGContext, function: SharedHandle!<FunctionDecl>, parameters: &List!<ValueRef>, return_kind: ReturnKind, span: Span) -> ValueRef {
 		assert(return_kind == ReturnKind::None || return_kind == ReturnKind::Value);
 		return this.codegenCall(function, parameters, return_kind, SharedHandle!<VarDecl>(), span);
 	}
 
-	func codegenCall(this: &&CGContext, function: SharedHandle!<FunctionDecl>, parameters: List!<ValueRef>, return_kind: ReturnKind, result_var: SharedHandle!<VarDecl>, span: Span) -> ValueRef {
+	func codegenCall(this: &&CGContext, function: SharedHandle!<FunctionDecl>, parameters: &List!<ValueRef>, return_kind: ReturnKind, result_var: SharedHandle!<VarDecl>, span: Span) -> ValueRef {
 		this.setCurrentDebugLocation(span);
 
 		match function.body {
@@ -1858,7 +1858,7 @@ struct CGContext {
 		}
 	}
 
-	func codegenMatchExpr(this: &&CGContext, match_expr: MatchExpr, span: Span) -> ValueRef {
+	func codegenMatchExpr(this: &&CGContext, match_expr: &MatchExpr, span: Span) -> ValueRef {
 		var value = this.codegenExpr(match_expr.value);
 
 		if match_expr.value.type.isVariant() {
@@ -1924,7 +1924,7 @@ struct CGContext {
 		return this.variables.get(match_expr.yield_var) ?? ValueRef();
 	}
 
-	func codegenIntrinsicCall(this: &&CGContext, intrinsic_name: String, parameter_types: List!<TypeRef>, parameters: List!<ValueRef>) -> ValueRef {
+	func codegenIntrinsicCall(this: &&CGContext, intrinsic_name: String, parameter_types: &List!<TypeRef>, parameters: &List!<ValueRef>) -> ValueRef {
 		const id = lookupIntrinsicID(intrinsic_name);
 		const type = this.llvm_context.getIntrinsicType(id, parameter_types);
 		const declaration = this.llvm_module.getIntrinsicDeclaration(id, parameter_types);

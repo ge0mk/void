@@ -214,7 +214,7 @@ struct Context {
 		return TypeRef(LLVMArrayType(element_type.handle, size as u32));
 	}
 
-	func getFunctionType(this: Context, return_type: TypeRef, parameter_types: List!<TypeRef>, is_variadic: bool) -> TypeRef {
+	func getFunctionType(this: Context, return_type: TypeRef, parameter_types: &List!<TypeRef>, is_variadic: bool) -> TypeRef {
 		var raw_parameter_types: List!<vptr!<LLVMOpaqueType>>;
 		for type in parameter_types {
 			raw_parameter_types.append(type.handle);
@@ -225,7 +225,7 @@ struct Context {
 		);
 	}
 
-	func getStructType(this: Context, element_types: List!<TypeRef>, is_packed: bool) -> TypeRef {
+	func getStructType(this: Context, element_types: &List!<TypeRef>, is_packed: bool) -> TypeRef {
 		var raw_element_types: List!<vptr!<LLVMOpaqueType>>;
 		for type in element_types {
 			raw_element_types.append(type.handle);
@@ -256,7 +256,7 @@ struct Context {
 		return ValueRef(LLVMConstStringInContext(this.handle, value.data(), value.size() as u32, dont_null_terminate as i32));
 	}
 
-	func getIntrinsicType(this: Context, id: u32, parameter_types: List!<TypeRef>) -> TypeRef {
+	func getIntrinsicType(this: Context, id: u32, parameter_types: &List!<TypeRef>) -> TypeRef {
 		var raw_parameter_types: List!<vptr!<LLVMOpaqueType>>;
 		for type in parameter_types {
 			raw_parameter_types.append(type.handle);
@@ -391,7 +391,7 @@ struct Module {
 		return result;
 	}
 
-	func getIntrinsicDeclaration(this: Module, id: u32, parameter_types: List!<TypeRef>) -> ValueRef {
+	func getIntrinsicDeclaration(this: Module, id: u32, parameter_types: &List!<TypeRef>) -> ValueRef {
 		var raw_parameter_types: List!<vptr!<LLVMOpaqueType>>;
 		for type in parameter_types {
 			raw_parameter_types.append(type.handle);
@@ -436,7 +436,7 @@ struct TypeRef {
 		return ValueRef(LLVMGetPoison(this.handle));
 	}
 
-	func setStructBody(this: TypeRef, element_types: List!<TypeRef>, is_packed: bool) -> void {
+	func setStructBody(this: TypeRef, element_types: &List!<TypeRef>, is_packed: bool) -> void {
 		var raw_element_types: List!<vptr!<LLVMOpaqueType>>;
 		for element_type in element_types {
 			raw_element_types.append(element_type.handle);
@@ -517,7 +517,7 @@ struct ValueRef {
 		LLVMSetGlobalConstant(this.handle, state as i32);
 	}
 
-	func addIncoming(this: ValueRef, values: List!<ValueRef>, blocks: List!<BasicBlockRef>) -> void {
+	func addIncoming(this: ValueRef, values: &List!<ValueRef>, blocks: &List!<BasicBlockRef>) -> void {
 		var raw_values: List!<vptr!<LLVMOpaqueValue>>;
 		for value in values {
 			raw_values.append(value.handle);
@@ -840,7 +840,7 @@ struct BuilderRef {
 		discard LLVMBuildStore(this.handle, value.handle, destination.handle);
 	}
 
-	func buildGEP2(this: BuilderRef, type: TypeRef, pointer: ValueRef, indices: List!<ValueRef>, name: String) -> ValueRef {
+	func buildGEP2(this: BuilderRef, type: TypeRef, pointer: ValueRef, indices: &List!<ValueRef>, name: String) -> ValueRef {
 		const c_name = name + "\0";
 		var raw_indices: List!<vptr!<LLVMOpaqueValue>>;
 		for i in indices {
@@ -915,7 +915,7 @@ struct BuilderRef {
 		return ValueRef(LLVMBuildPhi(this.handle, type.handle, c_name.data()));
 	}
 
-	func buildCall2(this: BuilderRef, type: TypeRef, function: ValueRef, args: List!<ValueRef>, name: String) -> ValueRef {
+	func buildCall2(this: BuilderRef, type: TypeRef, function: ValueRef, args: &List!<ValueRef>, name: String) -> ValueRef {
 		const c_name = name + "\0";
 
 		var c_args: List!<vptr!<LLVMOpaqueValue>>;
@@ -958,7 +958,7 @@ func constFloat(this: TypeRef, value: f64) -> ValueRef {
 	return ValueRef(LLVMConstReal(this.handle, value));
 }
 
-func constGEP2(this: TypeRef, pointer: ValueRef, indices: List!<ValueRef>) -> ValueRef {
+func constGEP2(this: TypeRef, pointer: ValueRef, indices: &List!<ValueRef>) -> ValueRef {
 	var raw_indices: List!<vptr!<LLVMOpaqueValue>>;
 	for i in indices {
 		raw_indices.append(i.handle);
@@ -1022,7 +1022,7 @@ struct DIBuilderRef {
 		return MetaDataRef(LLVMDIBuilderCreateFunction(this.handle, scope.handle, name.data(), name.size(), linkage_name.data(), linkage_name.size(), file.handle, line as u32, type.handle, is_local_to_unit as i32, is_definition as i32, scope_line as u32, flags, is_optimized as i32));
 	}
 
-	func getOrCreateTypeArray(this: DIBuilderRef, types: List!<MetaDataRef>) -> MetaDataRef {
+	func getOrCreateTypeArray(this: DIBuilderRef, types: &List!<MetaDataRef>) -> MetaDataRef {
 		var raw_types: List!<vptr!<LLVMOpaqueMetadata>>;
 		for type in types {
 			raw_types.append(type.handle);
@@ -1031,7 +1031,7 @@ struct DIBuilderRef {
 		return MetaDataRef(LLVMDIBuilderGetOrCreateTypeArray(this.handle, raw_types.data, types.size()));
 	}
 
-	func createSubroutineType(this: DIBuilderRef, file: MetaDataRef, parameter_types: List!<MetaDataRef>, flags: LLVMDIFlags) -> MetaDataRef {
+	func createSubroutineType(this: DIBuilderRef, file: MetaDataRef, parameter_types: &List!<MetaDataRef>, flags: LLVMDIFlags) -> MetaDataRef {
 		var raw_parameter_types: List!<vptr!<LLVMOpaqueMetadata>>;
 		for parameter_type in parameter_types {
 			raw_parameter_types.append(parameter_type.handle);
@@ -1044,7 +1044,7 @@ struct DIBuilderRef {
 		return MetaDataRef(LLVMDIBuilderCreateEnumerator(this.handle, name.data(), name.size(), value as i64, is_unsigned as i32));
 	}
 
-	func createEnumerationType(this: DIBuilderRef, scope: MetaDataRef, name: String, file: MetaDataRef, line: uint, size_in_bits: uint, alignment_in_bits: uint, elements: List!<MetaDataRef>, class_type: MetaDataRef) -> MetaDataRef {
+	func createEnumerationType(this: DIBuilderRef, scope: MetaDataRef, name: String, file: MetaDataRef, line: uint, size_in_bits: uint, alignment_in_bits: uint, elements: &List!<MetaDataRef>, class_type: MetaDataRef) -> MetaDataRef {
 		var raw_elements: List!<vptr!<LLVMOpaqueMetadata>>;
 		for element in elements {
 			raw_elements.append(element.handle);
@@ -1053,7 +1053,7 @@ struct DIBuilderRef {
 		return MetaDataRef(LLVMDIBuilderCreateEnumerationType(this.handle, scope.handle, name.data(), name.size(), file.handle, line as u32, size_in_bits as u64, alignment_in_bits as u32, raw_elements.data, raw_elements.size() as u32, class_type.handle));
 	}
 
-	func createUnionType(this: DIBuilderRef, scope: MetaDataRef, name: String, file: MetaDataRef, line: uint, size_in_bits: uint, alignment_in_bits: uint, flags: LLVMDIFlags, elements: List!<MetaDataRef>, runtime_lang: u32, unique_id: String) -> MetaDataRef {
+	func createUnionType(this: DIBuilderRef, scope: MetaDataRef, name: String, file: MetaDataRef, line: uint, size_in_bits: uint, alignment_in_bits: uint, flags: LLVMDIFlags, elements: &List!<MetaDataRef>, runtime_lang: u32, unique_id: String) -> MetaDataRef {
 		var raw_elements: List!<vptr!<LLVMOpaqueMetadata>>;
 		for element in elements {
 			raw_elements.append(element.handle);
@@ -1062,7 +1062,7 @@ struct DIBuilderRef {
 		return MetaDataRef(LLVMDIBuilderCreateUnionType(this.handle, scope.handle, name.data(), name.size(), file.handle, line as u32, size_in_bits as u64, alignment_in_bits as u32, flags, raw_elements.data, raw_elements.size() as u32, runtime_lang, unique_id.data(), unique_id.size()));
 	}
 
-	func createArrayType(this: DIBuilderRef, size: uint, alignment_in_bits: uint, element_type: MetaDataRef, subscripts: List!<MetaDataRef>) -> MetaDataRef {
+	func createArrayType(this: DIBuilderRef, size: uint, alignment_in_bits: uint, element_type: MetaDataRef, subscripts: &List!<MetaDataRef>) -> MetaDataRef {
 		var raw_subscripts: List!<vptr!<LLVMOpaqueMetadata>>;
 		for subscript in subscripts {
 			raw_subscripts.append(subscript.handle);
@@ -1071,7 +1071,7 @@ struct DIBuilderRef {
 		return MetaDataRef(LLVMDIBuilderCreateArrayType(this.handle, size as u64, alignment_in_bits as u32, element_type.handle, raw_subscripts.data, raw_subscripts.size() as u32));
 	}
 
-	func createVectorType(this: DIBuilderRef, size: uint, alignment_in_bits: uint, element_type: MetaDataRef, subscripts: List!<MetaDataRef>) -> MetaDataRef {
+	func createVectorType(this: DIBuilderRef, size: uint, alignment_in_bits: uint, element_type: MetaDataRef, subscripts: &List!<MetaDataRef>) -> MetaDataRef {
 		var raw_subscripts: List!<vptr!<LLVMOpaqueMetadata>>;
 		for subscript in subscripts {
 			raw_subscripts.append(subscript.handle);
@@ -1092,7 +1092,7 @@ struct DIBuilderRef {
 		return MetaDataRef(LLVMDIBuilderCreatePointerType(this.handle, pointee_type.handle, size_in_bits as u64, alignment_in_bits as u32, address_space as u32, name.data(), name.size()));
 	}
 
-	func createStructType(this: DIBuilderRef, scope: MetaDataRef, name: String, file: MetaDataRef, line: uint, size_in_bits: uint, alignment_in_bits: uint, flags: LLVMDIFlags, derived_from: MetaDataRef, elements: List!<MetaDataRef>, runtime_lang: u32, vtable_holder: MetaDataRef, unique_id: String) -> MetaDataRef {
+	func createStructType(this: DIBuilderRef, scope: MetaDataRef, name: String, file: MetaDataRef, line: uint, size_in_bits: uint, alignment_in_bits: uint, flags: LLVMDIFlags, derived_from: MetaDataRef, elements: &List!<MetaDataRef>, runtime_lang: u32, vtable_holder: MetaDataRef, unique_id: String) -> MetaDataRef {
 		var raw_elements: List!<vptr!<LLVMOpaqueMetadata>>;
 		for element in elements {
 			raw_elements.append(element.handle);
@@ -1262,7 +1262,7 @@ struct ExecutionEngineRef {
 		return LLVMRunFunctionAsMain(this.handle, function.handle, argv.size() as u32, argv.data(), envv.data()) as int;
 	}
 
-	func runFunction(this: ExecutionEngineRef, function: ValueRef, args: List!<GenericValueRef>) -> GenericValueRef {
+	func runFunction(this: ExecutionEngineRef, function: ValueRef, args: &List!<GenericValueRef>) -> GenericValueRef {
 		var raw_args: List!<vptr!<LLVMOpaqueGenericValue>>;
 		for arg in args {
 			raw_args.append(arg.handle);

@@ -372,7 +372,7 @@ func createFunctionTypeTemplate(program: &&Program, dest_namespace: SharedHandle
 	discard program.createType(dest_namespace, "function", template_parameters, TypeBody::Function((parameter_types: List!<Type>(), return_type: Type::unknown())));
 }
 
-func createFunctionTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, parameter_types: List!<Type>, return_type: Type) -> SharedHandle!<TypeDecl> {
+func createFunctionTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, parameter_types: &List!<Type>, return_type: Type) -> SharedHandle!<TypeDecl> {
 	var template_parameters: List!<TemplateParameterDecl>;
 	template_parameters.append(TemplateParameterDecl("ReturnType", program.any_concept, false, TemplateParameter::Type(return_type)));
 	for t in parameter_types {
@@ -472,7 +472,7 @@ func createTupleTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<N
 	discard program.createType(dest_namespace, "Tuple", template_parameters, TypeBody::Tuple);
 }
 
-func createTupleTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, names: List!<String>, types: List!<Type>) -> SharedHandle!<TypeDecl> {
+func createTupleTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, names: &List!<String>, types: &List!<Type>) -> SharedHandle!<TypeDecl> {
 	var template_parameters: List!<TemplateParameterDecl>;
 	template_parameters.append(TemplateParameterDecl("Names", program.string_concept, false, TemplateParameter::String(",".join(names))));
 	for t in types {

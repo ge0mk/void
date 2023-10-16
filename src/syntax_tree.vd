@@ -95,7 +95,7 @@ struct ParsedNamespace {
 	var name: String;
 	var children: SharedPtr!<List!<ParsedStmt>>;
 
-	func constructor(this: &&ParsedNamespace, annotations: List!<ParsedAnnotation>, template_parameters: List!<ParsedTemplateParameterDecl>, name: String) -> void {
+	func constructor(this: &&ParsedNamespace, annotations: &List!<ParsedAnnotation>, template_parameters: &List!<ParsedTemplateParameterDecl>, name: String) -> void {
 		this.annotations := annotations;
 		this.template_parameters := template_parameters;
 		this.name := name;
@@ -147,7 +147,7 @@ struct ParsedTypeDecl {
 	var id_type: Optional!<ParsedType>;
 	var children: SharedPtr!<List!<ParsedStmt>>;
 
-	func constructor(this: &&ParsedTypeDecl, annotations: List!<ParsedAnnotation>, template_parameters: List!<ParsedTemplateParameterDecl>) -> void {
+	func constructor(this: &&ParsedTypeDecl, annotations: &List!<ParsedAnnotation>, template_parameters: &List!<ParsedTemplateParameterDecl>) -> void {
 		this.annotations := annotations;
 		this.template_parameters := template_parameters;
 		this.kind := Garbage;
@@ -268,7 +268,7 @@ struct ParsedFunctionDecl {
 	var signature: ParsedFunctionSignature;
 	var body: ParsedFunctionBody;
 
-	func constructor(this: &&ParsedFunctionDecl, annotations: List!<ParsedAnnotation>, template_parameters: List!<ParsedTemplateParameterDecl>, is_comptime: bool, signature: ParsedFunctionSignature) -> void {
+	func constructor(this: &&ParsedFunctionDecl, annotations: &List!<ParsedAnnotation>, template_parameters: &List!<ParsedTemplateParameterDecl>, is_comptime: bool, signature: &ParsedFunctionSignature) -> void {
 		this.annotations := annotations;
 		this.template_parameters := template_parameters;
 		this.is_comptime := is_comptime;
@@ -319,7 +319,7 @@ struct ParsedFunctionSignature {
 	var parameters: List!<ParsedParameterDecl>;
 	var return_type: ParsedType;
 
-	func constructor(this: &&ParsedFunctionSignature, span: Span, name: String, parameters: List!<ParsedParameterDecl>, return_type: ParsedType) -> void {
+	func constructor(this: &&ParsedFunctionSignature, span: Span, name: String, parameters: &List!<ParsedParameterDecl>, return_type: &ParsedType) -> void {
 		this.span := span;
 		this.name := name;
 		this.parameters := parameters;
@@ -365,7 +365,7 @@ struct ParsedParameterDecl {
 	var type: ParsedType;
 	var initializer: Optional!<ParsedExpr>;
 
-	func constructor(this: &&ParsedParameterDecl, span: Span, annotations: List!<ParsedAnnotation>, name: String, type: ParsedType, initializer: Optional!<ParsedExpr>) -> void {
+	func constructor(this: &&ParsedParameterDecl, span: Span, annotations: &List!<ParsedAnnotation>, name: String, type: &ParsedType, initializer: Optional!<ParsedExpr>) -> void {
 		this.span := span;
 		this.annotations := annotations;
 		this.name := name;
@@ -478,7 +478,7 @@ struct ParsedNameSegment {
 	var name: String;
 	var template_parameters: List!<ParsedExpr>;
 
-	func constructor(this: &&ParsedNameSegment, span: Span, name: String, template_parameters: List!<ParsedExpr>) -> void {
+	func constructor(this: &&ParsedNameSegment, span: Span, name: String, template_parameters: &List!<ParsedExpr>) -> void {
 		this.span := span;
 		this.name := name;
 		this.template_parameters := template_parameters;
@@ -507,7 +507,7 @@ struct ParsedName {
 	var span: Span;
 	var segments: List!<ParsedNameSegment>;
 
-	func constructor(this: &&ParsedName, span: Span, segments: List!<ParsedNameSegment>) -> void {
+	func constructor(this: &&ParsedName, span: Span, segments: &List!<ParsedNameSegment>) -> void {
 		this.span := span;
 		this.segments := segments;
 	}
@@ -779,7 +779,7 @@ struct ParsedIfStmt {
 	var then_branch: ParsedCompoundStmt;
 	var else_branch: Optional!<Box!<ParsedStmt>>;
 
-	func constructor(this: &&ParsedIfStmt, condition: ParsedExpr, then_branch: ParsedCompoundStmt, else_branch: Optional!<Box!<ParsedStmt>>) -> void {
+	func constructor(this: &&ParsedIfStmt, condition: &ParsedExpr, then_branch: &ParsedCompoundStmt, else_branch: Optional!<Box!<ParsedStmt>>) -> void {
 		this.condition := condition;
 		this.then_branch := then_branch;
 		this.else_branch := else_branch;
@@ -796,7 +796,7 @@ struct ParsedIfVarStmt {
 	var var_decl: ParsedVarDecl;
 	var body: ParsedCompoundStmt;
 
-	func constructor(this: &&ParsedIfVarStmt, var_decl: ParsedVarDecl, body: ParsedCompoundStmt) -> void {
+	func constructor(this: &&ParsedIfVarStmt, var_decl: &ParsedVarDecl, body: &ParsedCompoundStmt) -> void {
 		this.var_decl := var_decl;
 		this.body := body;
 	}
@@ -814,7 +814,7 @@ struct ParsedVarElseStmt {
 	var capture_name: Optional!<String>;
 	var capture_kind: ReferenceKind;
 
-	func constructor(this: &&ParsedVarElseStmt, var_decl: ParsedVarDecl, body: ParsedCompoundStmt, capture_name: Optional!<String>, capture_kind: ReferenceKind) -> void {
+	func constructor(this: &&ParsedVarElseStmt, var_decl: &ParsedVarDecl, body: &ParsedCompoundStmt, capture_name: Optional!<String>, capture_kind: ReferenceKind) -> void {
 		this.var_decl := var_decl;
 		this.body := body;
 		this.capture_name := capture_name;
@@ -832,7 +832,7 @@ struct ParsedWhileStmt {
 	var condition: ParsedExpr;
 	var body: ParsedCompoundStmt;
 
-	func constructor(this: &&ParsedWhileStmt, condition: ParsedExpr, body: ParsedCompoundStmt) -> void {
+	func constructor(this: &&ParsedWhileStmt, condition: &ParsedExpr, body: &ParsedCompoundStmt) -> void {
 		this.condition := condition;
 		this.body := body;
 	}
@@ -848,7 +848,7 @@ struct ParsedDoWhileStmt {
 	var body: ParsedCompoundStmt;
 	var condition: ParsedExpr;
 
-	func constructor(this: &&ParsedDoWhileStmt, body: ParsedCompoundStmt, condition: ParsedExpr) -> void {
+	func constructor(this: &&ParsedDoWhileStmt, body: &ParsedCompoundStmt, condition: &ParsedExpr) -> void {
 		this.body := body;
 		this.condition := condition;
 	}
@@ -867,7 +867,7 @@ struct ParsedForStmt {
 	var range: ParsedExpr;
 	var body: ParsedCompoundStmt;
 
-	func constructor(this: &&ParsedForStmt, capture_name: String, capture_kind: ReferenceKind, capture_span: Span, range: ParsedExpr, body: ParsedCompoundStmt) -> void {
+	func constructor(this: &&ParsedForStmt, capture_name: String, capture_kind: ReferenceKind, capture_span: Span, range: &ParsedExpr, body: &ParsedCompoundStmt) -> void {
 		this.capture_name := capture_name;
 		this.capture_kind := capture_kind;
 		this.capture_span := capture_span;
@@ -888,7 +888,7 @@ struct ParsedCaseStmt {
 	var capture_kind: ReferenceKind;
 	var body: Box!<ParsedStmt>;
 
-	func constructor(this: &&ParsedCaseStmt, patterns: List!<ParsedExpr>, capture_name: Optional!<String>, capture_kind: ReferenceKind, body: ParsedStmt) -> void {
+	func constructor(this: &&ParsedCaseStmt, patterns: &List!<ParsedExpr>, capture_name: Optional!<String>, capture_kind: ReferenceKind, body: &ParsedStmt) -> void {
 		this.patterns := patterns;
 		this.capture_name := capture_name;
 		this.capture_kind := capture_kind;
@@ -1112,20 +1112,20 @@ struct ParsedOperatorExpr {
 	var op: Operator;
 	var operands: SharedPtr!<List!<ParsedExpr>>;
 
-	func constructor(this: &&ParsedOperatorExpr, op: Operator, operand: ParsedExpr) -> void {
+	func constructor(this: &&ParsedOperatorExpr, op: Operator, operand: &ParsedExpr) -> void {
 		this.op := op;
 		this.operands := List!<ParsedExpr>();
 		this.operands.append(operand);
 	}
 
-	func constructor(this: &&ParsedOperatorExpr, lhs: ParsedExpr, op: Operator, rhs: ParsedExpr) -> void {
+	func constructor(this: &&ParsedOperatorExpr, lhs: &ParsedExpr, op: Operator, rhs: &ParsedExpr) -> void {
 		this.op := op;
 		this.operands := List!<ParsedExpr>();
 		this.operands.append(lhs);
 		this.operands.append(rhs);
 	}
 
-	func constructor(this: &&ParsedOperatorExpr, op: Operator, operands: List!<ParsedExpr>) -> void {
+	func constructor(this: &&ParsedOperatorExpr, op: Operator, operands: &List!<ParsedExpr>) -> void {
 		this.op := op;
 		this.operands := operands;
 	}
@@ -1142,7 +1142,7 @@ struct ParsedTupleElement {
 	var name: String;
 	var value: ParsedExpr;
 
-	func constructor(this: &&ParsedTupleElement, span: Span, name: String, value: ParsedExpr) -> void {
+	func constructor(this: &&ParsedTupleElement, span: Span, name: String, value: &ParsedExpr) -> void {
 		this.span := span;
 		this.name := name;
 		this.value := value;
@@ -1170,7 +1170,7 @@ struct ParsedDictElement {
 	var key: ParsedExpr;
 	var value: ParsedExpr;
 
-	func constructor(this: &&ParsedDictElement, span: Span, key: ParsedExpr, value: ParsedExpr) -> void {
+	func constructor(this: &&ParsedDictElement, span: Span, key: &ParsedExpr, value: &ParsedExpr) -> void {
 		this.span := span;
 		this.key := key;
 		this.value := value;
@@ -1197,7 +1197,7 @@ struct ParsedMatchExpr {
 	var value: Box!<ParsedExpr>;
 	var body: ParsedCompoundStmt;
 
-	func constructor(this: &&ParsedMatchExpr, value: ParsedExpr, body: ParsedCompoundStmt) -> void {
+	func constructor(this: &&ParsedMatchExpr, value: &ParsedExpr, body: &ParsedCompoundStmt) -> void {
 		this.value := value;
 		this.body := body;
 	}

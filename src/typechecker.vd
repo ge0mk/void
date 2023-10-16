@@ -192,7 +192,7 @@ struct TCContext {
 		}
 	}
 
-	func interpret(this: &&TCContext, expr: Expr) -> Expr {
+	func interpret(this: &&TCContext, expr: &Expr) -> Expr {
 		match this.interpreter.interpret(expr) {
 			case Ok: value -> return value;
 			else -> {
@@ -202,13 +202,13 @@ struct TCContext {
 		}
 	}
 
-	func interpret(this: &&TCContext, stmt: Stmt) -> void {
+	func interpret(this: &&TCContext, stmt: &Stmt) -> void {
 		if this.interpreter.interpret(stmt) is Error {
 			this.error("unexpected control flow in comptime statement", stmt.span);
 		}
 	}
 
-	func interpret(this: &&TCContext, stmts: List!<Stmt>) -> void {
+	func interpret(this: &&TCContext, stmts: &List!<Stmt>) -> void {
 		for stmt in stmts {
 			this.interpret(stmt);
 		}
@@ -500,14 +500,14 @@ struct TCContext {
 		}
 	}
 
-	func checkNamespaceDecl(this: &&TCContext, parsed_decl: ParsedNamespace) -> SharedHandle!<Namespace> {
+	func checkNamespaceDecl(this: &&TCContext, parsed_decl: &ParsedNamespace) -> SharedHandle!<Namespace> {
 		const template_parameters = this.checkTemplateParameterDecl(parsed_decl.template_parameters);
 		var namespace_decl = this.program.getOrCreateChildNamespace(this.current_namespace, parsed_decl.name, template_parameters, false);
 		namespace_decl.addUncheckedChildren(parsed_decl.children);
 		return namespace_decl;
 	}
 
-	func checkTypeDecl(this: &&TCContext, parsed_decl: ParsedTypeDecl) -> SharedHandle!<TypeDecl> {
+	func checkTypeDecl(this: &&TCContext, parsed_decl: &ParsedTypeDecl) -> SharedHandle!<TypeDecl> {
 		const body = match parsed_decl.kind {
 			case Struct -> yield TypeBody::Struct;
 			case Enum -> yield TypeBody::Enum;
@@ -532,7 +532,7 @@ struct TCContext {
 		return type;
 	}
 
-	func checkTypeDecl(this: &&TCContext, name: String, template_parameters: List!<TemplateParameterDecl>, body: TypeBody, span: Span, name_span: Span, parsed_annotations: List!<ParsedAnnotation>, add_to_unchecked_list: bool) -> SharedHandle!<TypeDecl> {
+	func checkTypeDecl(this: &&TCContext, name: String, template_parameters: &List!<TemplateParameterDecl>, body: TypeBody, span: Span, name_span: Span, parsed_annotations: &List!<ParsedAnnotation>, add_to_unchecked_list: bool) -> SharedHandle!<TypeDecl> {
 		var type = this.program.createType(this.current_namespace, name, template_parameters, body);
 		type.span = span;
 		type.name_span = name_span;
@@ -599,11 +599,11 @@ struct TCContext {
 		}
 	}
 
-	func checkFunctionDecl(this: &&TCContext, parsed_decl: ParsedFunctionDecl) -> SharedHandle!<FunctionDecl> {
+	func checkFunctionDecl(this: &&TCContext, parsed_decl: &ParsedFunctionDecl) -> SharedHandle!<FunctionDecl> {
 		return this.checkFunctionDecl(parsed_decl, this.checkTemplateParameterDecl(parsed_decl.template_parameters), true);
 	}
 
-	func checkFunctionDecl(this: &&TCContext, parsed_decl: ParsedFunctionDecl, template_parameters: List!<TemplateParameterDecl>, add_to_unchecked_list: bool) -> SharedHandle!<FunctionDecl> {
+	func checkFunctionDecl(this: &&TCContext, parsed_decl: &ParsedFunctionDecl, template_parameters: &List!<TemplateParameterDecl>, add_to_unchecked_list: bool) -> SharedHandle!<FunctionDecl> {
 		const function = this.program.createFunction(this.current_namespace, parsed_decl.signature.name, template_parameters, FunctionBody::Unchecked(parsed_decl));
 		function.span = parsed_decl.span;
 		function.signature_span = parsed_decl.signature.span;
@@ -903,7 +903,7 @@ struct TCContext {
 		}
 	}
 
-	func checkFunctionBody(this: &&TCContext, decl: &&FunctionDecl, parsed_body: ParsedCompoundStmt) -> void {
+	func checkFunctionBody(this: &&TCContext, decl: &&FunctionDecl, parsed_body: &ParsedCompoundStmt) -> void {
 		var prev_scope_stack = this.scope_stack;
 		var prev_current_return_type = this.current_return_type;
 		var prev_active_member_variables = this.active_member_variables;
@@ -1046,7 +1046,7 @@ struct TCContext {
 		this.return_variable = prev_return_variable;
 	}
 
-	func checkTemplateParameterDecl(this: &&TCContext, unchecked_parameters: List!<ParsedTemplateParameterDecl>) -> List!<TemplateParameterDecl> {
+	func checkTemplateParameterDecl(this: &&TCContext, unchecked_parameters: &List!<ParsedTemplateParameterDecl>) -> List!<TemplateParameterDecl> {
 		var result: List!<TemplateParameterDecl>;
 
 		for parameter in unchecked_parameters {
@@ -1069,7 +1069,7 @@ struct TCContext {
 	}
 
 	// stmt typechecking functions
-	func checkStmt(this: &&TCContext, parsed_stmt: ParsedStmt) -> Stmt {
+	func checkStmt(this: &&TCContext, parsed_stmt: &ParsedStmt) -> Stmt {
 		var result: List!<Stmt>;
 
 		match parsed_stmt {
@@ -1166,7 +1166,7 @@ struct TCContext {
 		}
 	}
 
-	func checkMemberVarDecl(this: &&TCContext, parsed_decl: ParsedVarDecl) -> void {
+	func checkMemberVarDecl(this: &&TCContext, parsed_decl: &ParsedVarDecl) -> void {
 		var type_decl = this.current_namespace.linked_type;
 
 		if !(type_decl.body is Struct) && !(type_decl.body is Variant) {
@@ -1189,7 +1189,7 @@ struct TCContext {
 		type_decl.createMemberVariable(parsed_decl.span, name, type, initializer);
 	}
 
-	func checkCaseDecl(this: &&TCContext, parsed_decl: ParsedCaseDecl) -> void {
+	func checkCaseDecl(this: &&TCContext, parsed_decl: &ParsedCaseDecl) -> void {
 		if !this.current_namespace.linked_type.isAlive() {
 			this.error("case declarations are only allowed inside enum or variant types", parsed_decl.span);
 		}
@@ -1223,7 +1223,7 @@ struct TCContext {
 		}
 	}
 
-	func checkVarDecl(this: &&TCContext, parsed_stmt: ParsedVarDecl, is_comptime: bool) -> List!<Stmt> {
+	func checkVarDecl(this: &&TCContext, parsed_stmt: &ParsedVarDecl, is_comptime: bool) -> List!<Stmt> {
 		var type = Type::unknown();
 		if parsed_stmt.type.hasValue() {
 			type = this.checkTypeUsage(parsed_stmt.type.value(), false);
@@ -1251,7 +1251,7 @@ struct TCContext {
 		return this.checkVarDecl(parsed_stmt.name, type, parsed_stmt.is_const, initializer, initializer_cleanup, is_comptime, parsed_stmt.span);
 	}
 
-	func checkVarDecl(this: &&TCContext, name: String, type: Type, is_const: bool, initializer: List!<Expr>, initializer_cleanup: List!<Stmt>, is_comptime: bool, span: Span) -> List!<Stmt> {
+	func checkVarDecl(this: &&TCContext, name: String, type: Type, is_const: bool, initializer: &List!<Expr>, initializer_cleanup: &List!<Stmt>, is_comptime: bool, span: Span) -> List!<Stmt> {
 		if is_const && initializer.isEmpty() {
 			this.error("constants must be initialized", span);
 		}
@@ -1286,7 +1286,7 @@ struct TCContext {
 		return result;
 	}
 
-	func createConstructorCall(this: &&TCContext, variable: SharedHandle!<VarDecl>, initializer: List!<Expr>) -> void {
+	func createConstructorCall(this: &&TCContext, variable: SharedHandle!<VarDecl>, initializer: &List!<Expr>) -> void {
 		if variable.type.isUnknown() {
 			return;
 		}
@@ -1331,7 +1331,7 @@ struct TCContext {
 		}
 	}
 
-	func checkCompoundStmt(this: &&TCContext, parsed_stmt: ParsedCompoundStmt, create_scope: bool) -> Stmt {
+	func checkCompoundStmt(this: &&TCContext, parsed_stmt: &ParsedCompoundStmt, create_scope: bool) -> Stmt {
 		var result = CompoundStmt(parsed_stmt.span);
 		if create_scope {
 			this.pushScope(ScopeKind::Compound);
@@ -1350,7 +1350,7 @@ struct TCContext {
 		return Stmt::Compound(result, parsed_stmt.span);
 	}
 
-	func checkStmtList(this: &&TCContext, input: List!<ParsedStmt>, output: &&List!<Stmt>) -> void {
+	func checkStmtList(this: &&TCContext, input: &List!<ParsedStmt>, output: &&List!<Stmt>) -> void {
 		for stmt in input {
 			if const previous = output.last() {
 				if previous.isTerminator(this.program.never_type) {
@@ -1367,7 +1367,7 @@ struct TCContext {
 		}
 	}
 
-	func checkIfStmt(this: &&TCContext, if_stmt: ParsedIfStmt, is_comptime: bool, span: Span) -> Stmt {
+	func checkIfStmt(this: &&TCContext, if_stmt: &ParsedIfStmt, is_comptime: bool, span: Span) -> Stmt {
 		this.pushScope(ScopeKind::Expr);
 		const condition = this.checkExpr(if_stmt.condition, this.program.bool_type, is_comptime);
 		const condition_cleanup = this.collectCleanupCallsForCurrentScope();
@@ -1413,7 +1413,7 @@ struct TCContext {
 		}
 	}
 
-	func checkIfVarStmt(this: &&TCContext, parsed_stmt: ParsedIfVarStmt, is_comptime: bool, span: Span) -> List!<Stmt> {
+	func checkIfVarStmt(this: &&TCContext, parsed_stmt: &ParsedIfVarStmt, is_comptime: bool, span: Span) -> List!<Stmt> {
 		// if var x = y { ... }
 		// ->
 		// match y {
@@ -1483,7 +1483,7 @@ struct TCContext {
 		return result;
 	}
 
-	func checkVarElseStmt(this: &&TCContext, parsed_stmt: ParsedVarElseStmt, is_comptime: bool, span: Span) -> List!<Stmt> {
+	func checkVarElseStmt(this: &&TCContext, parsed_stmt: &ParsedVarElseStmt, is_comptime: bool, span: Span) -> List!<Stmt> {
 		// var bar = foo else: (&&)error { ... }
 		// ->
 		// var bar = match foo {
@@ -1562,7 +1562,7 @@ struct TCContext {
 		);
 	}
 
-	func checkWhileStmt(this: &&TCContext, parsed_stmt: ParsedWhileStmt, is_comptime: bool, span: Span) -> List!<Stmt> {
+	func checkWhileStmt(this: &&TCContext, parsed_stmt: &ParsedWhileStmt, is_comptime: bool, span: Span) -> List!<Stmt> {
 		this.pushScope(ScopeKind::Expr);
 		const condition = this.checkExpr(parsed_stmt.condition, this.program.bool_type, is_comptime);
 		const condition_cleanup = this.collectCleanupCallsForCurrentScope();
@@ -1598,7 +1598,7 @@ struct TCContext {
 		return result;
 	}
 
-	func checkDoWhileStmt(this: &&TCContext, parsed_stmt: ParsedDoWhileStmt, is_comptime: bool, span: Span) -> List!<Stmt> {
+	func checkDoWhileStmt(this: &&TCContext, parsed_stmt: &ParsedDoWhileStmt, is_comptime: bool, span: Span) -> List!<Stmt> {
 		var result: List!<Stmt>;
 
 		this.pushScope(ScopeKind::Loop);
@@ -1636,7 +1636,7 @@ struct TCContext {
 		return result;
 	}
 
-	func checkForStmt(this: &&TCContext, parsed_stmt: ParsedForStmt, is_comptime: bool, span: Span) -> Stmt {
+	func checkForStmt(this: &&TCContext, parsed_stmt: &ParsedForStmt, is_comptime: bool, span: Span) -> Stmt {
 		var result = CompoundStmt(span);
 
 		this.pushScope(ScopeKind::Expr);
@@ -1733,7 +1733,7 @@ struct TCContext {
 		return result;
 	}
 
-	func checkCaseStmt(this: &&TCContext, parsed_stmt: ParsedCaseStmt, span: Span) -> Stmt {
+	func checkCaseStmt(this: &&TCContext, parsed_stmt: &ParsedCaseStmt, span: Span) -> Stmt {
 		if this.match_type.isUnknown() {
 			this.error("case statement outside of a match statement", span);
 			return Stmt::Empty(span);
@@ -1845,7 +1845,7 @@ struct TCContext {
 		return Stmt::Case(CaseStmt(span, patterns, body), span);
 	}
 
-	func checkElseCaseStmt(this: &&TCContext, parsed_body: ParsedStmt, span: Span) -> Stmt {
+	func checkElseCaseStmt(this: &&TCContext, parsed_body: &ParsedStmt, span: Span) -> Stmt {
 		const body = this.checkStmt(parsed_body);
 		if body is Empty {
 			return Stmt::Empty(span);
@@ -1854,7 +1854,7 @@ struct TCContext {
 		}
 	}
 
-	func checkThrowStmt(this: &&TCContext, parsed_value: ParsedExpr, span: Span) -> List!<Stmt> {
+	func checkThrowStmt(this: &&TCContext, parsed_value: &ParsedExpr, span: Span) -> List!<Stmt> {
 		const return_type_decl = this.current_return_type.decl;
 		const c = return_type_decl.getVariantCase("Error") else {
 			this.error("invalid return type for throw: expected std::core::Result or similar, but got " + this.current_return_type.signature(), span);
@@ -1905,7 +1905,7 @@ struct TCContext {
 		return this.checkReturnStmt(value, value_cleanup, span);
 	}
 
-	func checkReturnStmt(this: &&TCContext, checked_value: Expr, value_cleanup: List!<Stmt>, span: Span) -> List!<Stmt> {
+	func checkReturnStmt(this: &&TCContext, checked_value: &Expr, value_cleanup: &List!<Stmt>, span: Span) -> List!<Stmt> {
 		var value = checked_value;
 		var result: List!<Stmt>;
 
@@ -2016,7 +2016,7 @@ struct TCContext {
 		return result;
 	}
 
-	func checkExprStmt(this: &&TCContext, parsed_expr: ParsedExpr, is_discard_stmt: bool, is_comptime: bool, span: Span) -> List!<Stmt> {
+	func checkExprStmt(this: &&TCContext, parsed_expr: &ParsedExpr, is_discard_stmt: bool, is_comptime: bool, span: Span) -> List!<Stmt> {
 		this.pushScope(ScopeKind::Expr);
 		const expr = this.checkExpr(parsed_expr, Type::unknown(), is_comptime);
 		const cleanup = this.collectCleanupCallsForCurrentScope();
@@ -2046,7 +2046,7 @@ struct TCContext {
 	}
 
 	// expr typechecking functions
-	func checkExpr(this: &&TCContext, parsed_expr: ParsedExpr, expected_type: Type, is_comptime: bool) -> Expr {
+	func checkExpr(this: &&TCContext, parsed_expr: &ParsedExpr, expected_type: Type, is_comptime: bool) -> Expr {
 		match parsed_expr {
 			case Char: char_literal -> return this.checkCharLiteralExpr(char_literal, parsed_expr.span);
 			case String: string_literal -> return this.checkStringLiteralExpr(string_literal, parsed_expr.span);
@@ -2066,7 +2066,7 @@ struct TCContext {
 		}
 	}
 
-	func checkExprList(this: &&TCContext, parsed_exprs: List!<ParsedExpr>, is_comptime: bool) -> List!<Expr> {
+	func checkExprList(this: &&TCContext, parsed_exprs: &List!<ParsedExpr>, is_comptime: bool) -> List!<Expr> {
 		var result: List!<Expr>;
 		result.grow(parsed_exprs.size());
 		for e in parsed_exprs {
@@ -2166,7 +2166,7 @@ struct TCContext {
 		return Expr::Dereference(Box!<Expr>(result), span, variable.type.base());
 	}
 
-	func checkArrayExpr(this: &&TCContext, parsed_elements: List!<ParsedExpr>, expected_type: Type, is_comptime: bool, span: Span) -> Expr {
+	func checkArrayExpr(this: &&TCContext, parsed_elements: &List!<ParsedExpr>, expected_type: Type, is_comptime: bool, span: Span) -> Expr {
 		var expected_element_type = Type::unknown();
 		if !expected_type.isUnknown() {
 			const type_decl = expected_type.decl;
@@ -2201,7 +2201,7 @@ struct TCContext {
 		);
 	}
 
-	func checkTupleExpr(this: &&TCContext, parsed_expr: List!<ParsedTupleElement>, expected_type: Type, is_comptime: bool, span: Span) -> Expr {
+	func checkTupleExpr(this: &&TCContext, parsed_expr: &List!<ParsedTupleElement>, expected_type: Type, is_comptime: bool, span: Span) -> Expr {
 		var names: List!<String>;
 		var elements: List!<Expr>;
 		var element_types: List!<Type>;
@@ -2230,16 +2230,16 @@ struct TCContext {
 		);
 	}
 
-	func checkDictExpr(this: &&TCContext, parsed_expr: List!<ParsedDictElement>, expected_type: Type, is_comptime: bool, span: Span) -> Expr {
+	func checkDictExpr(this: &&TCContext, parsed_expr: &List!<ParsedDictElement>, expected_type: Type, is_comptime: bool, span: Span) -> Expr {
 		this.todo("implement typechecking of dict expressions", span);
 		return Expr::Undefined(span, Type::unknown());
 	}
 
-	func checkMatchExpr(this: &&TCContext, parsed_expr: ParsedMatchExpr, expected_type: Type, is_comptime: bool, span: Span) -> Expr {
+	func checkMatchExpr(this: &&TCContext, parsed_expr: &ParsedMatchExpr, expected_type: Type, is_comptime: bool, span: Span) -> Expr {
 		return this.checkMatchExpr(this.checkExpr(parsed_expr.value, Type::unknown(), is_comptime), parsed_expr.body.children, expected_type, is_comptime, span);
 	}
 
-	func addCasesToMatchExpr(this: &&TCContext, match_expr: &&MatchExpr, stmt: Stmt) -> void {
+	func addCasesToMatchExpr(this: &&TCContext, match_expr: &&MatchExpr, stmt: &Stmt) -> void {
 		match stmt {
 			case Compound: compound_stmt -> {
 				for other in compound_stmt.children {
@@ -2262,7 +2262,7 @@ struct TCContext {
 		}
 	}
 
-	func checkMatchExpr(this: &&TCContext, checked_value: Expr, parsed_body: List!<ParsedStmt>, expected_type: Type, is_comptime: bool, span: Span) -> Expr {
+	func checkMatchExpr(this: &&TCContext, checked_value: &Expr, parsed_body: &List!<ParsedStmt>, expected_type: Type, is_comptime: bool, span: Span) -> Expr {
 		if checked_value is Undefined {
 			return Expr::Undefined(span, Type::unknown());
 		}
@@ -2421,7 +2421,7 @@ struct TCContext {
 		}
 	}
 
-	func checkFunctionRefExpr(this: &&TCContext, parsed_name: ParsedName, parsed_parameter_types: List!<ParsedType>, span: Span) -> Expr {
+	func checkFunctionRefExpr(this: &&TCContext, parsed_name: &ParsedName, parsed_parameter_types: &List!<ParsedType>, span: Span) -> Expr {
 		const checked_name = this.checkName(parsed_name);
 		var parameter_types: List!<Type>;
 		for t in parsed_parameter_types {
@@ -2443,7 +2443,7 @@ struct TCContext {
 		return Expr::FunctionRef(candidates[0u], span, this.getFunctionType(parameter_types, candidates[0u].return_type, span));
 	}
 
-	func checkAnonymousFunctionExpr(this: &&TCContext, parsed_function: ParsedFunctionDecl) -> Expr {
+	func checkAnonymousFunctionExpr(this: &&TCContext, parsed_function: &ParsedFunctionDecl) -> Expr {
 		const function = this.checkFunctionDecl(parsed_function, List!<TemplateParameterDecl>(), false);
 		this.checkFunctionSignature(function);
 
@@ -2454,7 +2454,7 @@ struct TCContext {
 		);
 	}
 
-	func checkNameExpr(this: &&TCContext, parsed_name: ParsedName, expected_type: Type, is_comptime: bool, span: Span) -> Expr {
+	func checkNameExpr(this: &&TCContext, parsed_name: &ParsedName, expected_type: Type, is_comptime: bool, span: Span) -> Expr {
 		const checked_name = this.checkName(parsed_name);
 		const symbols = this.lookupSymbol(
 			checked_name,
@@ -2520,7 +2520,7 @@ struct TCContext {
 		return result_candidates[0u];
 	}
 
-	func checkOperatorExpr(this: &&TCContext, parsed_expr: ParsedOperatorExpr, expected_type: Type, is_comptime: bool, span: Span) -> Expr {
+	func checkOperatorExpr(this: &&TCContext, parsed_expr: &ParsedOperatorExpr, expected_type: Type, is_comptime: bool, span: Span) -> Expr {
 		match parsed_expr.op {
 			case Initialize -> {
 				var lhs = this.checkExpr(parsed_expr.operands[0u], Type::unknown(), is_comptime).removeDereference();
@@ -2769,7 +2769,7 @@ struct TCContext {
 		}
 	}
 
-	func checkMemberAccessExpr(this: &&TCContext, raw_object: Expr, member_name: String, is_comptime: bool, span: Span) -> Expr {
+	func checkMemberAccessExpr(this: &&TCContext, raw_object: &Expr, member_name: String, is_comptime: bool, span: Span) -> Expr {
 		var object = raw_object.removeDereference();
 		if object is Undefined {
 			return Expr::Undefined(span, Type::unknown());
@@ -2800,7 +2800,7 @@ struct TCContext {
 		return Expr::MemberVarInvoke(MemberVarInvokeExpr(object, member_variable.id), span, result_type).addDereference();
 	}
 
-	func checkValidateExpr(this: &&TCContext, parsed_value: ParsedExpr, op: Operator, is_comptime: bool, span: Span) -> Expr {
+	func checkValidateExpr(this: &&TCContext, parsed_value: &ParsedExpr, op: Operator, is_comptime: bool, span: Span) -> Expr {
 		// try foo()
 		// ->
 		// match foo() {
@@ -2895,7 +2895,7 @@ struct TCContext {
 		return this.checkMatchExpr(value, cases, yield_type, is_comptime, span);
 	}
 
-	func checkInlineIfExpr(this: &&TCContext, then_value: ParsedExpr, condition: ParsedExpr, else_value: ParsedExpr, expected_type: Type, is_comptime: bool, span: Span) -> Expr {
+	func checkInlineIfExpr(this: &&TCContext, then_value: &ParsedExpr, condition: &ParsedExpr, else_value: &ParsedExpr, expected_type: Type, is_comptime: bool, span: Span) -> Expr {
 		// x if y else z
 		// ->
 		// match y {
@@ -2921,7 +2921,7 @@ struct TCContext {
 		return this.checkMatchExpr(ParsedMatchExpr(condition, match_body), expected_type, is_comptime, span);
 	}
 
-	func checkOperatorIsExpr(this: &&TCContext, parsed_lhs: ParsedExpr, parsed_rhs: ParsedExpr, is_comptime: bool, span: Span) -> Expr {
+	func checkOperatorIsExpr(this: &&TCContext, parsed_lhs: &ParsedExpr, parsed_rhs: &ParsedExpr, is_comptime: bool, span: Span) -> Expr {
 		var lhs = this.checkExpr(parsed_lhs, Type::unknown(), is_comptime);
 		if lhs is Undefined {
 			return Expr::Undefined(span, Type::unknown());
@@ -2975,7 +2975,7 @@ struct TCContext {
 		}
 	}
 
-	func checkOperatorAsExpr(this: &&TCContext, parsed_lhs: ParsedExpr, parsed_rhs: ParsedExpr, is_comptime: bool, span: Span) -> Expr {
+	func checkOperatorAsExpr(this: &&TCContext, parsed_lhs: &ParsedExpr, parsed_rhs: &ParsedExpr, is_comptime: bool, span: Span) -> Expr {
 		const lhs = this.checkExpr(parsed_lhs, Type::unknown(), is_comptime);
 		if lhs is Undefined {
 			return Expr::Undefined(span, Type::unknown());
@@ -3042,7 +3042,7 @@ struct TCContext {
 		}
 	}
 
-	func createSafeVariantCastExpr(this: &&TCContext, value: Expr, case_name: String, is_comptime: bool, span: Span) -> Expr {
+	func createSafeVariantCastExpr(this: &&TCContext, value: &Expr, case_name: String, is_comptime: bool, span: Span) -> Expr {
 		// x as Foo
 		// ->
 		// match x {
@@ -3093,7 +3093,7 @@ struct TCContext {
 		return this.checkMatchExpr(value, cases, yield_type, is_comptime, span);
 	}
 
-	func lookupNamespace(this: &&TCContext, namespaces_to_search: &Set!<SharedHandle!<Namespace>>, name: NameSegment) -> Set!<SharedHandle!<Namespace>> {
+	func lookupNamespace(this: &&TCContext, namespaces_to_search: &Set!<SharedHandle!<Namespace>>, name: &NameSegment) -> Set!<SharedHandle!<Namespace>> {
 		var result: Set!<SharedHandle!<Namespace>>;
 
 		for n in namespaces_to_search {
@@ -3101,7 +3101,7 @@ struct TCContext {
 			var matching_children: List!<SharedHandle!<Namespace>>;
 
 			for child in n.children_by_name.getOrDefault(name.name) {
-				const matching_template_parameters = this.getMatchingTemplateParameterCount(&child.template_parameters, &name.template_parameters);
+				const matching_template_parameters = this.getMatchingTemplateParameterCount(child.template_parameters, name.template_parameters);
 				if matching_template_parameters > most_matching_template_parameters {
 					matching_children.clear();
 					matching_children.append(child);
@@ -3130,7 +3130,7 @@ struct TCContext {
 		return result;
 	}
 
-	func lookupSymbol(this: &&TCContext, name: Name, parent_type: SharedHandle!<TypeDecl>, filter: SymbolLookupFilter, span: Span) -> List!<Symbol> {
+	func lookupSymbol(this: &&TCContext, name: &Name, parent_type: SharedHandle!<TypeDecl>, filter: SymbolLookupFilter, span: Span) -> List!<Symbol> {
 		var result: List!<Symbol>;
 		if name.segments.isEmpty() {
 			return result;
@@ -3148,7 +3148,7 @@ struct TCContext {
 			matching_namespaces.add(n);
 
 			for i in intersecting_segments..name_segments.size() {
-				matching_namespaces = this.lookupNamespace(&matching_namespaces, name_segments[i]);
+				matching_namespaces = this.lookupNamespace(matching_namespaces, name_segments[i]);
 			}
 
 			namespaces_to_search.add(matching_namespaces);
@@ -3162,7 +3162,7 @@ struct TCContext {
 			}
 		}
 
-		for n in this.lookupNamespace(&namespaces_to_search, last_segment) {
+		for n in this.lookupNamespace(namespaces_to_search, last_segment) {
 			if (filter & Namespaces) != None {
 				result.append(Symbol::Namespace(n, n.parent));
 			}
@@ -3186,7 +3186,7 @@ struct TCContext {
 					else -> panic("invalid numeric type");
 				}
 
-				for n in this.lookupNamespace(&namespaces_to_search, NameSegment(numeric_type_name, numeric_type_template_parameters)) {
+				for n in this.lookupNamespace(namespaces_to_search, NameSegment(numeric_type_name, numeric_type_template_parameters)) {
 					if n.linked_type.isAlive() {
 						result.append(Symbol::Type(n.linked_type, n.parent));
 					}
@@ -3235,7 +3235,7 @@ struct TCContext {
 				var most_matching_template_parameters = 0;
 				var functions_with_matching_template_parameters: List!<SharedHandle!<FunctionDecl>>;
 				for function in n.functions_by_name.getOrDefault(last_segment.name) {
-					const matching_template_parameters = this.getMatchingTemplateParameterCount(&function.template_parameters, &last_segment.template_parameters);
+					const matching_template_parameters = this.getMatchingTemplateParameterCount(function.template_parameters, last_segment.template_parameters);
 
 					if matching_template_parameters > most_matching_template_parameters {
 						functions_with_matching_template_parameters.clear();
@@ -3302,7 +3302,7 @@ struct TCContext {
 		return result;
 	}
 
-	func lookupType(this: &&TCContext, name: Name, span: Span) -> List!<Type> {
+	func lookupType(this: &&TCContext, name: &Name, span: Span) -> List!<Type> {
 		var candidates: List!<Type>;
 		for s in this.lookupSymbol(name, SharedHandle!<TypeDecl>(), SymbolLookupFilter::Types | TemplateParameters, span) {
 			match s {
@@ -3317,11 +3317,11 @@ struct TCContext {
 		return candidates;
 	}
 
-	func getType(this: &&TCContext, name: Name, span: Span) -> Type {
+	func getType(this: &&TCContext, name: &Name, span: Span) -> Type {
 		return this.getType(name, span, false);
 	}
 
-	func getType(this: &&TCContext, name: Name, span: Span, quiet: bool) -> Type {
+	func getType(this: &&TCContext, name: &Name, span: Span, quiet: bool) -> Type {
 		const candidates = this.lookupType(name, span);
 		if candidates.isEmpty() {
 			if !quiet {
@@ -3342,7 +3342,7 @@ struct TCContext {
 		}
 	}
 
-	func lookupFunction(this: &&TCContext, name: Name, parent_type: SharedHandle!<TypeDecl>, parameter_types: List!<Type>, allow_unwrapping_this: bool, allow_unwrapping: bool, span: Span) -> List!<SharedHandle!<FunctionDecl>> {
+	func lookupFunction(this: &&TCContext, name: &Name, parent_type: SharedHandle!<TypeDecl>, parameter_types: &List!<Type>, allow_unwrapping_this: bool, allow_unwrapping: bool, span: Span) -> List!<SharedHandle!<FunctionDecl>> {
 		var candidates: List!<SharedHandle!<FunctionDecl>>;
 		for s in this.lookupSymbol(name, parent_type, SymbolLookupFilter::Functions, span) {
 			candidates.append((s as Function).value());
@@ -3369,7 +3369,7 @@ struct TCContext {
 		return Some(number.toInt() as uint);
 	}
 
-	func selectMatchingFunctions(this: &&TCContext, candidates: List!<SharedHandle!<FunctionDecl>>, parameter_types: List!<Type>, allow_unwrapping_this: bool, allow_unwrapping: bool) -> List!<SharedHandle!<FunctionDecl>> {
+	func selectMatchingFunctions(this: &&TCContext, candidates: &List!<SharedHandle!<FunctionDecl>>, parameter_types: &List!<Type>, allow_unwrapping_this: bool, allow_unwrapping: bool) -> List!<SharedHandle!<FunctionDecl>> {
 		var result: List!<SharedHandle!<FunctionDecl>>;
 		result.grow(4u);
 
@@ -3408,7 +3408,7 @@ struct TCContext {
 		return result;
 	}
 
-	func validateFunctionCanditates(this: &&TCContext, candidates: List!<SharedHandle!<FunctionDecl>>, required_name: Name, required_parameter_types: List!<Type>, span: Span) -> bool {
+	func validateFunctionCanditates(this: &&TCContext, candidates: &List!<SharedHandle!<FunctionDecl>>, required_name: &Name, required_parameter_types: &List!<Type>, span: Span) -> bool {
 		if candidates.isEmpty() {
 			this.error("no matching function found", span);
 			this.info("looking for " + required_name.toString() + format(required_parameter_types), Span());
@@ -3493,7 +3493,7 @@ struct TCContext {
 		}
 	}
 
-	func getMatchingParameterCount(function: &FunctionDecl, parameter_types: List!<Type>, allow_unwrapping_this: bool, allow_unwrapping: bool) -> int {
+	func getMatchingParameterCount(function: &FunctionDecl, parameter_types: &List!<Type>, allow_unwrapping_this: bool, allow_unwrapping: bool) -> int {
 		if function.parameter_types.size() != parameter_types.size() {
 			return -1;
 		}
@@ -3519,7 +3519,7 @@ struct TCContext {
 		return count;
 	}
 
-	func createTemplateInstance(this: &&TCContext, base: SharedHandle!<Namespace>, template_parameters: List!<TemplateParameter>, error_span: Span) -> SharedHandle!<Namespace> {
+	func createTemplateInstance(this: &&TCContext, base: SharedHandle!<Namespace>, template_parameters: &List!<TemplateParameter>, error_span: Span) -> SharedHandle!<Namespace> {
 		const prev_namespace = this.current_namespace;
 		this.current_namespace = base.parent;
 
@@ -3634,7 +3634,7 @@ struct TCContext {
 		return instance;
 	}
 
-	func createTemplateInstance(this: &&TCContext, base: SharedHandle!<FunctionDecl>, template_parameters: List!<TemplateParameter>, error_span: Span) -> SharedHandle!<FunctionDecl> {
+	func createTemplateInstance(this: &&TCContext, base: SharedHandle!<FunctionDecl>, template_parameters: &List!<TemplateParameter>, error_span: Span) -> SharedHandle!<FunctionDecl> {
 		const prev_namespace = this.current_namespace;
 		this.current_namespace = base.parent_namespace;
 
@@ -3710,7 +3710,7 @@ struct TCContext {
 		return instance;
 	}
 
-	func getTemplateParameterDecls(base_decls: List!<TemplateParameterDecl>, values: List!<TemplateParameter>) -> List!<TemplateParameterDecl> {
+	func getTemplateParameterDecls(base_decls: &List!<TemplateParameterDecl>, values: &List!<TemplateParameter>) -> List!<TemplateParameterDecl> {
 		var result = base_decls;
 
 		for i in 0u..values.size() {
@@ -3724,7 +3724,7 @@ struct TCContext {
 		return result;
 	}
 
-	func checkName(this: &&TCContext, parsed_name: ParsedName) -> Name {
+	func checkName(this: &&TCContext, parsed_name: &ParsedName) -> Name {
 		var result = Name(parsed_name.span);
 
 		result.segments.grow(parsed_name.segments.size());
@@ -3741,7 +3741,7 @@ struct TCContext {
 		return result;
 	}
 
-	func checkTemplateParameter(this: &&TCContext, parameter: ParsedExpr) -> TemplateParameter {
+	func checkTemplateParameter(this: &&TCContext, parameter: &ParsedExpr) -> TemplateParameter {
 		if const parsed_type = parameter.toType() {
 			const type = this.checkTypeUsage(parsed_type, true);
 			if !type.isUnknown() {
@@ -3760,7 +3760,7 @@ struct TCContext {
 		return TemplateParameter::Garbage;
 	}
 
-	func checkTypeUsage(this: &&TCContext, parsed_type: ParsedType, quiet: bool) -> Type {
+	func checkTypeUsage(this: &&TCContext, parsed_type: &ParsedType, quiet: bool) -> Type {
 		match parsed_type {
 			case Name: name -> return this.getType(this.checkName(name), parsed_type.span, quiet);
 			case ConstReference: base -> {
@@ -3822,7 +3822,7 @@ struct TCContext {
 		}
 	}
 
-	func getFunctionType(this: &&TCContext, parameter_types: List!<Type>, return_type: Type, span: Span) -> Type {
+	func getFunctionType(this: &&TCContext, parameter_types: &List!<Type>, return_type: Type, span: Span) -> Type {
 		var template_parameters: List!<TemplateParameter>;
 		template_parameters.append(TemplateParameter::Type(return_type));
 		for t in parameter_types {
@@ -3832,7 +3832,7 @@ struct TCContext {
 		return this.getType(Name("function", template_parameters), span);
 	}
 
-	func checkCall(this: &&TCContext, name: Name, arguments: List!<Expr>, allow_unwrapping_this: bool, allow_unwrapping: bool, kind: CallKind, is_comptime: bool, span: Span) -> Expr {
+	func checkCall(this: &&TCContext, name: &Name, arguments: &List!<Expr>, allow_unwrapping_this: bool, allow_unwrapping: bool, kind: CallKind, is_comptime: bool, span: Span) -> Expr {
 		for arg in arguments {
 			if arg is Undefined {
 				return Expr::Undefined(span, Type::unknown());
@@ -3895,7 +3895,7 @@ struct TCContext {
 			|| name == "operator >" || name == "operator >=";
 	}
 
-	func unwrapArguments(this: &&TCContext, arguments: List!<Expr>, required_parameter_types: List!<Type>, is_comptime: bool) -> List!<Expr> {
+	func unwrapArguments(this: &&TCContext, arguments: &List!<Expr>, required_parameter_types: &List!<Type>, is_comptime: bool) -> List!<Expr> {
 		var result = arguments;
 
 		for i in 0u..result.size() {
@@ -3928,7 +3928,7 @@ struct TCContext {
 		return result;
 	}
 
-	func validateArgumentTypes(this: &&TCContext, arguments: List!<Expr>, required_parameter_types: List!<Type>, span: Span) -> bool {
+	func validateArgumentTypes(this: &&TCContext, arguments: &List!<Expr>, required_parameter_types: &List!<Type>, span: Span) -> bool {
 		for i in 0u..arguments.size() {
 			if arguments[i].type == required_parameter_types[i] {
 				continue;
@@ -3945,7 +3945,7 @@ struct TCContext {
 		return true;
 	}
 
-	func createCall(this: &&TCContext, function: SharedHandle!<FunctionDecl>, arguments: List!<Expr>, call_kind: CallKind, is_comptime: bool, span: Span) -> Expr {
+	func createCall(this: &&TCContext, function: SharedHandle!<FunctionDecl>, arguments: &List!<Expr>, call_kind: CallKind, is_comptime: bool, span: Span) -> Expr {
 		var unwrapped_arguments = this.unwrapArguments(arguments, function.parameter_types, is_comptime);
 		if !this.validateArgumentTypes(unwrapped_arguments, function.parameter_types, span) {
 			return Expr::Undefined(span, Type::unknown());
@@ -4014,7 +4014,7 @@ struct TCContext {
 		return result.addDereference();
 	}
 
-	func createTemporaryVariable(this: &&TCContext, type: Type, template_parameters: List!<TemplateParameter>, parsed_arguments: List!<ParsedExpr>, is_comptime: bool, span: Span) -> Expr {
+	func createTemporaryVariable(this: &&TCContext, type: Type, template_parameters: &List!<TemplateParameter>, parsed_arguments: &List!<ParsedExpr>, is_comptime: bool, span: Span) -> Expr {
 		var contains_errors = false;
 		var checked_arguments: List!<Expr>;
 		for parsed_argument in parsed_arguments {
@@ -4030,7 +4030,7 @@ struct TCContext {
 		return this.createTemporaryVariable(type, template_parameters, checked_arguments, is_comptime, span);
 	}
 
-	func createTemporaryVariable(this: &&TCContext, type: Type, template_parameters: List!<TemplateParameter>, checked_arguments: List!<Expr>, is_comptime: bool, span: Span) -> Expr {
+	func createTemporaryVariable(this: &&TCContext, type: Type, template_parameters: &List!<TemplateParameter>, checked_arguments: &List!<Expr>, is_comptime: bool, span: Span) -> Expr {
 		if type.isUnknown() {
 			return Expr::Undefined(span, Type::unknown());
 		}
@@ -4081,7 +4081,7 @@ struct TCContext {
 		}
 	}
 
-	func checkActiveMembersForCall(this: &&TCContext, arguments: List!<Expr>, function_name: String, span: Span) -> void {
+	func checkActiveMembersForCall(this: &&TCContext, arguments: &List!<Expr>, function_name: String, span: Span) -> void {
 		if !this.current_function.isAlive() {
 			return;
 		}
@@ -4154,7 +4154,7 @@ struct TCContext {
 		eliminateCallResultCopies(&&call_expr);
 	}
 
-	func getArgumentTypes(arguments: List!<Expr>, is_member_call: bool) -> List!<Type> {
+	func getArgumentTypes(arguments: &List!<Expr>, is_member_call: bool) -> List!<Type> {
 		var types: List!<Type>;
 		types.grow(arguments.size());
 

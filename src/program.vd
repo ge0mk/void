@@ -27,7 +27,7 @@ struct SourceFile {
 	var llvm_di_file: llvm_util::MetaDataRef;
 	var llvm_di_module: llvm_util::MetaDataRef;
 
-	func constructor(this: &&SourceFile, name: String, path: String, source: String, line_spans: List!<Span>) -> void {
+	func constructor(this: &&SourceFile, name: String, path: String, source: String, line_spans: &List!<Span>) -> void {
 		this.name := name;
 		this.path := path;
 		this.source := source;
@@ -233,7 +233,7 @@ struct Program {
 		}
 	}
 
-	func printErrors(this: &&Program, errors: List!<CompilationError>) -> void {
+	func printErrors(this: &&Program, errors: &List!<CompilationError>) -> void {
 		for e in errors {
 			this.printError(e);
 		}
@@ -268,7 +268,7 @@ struct Program {
 		return this.concepts_by_name.get(name);
 	}
 
-	func getOrCreateChildNamespace(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, template_parameters: List!<TemplateParameterDecl>, is_file: bool) -> SharedHandle!<Namespace> {
+	func getOrCreateChildNamespace(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, template_parameters: &List!<TemplateParameterDecl>, is_file: bool) -> SharedHandle!<Namespace> {
 		for child in parent_namespace.children {
 			if child.name != name {
 				continue;
@@ -340,7 +340,7 @@ struct Program {
 		return this.modules.get(path);
 	}
 
-	func createType(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, template_parameters: List!<TemplateParameterDecl>, body: TypeBody) -> SharedHandle!<TypeDecl> {
+	func createType(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, template_parameters: &List!<TemplateParameterDecl>, body: TypeBody) -> SharedHandle!<TypeDecl> {
 		var linked_namespace = this.getOrCreateChildNamespace(parent_namespace, name, template_parameters, false);
 		var type_decl = this.types.append(TypeDecl(name, linked_namespace.template_parameters, body));
 
@@ -359,7 +359,7 @@ struct Program {
 		return this.createType(parent_namespace, name, List!<TemplateParameterDecl>(), body);
 	}
 
-	func createFunction(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, template_parameters: List!<TemplateParameterDecl>, parameter_types: List!<Type>, return_type: Type, body: FunctionBody) -> SharedHandle!<FunctionDecl> {
+	func createFunction(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, template_parameters: &List!<TemplateParameterDecl>, parameter_types: &List!<Type>, return_type: Type, body: FunctionBody) -> SharedHandle!<FunctionDecl> {
 		var function = this.functions.append(FunctionDecl(name, template_parameters, body));
 
 		function.parent_namespace = parent_namespace;
@@ -376,35 +376,35 @@ struct Program {
 		return function;
 	}
 
-	func createFunction(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, template_parameters: List!<TemplateParameterDecl>, parameter_types: List!<Type>, return_type: Type, body: InlineBuiltinFunction) -> SharedHandle!<FunctionDecl> {
+	func createFunction(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, template_parameters: &List!<TemplateParameterDecl>, parameter_types: List!<Type>, return_type: Type, body: InlineBuiltinFunction) -> SharedHandle!<FunctionDecl> {
 		return this.createFunction(parent_namespace, name, template_parameters, parameter_types, return_type, FunctionBody::InlineBuiltin(body));
 	}
 
-	func createFunction(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, template_parameters: List!<TemplateParameterDecl>, parameter_types: List!<Type>, return_type: Type, body: BuiltinFunction) -> SharedHandle!<FunctionDecl> {
+	func createFunction(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, template_parameters: &List!<TemplateParameterDecl>, parameter_types: &List!<Type>, return_type: Type, body: BuiltinFunction) -> SharedHandle!<FunctionDecl> {
 		return this.createFunction(parent_namespace, name, template_parameters, parameter_types, return_type, FunctionBody::Builtin(body));
 	}
 
-	func createFunction(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, template_parameters: List!<TemplateParameterDecl>, body: FunctionBody) -> SharedHandle!<FunctionDecl> {
+	func createFunction(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, template_parameters: &List!<TemplateParameterDecl>, body: FunctionBody) -> SharedHandle!<FunctionDecl> {
 		return this.createFunction(parent_namespace, name, template_parameters, List!<Type>(), Type::unknown(), body);
 	}
 
-	func createFunction(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, template_parameters: List!<TemplateParameterDecl>, body: InlineBuiltinFunction) -> SharedHandle!<FunctionDecl> {
+	func createFunction(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, template_parameters: &List!<TemplateParameterDecl>, body: InlineBuiltinFunction) -> SharedHandle!<FunctionDecl> {
 		return this.createFunction(parent_namespace, name, template_parameters, List!<Type>(), Type::unknown(), FunctionBody::InlineBuiltin(body));
 	}
 
-	func createFunction(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, template_parameters: List!<TemplateParameterDecl>, body: BuiltinFunction) -> SharedHandle!<FunctionDecl> {
+	func createFunction(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, template_parameters: &List!<TemplateParameterDecl>, body: BuiltinFunction) -> SharedHandle!<FunctionDecl> {
 		return this.createFunction(parent_namespace, name, template_parameters, List!<Type>(), Type::unknown(), FunctionBody::Builtin(body));
 	}
 
-	func createFunction(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, parameter_types: List!<Type>, return_type: Type, body: FunctionBody) -> SharedHandle!<FunctionDecl> {
+	func createFunction(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, parameter_types: &List!<Type>, return_type: Type, body: FunctionBody) -> SharedHandle!<FunctionDecl> {
 		return this.createFunction(parent_namespace, name, List!<TemplateParameterDecl>(), parameter_types, return_type, body);
 	}
 
-	func createFunction(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, parameter_types: List!<Type>, return_type: Type, body: InlineBuiltinFunction) -> SharedHandle!<FunctionDecl> {
+	func createFunction(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, parameter_types: &List!<Type>, return_type: Type, body: InlineBuiltinFunction) -> SharedHandle!<FunctionDecl> {
 		return this.createFunction(parent_namespace, name, List!<TemplateParameterDecl>(), parameter_types, return_type, FunctionBody::InlineBuiltin(body));
 	}
 
-	func createFunction(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, parameter_types: List!<Type>, return_type: Type, body: BuiltinFunction) -> SharedHandle!<FunctionDecl> {
+	func createFunction(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, parameter_types: &List!<Type>, return_type: Type, body: BuiltinFunction) -> SharedHandle!<FunctionDecl> {
 		return this.createFunction(parent_namespace, name, List!<TemplateParameterDecl>(), parameter_types, return_type, FunctionBody::Builtin(body));
 	}
 
@@ -436,11 +436,11 @@ struct Program {
 		}
 	}
 
-	func runFunction(this: &Program, function: SharedHandle!<FunctionDecl>, args: List!<llvm_util::GenericValueRef>) -> llvm_util::GenericValueRef {
+	func runFunction(this: &Program, function: SharedHandle!<FunctionDecl>, args: &List!<llvm_util::GenericValueRef>) -> llvm_util::GenericValueRef {
 		return this.llvm_execution_engine.runFunction(function.llvm_func, args);
 	}
 
-	func runMainFunction(this: &Program, args: List!<String>, env: List!<String>) -> int {
+	func runMainFunction(this: &Program, args: &List!<String>, env: &List!<String>) -> int {
 		return this.llvm_execution_engine.runFunctionAsMain(this.llvm_module.getFunction("main"), args, env);
 	}
 }
@@ -544,12 +544,12 @@ struct NameSegment {
 	var name: String;
 	var template_parameters: List!<TemplateParameter>;
 
-	func constructor(this: &&NameSegment, name: String, template_parameters: List!<TemplateParameter>) -> void {
+	func constructor(this: &&NameSegment, name: String, template_parameters: &List!<TemplateParameter>) -> void {
 		this.name := name;
 		this.template_parameters := template_parameters;
 	}
 
-	func constructor(this: &&NameSegment, span: Span, name: String, template_parameters: List!<TemplateParameter>) -> void {
+	func constructor(this: &&NameSegment, span: Span, name: String, template_parameters: &List!<TemplateParameter>) -> void {
 		this.span := span;
 		this.name := name;
 		this.template_parameters := template_parameters;
@@ -578,7 +578,7 @@ struct Name {
 		this.segments := (1u, NameSegment(Span(), name, List!<TemplateParameter>()));
 	}
 
-	func constructor(this: &&Name, name: String, template_parameters: List!<TemplateParameter>) -> void {
+	func constructor(this: &&Name, name: String, template_parameters: &List!<TemplateParameter>) -> void {
 		this.segments := (1u, NameSegment(Span(), name, template_parameters));
 	}
 
@@ -594,7 +594,7 @@ struct Name {
 		return result;
 	}
 
-	func intersection(this: Name, segments: List!<NameSegment>) -> uint {
+	func intersection(this: &Name, segments: &List!<NameSegment>) -> uint {
 		for offset in 0u..this.segments.size() {
 			if segments.startsWith(this.segments[offset..this.segments.size()]) {
 				return this.segments.size() - offset;
@@ -683,7 +683,7 @@ struct Namespace {
 
 	var llvm_di: llvm_util::MetaDataRef;
 
-	func constructor(this: &&Namespace, name: String, template_parameters: List!<TemplateParameterDecl>, parent: SharedHandle!<Namespace>) -> void {
+	func constructor(this: &&Namespace, name: String, template_parameters: &List!<TemplateParameterDecl>, parent: SharedHandle!<Namespace>) -> void {
 		this.name := name;
 		this.template_parameters := template_parameters;
 		this.parent := parent;
@@ -788,7 +788,7 @@ struct Namespace {
 		}
 	}
 
-	func addUncheckedChildren(this: &&Namespace, children: List!<ParsedStmt>) -> void {
+	func addUncheckedChildren(this: &&Namespace, children: &List!<ParsedStmt>) -> void {
 		this.unchecked_children.append(children);
 		this.updateMinState(NamespaceState::Unchecked);
 
@@ -867,7 +867,7 @@ struct TypeDecl {
 	var llvm_type: llvm_util::TypeRef;
 	var llvm_di: llvm_util::MetaDataRef;
 
-	func constructor(this: &&TypeDecl, name: String, template_parameters: List!<TemplateParameterDecl>, body: TypeBody) -> void {
+	func constructor(this: &&TypeDecl, name: String, template_parameters: &List!<TemplateParameterDecl>, body: TypeBody) -> void {
 		this.name := name;
 		this.template_parameters := template_parameters;
 		this.body := body;
@@ -964,7 +964,7 @@ struct TypeDecl {
 		}
 	}
 
-	func createMemberVariable(this: &&TypeDecl, span: Span, name: String, type: Type, initializer: Expr) -> void {
+	func createMemberVariable(this: &&TypeDecl, span: Span, name: String, type: Type, initializer: &Expr) -> void {
 		if this.member_variables_by_name.contains(name) {
 			return;
 		}
@@ -1219,7 +1219,7 @@ struct FunctionDecl {
 	var llvm_type: llvm_util::TypeRef;
 	var llvm_di: llvm_util::MetaDataRef;
 
-	func constructor(this: &&FunctionDecl, name: String, template_parameters: List!<TemplateParameterDecl>, body: FunctionBody) -> void {
+	func constructor(this: &&FunctionDecl, name: String, template_parameters: &List!<TemplateParameterDecl>, body: FunctionBody) -> void {
 		this.name := name;
 		this.template_parameters := template_parameters;
 		this.body := body;
@@ -1357,7 +1357,7 @@ struct MemberVarDecl {
 
 	var initializer: Expr;
 
-	func constructor(this: &&MemberVarDecl, span: Span, id: uint, name: String, type: Type, initializer: Expr) -> void {
+	func constructor(this: &&MemberVarDecl, span: Span, id: uint, name: String, type: Type, initializer: &Expr) -> void {
 		this.span := span;
 
 		this.id := id;
@@ -1965,7 +1965,7 @@ struct IfStmt {
 	var then_branch: Box!<Stmt>;
 	var else_branch: Box!<Stmt>;
 
-	func constructor(this: &&IfStmt, condition: Expr, condition_cleanup: List!<Stmt>, then_branch: Stmt, else_branch: Stmt) -> void {
+	func constructor(this: &&IfStmt, condition: &Expr, condition_cleanup: &List!<Stmt>, then_branch: &Stmt, else_branch: &Stmt) -> void {
 		this.condition := condition;
 		this.condition_cleanup := condition_cleanup;
 		this.then_branch := then_branch;
@@ -1986,7 +1986,7 @@ struct WhileStmt {
 	var body: Box!<Stmt>;
 	var kind: WhileStmtKind;
 
-	func constructor(this: &&WhileStmt, condition: Expr, condition_cleanup: List!<Stmt>, body: Stmt, kind: WhileStmtKind) -> void {
+	func constructor(this: &&WhileStmt, condition: &Expr, condition_cleanup: &List!<Stmt>, body: &Stmt, kind: WhileStmtKind) -> void {
 		this.condition := condition;
 		this.condition_cleanup := condition_cleanup;
 		this.body := body;
@@ -2011,7 +2011,7 @@ struct CaseStmt {
 	var patterns: List!<Expr>;
 	var body: Box!<Stmt>;
 
-	func constructor(this: &&CaseStmt, span: Span, patterns: List!<Expr>, body: Stmt) -> void {
+	func constructor(this: &&CaseStmt, span: Span, patterns: &List!<Expr>, body: &Stmt) -> void {
 		this.span := span;
 		this.patterns := patterns;
 		this.body := body;
@@ -2234,7 +2234,7 @@ struct CallExpr {
 	var result_var: SharedHandle!<VarDecl>;
 	var return_kind: ReturnKind;
 
-	func constructor(this: &&CallExpr, function: SharedHandle!<FunctionDecl>, parameters: List!<Expr>, result_var: SharedHandle!<VarDecl>, return_kind: ReturnKind) -> void {
+	func constructor(this: &&CallExpr, function: SharedHandle!<FunctionDecl>, parameters: &List!<Expr>, result_var: SharedHandle!<VarDecl>, return_kind: ReturnKind) -> void {
 		this.function := function;
 		this.parameters := parameters;
 		this.result_var := result_var;
@@ -2259,7 +2259,7 @@ struct MatchExpr {
 		this.value := Expr::Undefined(Span(), Type::unknown());
 	}
 
-	func constructor(this: &&MatchExpr, value: Expr) -> void {
+	func constructor(this: &&MatchExpr, value: &Expr) -> void {
 		this.value := value;
 	}
 
@@ -2275,7 +2275,7 @@ struct MemberVarInvokeExpr {
 	var object: Box!<Expr>;
 	var id: uint;
 
-	func constructor(this: &&MemberVarInvokeExpr, object: Expr, id: uint) -> void {
+	func constructor(this: &&MemberVarInvokeExpr, object: &Expr, id: uint) -> void {
 		this.object := object;
 		this.id := id;
 	}
@@ -2292,7 +2292,7 @@ struct ShallowCopyExpr {
 	var destination: Box!<Expr>;
 	var value: Box!<Expr>;
 
-	func constructor(this: &&ShallowCopyExpr, destination: Expr, value: Expr) -> void {
+	func constructor(this: &&ShallowCopyExpr, destination: &Expr, value: &Expr) -> void {
 		this.destination := destination;
 		this.value := value;
 	}
@@ -2319,7 +2319,7 @@ func removeDereference(this: &Expr) -> Expr {
 	}
 }
 
-func format(template_parameters: List!<TemplateParameterDecl>) -> String {
+func format(template_parameters: &List!<TemplateParameterDecl>) -> String {
 	if template_parameters.isEmpty() {
 		return "";
 	}
@@ -2336,7 +2336,7 @@ func format(template_parameters: List!<TemplateParameterDecl>) -> String {
 	return result + ">";
 }
 
-func format(template_parameters: List!<TemplateParameter>) -> String {
+func format(template_parameters: &List!<TemplateParameter>) -> String {
 	if template_parameters.isEmpty() {
 		return "";
 	}
@@ -2353,7 +2353,7 @@ func format(template_parameters: List!<TemplateParameter>) -> String {
 	return result + ">";
 }
 
-func format(types: List!<Type>) -> String {
+func format(types: &List!<Type>) -> String {
 	var result = "(";
 	for i in 0u..types.size() {
 		if i != 0 {
