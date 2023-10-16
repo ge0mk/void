@@ -360,12 +360,14 @@ variant ParsedFunctionBody {
 
 struct ParsedParameterDecl {
 	var span: Span;
+	var annotations: List!<ParsedAnnotation>;
 	var name: String;
 	var type: ParsedType;
 	var initializer: Optional!<ParsedExpr>;
 
-	func constructor(this: &&ParsedParameterDecl, span: Span, name: String, type: ParsedType, initializer: Optional!<ParsedExpr>) -> void {
+	func constructor(this: &&ParsedParameterDecl, span: Span, annotations: List!<ParsedAnnotation>, name: String, type: ParsedType, initializer: Optional!<ParsedExpr>) -> void {
 		this.span := span;
+		this.annotations := annotations;
 		this.name := name;
 		this.type := type;
 		this.initializer := initializer;

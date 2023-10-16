@@ -667,6 +667,14 @@ struct TCContext {
 			const parameter_type = this.checkTypeUsage(parameter.type, false);
 			function.parameter_types.append(parameter_type);
 			function.createParameter(parameter.span, parameter.name, parameter_type);
+
+			for annotation in parameter.annotations {
+				match annotation {
+					else -> {
+						this.error("invalid function parameter annotation", annotation.span);
+					}
+				}
+			}
 		}
 
 		this.current_namespace.addUncheckedFunctionBody(function);

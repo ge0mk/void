@@ -621,6 +621,8 @@ struct Parser {
 		var error = false;
 		while !this.accept(TokenType::RParen) {
 			const parameter_start = this.currentSpan();
+
+			const annotations = this.parseAnnotations();
 			const parameter_name = this.expectIdentifier() else {
 				error = true;
 				break;
@@ -639,6 +641,7 @@ struct Parser {
 
 			parameters.append(ParsedParameterDecl(
 				parameter_start..this.previousSpan(),
+				annotations,
 				parameter_name,
 				param_type,
 				initializer
