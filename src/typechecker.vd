@@ -122,13 +122,13 @@ func typecheck(program: &&Program) -> void {
 	}
 
 	match program.llvm_context.loadModuleFromFile(program.options.install_path + "/rt.ll") {
-		case Some: rt_module -> program.llvm_module.link(rt_module);
+		case Some: rt_module -> discard LLVMLinkModules2(program.llvm_module, rt_module);
 		else -> program.has_errors = true;
 	}
 
 	program.finalizeDI();
 
-	if const error = program.llvm_module.verify(LLVMVerifierFailureAction::LLVMReturnStatusAction) as Error {
+	if const error = verifyModule(program.llvm_module, LLVMVerifierFailureAction::LLVMReturnStatusAction) as Error {
 		eprintln(error);
 		program.has_errors = true;
 	}
@@ -328,8 +328,9 @@ struct TCContext {
 			segments.removeLast();
 			const directory = "/".join(segments);
 
-			source_file.llvm_di_file = this.program.di_builder.createFile(filename, directory);
-			source_file.llvm_di_module = this.program.di_builder.createModule(
+			source_file.llvm_di_file = LLVMDIBuilderCreateFile(this.program.di_builder, filename, directory);
+			source_file.llvm_di_module = LLVMDIBuilderCreateModule(
+				this.program.di_builder,
 				this.program.di_compile_unit,
 				source_file.name,
 				"",		// config macros
@@ -502,6 +503,12 @@ struct TCContext {
 
 	func checkNamespaceDecl(this: &&TCContext, parsed_decl: &ParsedNamespace) -> SharedHandle!<Namespace> {
 		const template_parameters = this.checkTemplateParameterDecl(parsed_decl.template_parameters);
+
+		if var namespace_decl = this.current_namespace.aliases.get(parsed_decl.name) {
+			namespace_decl.addUncheckedChildren(parsed_decl.children);
+			return namespace_decl;
+		}
+
 		var namespace_decl = this.program.getOrCreateChildNamespace(this.current_namespace, parsed_decl.name, template_parameters, false);
 		namespace_decl.addUncheckedChildren(parsed_decl.children);
 		return namespace_decl;

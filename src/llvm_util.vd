@@ -6,9 +6,21 @@ import std/io;
 
 import llvm_c;
 
+alias LLVMMemoryBufferRef = vptr!<LLVMOpaqueMemoryBuffer>;
+alias LLVMContextRef = vptr!<LLVMOpaqueContext>;
+alias LLVMModuleRef = vptr!<LLVMOpaqueModule>;
+alias LLVMTypeRef = vptr!<LLVMOpaqueType>;
+alias LLVMValueRef = vptr!<LLVMOpaqueValue>;
+alias LLVMBasicBlockRef = vptr!<LLVMOpaqueBasicBlock>;
+alias LLVMMetadataRef = vptr!<LLVMOpaqueMetadata>;
+alias LLVMBuilderRef = vptr!<LLVMOpaqueBuilder>;
+alias LLVMDIBuilderRef = vptr!<LLVMOpaqueDIBuilder>;
+alias LLVMTargetDataRef = vptr!<LLVMOpaqueTargetData>;
+alias LLVMExecutionEngineRef = vptr!<LLVMOpaqueExecutionEngine>;
+alias LLVMGenericValueRef = vptr!<LLVMOpaqueGenericValue>;
+
 namespace dwarf {
 	// llvm/include/llvm/BinaryFormat/Dwarf.def
-	// why the fuck are these not enums in the c/c++ api ??????
 
 	enum Tag {
 		case Null = 0x0000;
@@ -104,1170 +116,542 @@ namespace dwarf {
 	}
 }
 
-func lookupIntrinsicID(name: String) -> u32{
+func createInterpreterForModule(module: LLVMModuleRef) -> Result!<LLVMExecutionEngineRef, String> {
+	var result: LLVMExecutionEngineRef;
+	var out_error: vptr!<byte>;
+
+	if LLVMCreateInterpreterForModule(vptr!<LLVMExecutionEngineRef>::addressOf(&&result), module, vptr!<vptr!<byte>>::addressOf(&&out_error)) != 0 {
+		const error = String::fromCString(out_error as cptr!<byte>);
+		LLVMDisposeMessage(out_error);
+		throw error;
+	}
+
+	return Ok(result);
+}
+
+func createJITCompilerForModule(module: LLVMModuleRef, optimization_level: uint) -> Result!<LLVMExecutionEngineRef, String> {
+	var result: LLVMExecutionEngineRef;
+	var out_error: vptr!<byte>;
+
+	if LLVMCreateJITCompilerForModule(vptr!<LLVMExecutionEngineRef>::addressOf(&&result), module, optimization_level as u32, vptr!<vptr!<byte>>::addressOf(&&out_error)) != 0 {
+		const error = String::fromCString(out_error as cptr!<byte>);
+		LLVMDisposeMessage(out_error);
+		throw error;
+	}
+
+	return Ok(result);
+}
+
+func loadModuleFromFile(ctx: LLVMContextRef, path: String) -> Optional!<LLVMModuleRef> {
+	var buffer: LLVMMemoryBufferRef;
+	var message: vptr!<byte>;
+
+	const buffer_status = LLVMCreateMemoryBufferWithContentsOfFile(
+		(path + '\0'b).data(),
+		vptr!<LLVMMemoryBufferRef>::addressOf(&&buffer),
+		vptr!<vptr!<byte>>::addressOf(&&message)
+	);
+
+	if buffer_status != 0 {
+		eprint("couldn't load module " + path + ": ");
+		eprintln(String::fromCString(message as cptr!<byte>));
+		return None;
+	}
+	LLVMDisposeMessage(message);
+
+	var module: LLVMModuleRef;
+	const module_status = LLVMParseIRInContext(
+		ctx, buffer,
+		vptr!<vptr!<LLVMOpaqueModule>>::addressOf(&&module),
+		vptr!<vptr!<byte>>::addressOf(&&message)
+	);
+
+	if module_status != 0 {
+		eprint("couldn't parse module " + path + ": ");
+		eprintln(String::fromCString(message as cptr!<byte>));
+		return None;
+	}
+	LLVMDisposeMessage(message);
+
+	return Some(module);
+}
+
+func printModuleToFile(module: LLVMModuleRef, path: String) -> bool {
+	var error_message = vptr::null() as vptr!<byte>;
+	if LLVMPrintModuleToFile(module, (path + '\0'b).data(), vptr!<vptr!<byte>>::addressOf(&&error_message)) != 0 {
+		eprintln(String::fromCString(error_message as cptr!<byte>));
+		LLVMDisposeMessage(error_message);
+		return false;
+	}
+
+	return true;
+}
+
+func printModuleToString(module: LLVMModuleRef) -> String {
+	const data = LLVMPrintModuleToString(module);
+	const result = String::fromCString(data as cptr!<byte>);
+	LLVMDisposeMessage(data);
+	return result;
+}
+
+func verifyModule(module: LLVMModuleRef, failure_action: LLVMVerifierFailureAction) -> Result!<void, String> {
+	var result = Result!<void, String>::Ok;
+
+	var message = vptr::null() as vptr!<byte>;
+	if LLVMVerifyModule(module, failure_action, vptr!<vptr!<byte>>::addressOf(&&message)) != 0 {
+		result = Result!<void, String>::Error(String::fromCString(message as cptr!<byte>));
+	}
+	LLVMDisposeMessage(message);
+
+	return result;
+}
+
+func LLVMLookupIntrinsicID(name: String) -> u32 {
 	return LLVMLookupIntrinsicID(name.data(), name.size());
 }
 
-func createInterpreterForModule(module: Module) -> Result!<ExecutionEngineRef, String> {
-	var result: vptr!<LLVMOpaqueExecutionEngine>;
-	var out_error: vptr!<byte>;
-
-	if LLVMCreateInterpreterForModule(vptr!<vptr!<LLVMOpaqueExecutionEngine>>::addressOf(&&result), module.handle, vptr!<vptr!<byte>>::addressOf(&&out_error)) != 0 {
-		const error = String::fromCString(out_error as cptr!<byte>);
-		LLVMDisposeMessage(out_error);
-		throw error;
-	}
-
-	return Ok(ExecutionEngineRef(result));
+func LLVMModuleCreateWithNameInContext(name: String, ctx: LLVMContextRef) -> LLVMModuleRef {
+	return LLVMModuleCreateWithNameInContext((name + '\0'b).data(), ctx);
 }
 
-func createJITCompilerForModule(module: Module, optimization_level: uint) -> Result!<ExecutionEngineRef, String> {
-	var result: vptr!<LLVMOpaqueExecutionEngine>;
-	var out_error: vptr!<byte>;
-
-	if LLVMCreateJITCompilerForModule(vptr!<vptr!<LLVMOpaqueExecutionEngine>>::addressOf(&&result), module.handle, optimization_level as u32, vptr!<vptr!<byte>>::addressOf(&&out_error)) != 0 {
-		const error = String::fromCString(out_error as cptr!<byte>);
-		LLVMDisposeMessage(out_error);
-		throw error;
-	}
-
-	return Ok(ExecutionEngineRef(result));
+func LLVMPointerTypeInContext(ctx: LLVMContextRef, address_space: uint) -> LLVMTypeRef {
+	return LLVMPointerTypeInContext(ctx, address_space as u32);
 }
 
-struct Context {
-	var handle: vptr!<LLVMOpaqueContext>;
-
-	func constructor(this: &&Context) -> void {
-		this.handle := LLVMContextCreate();
-	}
-
-	func constructor(this: &&Context, other: Context) -> void = default;
-	func destructor(this: &&Context) -> void = default;
-
-	operator =(this: &&Context, other: Context) -> void = default;
-
-	func dispose(this: Context) -> void {
-		LLVMContextDispose(this.handle);
-	}
-
-	func createModule(this: Context, name: String) -> Module {
-		const c_name = name + '\0'b;
-		return Module(LLVMModuleCreateWithNameInContext(c_name.data(), this.handle));
-	}
-
-	func loadModuleFromFile(this: Context, path: String) -> Optional!<Module> {
-		const c_path = path + "\0";
-		var buffer: vptr!<LLVMOpaqueMemoryBuffer>;
-		var message: vptr!<byte>;
-
-		const buffer_status = LLVMCreateMemoryBufferWithContentsOfFile(
-			c_path.data(),
-			vptr!<vptr!<LLVMOpaqueMemoryBuffer>>::addressOf(&&buffer),
-			vptr!<vptr!<byte>>::addressOf(&&message)
-		);
-
-		if buffer_status != 0 {
-			eprint("couldn't load module " + path + ": ");
-			eprintln(String::fromCString(message as cptr!<byte>));
-			return None;
-		}
-		LLVMDisposeMessage(message);
-
-		var module: vptr!<LLVMOpaqueModule>;
-		const module_status = LLVMParseIRInContext(
-			this.handle, buffer,
-			vptr!<vptr!<LLVMOpaqueModule>>::addressOf(&&module),
-			vptr!<vptr!<byte>>::addressOf(&&message)
-		);
-
-		if module_status != 0 {
-			eprint("couldn't parse module " + path + ": ");
-			eprintln(String::fromCString(message as cptr!<byte>));
-			return None;
-		}
-		LLVMDisposeMessage(message);
-
-		return Some(Module(module));
-	}
-
-	func getVoidType(this: Context) -> TypeRef {
-		return TypeRef(LLVMVoidTypeInContext(this.handle));
-	}
-
-	func getPointerType(this: Context, address_space: uint) -> TypeRef {
-		return TypeRef(LLVMPointerTypeInContext(this.handle, address_space as u32));
-	}
-
-	func getIntType(this: Context, bits: uint) -> TypeRef {
-		return TypeRef(LLVMIntTypeInContext(this.handle, bits as u32));
-	}
-
-	func getFloatType(this: Context) -> TypeRef {
-		return TypeRef(LLVMFloatTypeInContext(this.handle));
-	}
-
-	func getDoubleType(this: Context) -> TypeRef {
-		return TypeRef(LLVMDoubleTypeInContext(this.handle));
-	}
-
-	func getArrayType(this: Context, element_type: TypeRef, size: uint) -> TypeRef {
-		return TypeRef(LLVMArrayType(element_type.handle, size as u32));
-	}
-
-	func getFunctionType(this: Context, return_type: TypeRef, parameter_types: &List!<TypeRef>, is_variadic: bool) -> TypeRef {
-		var raw_parameter_types: List!<vptr!<LLVMOpaqueType>>;
-		for type in parameter_types {
-			raw_parameter_types.append(type.handle);
-		}
-
-		return TypeRef(
-			LLVMFunctionType(return_type.handle, raw_parameter_types.data, raw_parameter_types.size() as u32, is_variadic as i32)
-		);
-	}
-
-	func getStructType(this: Context, element_types: &List!<TypeRef>, is_packed: bool) -> TypeRef {
-		var raw_element_types: List!<vptr!<LLVMOpaqueType>>;
-		for type in element_types {
-			raw_element_types.append(type.handle);
-		}
-
-		return TypeRef(
-			LLVMStructTypeInContext(this.handle, raw_element_types.data, raw_element_types.size() as u32, is_packed as i32)
-		);
-	}
-
-	func createNamedStruct(this: Context, name: String) -> TypeRef {
-		const c_name = name + "\0";
-		return TypeRef(LLVMStructCreateNamed(this.handle, c_name.data()));
-	}
-
-	func appendBasicBlock(this: Context, function: ValueRef, name: String) -> BasicBlockRef {
-		const c_name = name + "\0";
-		return BasicBlockRef(
-			LLVMAppendBasicBlockInContext(this.handle, function.handle, c_name.data())
-		);
-	}
-
-	func createBuilder(this: Context) -> BuilderRef {
-		return BuilderRef(LLVMCreateBuilderInContext(this.handle));
-	}
-
-	func constString(this: Context, value: String, dont_null_terminate: bool) -> ValueRef {
-		return ValueRef(LLVMConstStringInContext(this.handle, value.data(), value.size() as u32, dont_null_terminate as i32));
-	}
-
-	func getIntrinsicType(this: Context, id: u32, parameter_types: &List!<TypeRef>) -> TypeRef {
-		var raw_parameter_types: List!<vptr!<LLVMOpaqueType>>;
-		for type in parameter_types {
-			raw_parameter_types.append(type.handle);
-		}
-
-		return TypeRef(LLVMIntrinsicGetType(this.handle, id, raw_parameter_types.data, parameter_types.size()));
-	}
-
-	func createDebugLocation(this: Context, line: uint, column: uint, scope: MetaDataRef) -> MetaDataRef {
-		return MetaDataRef(LLVMDIBuilderCreateDebugLocation(this.handle, line as u32, column as u32, scope.handle, vptr::null() as vptr!<LLVMOpaqueMetadata>));
-	}
-
-	func createDebugLocation(this: Context, line: uint, column: uint, scope: MetaDataRef, inlined_at: MetaDataRef) -> MetaDataRef {
-		return MetaDataRef(LLVMDIBuilderCreateDebugLocation(this.handle, line as u32, column as u32, scope.handle, inlined_at.handle));
-	}
-
-	func createTemporaryMDNode(this: Context) -> MetaDataRef {
-		return MetaDataRef(LLVMTemporaryMDNode(this.handle, vptr!<vptr!<LLVMOpaqueMetadata>>::null(), 0u));
-	}
+func LLVMIntTypeInContext(ctx: LLVMContextRef, bits: uint) -> LLVMTypeRef {
+	return LLVMIntTypeInContext(ctx, bits as u32);
 }
 
-struct Module {
-	var handle: vptr!<LLVMOpaqueModule>;
-
-	func constructor(this: &&Module) -> void = default;
-
-	func constructor(this: &&Module, handle: vptr!<LLVMOpaqueModule>) -> void {
-		this.handle := handle;
-	}
-
-	func constructor(this: &&Module, other: Module) -> void = default;
-	func destructor(this: &&Module) -> void = default;
-
-	operator =(this: &&Module, other: Module) -> void = default;
-
-	operator ==(this: Module, other: Module) -> bool = default;
-
-	func dispose(this: Module) -> void {
-		LLVMDisposeModule(this.handle);
-	}
-
-	func setIdentifier(this: Module, identifier: String) -> void {
-		LLVMSetModuleIdentifier(this.handle, identifier.data(), identifier.size());
-	}
-
-	func setSourceFileName(this: Module, file_name: String) -> void {
-		LLVMSetSourceFileName(this.handle, file_name.data(), file_name.size());
-	}
-
-	func setTargetTriple(this: Module, target_triple: String) -> void {
-		const c_str = target_triple + '\0'b;
-		LLVMSetTarget(this.handle, c_str.data());
-	}
-
-	func setDataLayout(this: Module, data_layout: String) -> void {
-		const c_str = data_layout + '\0'b;
-		LLVMSetDataLayout(this.handle, c_str.data());
-	}
-
-	func setDataLayout(this: Module, data_layout: TargetDataRef) -> void {
-		LLVMSetModuleDataLayout(this.handle, data_layout.handle);
-	}
-
-	func getDataLayout(this: Module) -> TargetDataRef {
-		return TargetDataRef(LLVMGetModuleDataLayout(this.handle));
-	}
-
-	func dump(this: Module) -> void {
-		LLVMDumpModule(this.handle);
-	}
-
-	func printToFile(this: Module, path: String) -> bool {
-		const c_path = path + '\0'b;
-		var error_message = vptr::null() as vptr!<byte>;
-		if LLVMPrintModuleToFile(this.handle, c_path.data(), vptr!<vptr!<byte>>::addressOf(&&error_message)) != 0 {
-			eprintln(String::fromCString(error_message as cptr!<byte>));
-			LLVMDisposeMessage(error_message);
-			return false;
-		}
-
-		return true;
-	}
-
-	func printToString(this: Module) -> String {
-		const data = LLVMPrintModuleToString(this.handle);
-		const result = String::fromCString(data as cptr!<byte>);
-		LLVMDisposeMessage(data);
-		return result;
-	}
-
-	func writeBitcodeToFile(this: Module, path: String) -> bool {
-		const c_path = path + '\0'b;
-		return LLVMWriteBitcodeToFile(this.handle, c_path.data()) == 0;
-	}
-
-	func addFunction(this: Module, name: String, type: TypeRef) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMAddFunction(this.handle, c_name.data(), type.handle));
-	}
-
-	func deleteFunction(this: Module, function: ValueRef) -> void {
-		LLVMDeleteFunction(function.handle);
-	}
-
-	func getFunction(this: Module, name: String) -> ValueRef {
-		const c_name = name + '\0'b;
-		return ValueRef(LLVMGetNamedFunction(this.handle, c_name.data()));
-	}
-
-	func addGlobal(this: Module, type: TypeRef, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMAddGlobal(this.handle, type.handle, c_name.data()));
-	}
-
-	func addFlag(this: Module, behavior: LLVMModuleFlagBehavior, key: String, value: MetaDataRef) -> void {
-		LLVMAddModuleFlag(this.handle, behavior, key.data(), key.size(), value.handle);
-	}
-
-	func link(this: Module, other: Module) -> void {
-		discard LLVMLinkModules2(this.handle, other.handle);
-	}
-
-	func verify(this: Module, failure_action: LLVMVerifierFailureAction) -> Result!<void, String> {
-		var result = Result!<void, String>::Ok;
-
-		var message = vptr::null() as vptr!<byte>;
-		if LLVMVerifyModule(this.handle, failure_action, vptr!<vptr!<byte>>::addressOf(&&message)) != 0 {
-			result = Result!<void, String>::Error(String::fromCString(message as cptr!<byte>));
-		}
-		LLVMDisposeMessage(message);
-
-		return result;
-	}
-
-	func getIntrinsicDeclaration(this: Module, id: u32, parameter_types: &List!<TypeRef>) -> ValueRef {
-		var raw_parameter_types: List!<vptr!<LLVMOpaqueType>>;
-		for type in parameter_types {
-			raw_parameter_types.append(type.handle);
-		}
-
-		return ValueRef(LLVMGetIntrinsicDeclaration(this.handle, id, raw_parameter_types.data, parameter_types.size()));
-	}
-
-	func createDIBuilder(this: Module) -> DIBuilderRef {
-		return DIBuilderRef(LLVMCreateDIBuilder(this.handle));
-	}
+func LLVMArrayType(element_type: LLVMTypeRef, size: uint) -> LLVMTypeRef {
+	return LLVMArrayType(element_type, size as u32);
 }
 
-struct TypeRef {
-	var handle: vptr!<LLVMOpaqueType>;
-
-	func constructor(this: &&TypeRef) -> void = default;
-
-	func constructor(this: &&TypeRef, handle: vptr!<LLVMOpaqueType>) -> void {
-		this.handle := handle;
-	}
-
-	func constructor(this: &&TypeRef, other: TypeRef) -> void = default;
-	func destructor(this: &&TypeRef) -> void = default;
-
-	operator =(this: &&TypeRef, other: TypeRef) -> void = default;
-
-	operator ==(this: TypeRef, other: TypeRef) -> bool = default;
-	operator <=>(this: TypeRef, other: TypeRef) -> int {
-		return this.handle <=> other.handle;
-	}
-
-	func getIntTypeWidth(this: TypeRef) -> uint {
-		return LLVMGetIntTypeWidth(this.handle) as uint;
-	}
-
-	func getUndef(this: TypeRef) -> ValueRef {
-		return ValueRef(LLVMGetUndef(this.handle));
-	}
-
-	func getPoison(this: TypeRef) -> ValueRef {
-		return ValueRef(LLVMGetPoison(this.handle));
-	}
-
-	func setStructBody(this: TypeRef, element_types: &List!<TypeRef>, is_packed: bool) -> void {
-		var raw_element_types: List!<vptr!<LLVMOpaqueType>>;
-		for element_type in element_types {
-			raw_element_types.append(element_type.handle);
-		}
-
-		LLVMStructSetBody(this.handle, raw_element_types.data, raw_element_types.size() as u32, is_packed as i32);
-	}
-
-	func structGetTypeAtIndex(this: TypeRef, index: uint) -> TypeRef {
-		return TypeRef(LLVMStructGetTypeAtIndex(this.handle, index as u32));
-	}
+func LLVMFunctionType(return_type: LLVMTypeRef, parameter_types: &List!<LLVMTypeRef>, is_variadic: bool) -> LLVMTypeRef {
+	return LLVMFunctionType(return_type, parameter_types.data, parameter_types.size() as u32, is_variadic as i32);
 }
 
-struct ValueRef {
-	var handle: vptr!<LLVMOpaqueValue>;
-
-	func constructor(this: &&ValueRef) -> void = default;
-
-	func constructor(this: &&ValueRef, handle: vptr!<LLVMOpaqueValue>) -> void {
-		this.handle := handle;
-	}
-
-	func constructor(this: &&ValueRef, other: ValueRef) -> void = default;
-	func destructor(this: &&ValueRef) -> void = default;
-
-	operator =(this: &&ValueRef, other: ValueRef) -> void = default;
-
-	operator ==(this: ValueRef, other: ValueRef) -> bool = default;
-	operator <=>(this: ValueRef, other: ValueRef) -> int {
-		return this.handle <=> other.handle;
-	}
-
-	func countParams(this: ValueRef) -> uint {
-		return LLVMCountParams(this.handle) as uint;
-	}
-
-	func getParam(this: ValueRef, index: uint) -> ValueRef {
-		return ValueRef(LLVMGetParam(this.handle, index as u32));
-	}
-
-	func countBasicBlocks(this: ValueRef) -> uint {
-		return LLVMCountBasicBlocks(this.handle) as uint;
-	}
-
-	func addCase(this: ValueRef, on_value: ValueRef, destination: BasicBlockRef) -> void {
-		LLVMAddCase(this.handle, on_value.handle, destination.handle);
-	}
-
-	func getType(this: ValueRef) -> TypeRef {
-		return TypeRef(LLVMTypeOf(this.handle));
-	}
-
-	func setLinkage(this: ValueRef, linkage: LLVMLinkage) -> void {
-		LLVMSetLinkage(this.handle, linkage);
-	}
-
-	func setVisibility(this: ValueRef, visibility: LLVMVisibility) -> void {
-		LLVMSetVisibility(this.handle, visibility);
-	}
-
-	func setUnnamedAddress(this: ValueRef, unnamed_address: LLVMUnnamedAddr) -> void {
-		LLVMSetUnnamedAddress(this.handle, unnamed_address);
-	}
-
-	func setUnnamedAddress(this: ValueRef, unnamed_address: bool) -> void {
-		LLVMSetUnnamedAddr(this.handle, unnamed_address as i32);
-	}
-
-	func setAlignment(this: ValueRef, alignment: uint) -> void {
-		LLVMSetAlignment(this.handle, alignment as u32);
-	}
-
-	func setInitializer(this: ValueRef, value: ValueRef) -> void {
-		LLVMSetInitializer(this.handle, value.handle);
-	}
-
-	func setGlobalConstant(this: ValueRef, state: bool) -> void {
-		LLVMSetGlobalConstant(this.handle, state as i32);
-	}
-
-	func addIncoming(this: ValueRef, values: &List!<ValueRef>, blocks: &List!<BasicBlockRef>) -> void {
-		var raw_values: List!<vptr!<LLVMOpaqueValue>>;
-		for value in values {
-			raw_values.append(value.handle);
-		}
-
-		var raw_blocks: List!<vptr!<LLVMOpaqueBasicBlock>>;
-		for block in blocks {
-			raw_blocks.append(block.handle);
-		}
-
-		assert(raw_values.size() == raw_blocks.size());
-		LLVMAddIncoming(this.handle, raw_values.data, raw_blocks.data, raw_values.size() as u32);
-	}
-
-	func asMetadata(this: ValueRef) -> MetaDataRef {
-		return MetaDataRef(LLVMValueAsMetadata(this.handle));
-	}
-
-	func setSubprogram(this: ValueRef, subprogram: MetaDataRef) -> void {
-		LLVMSetSubprogram(this.handle, subprogram.handle);
-	}
+func LLVMStructTypeInContext(ctx: LLVMContextRef, element_types: &List!<LLVMTypeRef>, is_packed: bool) -> LLVMTypeRef {
+	return LLVMStructTypeInContext(ctx, element_types.data, element_types.size() as u32, is_packed as i32);
 }
 
-struct TargetDataRef {
-	var handle: vptr!<LLVMOpaqueTargetData>;
-
-	func constructor(this: &&TargetDataRef) -> void = default;
-
-	func constructor(this: &&TargetDataRef, handle: vptr!<LLVMOpaqueTargetData>) -> void {
-		this.handle := handle;
-	}
-
-	func constructor(this: &&TargetDataRef, other: TargetDataRef) -> void = default;
-	func destructor(this: &&TargetDataRef) -> void = default;
-
-	operator =(this: &&TargetDataRef, other: TargetDataRef) -> void = default;
-	operator ==(this: TargetDataRef, other: TargetDataRef) -> bool = default;
-	operator <=>(this: TargetDataRef, other: TargetDataRef) -> int {
-		return this.handle <=> other.handle;
-	}
-
-	func getPointerSize(this: TargetDataRef) -> uint {
-		return LLVMPointerSize(this.handle) as uint;
-	}
-
-	func getStoreSizeOfType(this: TargetDataRef, type: TypeRef) -> uint {
-		return LLVMStoreSizeOfType(this.handle, type.handle) as uint;
-	}
-
-	func getABISizeOfType(this: TargetDataRef, type: TypeRef) -> uint {
-		return LLVMABISizeOfType(this.handle, type.handle) as uint;
-	}
-
-	func getABIAlignmentOfType(this: TargetDataRef, type: TypeRef) -> uint {
-		return LLVMABIAlignmentOfType(this.handle, type.handle) as uint;
-	}
-
-	func getCallFrameAlignmentOfType(this: TargetDataRef, type: TypeRef) -> uint {
-		return LLVMCallFrameAlignmentOfType(this.handle, type.handle) as uint;
-	}
-
-	func getPreferredAlignmentOfType(this: TargetDataRef, type: TypeRef) -> uint {
-		return LLVMPreferredAlignmentOfType(this.handle, type.handle) as uint;
-	}
-
-	func getOffsetOfElement(this: TargetDataRef, type: TypeRef, index: uint) -> uint {
-		return LLVMOffsetOfElement(this.handle, type.handle,index as u32) as uint;
-	}
+func LLVMStructCreateNamed(ctx: LLVMContextRef, name: String) -> LLVMTypeRef {
+	return LLVMStructCreateNamed(ctx, (name + '\0'b).data());
 }
 
-struct BasicBlockRef {
-	var handle: vptr!<LLVMOpaqueBasicBlock>;
-
-	func constructor(this: &&BasicBlockRef) -> void = default;
-
-	func constructor(this: &&BasicBlockRef, handle: vptr!<LLVMOpaqueBasicBlock>) -> void {
-		this.handle := handle;
-	}
-
-	func constructor(this: &&BasicBlockRef, other: BasicBlockRef) -> void = default;
-	func destructor(this: &&BasicBlockRef) -> void = default;
-
-	operator =(this: &&BasicBlockRef, other: BasicBlockRef) -> void = default;
-
-	operator ==(this: BasicBlockRef, other: BasicBlockRef) -> bool = default;
-	operator <=>(this: BasicBlockRef, other: BasicBlockRef) -> int {
-		return this.handle <=> other.handle;
-	}
-
-	func hasTerminator(this: BasicBlockRef) -> bool {
-		return LLVMGetBasicBlockTerminator(this.handle) != vptr::null();
-	}
+func LLVMAppendBasicBlockInContext(ctx: LLVMContextRef, function: LLVMValueRef, name: String) -> LLVMBasicBlockRef {
+	return LLVMAppendBasicBlockInContext(ctx, function, (name + '\0'b).data());
 }
 
-struct BuilderRef {
-	var handle: vptr!<LLVMOpaqueBuilder>;
-
-	func constructor(this: &&BuilderRef) -> void = default;
-
-	func constructor(this: &&BuilderRef, handle: vptr!<LLVMOpaqueBuilder>) -> void {
-		this.handle := handle;
-	}
-
-	func constructor(this: &&BuilderRef, other: BuilderRef) -> void = default;
-	func destructor(this: &&BuilderRef) -> void = default;
-
-	operator =(this: &&BuilderRef, other: BuilderRef) -> void = default;
-
-	operator ==(this: BuilderRef, other: BuilderRef) -> bool = default;
-	operator <=>(this: BuilderRef, other: BuilderRef) -> int {
-		return this.handle <=> other.handle;
-	}
-
-	func dispose(this: BuilderRef) -> void {
-		LLVMDisposeBuilder(this.handle);
-	}
-
-	func positionBefore(this: BuilderRef, instruction: ValueRef) -> void {
-		LLVMPositionBuilderBefore(this.handle, instruction.handle);
-	}
-
-	func positionAtEnd(this: BuilderRef, basic_block: BasicBlockRef) -> void {
-		LLVMPositionBuilderAtEnd(this.handle, basic_block.handle);
-	}
-
-	func getInsertBlock(this: BuilderRef) -> BasicBlockRef {
-		return BasicBlockRef(LLVMGetInsertBlock(this.handle));
-	}
-
-	func buildRetVoid(this: BuilderRef) -> void {
-		discard LLVMBuildRetVoid(this.handle);
-	}
-
-	func buildRet(this: BuilderRef, value: ValueRef) -> void {
-		discard LLVMBuildRet(this.handle, value.handle);
-	}
-
-	func buildBr(this: BuilderRef, target: BasicBlockRef) -> void {
-		discard LLVMBuildBr(this.handle, target.handle);
-	}
-
-	func buildCondBr(this: BuilderRef, condition: ValueRef, then_block: BasicBlockRef, else_block: BasicBlockRef) -> void {
-		discard LLVMBuildCondBr(this.handle, condition.handle, then_block.handle, else_block.handle);
-	}
-
-	func buildSwitch(this: BuilderRef, value: ValueRef, else_block: BasicBlockRef, num_cases: uint) -> ValueRef {
-		return ValueRef(LLVMBuildSwitch(this.handle, value.handle, else_block.handle, num_cases as u32));
-	}
-
-	func buildUnreachable(this: BuilderRef) -> void {
-		discard LLVMBuildUnreachable(this.handle);
-	}
-
-	func buildAdd(this: BuilderRef, lhs: ValueRef, rhs: ValueRef, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildAdd(this.handle, lhs.handle, rhs.handle, c_name.data()));
-	}
-
-	func buildNSWAdd(this: BuilderRef, lhs: ValueRef, rhs: ValueRef, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildNSWAdd(this.handle, lhs.handle, rhs.handle, c_name.data()));
-	}
-
-	func buildNUWAdd(this: BuilderRef, lhs: ValueRef, rhs: ValueRef, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildNUWAdd(this.handle, lhs.handle, rhs.handle, c_name.data()));
-	}
-
-	func buildFAdd(this: BuilderRef, lhs: ValueRef, rhs: ValueRef, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildFAdd(this.handle, lhs.handle, rhs.handle, c_name.data()));
-	}
-
-	func buildSub(this: BuilderRef, lhs: ValueRef, rhs: ValueRef, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildSub(this.handle, lhs.handle, rhs.handle, c_name.data()));
-	}
-
-	func buildNSWSub(this: BuilderRef, lhs: ValueRef, rhs: ValueRef, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildNSWSub(this.handle, lhs.handle, rhs.handle, c_name.data()));
-	}
-
-	func buildNUWSub(this: BuilderRef, lhs: ValueRef, rhs: ValueRef, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildNUWSub(this.handle, lhs.handle, rhs.handle, c_name.data()));
-	}
-
-	func buildFSub(this: BuilderRef, lhs: ValueRef, rhs: ValueRef, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildFSub(this.handle, lhs.handle, rhs.handle, c_name.data()));
-	}
-
-	func buildMul(this: BuilderRef, lhs: ValueRef, rhs: ValueRef, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildMul(this.handle, lhs.handle, rhs.handle, c_name.data()));
-	}
-
-	func buildNSWMul(this: BuilderRef, lhs: ValueRef, rhs: ValueRef, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildNSWMul(this.handle, lhs.handle, rhs.handle, c_name.data()));
-	}
-
-	func buildNUWMul(this: BuilderRef, lhs: ValueRef, rhs: ValueRef, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildNUWMul(this.handle, lhs.handle, rhs.handle, c_name.data()));
-	}
-
-	func buildFMul(this: BuilderRef, lhs: ValueRef, rhs: ValueRef, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildFMul(this.handle, lhs.handle, rhs.handle, c_name.data()));
-	}
-
-	func buildUDiv(this: BuilderRef, lhs: ValueRef, rhs: ValueRef, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildUDiv(this.handle, lhs.handle, rhs.handle, c_name.data()));
-	}
-
-	func buildExactUDiv(this: BuilderRef, lhs: ValueRef, rhs: ValueRef, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildExactUDiv(this.handle, lhs.handle, rhs.handle, c_name.data()));
-	}
-
-	func buildSDiv(this: BuilderRef, lhs: ValueRef, rhs: ValueRef, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildSDiv(this.handle, lhs.handle, rhs.handle, c_name.data()));
-	}
-
-	func buildExactSDiv(this: BuilderRef, lhs: ValueRef, rhs: ValueRef, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildExactSDiv(this.handle, lhs.handle, rhs.handle, c_name.data()));
-	}
-
-	func buildFDiv(this: BuilderRef, lhs: ValueRef, rhs: ValueRef, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildFDiv(this.handle, lhs.handle, rhs.handle, c_name.data()));
-	}
-
-	func buildURem(this: BuilderRef, lhs: ValueRef, rhs: ValueRef, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildURem(this.handle, lhs.handle, rhs.handle, c_name.data()));
-	}
-
-	func buildSRem(this: BuilderRef, lhs: ValueRef, rhs: ValueRef, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildSRem(this.handle, lhs.handle, rhs.handle, c_name.data()));
-	}
-
-	func buildFRem(this: BuilderRef, lhs: ValueRef, rhs: ValueRef, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildFRem(this.handle, lhs.handle, rhs.handle, c_name.data()));
-	}
-
-	func buildShl(this: BuilderRef, lhs: ValueRef, rhs: ValueRef, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildShl(this.handle, lhs.handle, rhs.handle, c_name.data()));
-	}
-
-	func buildLShr(this: BuilderRef, lhs: ValueRef, rhs: ValueRef, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildLShr(this.handle, lhs.handle, rhs.handle, c_name.data()));
-	}
-
-	func buildAShr(this: BuilderRef, lhs: ValueRef, rhs: ValueRef, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildAShr(this.handle, lhs.handle, rhs.handle, c_name.data()));
-	}
-
-	func buildAnd(this: BuilderRef, lhs: ValueRef, rhs: ValueRef, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildAnd(this.handle, lhs.handle, rhs.handle, c_name.data()));
-	}
-
-	func buildOr(this: BuilderRef, lhs: ValueRef, rhs: ValueRef, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildOr(this.handle, lhs.handle, rhs.handle, c_name.data()));
-	}
-
-	func buildXor(this: BuilderRef, lhs: ValueRef, rhs: ValueRef, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildXor(this.handle, lhs.handle, rhs.handle, c_name.data()));
-	}
-
-	func buildNeg(this: BuilderRef, lhs: ValueRef, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildNeg(this.handle, lhs.handle, c_name.data()));
-	}
-
-	func buildNSWNeg(this: BuilderRef, lhs: ValueRef, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildNSWNeg(this.handle, lhs.handle, c_name.data()));
-	}
-
-	func buildNUWNeg(this: BuilderRef, lhs: ValueRef, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildNUWNeg(this.handle, lhs.handle, c_name.data()));
-	}
-
-	func buildFNeg(this: BuilderRef, lhs: ValueRef, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildFNeg(this.handle, lhs.handle, c_name.data()));
-	}
-
-	func buildNot(this: BuilderRef, lhs: ValueRef, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildNot(this.handle, lhs.handle, c_name.data()));
-	}
-
-	func buildAlloca(this: BuilderRef, type: TypeRef, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildAlloca(this.handle, type.handle, c_name.data()));
-	}
-
-	func buildLoad2(this: BuilderRef, type: TypeRef, pointer: ValueRef, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildLoad2(this.handle, type.handle, pointer.handle, c_name.data()));
-	}
-
-	func buildStore(this: BuilderRef, value: ValueRef, destination: ValueRef) -> void {
-		discard LLVMBuildStore(this.handle, value.handle, destination.handle);
-	}
-
-	func buildGEP2(this: BuilderRef, type: TypeRef, pointer: ValueRef, indices: &List!<ValueRef>, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		var raw_indices: List!<vptr!<LLVMOpaqueValue>>;
-		for i in indices {
-			raw_indices.append(i.handle);
-		}
-
-		return ValueRef(LLVMBuildGEP2(this.handle, type.handle, pointer.handle, raw_indices.data, raw_indices.size() as u32, c_name.data()));
-	}
-
-	func buildStructGEP2(this: BuilderRef, type: TypeRef, pointer: ValueRef, index: uint, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildStructGEP2(this.handle, type.handle, pointer.handle, index as u32, c_name.data()));
-	}
-
-	func buildTrunc(this: BuilderRef, value: ValueRef, type: TypeRef, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildTrunc(this.handle, value.handle, type.handle, c_name.data()));
-	}
-
-	func buildZExt(this: BuilderRef, value: ValueRef, type: TypeRef, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildZExt(this.handle, value.handle, type.handle, c_name.data()));
-	}
-
-	func buildSExt(this: BuilderRef, value: ValueRef, type: TypeRef, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildSExt(this.handle, value.handle, type.handle, c_name.data()));
-	}
-
-	func buildFPToUI(this: BuilderRef, value: ValueRef, type: TypeRef, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildFPToUI(this.handle, value.handle, type.handle, c_name.data()));
-	}
-
-	func buildFPToSI(this: BuilderRef, value: ValueRef, type: TypeRef, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildFPToSI(this.handle, value.handle, type.handle, c_name.data()));
-	}
-
-	func buildUIToFP(this: BuilderRef, value: ValueRef, type: TypeRef, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildUIToFP(this.handle, value.handle, type.handle, c_name.data()));
-	}
-
-	func buildSIToFP(this: BuilderRef, value: ValueRef, type: TypeRef, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildSIToFP(this.handle, value.handle, type.handle, c_name.data()));
-	}
-
-	func buildFPTrunc(this: BuilderRef, value: ValueRef, type: TypeRef, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildFPTrunc(this.handle, value.handle, type.handle, c_name.data()));
-	}
-
-	func buildFPExt(this: BuilderRef, value: ValueRef, type: TypeRef, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildFPExt(this.handle, value.handle, type.handle, c_name.data()));
-	}
-
-	func buildICmp(this: BuilderRef, op: LLVMIntPredicate, lhs: ValueRef, rhs: ValueRef, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildICmp(this.handle, op, lhs.handle, rhs.handle, c_name.data()));
-	}
-
-	func buildFCmp(this: BuilderRef, op: LLVMRealPredicate, lhs: ValueRef, rhs: ValueRef, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildFCmp(this.handle, op, lhs.handle, rhs.handle, c_name.data()));
-	}
-
-	func buildPhi(this: BuilderRef, type: TypeRef, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildPhi(this.handle, type.handle, c_name.data()));
-	}
-
-	func buildCall2(this: BuilderRef, type: TypeRef, function: ValueRef, args: &List!<ValueRef>, name: String) -> ValueRef {
-		const c_name = name + "\0";
-
-		var c_args: List!<vptr!<LLVMOpaqueValue>>;
-		for arg in args {
-			c_args.append(arg.handle);
-		}
-
-		return ValueRef(LLVMBuildCall2(this.handle, type.handle, function.handle, c_args.data, c_args.size as u32, c_name.data()));
-	}
-
-	func buildExtractValue(this: BuilderRef, object: ValueRef, index: uint, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildExtractValue(this.handle, object.handle, index as u32, c_name.data()));
-	}
-
-	func buildInsertValue(this: BuilderRef, object: ValueRef, element: ValueRef, index: uint, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildInsertValue(this.handle, object.handle, element.handle, index as u32, c_name.data()));
-	}
-
-	func buildPtrDiff2(this: BuilderRef, type: TypeRef, lhs: ValueRef, rhs: ValueRef, name: String) -> ValueRef {
-		const c_name = name + "\0";
-		return ValueRef(LLVMBuildPtrDiff2(this.handle, type.handle, lhs.handle, rhs.handle, c_name.data()));
-	}
-
-	func setCurrentDebugLocation2(this: BuilderRef, debug_location: MetaDataRef) -> void {
-		LLVMSetCurrentDebugLocation2(this.handle, debug_location.handle);
-	}
+func LLVMConstStringInContext(ctx: LLVMContextRef, value: String, dont_null_terminate: bool) -> LLVMValueRef {
+	return LLVMConstStringInContext(ctx, value.data(), value.size() as u32, dont_null_terminate as i32);
 }
 
-func constNull(this: TypeRef) -> ValueRef {
-	return ValueRef(LLVMConstNull(this.handle));
+func LLVMIntrinsicGetType(ctx: LLVMContextRef, id: u32, parameter_types: &List!<LLVMTypeRef>) -> LLVMTypeRef {
+	return LLVMIntrinsicGetType(ctx, id, parameter_types.data, parameter_types.size());
 }
 
-func constInt(this: TypeRef, value: int, sign_extend: bool) -> ValueRef {
-	return ValueRef(LLVMConstInt(this.handle, value as u32, sign_extend as i32));
+func LLVMDIBuilderCreateDebugLocation(ctx: LLVMContextRef, line: uint, column: uint, scope: LLVMMetadataRef) -> LLVMMetadataRef {
+	return LLVMDIBuilderCreateDebugLocation(ctx, line as u32, column as u32, scope, vptr::null() as vptr!<LLVMOpaqueMetadata>);
 }
 
-func constFloat(this: TypeRef, value: f64) -> ValueRef {
-	return ValueRef(LLVMConstReal(this.handle, value));
+func LLVMDIBuilderCreateDebugLocation(ctx: LLVMContextRef, line: uint, column: uint, scope: LLVMMetadataRef, inlined_at: LLVMMetadataRef) -> LLVMMetadataRef {
+	return LLVMDIBuilderCreateDebugLocation(ctx, line as u32, column as u32, scope, inlined_at);
 }
 
-func constGEP2(this: TypeRef, pointer: ValueRef, indices: &List!<ValueRef>) -> ValueRef {
-	var raw_indices: List!<vptr!<LLVMOpaqueValue>>;
-	for i in indices {
-		raw_indices.append(i.handle);
-	}
-
-	return ValueRef(LLVMConstGEP2(this.handle, pointer.handle, raw_indices.data, raw_indices.size() as u32));
+func LLVMTemporaryMDNode(ctx: LLVMContextRef) -> LLVMMetadataRef {
+	return LLVMTemporaryMDNode(ctx, vptr!<LLVMMetadataRef>::null(), 0u);
 }
 
-func constPtrToInt(value: ValueRef, target_type: TypeRef) -> ValueRef {
-	return ValueRef(LLVMConstPtrToInt(value.handle, target_type.handle));
+func LLVMSetModuleIdentifier(module: LLVMModuleRef, identifier: String) -> void {
+	LLVMSetModuleIdentifier(module, identifier.data(), identifier.size());
 }
 
-struct DIBuilderRef {
-	var handle: vptr!<LLVMOpaqueDIBuilder>;
-
-	func constructor(this: &&DIBuilderRef) -> void = default;
-
-	func constructor(this: &&DIBuilderRef, handle: vptr!<LLVMOpaqueDIBuilder>) -> void {
-		this.handle := handle;
-	}
-
-	func constructor(this: &&DIBuilderRef, other: DIBuilderRef) -> void = default;
-	func destructor(this: &&DIBuilderRef) -> void = default;
-
-	operator =(this: &&DIBuilderRef, other: DIBuilderRef) -> void = default;
-
-	operator ==(this: DIBuilderRef, other: DIBuilderRef) -> bool = default;
-	operator <=>(this: DIBuilderRef, other: DIBuilderRef) -> int {
-		return this.handle <=> other.handle;
-	}
-
-	func dispose(this: DIBuilderRef) -> void {
-		LLVMDisposeDIBuilder(this.handle);
-	}
-
-	func finalize(this: DIBuilderRef) -> void {
-		LLVMDIBuilderFinalize(this.handle);
-	}
-
-	func finalizeSubprogram(this: DIBuilderRef, subprogram: MetaDataRef) -> void {
-		LLVMDIBuilderFinalizeSubprogram(this.handle, subprogram.handle);
-	}
-
-	func createFile(this: DIBuilderRef, file_name: String, directory: String) -> MetaDataRef {
-		return MetaDataRef(LLVMDIBuilderCreateFile(this.handle, file_name.data(), file_name.size(), directory.data(), directory.size()));
-	}
-
-	func createCompileUnit(this: DIBuilderRef, lang: LLVMDWARFSourceLanguage, file: MetaDataRef, producer: String, is_optimized: bool, flags: String, runtime_version: uint, split_name: String, kind: LLVMDWARFEmissionKind, dwo_id: uint, split_debug_inlining: bool, debug_info_for_profiling: bool, sys_root: String, sdk: String) -> MetaDataRef {
-		return MetaDataRef(LLVMDIBuilderCreateCompileUnit(this.handle, lang, file.handle, producer.data(), producer.size(), is_optimized as i32, flags.data(), flags.size(), runtime_version as u32, split_name.data(), split_name.size(), kind, dwo_id as u32, split_debug_inlining as i32, debug_info_for_profiling as i32, sys_root.data(), sys_root.size(), sdk.data(), sdk.size()));
-	}
-
-	func createModule(this: DIBuilderRef, cu: MetaDataRef, name: String, config_macros: String, include_path: String, api_notes_file: String) -> MetaDataRef {
-		return MetaDataRef(LLVMDIBuilderCreateModule(this.handle, cu.handle, name.data(), name.size(), config_macros.data(), config_macros.size(), include_path.data(), include_path.size(), api_notes_file.data(), api_notes_file.size()));
-	}
-
-	func createNameSpace(this: DIBuilderRef, parent: MetaDataRef, name: String, export_symbols: bool) -> MetaDataRef {
-		return MetaDataRef(LLVMDIBuilderCreateNameSpace(this.handle, parent.handle, name.data(), name.size(), export_symbols as i32));
-	}
-
-	func createFunction(this: DIBuilderRef, scope: MetaDataRef, name: String, linkage_name: String, file: MetaDataRef, line: uint, type: MetaDataRef, is_local_to_unit: bool, is_definition: bool, scope_line: uint, flags: LLVMDIFlags, is_optimized: bool) -> MetaDataRef {
-		return MetaDataRef(LLVMDIBuilderCreateFunction(this.handle, scope.handle, name.data(), name.size(), linkage_name.data(), linkage_name.size(), file.handle, line as u32, type.handle, is_local_to_unit as i32, is_definition as i32, scope_line as u32, flags, is_optimized as i32));
-	}
-
-	func getOrCreateTypeArray(this: DIBuilderRef, types: &List!<MetaDataRef>) -> MetaDataRef {
-		var raw_types: List!<vptr!<LLVMOpaqueMetadata>>;
-		for type in types {
-			raw_types.append(type.handle);
-		}
-
-		return MetaDataRef(LLVMDIBuilderGetOrCreateTypeArray(this.handle, raw_types.data, types.size()));
-	}
-
-	func createSubroutineType(this: DIBuilderRef, file: MetaDataRef, parameter_types: &List!<MetaDataRef>, flags: LLVMDIFlags) -> MetaDataRef {
-		var raw_parameter_types: List!<vptr!<LLVMOpaqueMetadata>>;
-		for parameter_type in parameter_types {
-			raw_parameter_types.append(parameter_type.handle);
-		}
-
-		return MetaDataRef(LLVMDIBuilderCreateSubroutineType(this.handle, file.handle, raw_parameter_types.data, raw_parameter_types.size() as u32, flags));
-	}
-
-	func createEnumerator(this: DIBuilderRef, name: String, value: int, is_unsigned: bool) -> MetaDataRef {
-		return MetaDataRef(LLVMDIBuilderCreateEnumerator(this.handle, name.data(), name.size(), value as i64, is_unsigned as i32));
-	}
-
-	func createEnumerationType(this: DIBuilderRef, scope: MetaDataRef, name: String, file: MetaDataRef, line: uint, size_in_bits: uint, alignment_in_bits: uint, elements: &List!<MetaDataRef>, class_type: MetaDataRef) -> MetaDataRef {
-		var raw_elements: List!<vptr!<LLVMOpaqueMetadata>>;
-		for element in elements {
-			raw_elements.append(element.handle);
-		}
-
-		return MetaDataRef(LLVMDIBuilderCreateEnumerationType(this.handle, scope.handle, name.data(), name.size(), file.handle, line as u32, size_in_bits as u64, alignment_in_bits as u32, raw_elements.data, raw_elements.size() as u32, class_type.handle));
-	}
-
-	func createUnionType(this: DIBuilderRef, scope: MetaDataRef, name: String, file: MetaDataRef, line: uint, size_in_bits: uint, alignment_in_bits: uint, flags: LLVMDIFlags, elements: &List!<MetaDataRef>, runtime_lang: u32, unique_id: String) -> MetaDataRef {
-		var raw_elements: List!<vptr!<LLVMOpaqueMetadata>>;
-		for element in elements {
-			raw_elements.append(element.handle);
-		}
-
-		return MetaDataRef(LLVMDIBuilderCreateUnionType(this.handle, scope.handle, name.data(), name.size(), file.handle, line as u32, size_in_bits as u64, alignment_in_bits as u32, flags, raw_elements.data, raw_elements.size() as u32, runtime_lang, unique_id.data(), unique_id.size()));
-	}
-
-	func createArrayType(this: DIBuilderRef, size: uint, alignment_in_bits: uint, element_type: MetaDataRef, subscripts: &List!<MetaDataRef>) -> MetaDataRef {
-		var raw_subscripts: List!<vptr!<LLVMOpaqueMetadata>>;
-		for subscript in subscripts {
-			raw_subscripts.append(subscript.handle);
-		}
-
-		return MetaDataRef(LLVMDIBuilderCreateArrayType(this.handle, size as u64, alignment_in_bits as u32, element_type.handle, raw_subscripts.data, raw_subscripts.size() as u32));
-	}
-
-	func createVectorType(this: DIBuilderRef, size: uint, alignment_in_bits: uint, element_type: MetaDataRef, subscripts: &List!<MetaDataRef>) -> MetaDataRef {
-		var raw_subscripts: List!<vptr!<LLVMOpaqueMetadata>>;
-		for subscript in subscripts {
-			raw_subscripts.append(subscript.handle);
-		}
-
-		return MetaDataRef(LLVMDIBuilderCreateVectorType(this.handle, size as u64, alignment_in_bits as u32, element_type.handle, raw_subscripts.data, raw_subscripts.size() as u32));
-	}
-
-	func createUnspecifiedType(this: DIBuilderRef, name: String) -> MetaDataRef {
-		return MetaDataRef(LLVMDIBuilderCreateUnspecifiedType(this.handle, name.data(), name.size()));
-	}
-
-	func createBasicType(this: DIBuilderRef, name: String, size_in_bits: uint, encoding: dwarf::TypeEncoding, flags: LLVMDIFlags) -> MetaDataRef {
-		return MetaDataRef(LLVMDIBuilderCreateBasicType(this.handle, name.data(), name.size(), size_in_bits as u64, encoding as u32, flags));
-	}
-
-	func createPointerType(this: DIBuilderRef, pointee_type: MetaDataRef, size_in_bits: uint, alignment_in_bits: uint, address_space: uint, name: String) -> MetaDataRef {
-		return MetaDataRef(LLVMDIBuilderCreatePointerType(this.handle, pointee_type.handle, size_in_bits as u64, alignment_in_bits as u32, address_space as u32, name.data(), name.size()));
-	}
-
-	func createStructType(this: DIBuilderRef, scope: MetaDataRef, name: String, file: MetaDataRef, line: uint, size_in_bits: uint, alignment_in_bits: uint, flags: LLVMDIFlags, derived_from: MetaDataRef, elements: &List!<MetaDataRef>, runtime_lang: u32, vtable_holder: MetaDataRef, unique_id: String) -> MetaDataRef {
-		var raw_elements: List!<vptr!<LLVMOpaqueMetadata>>;
-		for element in elements {
-			raw_elements.append(element.handle);
-		}
-
-		return MetaDataRef(LLVMDIBuilderCreateStructType(this.handle, scope.handle, name.data(), name.size(), file.handle, line as u32, size_in_bits as u64, alignment_in_bits as u32, flags, derived_from.handle, raw_elements.data, raw_elements.size() as u32, runtime_lang, vtable_holder.handle, unique_id.data(), unique_id.size()));
-	}
-
-	func createMemberType(this: DIBuilderRef, scope: MetaDataRef, name: String, file: MetaDataRef, line: uint, size_in_bits: uint, alignment_in_bits: uint, offset_in_bits: uint, flags: LLVMDIFlags, type: MetaDataRef) -> MetaDataRef {
-		return MetaDataRef(LLVMDIBuilderCreateMemberType(this.handle, scope.handle, name.data(), name.size(), file.handle, line as u32, size_in_bits as u64, alignment_in_bits as u32, offset_in_bits as u64, flags, type.handle));
-	}
-
-	func createReferenceType(this: DIBuilderRef, tag: dwarf::Tag, base_type: MetaDataRef) -> MetaDataRef {
-		return MetaDataRef(LLVMDIBuilderCreateReferenceType(this.handle, tag as u32, base_type.handle));
-	}
-
-	func createForwardDecl(this: DIBuilderRef, tag: dwarf::Tag, name: String, scope: MetaDataRef, file: MetaDataRef, line: uint, runtime_lang: u32, size_in_bits: uint, alignment_in_bits: uint, unique_id: String) -> MetaDataRef {
-		return MetaDataRef(LLVMDIBuilderCreateForwardDecl(this.handle, tag as u32, name.data(), name.size(), scope.handle, file.handle, line as u32, runtime_lang, size_in_bits as u64, alignment_in_bits as u32, unique_id.data(), unique_id.size()));
-	}
-
-	func createReplaceableCompositeType(this: DIBuilderRef, tag: dwarf::Tag, name: String, scope: MetaDataRef, file: MetaDataRef, line: uint, runtime_lang: u32, size_in_bits: uint, alignment_in_bits: uint, flags: LLVMDIFlags, unique_id: String) -> MetaDataRef {
-		return MetaDataRef(LLVMDIBuilderCreateReplaceableCompositeType(this.handle, tag as u32, name.data(), name.size(), scope.handle, file.handle, line as u32, runtime_lang, size_in_bits as u64, alignment_in_bits as u32, flags, unique_id.data(), unique_id.size()));
-	}
-
-	func createExpression(this: DIBuilderRef, address: vptr!<u64>, length: uint) -> MetaDataRef {
-		return MetaDataRef(LLVMDIBuilderCreateExpression(this.handle, address, length));
-	}
-
-	func insertDeclareBefore(this: DIBuilderRef, storage: ValueRef, var_info: MetaDataRef, expr: MetaDataRef, debug_location: MetaDataRef, instruction: ValueRef) -> void {
-		discard LLVMDIBuilderInsertDeclareBefore(this.handle, storage.handle, var_info.handle, expr.handle, debug_location.handle, instruction.handle);
-	}
-
-	func insertDeclareAtEnd(this: DIBuilderRef, storage: ValueRef, var_info: MetaDataRef, expr: MetaDataRef, debug_location: MetaDataRef, block: BasicBlockRef) -> void {
-		discard LLVMDIBuilderInsertDeclareAtEnd(this.handle, storage.handle, var_info.handle, expr.handle, debug_location.handle, block.handle);
-	}
-
-	func insertDbgValueBefore(this: DIBuilderRef, val: ValueRef, var_info: MetaDataRef, expr: MetaDataRef, debug_location: MetaDataRef, instruction: ValueRef) -> void {
-		discard LLVMDIBuilderInsertDbgValueBefore(this.handle, val.handle, var_info.handle, expr.handle, debug_location.handle, instruction.handle);
-	}
-
-	func insertDbgValueAtEnd(this: DIBuilderRef, val: ValueRef, var_info: MetaDataRef, expr: MetaDataRef, debug_location: MetaDataRef, block: BasicBlockRef) -> void {
-		discard LLVMDIBuilderInsertDbgValueAtEnd(this.handle, val.handle, var_info.handle, expr.handle, debug_location.handle, block.handle);
-	}
-
-	func createAutoVariable(this: DIBuilderRef, scope: MetaDataRef, name: String, file: MetaDataRef, line: uint, type: MetaDataRef, always_preserve: bool, flags: LLVMDIFlags, alignment_in_bits: uint) -> MetaDataRef {
-		return MetaDataRef(LLVMDIBuilderCreateAutoVariable(this.handle, scope.handle, name.data(), name.size(), file.handle, line as u32, type.handle, always_preserve as i32, flags, alignment_in_bits as u32));
-	}
-
-	func createParameterVariable(this: DIBuilderRef, scope: MetaDataRef, name: String, arg_no: uint, file: MetaDataRef, line: uint, type: MetaDataRef, always_preserve: bool, flags: LLVMDIFlags) -> MetaDataRef {
-		return MetaDataRef(LLVMDIBuilderCreateParameterVariable(this.handle, scope.handle, name.data(), name.size(), arg_no as u32, file.handle, line as u32, type.handle, always_preserve as i32, flags));
-	}
+func LLVMSetSourceFileName(module: LLVMModuleRef, file_name: String) -> void {
+	LLVMSetSourceFileName(module, file_name.data(), file_name.size());
 }
 
-struct MetaDataRef {
-	var handle: vptr!<LLVMOpaqueMetadata>;
-
-	func constructor(this: &&MetaDataRef) -> void = default;
-
-	func constructor(this: &&MetaDataRef, handle: vptr!<LLVMOpaqueMetadata>) -> void {
-		this.handle := handle;
-	}
-
-	func constructor(this: &&MetaDataRef, other: MetaDataRef) -> void = default;
-	func destructor(this: &&MetaDataRef) -> void = default;
-
-	operator =(this: &&MetaDataRef, other: MetaDataRef) -> void = default;
-
-	operator ==(this: MetaDataRef, other: MetaDataRef) -> bool = default;
-	operator <=>(this: MetaDataRef, other: MetaDataRef) -> int {
-		return this.handle <=> other.handle;
-	}
-
-	func disposeTemporaryMDNode(node: MetaDataRef) -> void {
-		LLVMDisposeTemporaryMDNode(node.handle);
-	}
-
-	func replaceAllUsesWith(node: MetaDataRef, replacement: MetaDataRef) -> void {
-		LLVMMetadataReplaceAllUsesWith(node.handle, replacement.handle);
-	}
+func LLVMSetTarget(module: LLVMModuleRef, target_triple: String) -> void {
+	LLVMSetTarget(module, (target_triple + '\0'b).data());
 }
 
-struct GenericValueRef {
-	var handle: vptr!<LLVMOpaqueGenericValue>;
-
-	func constructor(this: &&GenericValueRef) -> void = default;
-
-	func constructor(this: &&GenericValueRef, handle: vptr!<LLVMOpaqueGenericValue>) -> void {
-		this.handle := handle;
-	}
-
-	func constructor(this: &&GenericValueRef, other: GenericValueRef) -> void = default;
-	func destructor(this: &&GenericValueRef) -> void = default;
-
-	operator =(this: &&GenericValueRef, other: GenericValueRef) -> void = default;
-
-	operator ==(this: GenericValueRef, other: GenericValueRef) -> bool = default;
-	operator <=>(this: GenericValueRef, other: GenericValueRef) -> int {
-		return this.handle <=> other.handle;
-	}
-
-	func fromInt(type: TypeRef, value: int, is_signed: bool) -> GenericValueRef {
-		return GenericValueRef(LLVMCreateGenericValueOfInt(type.handle, value as u32, is_signed as i32));
-	}
-
-	func fromPointer(value: vptr) -> GenericValueRef {
-		return GenericValueRef(LLVMCreateGenericValueOfPointer(value));
-	}
-
-	func fromFloat(type: TypeRef, value: f64) -> GenericValueRef {
-		return GenericValueRef(LLVMCreateGenericValueOfFloat(type.handle, value));
-	}
-
-	func toInt(this: GenericValueRef, is_signed: bool) -> int {
-		return LLVMGenericValueToInt(this.handle, is_signed as i32) as int;
-	}
-
-	func toPointer(this: GenericValueRef) -> vptr {
-		return LLVMGenericValueToPointer(this.handle);
-	}
-
-	func toFloat(this: GenericValueRef, type: TypeRef) -> f64 {
-		return LLVMGenericValueToFloat(type.handle, this.handle);
-	}
-
-	func dispose(this: GenericValueRef) -> void {
-		LLVMDisposeGenericValue(this.handle);
-	}
+func LLVMSetDataLayout(module: LLVMModuleRef, data_layout: String) -> void {
+	LLVMSetDataLayout(module, (data_layout + '\0'b).data());
 }
 
-struct ExecutionEngineRef {
-	var handle: vptr!<LLVMOpaqueExecutionEngine>;
+func LLVMWriteBitcodeToFile(module: LLVMModuleRef, path: String) -> int {
+	return LLVMWriteBitcodeToFile(module, (path + '\0'b).data()) as int;
+}
 
-	func constructor(this: &&ExecutionEngineRef) -> void = default;
+func LLVMAddFunction(module: LLVMModuleRef, name: String, type: LLVMTypeRef) -> LLVMValueRef {
+	return LLVMAddFunction(module, (name + '\0'b).data(), type);
+}
 
-	func constructor(this: &&ExecutionEngineRef, handle: vptr!<LLVMOpaqueExecutionEngine>) -> void {
-		this.handle := handle;
+func LLVMGetNamedFunction(module: LLVMModuleRef, name: String) -> LLVMValueRef {
+	return LLVMGetNamedFunction(module, (name + '\0'b).data());
+}
+
+func LLVMAddGlobal(module: LLVMModuleRef, type: LLVMTypeRef, name: String) -> LLVMValueRef {
+	return LLVMAddGlobal(module, type, (name + '\0'b).data());
+}
+
+func LLVMAddModuleFlag(module: LLVMModuleRef, behavior: LLVMModuleFlagBehavior, key: String, value: LLVMMetadataRef) -> void {
+	LLVMAddModuleFlag(module, behavior, key.data(), key.size(), value);
+}
+
+func LLVMGetIntrinsicDeclaration(module: LLVMModuleRef, id: u32, parameter_types: &List!<LLVMTypeRef>) -> LLVMValueRef {
+	return LLVMGetIntrinsicDeclaration(module, id, parameter_types.data, parameter_types.size());
+}
+
+func LLVMStructSetBody(type: LLVMTypeRef, element_types: &List!<LLVMTypeRef>, is_packed: bool) -> void {
+	LLVMStructSetBody(type, element_types.data, element_types.size() as u32, is_packed as i32);
+}
+
+func LLVMStructGetTypeAtIndex(type: LLVMTypeRef, index: uint) -> LLVMTypeRef {
+	return LLVMStructGetTypeAtIndex(type, index as u32);
+}
+
+func LLVMGetParam(value: LLVMValueRef, index: uint) -> LLVMValueRef {
+	return LLVMGetParam(value, index as u32);
+}
+
+func LLVMSetUnnamedAddr(value: LLVMValueRef, unnamed_address: bool) -> void {
+	LLVMSetUnnamedAddr(value, unnamed_address as i32);
+}
+
+func LLVMSetAlignment(value: LLVMValueRef, alignment: uint) -> void {
+	LLVMSetAlignment(value, alignment as u32);
+}
+
+func LLVMSetGlobalConstant(value: LLVMValueRef, state: bool) -> void {
+	LLVMSetGlobalConstant(value, state as i32);
+}
+
+func LLVMAddIncoming(phi_node: LLVMValueRef, values: &List!<LLVMValueRef>, blocks: &List!<LLVMBasicBlockRef>) -> void {
+	assert(values.size() == blocks.size());
+	LLVMAddIncoming(phi_node, values.data, blocks.data, values.size() as u32);
+}
+
+func LLVMOffsetOfElement(target_data: LLVMTargetDataRef, type: LLVMTypeRef, index: uint) -> uint {
+	return LLVMOffsetOfElement(target_data, type, index as u32) as uint;
+}
+
+func LLVMHasBasicBlockTerminator(bb: LLVMBasicBlockRef) -> bool {
+	return LLVMGetBasicBlockTerminator(bb) != vptr::null();
+}
+
+func LLVMBuildSwitch(builder: LLVMBuilderRef, value: LLVMValueRef, else_block: LLVMBasicBlockRef, num_cases: uint) -> LLVMValueRef {
+	return LLVMBuildSwitch(builder, value, else_block, num_cases as u32);
+}
+
+func LLVMBuildAdd(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+	return LLVMBuildAdd(builder, lhs, rhs, (name + '\0'b).data());
+}
+
+func LLVMBuildNSWAdd(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+	return LLVMBuildNSWAdd(builder, lhs, rhs, (name + '\0'b).data());
+}
+
+func LLVMBuildNUWAdd(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+	return LLVMBuildNUWAdd(builder, lhs, rhs, (name + '\0'b).data());
+}
+
+func LLVMBuildFAdd(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+	return LLVMBuildFAdd(builder, lhs, rhs, (name + '\0'b).data());
+}
+
+func LLVMBuildSub(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+	return LLVMBuildSub(builder, lhs, rhs, (name + '\0'b).data());
+}
+
+func LLVMBuildNSWSub(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+	return LLVMBuildNSWSub(builder, lhs, rhs, (name + '\0'b).data());
+}
+
+func LLVMBuildNUWSub(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+	return LLVMBuildNUWSub(builder, lhs, rhs, (name + '\0'b).data());
+}
+
+func LLVMBuildFSub(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+	return LLVMBuildFSub(builder, lhs, rhs, (name + '\0'b).data());
+}
+
+func LLVMBuildMul(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+	return LLVMBuildMul(builder, lhs, rhs, (name + '\0'b).data());
+}
+
+func LLVMBuildNSWMul(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+	return LLVMBuildNSWMul(builder, lhs, rhs, (name + '\0'b).data());
+}
+
+func LLVMBuildNUWMul(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+	return LLVMBuildNUWMul(builder, lhs, rhs, (name + '\0'b).data());
+}
+
+func LLVMBuildFMul(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+	return LLVMBuildFMul(builder, lhs, rhs, (name + '\0'b).data());
+}
+
+func LLVMBuildUDiv(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+	return LLVMBuildUDiv(builder, lhs, rhs, (name + '\0'b).data());
+}
+
+func LLVMBuildExactUDiv(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+	return LLVMBuildExactUDiv(builder, lhs, rhs, (name + '\0'b).data());
+}
+
+func LLVMBuildSDiv(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+	return LLVMBuildSDiv(builder, lhs, rhs, (name + '\0'b).data());
+}
+
+func LLVMBuildExactSDiv(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+	return LLVMBuildExactSDiv(builder, lhs, rhs, (name + '\0'b).data());
+}
+
+func LLVMBuildFDiv(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+	return LLVMBuildFDiv(builder, lhs, rhs, (name + '\0'b).data());
+}
+
+func LLVMBuildURem(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+	return LLVMBuildURem(builder, lhs, rhs, (name + '\0'b).data());
+}
+
+func LLVMBuildSRem(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+	return LLVMBuildSRem(builder, lhs, rhs, (name + '\0'b).data());
+}
+
+func LLVMBuildFRem(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+	return LLVMBuildFRem(builder, lhs, rhs, (name + '\0'b).data());
+}
+
+func LLVMBuildShl(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+	return LLVMBuildShl(builder, lhs, rhs, (name + '\0'b).data());
+}
+
+func LLVMBuildLShr(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+	return LLVMBuildLShr(builder, lhs, rhs, (name + '\0'b).data());
+}
+
+func LLVMBuildAShr(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+	return LLVMBuildAShr(builder, lhs, rhs, (name + '\0'b).data());
+}
+
+func LLVMBuildAnd(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+	return LLVMBuildAnd(builder, lhs, rhs, (name + '\0'b).data());
+}
+
+func LLVMBuildOr(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+	return LLVMBuildOr(builder, lhs, rhs, (name + '\0'b).data());
+}
+
+func LLVMBuildXor(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+	return LLVMBuildXor(builder, lhs, rhs, (name + '\0'b).data());
+}
+
+func LLVMBuildNeg(builder: LLVMBuilderRef, lhs: LLVMValueRef, name: String) -> LLVMValueRef {
+	return LLVMBuildNeg(builder, lhs, (name + '\0'b).data());
+}
+
+func LLVMBuildNSWNeg(builder: LLVMBuilderRef, lhs: LLVMValueRef, name: String) -> LLVMValueRef {
+	return LLVMBuildNSWNeg(builder, lhs, (name + '\0'b).data());
+}
+
+func LLVMBuildNUWNeg(builder: LLVMBuilderRef, lhs: LLVMValueRef, name: String) -> LLVMValueRef {
+	return LLVMBuildNUWNeg(builder, lhs, (name + '\0'b).data());
+}
+
+func LLVMBuildFNeg(builder: LLVMBuilderRef, lhs: LLVMValueRef, name: String) -> LLVMValueRef {
+	return LLVMBuildFNeg(builder, lhs, (name + '\0'b).data());
+}
+
+func LLVMBuildNot(builder: LLVMBuilderRef, lhs: LLVMValueRef, name: String) -> LLVMValueRef {
+	return LLVMBuildNot(builder, lhs, (name + '\0'b).data());
+}
+
+func LLVMBuildAlloca(builder: LLVMBuilderRef, type: LLVMTypeRef, name: String) -> LLVMValueRef {
+	return LLVMBuildAlloca(builder, type, (name + '\0'b).data());
+}
+
+func LLVMBuildLoad2(builder: LLVMBuilderRef, type: LLVMTypeRef, pointer: LLVMValueRef, name: String) -> LLVMValueRef {
+	return LLVMBuildLoad2(builder, type, pointer, (name + '\0'b).data());
+}
+
+func LLVMBuildGEP2(builder: LLVMBuilderRef, type: LLVMTypeRef, pointer: LLVMValueRef, indices: &List!<LLVMValueRef>, name: String) -> LLVMValueRef {
+	return LLVMBuildGEP2(builder, type, pointer, indices.data, indices.size() as u32, (name + '\0'b).data());
+}
+
+func LLVMBuildStructGEP2(builder: LLVMBuilderRef, type: LLVMTypeRef, pointer: LLVMValueRef, index: uint, name: String) -> LLVMValueRef {
+	return LLVMBuildStructGEP2(builder, type, pointer, index as u32, (name + '\0'b).data());
+}
+
+func LLVMBuildTrunc(builder: LLVMBuilderRef, value: LLVMValueRef, type: LLVMTypeRef, name: String) -> LLVMValueRef {
+	return LLVMBuildTrunc(builder, value, type, (name + '\0'b).data());
+}
+
+func LLVMBuildZExt(builder: LLVMBuilderRef, value: LLVMValueRef, type: LLVMTypeRef, name: String) -> LLVMValueRef {
+	return LLVMBuildZExt(builder, value, type, (name + '\0'b).data());
+}
+
+func LLVMBuildSExt(builder: LLVMBuilderRef, value: LLVMValueRef, type: LLVMTypeRef, name: String) -> LLVMValueRef {
+	return LLVMBuildSExt(builder, value, type, (name + '\0'b).data());
+}
+
+func LLVMBuildFPToUI(builder: LLVMBuilderRef, value: LLVMValueRef, type: LLVMTypeRef, name: String) -> LLVMValueRef {
+	return LLVMBuildFPToUI(builder, value, type, (name + '\0'b).data());
+}
+
+func LLVMBuildFPToSI(builder: LLVMBuilderRef, value: LLVMValueRef, type: LLVMTypeRef, name: String) -> LLVMValueRef {
+	return LLVMBuildFPToSI(builder, value, type, (name + '\0'b).data());
+}
+
+func LLVMBuildUIToFP(builder: LLVMBuilderRef, value: LLVMValueRef, type: LLVMTypeRef, name: String) -> LLVMValueRef {
+	return LLVMBuildUIToFP(builder, value, type, (name + '\0'b).data());
+}
+
+func LLVMBuildSIToFP(builder: LLVMBuilderRef, value: LLVMValueRef, type: LLVMTypeRef, name: String) -> LLVMValueRef {
+	return LLVMBuildSIToFP(builder, value, type, (name + '\0'b).data());
+}
+
+func LLVMBuildFPTrunc(builder: LLVMBuilderRef, value: LLVMValueRef, type: LLVMTypeRef, name: String) -> LLVMValueRef {
+	return LLVMBuildFPTrunc(builder, value, type, (name + '\0'b).data());
+}
+
+func LLVMBuildFPExt(builder: LLVMBuilderRef, value: LLVMValueRef, type: LLVMTypeRef, name: String) -> LLVMValueRef {
+	return LLVMBuildFPExt(builder, value, type, (name + '\0'b).data());
+}
+
+func LLVMBuildICmp(builder: LLVMBuilderRef, op: LLVMIntPredicate, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+	return LLVMBuildICmp(builder, op, lhs, rhs, (name + '\0'b).data());
+}
+
+func LLVMBuildFCmp(builder: LLVMBuilderRef, op: LLVMRealPredicate, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+	return LLVMBuildFCmp(builder, op, lhs, rhs, (name + '\0'b).data());
+}
+
+func LLVMBuildPhi(builder: LLVMBuilderRef, type: LLVMTypeRef, name: String) -> LLVMValueRef {
+	return LLVMBuildPhi(builder, type, (name + '\0'b).data());
+}
+
+func LLVMBuildCall2(builder: LLVMBuilderRef, type: LLVMTypeRef, function: LLVMValueRef, args: &List!<LLVMValueRef>, name: String) -> LLVMValueRef {
+	return LLVMBuildCall2(builder, type, function, args.data, args.size() as u32, (name + '\0'b).data());
+}
+
+func LLVMBuildExtractValue(builder: LLVMBuilderRef, object: LLVMValueRef, index: uint, name: String) -> LLVMValueRef {
+	return LLVMBuildExtractValue(builder, object, index as u32, (name + '\0'b).data());
+}
+
+func LLVMBuildInsertValue(builder: LLVMBuilderRef, object: LLVMValueRef, element: LLVMValueRef, index: uint, name: String) -> LLVMValueRef {
+	return LLVMBuildInsertValue(builder, object, element, index as u32, (name + '\0'b).data());
+}
+
+func LLVMBuildPtrDiff2(builder: LLVMBuilderRef, type: LLVMTypeRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+	return LLVMBuildPtrDiff2(builder, type, lhs, rhs, (name + '\0'b).data());
+}
+
+func LLVMConstInt(type: LLVMTypeRef, value: int, sign_extend: bool) -> LLVMValueRef {
+	return LLVMConstInt(type, value as u32, sign_extend as i32);
+}
+
+func LLVMConstGEP2(type: LLVMTypeRef, pointer: LLVMValueRef, indices: &List!<LLVMValueRef>) -> LLVMValueRef {
+	return LLVMConstGEP2(type, pointer, indices.data, indices.size() as u32);
+}
+
+func LLVMDIBuilderCreateFile(di_builder: LLVMDIBuilderRef, file_name: String, directory: String) -> LLVMMetadataRef {
+	return LLVMDIBuilderCreateFile(di_builder, file_name.data(), file_name.size(), directory.data(), directory.size());
+}
+
+func LLVMDIBuilderCreateCompileUnit(di_builder: LLVMDIBuilderRef, lang: LLVMDWARFSourceLanguage, file: LLVMMetadataRef, producer: String, is_optimized: bool, flags: String, runtime_version: uint, split_name: String, kind: LLVMDWARFEmissionKind, dwo_id: uint, split_debug_inlining: bool, debug_info_for_profiling: bool, sys_root: String, sdk: String) -> LLVMMetadataRef {
+	return LLVMDIBuilderCreateCompileUnit(di_builder, lang, file, producer.data(), producer.size(), is_optimized as i32, flags.data(), flags.size(), runtime_version as u32, split_name.data(), split_name.size(), kind, dwo_id as u32, split_debug_inlining as i32, debug_info_for_profiling as i32, sys_root.data(), sys_root.size(), sdk.data(), sdk.size());
+}
+
+func LLVMDIBuilderCreateModule(di_builder: LLVMDIBuilderRef, cu: LLVMMetadataRef, name: String, config_macros: String, include_path: String, api_notes_file: String) -> LLVMMetadataRef {
+	return LLVMDIBuilderCreateModule(di_builder, cu, name.data(), name.size(), config_macros.data(), config_macros.size(), include_path.data(), include_path.size(), api_notes_file.data(), api_notes_file.size());
+}
+
+func LLVMDIBuilderCreateNameSpace(di_builder: LLVMDIBuilderRef, parent: LLVMMetadataRef, name: String, export_symbols: bool) -> LLVMMetadataRef {
+	return LLVMDIBuilderCreateNameSpace(di_builder, parent, name.data(), name.size(), export_symbols as i32);
+}
+
+func LLVMDIBuilderCreateFunction(di_builder: LLVMDIBuilderRef, scope: LLVMMetadataRef, name: String, linkage_name: String, file: LLVMMetadataRef, line: uint, type: LLVMMetadataRef, is_local_to_unit: bool, is_definition: bool, scope_line: uint, flags: LLVMDIFlags, is_optimized: bool) -> LLVMMetadataRef {
+	return LLVMDIBuilderCreateFunction(di_builder, scope, name.data(), name.size(), linkage_name.data(), linkage_name.size(), file, line as u32, type, is_local_to_unit as i32, is_definition as i32, scope_line as u32, flags, is_optimized as i32);
+}
+
+func LLVMDIBuilderCreateSubroutineType(di_builder: LLVMDIBuilderRef, file: LLVMMetadataRef, parameter_types: &List!<LLVMMetadataRef>, flags: LLVMDIFlags) -> LLVMMetadataRef {
+	return LLVMDIBuilderCreateSubroutineType(di_builder, file, parameter_types.data, parameter_types.size() as u32, flags);
+}
+
+func LLVMDIBuilderCreateEnumerator(di_builder: LLVMDIBuilderRef, name: String, value: int, is_unsigned: bool) -> LLVMMetadataRef {
+	return LLVMDIBuilderCreateEnumerator(di_builder, name.data(), name.size(), value as i64, is_unsigned as i32);
+}
+
+func LLVMDIBuilderCreateEnumerationType(di_builder: LLVMDIBuilderRef, scope: LLVMMetadataRef, name: String, file: LLVMMetadataRef, line: uint, size_in_bits: uint, alignment_in_bits: uint, elements: &List!<LLVMMetadataRef>, class_type: LLVMMetadataRef) -> LLVMMetadataRef {
+	return LLVMDIBuilderCreateEnumerationType(di_builder, scope, name.data(), name.size(), file, line as u32, size_in_bits as u64, alignment_in_bits as u32, elements.data, elements.size() as u32, class_type);
+}
+
+func LLVMDIBuilderCreateUnionType(di_builder: LLVMDIBuilderRef, scope: LLVMMetadataRef, name: String, file: LLVMMetadataRef, line: uint, size_in_bits: uint, alignment_in_bits: uint, flags: LLVMDIFlags, elements: &List!<LLVMMetadataRef>, runtime_lang: u32, unique_id: String) -> LLVMMetadataRef {
+	return LLVMDIBuilderCreateUnionType(di_builder, scope, name.data(), name.size(), file, line as u32, size_in_bits as u64, alignment_in_bits as u32, flags, elements.data, elements.size() as u32, runtime_lang, unique_id.data(), unique_id.size());
+}
+
+func LLVMDIBuilderCreateArrayType(di_builder: LLVMDIBuilderRef, size: uint, alignment_in_bits: uint, element_type: LLVMMetadataRef, subscripts: &List!<LLVMMetadataRef>) -> LLVMMetadataRef {
+	return LLVMDIBuilderCreateArrayType(di_builder, size as u64, alignment_in_bits as u32, element_type, subscripts.data, subscripts.size() as u32);
+}
+
+func LLVMDIBuilderCreateVectorType(di_builder: LLVMDIBuilderRef, size: uint, alignment_in_bits: uint, element_type: LLVMMetadataRef, subscripts: &List!<LLVMMetadataRef>) -> LLVMMetadataRef {
+	return LLVMDIBuilderCreateVectorType(di_builder, size as u64, alignment_in_bits as u32, element_type, subscripts.data, subscripts.size() as u32);
+}
+
+func LLVMDIBuilderCreateUnspecifiedType(di_builder: LLVMDIBuilderRef, name: String) -> LLVMMetadataRef {
+	return LLVMDIBuilderCreateUnspecifiedType(di_builder, name.data(), name.size());
+}
+
+func LLVMDIBuilderCreateBasicType(di_builder: LLVMDIBuilderRef, name: String, size_in_bits: uint, encoding: dwarf::TypeEncoding, flags: LLVMDIFlags) -> LLVMMetadataRef {
+	return LLVMDIBuilderCreateBasicType(di_builder, name.data(), name.size(), size_in_bits as u64, encoding as u32, flags);
+}
+
+func LLVMDIBuilderCreatePointerType(di_builder: LLVMDIBuilderRef, pointee_type: LLVMMetadataRef, size_in_bits: uint, alignment_in_bits: uint, address_space: uint, name: String) -> LLVMMetadataRef {
+	return LLVMDIBuilderCreatePointerType(di_builder, pointee_type, size_in_bits as u64, alignment_in_bits as u32, address_space as u32, name.data(), name.size());
+}
+
+func LLVMDIBuilderCreateStructType(di_builder: LLVMDIBuilderRef, scope: LLVMMetadataRef, name: String, file: LLVMMetadataRef, line: uint, size_in_bits: uint, alignment_in_bits: uint, flags: LLVMDIFlags, derived_from: LLVMMetadataRef, elements: &List!<LLVMMetadataRef>, runtime_lang: u32, vtable_holder: LLVMMetadataRef, unique_id: String) -> LLVMMetadataRef {
+	return LLVMDIBuilderCreateStructType(di_builder, scope, name.data(), name.size(), file, line as u32, size_in_bits as u64, alignment_in_bits as u32, flags, derived_from, elements.data, elements.size() as u32, runtime_lang, vtable_holder, unique_id.data(), unique_id.size());
+}
+
+func LLVMDIBuilderCreateMemberType(di_builder: LLVMDIBuilderRef, scope: LLVMMetadataRef, name: String, file: LLVMMetadataRef, line: uint, size_in_bits: uint, alignment_in_bits: uint, offset_in_bits: uint, flags: LLVMDIFlags, type: LLVMMetadataRef) -> LLVMMetadataRef {
+	return LLVMDIBuilderCreateMemberType(di_builder, scope, name.data(), name.size(), file, line as u32, size_in_bits as u64, alignment_in_bits as u32, offset_in_bits as u64, flags, type);
+}
+
+func LLVMDIBuilderCreateReferenceType(di_builder: LLVMDIBuilderRef, tag: dwarf::Tag, base_type: LLVMMetadataRef) -> LLVMMetadataRef {
+	return LLVMDIBuilderCreateReferenceType(di_builder, tag as u32, base_type);
+}
+
+func LLVMDIBuilderCreateReplaceableCompositeType(di_builder: LLVMDIBuilderRef, tag: dwarf::Tag, name: String, scope: LLVMMetadataRef, file: LLVMMetadataRef, line: uint, runtime_lang: u32, size_in_bits: uint, alignment_in_bits: uint, flags: LLVMDIFlags, unique_id: String) -> LLVMMetadataRef {
+	return LLVMDIBuilderCreateReplaceableCompositeType(di_builder, tag as u32, name.data(), name.size(), scope, file, line as u32, runtime_lang, size_in_bits as u64, alignment_in_bits as u32, flags, unique_id.data(), unique_id.size());
+}
+
+func LLVMDIBuilderCreateAutoVariable(di_builder: LLVMDIBuilderRef, scope: LLVMMetadataRef, name: String, file: LLVMMetadataRef, line: uint, type: LLVMMetadataRef, always_preserve: bool, flags: LLVMDIFlags, alignment_in_bits: uint) -> LLVMMetadataRef {
+	return LLVMDIBuilderCreateAutoVariable(di_builder, scope, name.data(), name.size(), file, line as u32, type, always_preserve as i32, flags, alignment_in_bits as u32);
+}
+
+func LLVMDIBuilderCreateParameterVariable(di_builder: LLVMDIBuilderRef, scope: LLVMMetadataRef, name: String, arg_no: uint, file: LLVMMetadataRef, line: uint, type: LLVMMetadataRef, always_preserve: bool, flags: LLVMDIFlags) -> LLVMMetadataRef {
+	return LLVMDIBuilderCreateParameterVariable(di_builder, scope, name.data(), name.size(), arg_no as u32, file, line as u32, type, always_preserve as i32, flags);
+}
+
+func LLVMRunFunctionAsMain(ee: LLVMExecutionEngineRef, function: LLVMValueRef, args: List!<String>, env: List!<String>) -> int {
+	var argv: List!<cptr!<byte>>;
+	for &&arg in args {
+		arg.append('\0'b);
+		argv.append(arg.data());
 	}
 
-	func constructor(this: &&ExecutionEngineRef, other: ExecutionEngineRef) -> void = default;
-	func destructor(this: &&ExecutionEngineRef) -> void = default;
-
-	operator =(this: &&ExecutionEngineRef, other: ExecutionEngineRef) -> void = default;
-
-	operator ==(this: ExecutionEngineRef, other: ExecutionEngineRef) -> bool = default;
-	operator <=>(this: ExecutionEngineRef, other: ExecutionEngineRef) -> int {
-		return this.handle <=> other.handle;
+	var envv: List!<cptr!<byte>>;
+	for &&val in env {
+		val.append('\0'b);
+		envv.append(val.data());
 	}
+	envv.append(cptr!<byte>::null());
 
-	func dispose(this: ExecutionEngineRef) -> void {
-		LLVMDisposeExecutionEngine(this.handle);
-	}
+	return LLVMRunFunctionAsMain(ee, function, argv.size() as u32, argv.data(), envv.data()) as int;
+}
 
-	func runFunctionAsMain(this: ExecutionEngineRef, function: ValueRef, args: List!<String>, env: List!<String>) -> int {
-		var argv: List!<cptr!<byte>>;
-		for &&arg in args {
-			arg.append('\0'b);
-			argv.append(arg.data());
-		}
-
-		var envv: List!<cptr!<byte>>;
-		for &&val in env {
-			val.append('\0'b);
-			envv.append(val.data());
-		}
-		envv.append(cptr!<byte>::null());
-
-		return LLVMRunFunctionAsMain(this.handle, function.handle, argv.size() as u32, argv.data(), envv.data()) as int;
-	}
-
-	func runFunction(this: ExecutionEngineRef, function: ValueRef, args: &List!<GenericValueRef>) -> GenericValueRef {
-		var raw_args: List!<vptr!<LLVMOpaqueGenericValue>>;
-		for arg in args {
-			raw_args.append(arg.handle);
-		}
-
-		return GenericValueRef(LLVMRunFunction(this.handle, function.handle, raw_args.size() as u32, raw_args.data));
-	}
+func LLVMRunFunction(ee: LLVMExecutionEngineRef, function: LLVMValueRef, args: &List!<LLVMGenericValueRef>) -> LLVMGenericValueRef {
+	return LLVMRunFunction(ee, function, args.size() as u32, args.data);
 }

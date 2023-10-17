@@ -24,8 +24,8 @@ struct SourceFile {
 	var source: String;
 	var line_spans: List!<Span>;
 
-	var llvm_di_file: llvm_util::MetaDataRef;
-	var llvm_di_module: llvm_util::MetaDataRef;
+	var llvm_di_file: LLVMMetadataRef;
+	var llvm_di_module: LLVMMetadataRef;
 
 	func constructor(this: &&SourceFile, name: String, path: String, source: String, line_spans: &List!<Span>) -> void {
 		this.name := name;
@@ -88,15 +88,15 @@ struct Program {
 	var main_function: SharedHandle!<FunctionDecl>;
 
 	// llvm
-	var llvm_context: llvm_util::Context;
-	var llvm_module: llvm_util::Module;
-	var llvm_execution_engine: llvm_util::ExecutionEngineRef;
-	var data_layout: llvm_util::TargetDataRef;
+	var llvm_context: LLVMContextRef;
+	var llvm_module: LLVMModuleRef;
+	var llvm_execution_engine: LLVMExecutionEngineRef;
+	var data_layout: LLVMTargetDataRef;
 
-	var string_globals: Map!<String, llvm_util::ValueRef>;
+	var string_globals: Map!<String, LLVMValueRef>;
 
-	var di_builder: llvm_util::DIBuilderRef;
-	var di_compile_unit: llvm_util::MetaDataRef;
+	var di_builder: LLVMDIBuilderRef;
+	var di_compile_unit: LLVMMetadataRef;
 
 	func constructor(this: &&Program, options: CompilerOptions) -> void {
 		this.name := options.program_name;
@@ -110,23 +110,25 @@ struct Program {
 		this.namespaces := ();
 		this.top_level_namespaces := ();
 
-		this.llvm_context := ();
-		this.llvm_module := this.llvm_context.createModule(this.name);
-		this.llvm_module.setSourceFileName(options.root_module_path);
-		this.llvm_module.setTargetTriple(options.target_triple);
-		this.llvm_module.setDataLayout(options.target_data_layout);
+		this.llvm_context := LLVMContextCreate();
+		this.llvm_module := LLVMModuleCreateWithNameInContext(this.name, this.llvm_context);
+		LLVMSetSourceFileName(this.llvm_module, options.root_module_path);
+		LLVMSetTarget(this.llvm_module, options.target_triple);
+		LLVMSetDataLayout(this.llvm_module, options.target_data_layout);
 
-		this.data_layout := this.llvm_module.getDataLayout();
+		this.data_layout := LLVMGetModuleDataLayout(this.llvm_module);
 
 		this.di_builder := ();
 		if options.generate_debug_info {
-			this.llvm_module.addFlag(LLVMModuleFlagBehavior::LLVMModuleFlagBehaviorError, "Dwarf Version", llvm_util::constInt(this.llvm_context.getIntType(64u), 5, false).asMetadata());
-			this.llvm_module.addFlag(LLVMModuleFlagBehavior::LLVMModuleFlagBehaviorWarning, "Debug Info Version", llvm_util::constInt(this.llvm_context.getIntType(64u), 3, false).asMetadata());
-			this.di_builder = this.llvm_module.createDIBuilder();
+			const int_type = LLVMIntTypeInContext(this.llvm_context, 64u);
+			LLVMAddModuleFlag(this.llvm_module, LLVMModuleFlagBehavior::LLVMModuleFlagBehaviorError, "Dwarf Version", LLVMValueAsMetadata(LLVMConstInt(int_type, 5, false)));
+			LLVMAddModuleFlag(this.llvm_module, LLVMModuleFlagBehavior::LLVMModuleFlagBehaviorWarning, "Debug Info Version", LLVMValueAsMetadata(LLVMConstInt(int_type, 3, false)));
+			this.di_builder = LLVMCreateDIBuilder(this.llvm_module);
 
-			this.files[0u].llvm_di_file = this.di_builder.createFile("unknown", ".");
+			this.files[0u].llvm_di_file = LLVMDIBuilderCreateFile(this.di_builder, "unknown", ".");
 
-			this.di_compile_unit = this.di_builder.createCompileUnit(
+			this.di_compile_unit = LLVMDIBuilderCreateCompileUnit(
+				this.di_builder,
 				LLVMDWARFSourceLanguage::LLVMDWARFSourceLanguageC,
 				this.files[0u].llvm_di_file,
 				"",			// producer
@@ -142,7 +144,8 @@ struct Program {
 				"",			// sdk
 			);
 
-			this.files[0u].llvm_di_module = this.di_builder.createModule(
+			this.files[0u].llvm_di_module = LLVMDIBuilderCreateModule(
+				this.di_builder,
 				this.di_compile_unit,
 				this.files[0u].name,
 				"",		// config macros
@@ -154,8 +157,8 @@ struct Program {
 		for i in 0u..options.import_search_paths.size() {
 			var ns = this.namespaces.append(Namespace(format(i), List!<TemplateParameterDecl>(), SharedHandle!<Namespace>()));
 
-			if this.di_builder.handle != vptr::null() {
-				ns.llvm_di = this.di_builder.createNameSpace(this.files[0u].llvm_di_module, ns.name, true);
+			if this.di_builder != vptr::null() {
+				ns.llvm_di = LLVMDIBuilderCreateNameSpace(this.di_builder, this.files[0u].llvm_di_module, ns.name, true);
 			}
 
 			this.top_level_namespaces.append(ns);
@@ -169,19 +172,19 @@ struct Program {
 		LLVMInitializeX86TargetMC();
 		LLVMInitializeX86AsmPrinter();
 
-		match llvm_util::createJITCompilerForModule(this.llvm_module, 0u) {
+		match createJITCompilerForModule(this.llvm_module, 0u) {
 			case Ok: ee -> this.llvm_execution_engine = ee;
 			case Error: error -> panic(error);
 		}
 	}
 
 	func destructor(this: &&Program) -> void {
-		if this.di_builder.handle != vptr::null() {
-			this.di_builder.dispose();
+		if this.di_builder != vptr::null() {
+			LLVMDisposeDIBuilder(this.di_builder);
 		}
 
-		this.llvm_execution_engine.dispose();
-		this.llvm_context.dispose();
+		LLVMDisposeExecutionEngine(this.llvm_execution_engine);
+		LLVMContextDispose(this.llvm_context);
 
 		LLVMShutdown();
 	}
@@ -293,8 +296,8 @@ struct Program {
 		parent_namespace.children_by_name[name].append(child);
 		parent_namespace.updateMinState(NamespaceState::Unchecked);
 
-		if this.di_builder.handle != vptr::null() {
-			child.llvm_di = this.di_builder.createNameSpace(parent_namespace.llvm_di, child.name, true);
+		if this.di_builder != vptr::null() {
+			child.llvm_di = LLVMDIBuilderCreateNameSpace(this.di_builder, parent_namespace.llvm_di, child.name, true);
 		}
 
 		return child;
@@ -410,7 +413,7 @@ struct Program {
 
 	func printLLVMIRToFile(this: &Program) -> Optional!<String> {
 		const output_path = this.options.getOutputCodePath(".ll");
-		if this.llvm_module.printToFile(output_path) {
+		if printModuleToFile(this.llvm_module, output_path) {
 			return Some(output_path);
 		} else {
 			return None;
@@ -419,7 +422,7 @@ struct Program {
 
 	func writeLLVMBitcodeToFile(this: &Program) -> Optional!<String> {
 		const output_path = this.options.getOutputCodePath(".bc");
-		if this.llvm_module.writeBitcodeToFile(output_path) {
+		if LLVMWriteBitcodeToFile(this.llvm_module, output_path) == 0 {
 			return Some(output_path);
 		} else {
 			return None;
@@ -427,21 +430,21 @@ struct Program {
 	}
 
 	func printLLVMIRString(this: &Program) -> String {
-		return this.llvm_module.printToString();
+		return printModuleToString(this.llvm_module);
 	}
 
 	func finalizeDI(this: &Program) -> void {
-		if this.di_builder.handle != vptr::null() {
-			this.di_builder.finalize();
+		if this.di_builder != vptr::null() {
+			LLVMDIBuilderFinalize(this.di_builder);
 		}
 	}
 
-	func runFunction(this: &Program, function: SharedHandle!<FunctionDecl>, args: &List!<llvm_util::GenericValueRef>) -> llvm_util::GenericValueRef {
-		return this.llvm_execution_engine.runFunction(function.llvm_func, args);
+	func runFunction(this: &Program, function: SharedHandle!<FunctionDecl>, args: &List!<LLVMGenericValueRef>) -> LLVMGenericValueRef {
+		return LLVMRunFunction(this.llvm_execution_engine, function.llvm_func, args);
 	}
 
 	func runMainFunction(this: &Program, args: &List!<String>, env: &List!<String>) -> int {
-		return this.llvm_execution_engine.runFunctionAsMain(this.llvm_module.getFunction("main"), args, env);
+		return LLVMRunFunctionAsMain(this.llvm_execution_engine, LLVMGetNamedFunction(this.llvm_module, "main"), args, env);
 	}
 }
 
@@ -681,7 +684,7 @@ struct Namespace {
 	var unchecked_functions: List!<SharedHandle!<FunctionDecl>>;
 	var unchecked_function_bodies: List!<SharedHandle!<FunctionDecl>>;
 
-	var llvm_di: llvm_util::MetaDataRef;
+	var llvm_di: LLVMMetadataRef;
 
 	func constructor(this: &&Namespace, name: String, template_parameters: &List!<TemplateParameterDecl>, parent: SharedHandle!<Namespace>) -> void {
 		this.name := name;
@@ -864,8 +867,8 @@ struct TypeDecl {
 	var is_packed: bool;
 
 	// llvm
-	var llvm_type: llvm_util::TypeRef;
-	var llvm_di: llvm_util::MetaDataRef;
+	var llvm_type: LLVMTypeRef;
+	var llvm_di: LLVMMetadataRef;
 
 	func constructor(this: &&TypeDecl, name: String, template_parameters: &List!<TemplateParameterDecl>, body: TypeBody) -> void {
 		this.name := name;
@@ -1215,9 +1218,9 @@ struct FunctionDecl {
 	var is_copy_constructor: bool;
 
 	// llvm
-	var llvm_func: llvm_util::ValueRef;
-	var llvm_type: llvm_util::TypeRef;
-	var llvm_di: llvm_util::MetaDataRef;
+	var llvm_func: LLVMValueRef;
+	var llvm_type: LLVMTypeRef;
+	var llvm_di: LLVMMetadataRef;
 
 	func constructor(this: &&FunctionDecl, name: String, template_parameters: &List!<TemplateParameterDecl>, body: FunctionBody) -> void {
 		this.name := name;
