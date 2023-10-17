@@ -1828,32 +1828,28 @@ struct CGContext {
 	func codegenCall(this: &&CGContext, function: SharedHandle!<FunctionDecl>, parameters: &List!<ValueRef>, return_kind: ReturnKind, result_var: SharedHandle!<VarDecl>, span: Span) -> ValueRef {
 		this.setCurrentDebugLocation(span);
 
-		match function.body {
-			case InlineBuiltin: function -> return this.codegenInlineBuiltinFunctionCall(function, parameters);
-			else -> {
-				if return_kind is Parameter {
-					this.codegenLifeTimeStart(this.getVariable(result_var));
-				}
+		if return_kind is Parameter {
+			this.codegenLifeTimeStart(this.getVariable(result_var));
+		}
 
-				const function_impl = function.llvm_func;
-				const function_type = function.llvm_type;
-				const result = this.builder.buildCall2(function_type, function_impl, parameters, "");
+		const result = match function.body {
+			case InlineBuiltin: function -> yield this.codegenInlineBuiltinFunctionCall(function, parameters);
+			else -> yield this.builder.buildCall2(function.llvm_type, function.llvm_func, parameters, "");
+		}
 
-				match return_kind {
-					case None -> return ValueRef();
-					case Value -> return result;
-					case Variable -> {
-						const built_result_var = this.getVariable(result_var);
-						this.builder.buildStore(result, built_result_var);
-						return built_result_var;
-					}
-					case Parameter -> return this.getVariable(result_var);
-					case VariableButYieldNone -> {
-						const built_result_var = this.getVariable(result_var);
-						this.builder.buildStore(result, built_result_var);
-						return ValueRef();
-					}
-				}
+		match return_kind {
+			case None -> return ValueRef();
+			case Value -> return result;
+			case Variable -> {
+				const built_result_var = this.getVariable(result_var);
+				this.builder.buildStore(result, built_result_var);
+				return built_result_var;
+			}
+			case Parameter -> return this.getVariable(result_var);
+			case VariableButYieldNone -> {
+				const built_result_var = this.getVariable(result_var);
+				this.builder.buildStore(result, built_result_var);
+				return ValueRef();
 			}
 		}
 	}

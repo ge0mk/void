@@ -1,0 +1,7 @@
+//> test-ec "5"
+
+pragma generate_std_core_builtins;
+
+func main() -> int {
+	return int(5);
+}
