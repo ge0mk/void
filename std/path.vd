@@ -243,4 +243,15 @@ struct Path {
 	func recursiveRange(this: &Path) -> RecursivePathRange {
 		return RecursivePathRange(this);
 	}
+
+	func getLinkTarget(this: &Path) -> Path {
+		var buffer = String(4096u, '\0'b);
+		const c_path = this.toString() + '\0'b;
+		discard libc::unistd::readlink(c_path.data(), vptr!<byte>::addressOf(&&buffer[0u]), buffer.size() - 1);
+		return Path(String::fromCString(buffer.data()));
+	}
+
+	func getExePath() -> Path {
+		return Path("/proc/self/exe").getLinkTarget();
+	}
 }

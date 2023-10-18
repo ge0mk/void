@@ -78,16 +78,13 @@ func parseArguments(arguments: Range!<String>) -> Optional!<CompilerOptions> {
 		options.program_name = path.substring(name_begin..name_end);
 	}
 
-	const compiler_binary_path = Path(arguments[0u]); // FIXME: depends on how the program was run
+	options.install_path = ".";
+	const compiler_binary_path = Path::getExePath();
 	if const compiler_binary_dir = compiler_binary_path.parentDir() {
 		if const compiler_install_dir = compiler_binary_dir.parentDir() {
 			options.import_search_paths.append(compiler_install_dir);
 			options.install_path = compiler_install_dir.toString();
 		}
-	}
-
-	if options.install_path == "" {
-		options.install_path = ".";
 	}
 
 	options.import_search_paths.append(Path::cwd());

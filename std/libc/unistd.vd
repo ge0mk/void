@@ -1,3 +1,4 @@
 import std/core;
 
 func getcwd(buffer: vptr!<byte>, buffer_size: uint) -> vptr!<byte> = extern;
+func readlink(path: cptr!<byte>, buffer: vptr!<byte>, buffer_size: uint) -> int = extern;
