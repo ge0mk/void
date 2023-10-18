@@ -1,3 +1,5 @@
+INSTALL_DIR := ~/.local/void
+
 main: stage1
 
 test: test-stage1
@@ -70,6 +72,12 @@ update-stage0:
 	-@$(MAKE) --no-print-directory update-stage0.ll
 	-@$(MAKE) --no-print-directory stage0
 
+install: stage0 rt.ll std/*.vd
+	-@mkdir $(INSTALL_DIR)/bin -p
+	-@cp -f build/stage0 $(INSTALL_DIR)/bin/void
+	-@cp -f rt.ll $(INSTALL_DIR)/rt.ll
+	-@cp -rf std $(INSTALL_DIR)/std
+
 .PHONY: \
 	main test \
 	clean clean-but-keep-stage0 \
@@ -77,7 +85,8 @@ update-stage0:
 	stage1 test-stage1 \
 	stage2 test-stage2 \
 	generate-bootstrap-files \
-	update-stage0.ll update-stage0
+	update-stage0.ll update-stage0 \
+	install
 
 # llvm libraries:
 # llvm-config --libs --link-static core analysis target bitwriter
