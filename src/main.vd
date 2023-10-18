@@ -105,6 +105,11 @@ func main(args: Range!<String>) -> int {
 		return 1;
 	}
 
+	if !Path(options.build_dir).isDirectory() {
+		const mkdir_cmd = "mkdir -p " + options.build_dir + '\0'b;
+		discard system(mkdir_cmd.data());
+	}
+
 	var program: Program = (options);
 	typecheck(&&program);
 
