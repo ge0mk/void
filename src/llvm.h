@@ -13,3 +13,17 @@
 #include <llvm-c/Linker.h>
 #include <llvm-c/DebugInfo.h>
 #include <llvm-c/ExecutionEngine.h>
+
+enum DWARFTag {
+#define HANDLE_DW_TAG(ID, NAME, VERSION, VENDOR, KIND) Tag_##NAME = ID,
+
+#include <llvm/BinaryFormat/Dwarf.def>
+};
+
+enum DWARFTypeEncoding {
+#define HANDLE_DW_ATE(ID, NAME, VERSION, VENDOR) Type_##NAME = ID,
+
+#include <llvm/BinaryFormat/Dwarf.def>
+};
+
+

@@ -99,7 +99,7 @@ struct CGContext {
 		if type.reference_kind == None {
 			return type.decl.llvm_di;
 		} else {
-			return LLVMDIBuilderCreateReferenceType(this.di_builder, dwarf::Tag::Reference_type, type.decl.llvm_di);
+			return LLVMDIBuilderCreateReferenceType(this.di_builder, DWARFTag::Tag_reference_type, type.decl.llvm_di);
 		}
 	}
 
@@ -241,14 +241,14 @@ struct CGContext {
 
 		match type.body {
 			case Empty -> type.llvm_di = LLVMDIBuilderCreateUnspecifiedType(this.di_builder, di_name);
-			case Void -> type.llvm_di = LLVMDIBuilderCreateBasicType(this.di_builder, di_name, size_in_bits, 0 as dwarf::TypeEncoding, LLVMDIFlags::LLVMDIFlagZero);
-			case Bool -> type.llvm_di = LLVMDIBuilderCreateBasicType(this.di_builder, di_name, size_in_bits, dwarf::TypeEncoding::Boolean, LLVMDIFlags::LLVMDIFlagZero);
-			case Byte -> type.llvm_di = LLVMDIBuilderCreateBasicType(this.di_builder, di_name, size_in_bits, dwarf::TypeEncoding::Unsigned_char, LLVMDIFlags::LLVMDIFlagZero);
-			case Int -> type.llvm_di = LLVMDIBuilderCreateBasicType(this.di_builder, di_name, size_in_bits, dwarf::TypeEncoding::Signed, LLVMDIFlags::LLVMDIFlagZero);
-			case UInt -> type.llvm_di = LLVMDIBuilderCreateBasicType(this.di_builder, di_name, size_in_bits, dwarf::TypeEncoding::Unsigned, LLVMDIFlags::LLVMDIFlagZero);
-			case Float -> type.llvm_di = LLVMDIBuilderCreateBasicType(this.di_builder, di_name, size_in_bits, dwarf::TypeEncoding::Float, LLVMDIFlags::LLVMDIFlagZero);
+			case Void -> type.llvm_di = LLVMDIBuilderCreateBasicType(this.di_builder, di_name, size_in_bits, 0 as DWARFTypeEncoding, LLVMDIFlags::LLVMDIFlagZero);
+			case Bool -> type.llvm_di = LLVMDIBuilderCreateBasicType(this.di_builder, di_name, size_in_bits, DWARFTypeEncoding::Type_boolean, LLVMDIFlags::LLVMDIFlagZero);
+			case Byte -> type.llvm_di = LLVMDIBuilderCreateBasicType(this.di_builder, di_name, size_in_bits, DWARFTypeEncoding::Type_unsigned_char, LLVMDIFlags::LLVMDIFlagZero);
+			case Int -> type.llvm_di = LLVMDIBuilderCreateBasicType(this.di_builder, di_name, size_in_bits, DWARFTypeEncoding::Type_signed, LLVMDIFlags::LLVMDIFlagZero);
+			case UInt -> type.llvm_di = LLVMDIBuilderCreateBasicType(this.di_builder, di_name, size_in_bits, DWARFTypeEncoding::Type_unsigned, LLVMDIFlags::LLVMDIFlagZero);
+			case Float -> type.llvm_di = LLVMDIBuilderCreateBasicType(this.di_builder, di_name, size_in_bits, DWARFTypeEncoding::Type_float, LLVMDIFlags::LLVMDIFlagZero);
 			case Pointer: pointer_type -> {
-				type.llvm_di = LLVMDIBuilderCreateReplaceableCompositeType(this.di_builder, dwarf::Tag::Unspecified_type, di_name, parent_namespace, di_file, line, 0u32, size_in_bits, alignment_in_bits, LLVMDIFlags::LLVMDIFlagZero, type.signature());
+				type.llvm_di = LLVMDIBuilderCreateReplaceableCompositeType(this.di_builder, DWARFTag::Tag_unspecified_type, di_name, parent_namespace, di_file, line, 0u32, size_in_bits, alignment_in_bits, LLVMDIFlags::LLVMDIFlagZero, type.signature());
 
 				const pointee_type = match pointer_type.pointee_type.isUnknown() {
 					case true -> yield this.getDIType(this.program.void_type);
@@ -276,7 +276,7 @@ struct CGContext {
 				);
 			}
 			case Array: array_type -> {
-				type.llvm_di = LLVMDIBuilderCreateReplaceableCompositeType(this.di_builder, dwarf::Tag::Unspecified_type, di_name, parent_namespace, di_file, line, 0u32, size_in_bits, alignment_in_bits, LLVMDIFlags::LLVMDIFlagZero, type.signature());
+				type.llvm_di = LLVMDIBuilderCreateReplaceableCompositeType(this.di_builder, DWARFTag::Tag_unspecified_type, di_name, parent_namespace, di_file, line, 0u32, size_in_bits, alignment_in_bits, LLVMDIFlags::LLVMDIFlagZero, type.signature());
 
 				const di_type = LLVMDIBuilderCreateArrayType(this.di_builder, array_type.size, alignment_in_bits, this.getDIType(array_type.element_type), List!<LLVMMetadataRef>());
 
@@ -284,7 +284,7 @@ struct CGContext {
 				type.llvm_di = di_type;
 			}
 			case Tuple | Struct | Variant -> {
-				type.llvm_di = LLVMDIBuilderCreateReplaceableCompositeType(this.di_builder, dwarf::Tag::Unspecified_type, di_name, parent_namespace, di_file, line, 0u32, size_in_bits, alignment_in_bits, LLVMDIFlags::LLVMDIFlagZero, type.signature());
+				type.llvm_di = LLVMDIBuilderCreateReplaceableCompositeType(this.di_builder, DWARFTag::Tag_unspecified_type, di_name, parent_namespace, di_file, line, 0u32, size_in_bits, alignment_in_bits, LLVMDIFlags::LLVMDIFlagZero, type.signature());
 
 				var members: List!<LLVMMetadataRef>;
 
@@ -395,7 +395,7 @@ struct CGContext {
 				type.llvm_di = di_type;
 			}
 			case Enum -> {
-				type.llvm_di = LLVMDIBuilderCreateReplaceableCompositeType(this.di_builder, dwarf::Tag::Unspecified_type, di_name, parent_namespace, di_file, line, 0u32, size_in_bits, alignment_in_bits, LLVMDIFlags::LLVMDIFlagZero, type.signature());
+				type.llvm_di = LLVMDIBuilderCreateReplaceableCompositeType(this.di_builder, DWARFTag::Tag_unspecified_type, di_name, parent_namespace, di_file, line, 0u32, size_in_bits, alignment_in_bits, LLVMDIFlags::LLVMDIFlagZero, type.signature());
 
 				var cases: List!<LLVMMetadataRef>;
 				for c in type.enum_cases {
