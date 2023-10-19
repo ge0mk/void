@@ -178,8 +178,17 @@ def main(args):
 
 		qual_type = decl["type"]["desugaredQualType"] if "desugaredQualType" in decl["type"] else decl["type"]["qualType"]
 		type = parse_type(qual_type)
-		if not type is None:
-			type_aliases[name] = type
+		if type is None:
+			continue
+
+		if type == name: # typedef struct Foo { ... } Foo;
+			continue
+
+		type_aliases[name] = name
+		type_decls[name] = {
+			"kind": "alias",
+			"value": type
+		}
 
 	for name, decl in ast.items():
 		if decl["kind"] != "FunctionDecl":
@@ -240,6 +249,8 @@ def main(args):
 							output += " = " + id
 						output += ";\n"
 					output += "}"
+			case "alias":
+				output += "alias " + name + " = " + decl["value"] + ";"
 		output += "\n\n"
 
 	for name, func in function_decls.items():
