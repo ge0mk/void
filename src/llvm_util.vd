@@ -6,19 +6,6 @@ import std/io;
 
 import llvm_c;
 
-alias LLVMMemoryBufferRef = vptr!<LLVMOpaqueMemoryBuffer>;
-alias LLVMContextRef = vptr!<LLVMOpaqueContext>;
-alias LLVMModuleRef = vptr!<LLVMOpaqueModule>;
-alias LLVMTypeRef = vptr!<LLVMOpaqueType>;
-alias LLVMValueRef = vptr!<LLVMOpaqueValue>;
-alias LLVMBasicBlockRef = vptr!<LLVMOpaqueBasicBlock>;
-alias LLVMMetadataRef = vptr!<LLVMOpaqueMetadata>;
-alias LLVMBuilderRef = vptr!<LLVMOpaqueBuilder>;
-alias LLVMDIBuilderRef = vptr!<LLVMOpaqueDIBuilder>;
-alias LLVMTargetDataRef = vptr!<LLVMOpaqueTargetData>;
-alias LLVMExecutionEngineRef = vptr!<LLVMOpaqueExecutionEngine>;
-alias LLVMGenericValueRef = vptr!<LLVMOpaqueGenericValue>;
-
 func createInterpreterForModule(module: LLVMModuleRef) -> Result!<LLVMExecutionEngineRef, String> {
 	var result: LLVMExecutionEngineRef;
 	var out_error: vptr!<byte>;
