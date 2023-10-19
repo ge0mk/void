@@ -127,6 +127,19 @@ def main(args):
 					return "vptr!<" + parse_type(t[:-1]) + ">"
 		elif t.endswith("*const"):
 			return "cptr!<" + parse_type(t[:-6]) + ">"
+		elif "(*)" in t:
+			sep = t.find("(*)")
+			return_type = parse_type(t[:sep])
+			parameters = [parse_type(p) for p in t[sep+4:-1].split(",")]
+
+			return "(" + ", ".join(parameters) + ")" + " -> " + return_type
+
+			result = "function!<" + return_type
+			for p in parameters:
+				result += ", " + p
+			result += ">"
+			return result
+			print(t + " - " + return_type + " - " + str(parameters))
 		else:
 			print("unknown type: " + t)
 
