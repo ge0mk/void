@@ -1791,7 +1791,7 @@ struct CGContext {
 			case Match: match_expr -> return this.codegenMatchExpr(match_expr, expr.span);
 			case ShallowCopy: shallow_copy_expr -> {
 				var dst = LLVMValueRef();
-				match shallow_copy_expr.destination.operator unwrap() {
+				match shallow_copy_expr.destination {
 					case VarInvoke: variable -> dst = this.getVariable(variable);
 					case MemberVarInvoke: member_var_invoke_expr -> {
 						const object = this.codegenExpr(member_var_invoke_expr.object);
@@ -1911,14 +1911,14 @@ struct CGContext {
 		}
 
 		LLVMPositionBuilderAtEnd(this.builder, else_block);
-		match match_expr.else_case {
-			case Some: stmt -> {
-				this.codegenStmt(stmt);
-				if !LLVMHasBasicBlockTerminator(LLVMGetInsertBlock(this.builder)) {
-					discard LLVMBuildBr(this.builder, cont_block);
-				}
+		if match_expr.else_case is Empty {
+			discard LLVMBuildUnreachable(this.builder);
+		} else {
+			this.codegenStmt(match_expr.else_case);
+
+			if !LLVMHasBasicBlockTerminator(LLVMGetInsertBlock(this.builder)) {
+				discard LLVMBuildBr(this.builder, cont_block);
 			}
-			else -> discard LLVMBuildUnreachable(this.builder);
 		}
 
 		LLVMPositionBuilderAtEnd(this.builder, cont_block);

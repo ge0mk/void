@@ -477,7 +477,7 @@ struct TemplateParameterDecl {
 	var concept: SharedHandle!<Concept>;
 	var is_variadic: bool;
 
-	var value: Optional!<TemplateParameter>;
+	var value: TemplateParameter;
 
 	func constructor(this: &&TemplateParameterDecl, name: String, concept: SharedHandle!<Concept>, is_variadic: bool) -> void {
 		this.name := name;
@@ -490,7 +490,7 @@ struct TemplateParameterDecl {
 		this.name := name;
 		this.concept := concept;
 		this.is_variadic := is_variadic;
-		this.value := Some(value);
+		this.value := value;
 	}
 
 	func constructor(this: &&TemplateParameterDecl, other: TemplateParameterDecl) -> void = default;
@@ -503,8 +503,8 @@ struct TemplateParameterDecl {
 	func signature(this: &TemplateParameterDecl) -> String {
 		var result = this.name + ": ";
 		result += ("..." if this.is_variadic else "") + this.concept.name;
-		if const value = this.value {
-			result += " = " + value.toString();
+		if !(this.value is None) {
+			result += " = " + format(this.value);
 		}
 		return result;
 	}
@@ -515,9 +515,9 @@ struct TemplateParameterDecl {
 		out.text(":");
 		out.attribute(this.concept.name);
 
-		if const value = this.value {
+		if !(this.value is None) {
 			out.text(" =");
-			out.value(value.toString());
+			out.value(format(this.value));
 		}
 
 		out.pop();
@@ -525,46 +525,12 @@ struct TemplateParameterDecl {
 }
 
 variant TemplateParameter {
+	case None;
 	case Type: Type;
 	case Boolean: bool;
 	case Integer: int;
 	case String: String;
 	case Garbage;
-
-	func toString(this: TemplateParameter) -> String {
-		match this {
-			case Type: t -> return t.signature();
-			case Boolean: v -> return format(v);
-			case Integer: v -> return format(v);
-			case String: s -> return "\"" + s + "\"";
-			case Garbage -> return "<garbage>";
-		}
-	}
-}
-
-struct NameSegment {
-	var span: Span;
-	var name: String;
-	var template_parameters: List!<TemplateParameter>;
-
-	func constructor(this: &&NameSegment, name: String, template_parameters: &List!<TemplateParameter>) -> void {
-		this.name := name;
-		this.template_parameters := template_parameters;
-	}
-
-	func constructor(this: &&NameSegment, span: Span, name: String, template_parameters: &List!<TemplateParameter>) -> void {
-		this.span := span;
-		this.name := name;
-		this.template_parameters := template_parameters;
-	}
-
-	func constructor(this: &&NameSegment, other: NameSegment) -> void = default;
-	func destructor(this: &&NameSegment) -> void = default;
-
-	operator =(this: &&NameSegment, other: NameSegment) -> void = default;
-	operator ==(@[shallow] this: NameSegment, @[shallow] other: NameSegment) -> bool {
-		return this.name == other.name && this.template_parameters == other.template_parameters;
-	}
 }
 
 struct Name {
@@ -578,11 +544,11 @@ struct Name {
 	}
 
 	func constructor(this: &&Name, name: String) -> void {
-		this.segments := (1u, NameSegment(Span(), name, List!<TemplateParameter>()));
+		this.segments := (1u, NameSegment(name, List!<TemplateParameter>()));
 	}
 
 	func constructor(this: &&Name, name: String, template_parameters: &List!<TemplateParameter>) -> void {
-		this.segments := (1u, NameSegment(Span(), name, template_parameters));
+		this.segments := (1u, NameSegment(name, template_parameters));
 	}
 
 	func constructor(this: &&Name, other: Name) -> void = default;
@@ -606,20 +572,6 @@ struct Name {
 
 		return 0u;
 	}
-
-	func toString(this: &Name) -> String {
-		var result = "";
-		var first = true;
-		for i in 0u..this.segments.size() {
-			if i != 0 {
-				result += "::";
-			}
-			result += this.segments[i].name;
-			result += format(this.segments[i].template_parameters);
-		}
-
-		return result;
-	}
 }
 
 enum NamespaceState {
@@ -632,19 +584,6 @@ enum NamespaceState {
 
 	operator +(this: NamespaceState, delta: uint) -> NamespaceState {
 		return (this as uint + delta) as NamespaceState;
-	}
-
-	func toString(this: NamespaceState) -> String {
-		assert(this >= IncompleteTemplate && this <= Done);
-
-		match this {
-			case IncompleteTemplate -> return "IncompleteTemplate";
-			case Unchecked -> return "Unchecked";
-			case UncheckedTypeBodies -> return "UncheckedTypeBodies";
-			case UncheckedFunctionSignatures -> return "UncheckedFunctionSignatures";
-			case UncheckedFunctionBodies -> return "UncheckedFunctionBodies";
-			case Done -> return "Done";
-		}
 	}
 }
 
@@ -694,16 +633,16 @@ struct Namespace {
 
 		var template_parameter_values: List!<TemplateParameter>;
 		for p in template_parameters {
-			if p.value.hasValue() {
-				template_parameter_values.append(p.value.value());
-			} else {
+			if p.value is None {
 				this.state = IncompleteTemplate;
+			} else {
+				template_parameter_values.append(p.value);
 			}
 		}
 
 		var full_name: Name;
 		if this.parent.isAlive() {
-			full_name = this.parent.full_name + NameSegment(Span(), name, template_parameter_values);
+			full_name = this.parent.full_name + NameSegment(name, template_parameter_values);
 		} else {
 			full_name = Name(name, template_parameter_values);
 		}
@@ -734,7 +673,7 @@ struct Namespace {
 	func dump(this: &Namespace, out: &&TreeFormatter, is_last: bool) -> void {
 		out.push("Namespace", is_last);
 		out.attribute(this.signature());
-		out.value(this.state.toString());
+		out.value(format(this.state));
 
 		for parameter in this.template_parameters {
 			parameter.dump(&&out, false);
@@ -851,7 +790,7 @@ struct TypeDecl {
 	var member_variables_by_name: Map!<String, uint>;
 
 	// enum & variant
-	var parsed_id_type: Optional!<ParsedType>;
+	var parsed_id_type: ParsedType;
 	var id_type: Type;
 
 	// only enum
@@ -874,6 +813,7 @@ struct TypeDecl {
 		this.name := name;
 		this.template_parameters := template_parameters;
 		this.body := body;
+		this.parsed_id_type := Empty(Span());
 	}
 
 	func constructor(this: &&TypeDecl, other: TypeDecl) -> void = default;
@@ -1315,14 +1255,6 @@ struct FunctionDecl {
 
 		return false;
 	}
-
-	func getParsedSignature(this: &FunctionDecl) -> Optional!<ParsedFunctionSignature> {
-		if const parsed_function = this.body as Unchecked {
-			return Some(parsed_function.signature);
-		}
-
-		return None;
-	}
 }
 
 variant TypeBody {
@@ -1349,107 +1281,6 @@ variant TypeBody {
 	case Struct;
 	case Enum;
 	case Variant;
-}
-
-struct MemberVarDecl {
-	var span: Span;
-
-	var id: uint;
-	var name: String;
-	var type: Type;
-
-	var initializer: Expr;
-
-	func constructor(this: &&MemberVarDecl, span: Span, id: uint, name: String, type: Type, initializer: &Expr) -> void {
-		this.span := span;
-
-		this.id := id;
-		this.name := name;
-		this.type := type;
-
-		this.initializer := initializer;
-	}
-
-	func constructor(this: &&MemberVarDecl, other: MemberVarDecl) -> void = default;
-	func destructor(this: &&MemberVarDecl) -> void = default;
-
-	operator =(this: &&MemberVarDecl, other: MemberVarDecl) -> void = default;
-
-	operator ==(@[shallow] this: MemberVarDecl, @[shallow] other: MemberVarDecl) -> bool {
-		return this.id == other.id;
-	}
-
-	func dump(this: &MemberVarDecl, out: &&TreeFormatter, is_last: bool) -> void {
-		out.push("MemberVarDecl", is_last);
-		out.attribute(this.name);
-		out.value(this.type.signature());
-		out.span(this.span);
-		this.initializer.dump(&&out, true);
-		out.pop();
-	}
-}
-
-struct EnumCaseDecl {
-	var span: Span;
-
-	var id: int;
-	var name: String;
-
-	func constructor(this: &&EnumCaseDecl, span: Span, id: int, name: String) -> void {
-		this.span := span;
-		this.id := id;
-		this.name := name;
-	}
-
-	func constructor(this: &&EnumCaseDecl, other: EnumCaseDecl) -> void = default;
-	func destructor(this: &&EnumCaseDecl) -> void = default;
-
-	operator =(this: &&EnumCaseDecl, other: EnumCaseDecl) -> void = default;
-
-	operator ==(@[shallow] this: EnumCaseDecl, @[shallow] other: EnumCaseDecl) -> bool {
-		return this.id == other.id;
-	}
-
-	func dump(this: &EnumCaseDecl, out: &&TreeFormatter, is_last: bool) -> void {
-		out.push("EnumCaseDecl", is_last);
-		out.attribute(this.name);
-		out.value(format(this.id));
-		out.span(this.span);
-		out.pop();
-	}
-}
-
-struct VariantCaseDecl {
-	var span: Span;
-
-	var id: int;
-	var name: String;
-	var type: Type;
-
-	func constructor(this: &&VariantCaseDecl, span: Span, id: int, name: String, type: Type) -> void {
-		this.span := span;
-		this.id := id;
-		this.name := name;
-		this.type := type;
-	}
-
-	func constructor(this: &&VariantCaseDecl, other: VariantCaseDecl) -> void = default;
-	func destructor(this: &&VariantCaseDecl) -> void = default;
-
-	operator =(this: &&VariantCaseDecl, other: VariantCaseDecl) -> void = default;
-
-	operator ==(@[shallow] this: VariantCaseDecl, @[shallow] other: VariantCaseDecl) -> bool {
-		return this.id == other.id;
-	}
-
-	func dump(this: &VariantCaseDecl, out: &&TreeFormatter, is_last: bool) -> void {
-		out.push("VariantCaseDecl", is_last);
-		out.attribute(this.name);
-		out.value(format(this.id));
-		out.value(this.type.signature());
-		out.span(this.span);
-		out.pop();
-	}
 }
 
 variant FunctionBody {
@@ -1821,10 +1652,10 @@ variant Stmt {
 
 	case Expr: Expr;
 
-	case If: IfStmt;
-	case While: WhileStmt;
+	case If: Box!<IfStmt>;
+	case While: Box!<WhileStmt>;
 
-	case Case: CaseStmt;
+	case Case: Box!<CaseStmt>;
 	case ElseCase: Box!<Stmt>;
 
 	case Break;
@@ -1902,19 +1733,15 @@ variant Stmt {
 		}
 	}
 
-	func isTerminator(this: &Stmt, never_type: Type) -> bool {
-		return this.isTerminator(never_type, true);
-	}
-
 	func isTerminator(this: &Stmt, never_type: Type, yield_is_terminator: bool) -> bool {
 		match this {
 			case Empty -> return false;
-			case Compound: compound_stmt -> return compound_stmt.isTerminator(never_type);
+			case Compound: compound_stmt -> return compound_stmt.isTerminator(never_type, yield_is_terminator);
 			case Expr: expr -> return expr.type == never_type;
-			case If: if_stmt -> return if_stmt.then_branch.isTerminator(never_type) && if_stmt.else_branch.isTerminator(never_type);
-			case While: while_stmt -> return while_stmt.kind == DoWhile && while_stmt.body.isTerminator(never_type);
-			case Case: case_stmt -> return case_stmt.body.isTerminator(never_type);
-			case ElseCase: body -> return body.isTerminator(never_type);
+			case If: if_stmt -> return if_stmt.then_branch.isTerminator(never_type, yield_is_terminator) && if_stmt.else_branch.isTerminator(never_type, yield_is_terminator);
+			case While: while_stmt -> return while_stmt.kind == DoWhile && while_stmt.body.isTerminator(never_type, yield_is_terminator);
+			case Case: case_stmt -> return case_stmt.body.isTerminator(never_type, yield_is_terminator);
+			case ElseCase: body -> return body.isTerminator(never_type, yield_is_terminator);
 			case Break
 			| Continue
 			| Return -> return true;
@@ -1954,89 +1781,11 @@ struct CompoundStmt {
 		out.pop();
 	}
 
-	func isTerminator(this: &CompoundStmt, never_type: Type) -> bool {
+	func isTerminator(this: &CompoundStmt, never_type: Type, yield_is_terminator: bool) -> bool {
 		if const last = this.children.last() {
-			return last.isTerminator(never_type);
+			return last.isTerminator(never_type, yield_is_terminator);
 		}
 		return false;
-	}
-}
-
-struct IfStmt {
-	var condition: Expr;
-	var condition_cleanup: List!<Stmt>;
-	var then_branch: Box!<Stmt>;
-	var else_branch: Box!<Stmt>;
-
-	func constructor(this: &&IfStmt, condition: &Expr, condition_cleanup: &List!<Stmt>, then_branch: &Stmt, else_branch: &Stmt) -> void {
-		this.condition := condition;
-		this.condition_cleanup := condition_cleanup;
-		this.then_branch := then_branch;
-		this.else_branch := else_branch;
-	}
-
-	func constructor(this: &&IfStmt, other: IfStmt) -> void = default;
-	func destructor(this: &&IfStmt) -> void = default;
-
-	operator =(this: &&IfStmt, other: IfStmt) -> void = default;
-
-	operator ==(this: IfStmt, other: IfStmt) -> bool = default;
-}
-
-struct WhileStmt {
-	var condition: Expr;
-	var condition_cleanup: List!<Stmt>;
-	var body: Box!<Stmt>;
-	var kind: WhileStmtKind;
-
-	func constructor(this: &&WhileStmt, condition: &Expr, condition_cleanup: &List!<Stmt>, body: &Stmt, kind: WhileStmtKind) -> void {
-		this.condition := condition;
-		this.condition_cleanup := condition_cleanup;
-		this.body := body;
-		this.kind := kind;
-	}
-
-	func constructor(this: &&WhileStmt, other: WhileStmt) -> void = default;
-	func destructor(this: &&WhileStmt) -> void = default;
-
-	operator =(this: &&WhileStmt, other: WhileStmt) -> void = default;
-
-	operator ==(this: WhileStmt, other: WhileStmt) -> bool = default;
-}
-
-enum WhileStmtKind {
-	case While;
-	case DoWhile;
-}
-
-struct CaseStmt {
-	var span: Span;
-	var patterns: List!<Expr>;
-	var body: Box!<Stmt>;
-
-	func constructor(this: &&CaseStmt, span: Span, patterns: &List!<Expr>, body: &Stmt) -> void {
-		this.span := span;
-		this.patterns := patterns;
-		this.body := body;
-	}
-
-	func constructor(this: &&CaseStmt, other: CaseStmt) -> void = default;
-	func destructor(this: &&CaseStmt) -> void = default;
-
-	operator =(this: &&CaseStmt, other: CaseStmt) -> void = default;
-
-	operator ==(this: CaseStmt, other: CaseStmt) -> bool = default;
-
-	func dump(this: &CaseStmt, out: &&TreeFormatter, is_last: bool) -> void {
-		out.push("CaseStmt", is_last);
-		out.span(this.span);
-
-		for pattern in this.patterns {
-			pattern.dump(&&out, false);
-		}
-
-		this.body.dump(&&out, true);
-		out.pop();
 	}
 }
 
@@ -2054,20 +1803,25 @@ variant Expr {
 	case ConstAggregate: List!<Expr>;
 
 	case Call: CallExpr;
-	case Match: MatchExpr;
+	case Match: Box!<MatchExpr>;
 
 	case VarInvoke: SharedHandle!<VarDecl>;
-	case MemberVarInvoke: MemberVarInvokeExpr;
+	case MemberVarInvoke: Box!<MemberVarInvokeExpr>;
 
 	case Dereference: Box!<Expr>;
 
-	case ShallowCopy: ShallowCopyExpr;
+	case ShallowCopy: Box!<ShallowCopyExpr>;
 
 	case TypeRef: Type;
 	case FunctionRef: SharedHandle!<FunctionDecl>;
 
 	func constructor(this: &&Expr) -> void {
 		this.constructor!<0>(Span(), Type::unknown());
+	}
+
+	template <Id: int = 11>
+	func constructor(this: &&Expr, data: &ShallowCopyExpr, span: Span, type: Type) -> void {
+		this.constructor!<11>(Box!<ShallowCopyExpr>(data), span, type);
 	}
 
 	func toBool(this: &Expr) -> bool {
@@ -2097,121 +1851,23 @@ variant Expr {
 			else -> return 0.0;
 		}
 	}
-
-	func dump(this: &Expr, out: &&TreeFormatter, is_last: bool) -> void {
-		match this {
-			case Undefined -> {
-				out.push("UndefinedExpr", is_last);
-				out.span(this.span);
-				out.pop();
-			}
-			case Void -> {
-				out.push("VoidExpr", is_last);
-				out.span(this.span);
-				out.pop();
-			}
-			case Integer: value -> {
-				out.push("IntegerExpr", is_last);
-				out.value(format(value));
-				out.attribute(this.type.signature());
-				out.span(this.span);
-				out.pop();
-			}
-			case Float: value -> {
-				out.push("FloatExpr", is_last);
-				//out.value(format(value));
-				out.attribute(this.type.signature());
-				out.span(this.span);
-				out.pop();
-			}
-			case String: value -> {
-				out.push("StringExpr", is_last);
-				out.value("\"" + value + "\"");
-				out.attribute(this.type.signature());
-				out.span(this.span);
-				out.pop();
-			}
-			case ConstAggregate -> {}
-			case Call: call_expr -> {
-				out.push("CallExpr", is_last);
-				out.value(call_expr.function.signature());
-				out.attribute(call_expr.return_kind.toString());
-				out.span(this.span);
-
-				if call_expr.result_var.isAlive() {
-					call_expr.result_var.dump(&&out, call_expr.parameters.isEmpty());
-				}
-
-				for i in 0u..call_expr.parameters.size() {
-					call_expr.parameters[i].dump(&&out, i == call_expr.parameters.size() - 1);
-				}
-
-				out.pop();
-			}
-			case Match: match_expr -> {
-				out.push("MatchExpr", is_last);
-				out.attribute(this.type.signature());
-				out.span(this.span);
-
-				match_expr.value.dump(&&out, false);
-				if match_expr.yield_var.isAlive() {
-					match_expr.yield_var.dump(&&out, false);
-				}
-
-				for i in 0u..match_expr.cases.size() {
-					match_expr.cases[i].dump(&&out, i == match_expr.cases.size() - 1 && match_expr.else_case is None);
-				}
-
-				if const else_case = match_expr.else_case {
-					else_case.dump(&&out, true);
-				}
-
-				out.pop();
-			}
-			case VarInvoke: variable -> {
-				out.push("VarInvokeExpr", is_last);
-				out.value(("#" if variable.is_parameter else "") + variable.name);
-				out.attribute(this.type.signature());
-				out.span(this.span);
-				out.pop();
-			}
-			case MemberVarInvoke: member_var_invoke_expr -> {
-				out.push("MemberVarInvokeExpr", is_last);
-				out.value(format(member_var_invoke_expr.id));
-				out.attribute(this.type.signature());
-				out.span(this.span);
-				member_var_invoke_expr.object.dump(&&out, true);
-				out.pop();
-			}
-			case Dereference: base -> {
-				out.push("DereferenceExpr", is_last);
-				out.attribute(this.type.signature());
-				out.span(this.span);
-				base.dump(&&out, true);
-				out.pop();
-			}
-			case ShallowCopy: shallow_copy_expr -> {
-				out.push("ShallowCopyExpr", is_last);
-				out.span(this.span);
-				shallow_copy_expr.destination.dump(&&out, false);
-				shallow_copy_expr.value.dump(&&out, true);
-				out.pop();
-			}
-			case TypeRef: type -> {
-				out.push("TypeRefExpr", is_last);
-				out.span(this.span);
-				out.value(type.signature());
-				out.pop();
-			}
-			case FunctionRef: function -> {
-				out.push("FunctionRefExpr", is_last);
-				out.span(this.span);
-				out.value(function.signature());
-				out.pop();
-			}
-		}
-	}
 }
+
+alias NameSegment = (name: String, template_parameters: List!<TemplateParameter>);
+
+alias MemberVarDecl = (span: Span, id: uint, name: String, type: Type, initializer: Expr);
+alias EnumCaseDecl = (span: Span, id: int, name: String);
+alias VariantCaseDecl = (span: Span, id: int, name: String, type: Type);
+
+alias IfStmt = (condition: Expr, condition_cleanup: List!<Stmt>, then_branch: Stmt, else_branch: Stmt);
+
+enum WhileStmtKind {
+	case While;
+	case DoWhile;
+}
+
+alias WhileStmt = (condition: Expr, condition_cleanup: List!<Stmt>, body: Stmt, kind: WhileStmtKind);
+alias CaseStmt = (span: Span, patterns: List!<Expr>, body: Stmt);
 
 enum ReturnKind {
 	case None;		// function returns void or never
@@ -2219,93 +1875,163 @@ enum ReturnKind {
 	case Variable;	// result gets stored in variable allocated by caller
 	case Parameter;	// callee initializes variable allocated by caller, passed by reference as first parameter
 	case VariableButYieldNone;	// same as variable, but result gets discarded. Used when initializing a variable with the result of a call (optimized)
+}
 
-	func toString(this: ReturnKind) -> String {
-		match this {
-			case None -> return "None";
-			case Value -> return "Value";
-			case Variable -> return "Variable";
-			case Parameter -> return "Parameter";
-			case VariableButYieldNone -> return "VariableButYieldNone";
+alias CallExpr = (
+	function: SharedHandle!<FunctionDecl>,
+	parameters: SharedPtr!<List!<Expr>>,
+	result_var: SharedHandle!<VarDecl>,
+	return_kind: ReturnKind
+);
+
+alias MatchExpr = (value: Expr, cases: List!<CaseStmt>, else_case: Stmt, yield_var: SharedHandle!<VarDecl>);
+alias MemberVarInvokeExpr = (object: Expr, id: uint);
+alias ShallowCopyExpr = (destination: Expr, value: Expr);
+
+func dump(this: &MemberVarDecl, out: &&TreeFormatter, is_last: bool) -> void {
+	out.push("MemberVarDecl", is_last);
+	out.attribute(this.name);
+	out.value(this.type.signature());
+	out.span(this.span);
+	this.initializer.dump(&&out, true);
+	out.pop();
+}
+
+func dump(this: &EnumCaseDecl, out: &&TreeFormatter, is_last: bool) -> void {
+	out.push("EnumCaseDecl", is_last);
+	out.attribute(this.name);
+	out.value(format(this.id));
+	out.span(this.span);
+	out.pop();
+}
+
+func dump(this: &VariantCaseDecl, out: &&TreeFormatter, is_last: bool) -> void {
+	out.push("VariantCaseDecl", is_last);
+	out.attribute(this.name);
+	out.value(format(this.id));
+	out.value(this.type.signature());
+	out.span(this.span);
+	out.pop();
+}
+
+func dump(this: &Expr, out: &&TreeFormatter, is_last: bool) -> void {
+	match this {
+		case Undefined -> {
+			out.push("UndefinedExpr", is_last);
+			out.span(this.span);
+			out.pop();
+		}
+		case Void -> {
+			out.push("VoidExpr", is_last);
+			out.span(this.span);
+			out.pop();
+		}
+		case Integer: value -> {
+			out.push("IntegerExpr", is_last);
+			out.value(format(value));
+			out.attribute(this.type.signature());
+			out.span(this.span);
+			out.pop();
+		}
+		case Float: value -> {
+			out.push("FloatExpr", is_last);
+			//out.value(format(value));
+			out.attribute(this.type.signature());
+			out.span(this.span);
+			out.pop();
+		}
+		case String: value -> {
+			out.push("StringExpr", is_last);
+			out.value("\"" + value + "\"");
+			out.attribute(this.type.signature());
+			out.span(this.span);
+			out.pop();
+		}
+		case ConstAggregate -> {}
+		case Call: call_expr -> {
+			out.push("CallExpr", is_last);
+			out.value(call_expr.function.signature());
+			out.attribute(format(call_expr.return_kind));
+			out.span(this.span);
+
+			if call_expr.result_var.isAlive() {
+				call_expr.result_var.dump(&&out, call_expr.parameters.isEmpty());
+			}
+
+			for i in 0u..call_expr.parameters.size() {
+				call_expr.parameters[i].dump(&&out, i == call_expr.parameters.size() - 1);
+			}
+
+			out.pop();
+		}
+		case Match: match_expr -> {
+			out.push("MatchExpr", is_last);
+			out.attribute(this.type.signature());
+			out.span(this.span);
+
+			match_expr.value.dump(&&out, false);
+			if match_expr.yield_var.isAlive() {
+				match_expr.yield_var.dump(&&out, false);
+			}
+
+			for c in match_expr.cases {
+				out.push("CaseStmt", is_last);
+				out.span(c.span);
+
+				for pattern in c.patterns {
+					pattern.dump(&&out, false);
+				}
+
+				c.body.dump(&&out, true);
+				out.pop();
+			}
+
+			match_expr.else_case.dump(&&out, true);
+
+			out.pop();
+		}
+		case VarInvoke: variable -> {
+			out.push("VarInvokeExpr", is_last);
+			out.value(("#" if variable.is_parameter else "") + variable.name);
+			out.attribute(this.type.signature());
+			out.span(this.span);
+			out.pop();
+		}
+		case MemberVarInvoke: member_var_invoke_expr -> {
+			out.push("MemberVarInvokeExpr", is_last);
+			out.value(format(member_var_invoke_expr.id));
+			out.attribute(this.type.signature());
+			out.span(this.span);
+			member_var_invoke_expr.object.dump(&&out, true);
+			out.pop();
+		}
+		case Dereference: base -> {
+			out.push("DereferenceExpr", is_last);
+			out.attribute(this.type.signature());
+			out.span(this.span);
+			base.dump(&&out, true);
+			out.pop();
+		}
+		case ShallowCopy: shallow_copy_expr -> {
+			out.push("ShallowCopyExpr", is_last);
+			out.span(this.span);
+			shallow_copy_expr.destination.dump(&&out, false);
+			shallow_copy_expr.value.dump(&&out, true);
+			out.pop();
+		}
+		case TypeRef: type -> {
+			out.push("TypeRefExpr", is_last);
+			out.span(this.span);
+			out.value(type.signature());
+			out.pop();
+		}
+		case FunctionRef: function -> {
+			out.push("FunctionRefExpr", is_last);
+			out.span(this.span);
+			out.value(function.signature());
+			out.pop();
 		}
 	}
-}
-
-struct CallExpr {
-	var function: SharedHandle!<FunctionDecl>;
-	var parameters: SharedPtr!<List!<Expr>>;
-	var result_var: SharedHandle!<VarDecl>;
-	var return_kind: ReturnKind;
-
-	func constructor(this: &&CallExpr, function: SharedHandle!<FunctionDecl>, parameters: &List!<Expr>, result_var: SharedHandle!<VarDecl>, return_kind: ReturnKind) -> void {
-		this.function := function;
-		this.parameters := parameters;
-		this.result_var := result_var;
-		this.return_kind := return_kind;
-	}
-
-	func constructor(this: &&CallExpr, other: CallExpr) -> void = default;
-	func destructor(this: &&CallExpr) -> void = default;
-
-	operator =(this: &&CallExpr, other: CallExpr) -> void = default;
-
-	operator ==(this: CallExpr, other: CallExpr) -> bool = default;
-}
-
-struct MatchExpr {
-	var value: Box!<Expr>;
-	var cases: List!<CaseStmt>;
-	var else_case: Optional!<Box!<Stmt>>;
-	var yield_var: SharedHandle!<VarDecl>;
-
-	func constructor(this: &&MatchExpr) -> void {
-		this.value := Expr::Undefined(Span(), Type::unknown());
-	}
-
-	func constructor(this: &&MatchExpr, value: &Expr) -> void {
-		this.value := value;
-	}
-
-	func constructor(this: &&MatchExpr, other: MatchExpr) -> void = default;
-	func destructor(this: &&MatchExpr) -> void = default;
-
-	operator =(this: &&MatchExpr, other: MatchExpr) -> void = default;
-
-	operator ==(this: MatchExpr, other: MatchExpr) -> bool = default;
-}
-
-struct MemberVarInvokeExpr {
-	var object: Box!<Expr>;
-	var id: uint;
-
-	func constructor(this: &&MemberVarInvokeExpr, object: &Expr, id: uint) -> void {
-		this.object := object;
-		this.id := id;
-	}
-
-	func constructor(this: &&MemberVarInvokeExpr, other: MemberVarInvokeExpr) -> void = default;
-	func destructor(this: &&MemberVarInvokeExpr) -> void = default;
-
-	operator =(this: &&MemberVarInvokeExpr, other: MemberVarInvokeExpr) -> void = default;
-
-	operator ==(this: MemberVarInvokeExpr, other: MemberVarInvokeExpr) -> bool = default;
-}
-
-struct ShallowCopyExpr {
-	var destination: Box!<Expr>;
-	var value: Box!<Expr>;
-
-	func constructor(this: &&ShallowCopyExpr, destination: &Expr, value: &Expr) -> void {
-		this.destination := destination;
-		this.value := value;
-	}
-
-	func constructor(this: &&ShallowCopyExpr, other: ShallowCopyExpr) -> void = default;
-	func destructor(this: &&ShallowCopyExpr) -> void = default;
-
-	operator =(this: &&ShallowCopyExpr, other: ShallowCopyExpr) -> void = default;
-
-	operator ==(this: ShallowCopyExpr, other: ShallowCopyExpr) -> bool = default;
 }
 
 func addDereference(this: &Expr) -> Expr {
@@ -2319,6 +2045,17 @@ func removeDereference(this: &Expr) -> Expr {
 	match this {
 		case Dereference: &base -> return base.operator unwrap();
 		else -> return this;
+	}
+}
+
+func format(template_parameter: &TemplateParameter) -> String {
+	match template_parameter {
+		case None -> return "<none>";
+		case Type: t -> return t.signature();
+		case Boolean: v -> return format(v);
+		case Integer: v -> return format(v);
+		case String: s -> return "\"" + s + "\"";
+		case Garbage -> return "<garbage>";
 	}
 }
 
@@ -2350,10 +2087,37 @@ func format(template_parameters: &List!<TemplateParameter>) -> String {
 			result += ", ";
 		}
 
-		result += template_parameters[i].toString();
+		result += format(template_parameters[i]);
 	}
 
 	return result + ">";
+}
+
+func format(state: NamespaceState) -> String {
+	assert(state >= IncompleteTemplate && state <= Done);
+
+	match state {
+		case IncompleteTemplate -> return "IncompleteTemplate";
+		case Unchecked -> return "Unchecked";
+		case UncheckedTypeBodies -> return "UncheckedTypeBodies";
+		case UncheckedFunctionSignatures -> return "UncheckedFunctionSignatures";
+		case UncheckedFunctionBodies -> return "UncheckedFunctionBodies";
+		case Done -> return "Done";
+	}
+}
+
+func format(this: &Name) -> String {
+	var result = "";
+	var first = true;
+	for i in 0u..this.segments.size() {
+		if i != 0 {
+			result += "::";
+		}
+		result += this.segments[i].name;
+		result += format(this.segments[i].template_parameters);
+	}
+
+	return result;
 }
 
 func format(types: &List!<Type>) -> String {
@@ -2367,4 +2131,14 @@ func format(types: &List!<Type>) -> String {
 	}
 
 	return result + ")";
+}
+
+func format(return_kind: ReturnKind) -> String {
+	match return_kind {
+		case None -> return "None";
+		case Value -> return "Value";
+		case Variable -> return "Variable";
+		case Parameter -> return "Parameter";
+		case VariableButYieldNone -> return "VariableButYieldNone";
+	}
 }

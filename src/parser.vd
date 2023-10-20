@@ -1,12 +1,14 @@
 import std/core;
-import std/string;
-import std/list;
-import std/map;
 import std/box;
 import std/io;
+import std/list;
+import std/map;
+import std/shared;
+import std/string;
 
 import error;
 import lexer;
+import operators;
 import program;
 import span;
 import syntax_tree;
@@ -23,7 +25,7 @@ enum ParserScope {
 	case WhileStmt;
 	case DoWhileStmt;
 	case ForStmt;
-	case MatchStmt;
+	case MatchExpr;
 	case CaseStmt;
 }
 
@@ -152,20 +154,21 @@ struct Parser {
 		}
 	}
 
-	func expectIdentifier(this: &&Parser) -> Optional!<String> {
+	func expectIdentifier(this: &&Parser) -> String {
 		if this.index >= this.tokens.size() {
 			this.error("unexpected end of file", this.getEofSpan());
+			return "";
 		}
 
 		const current = this.tokens[this.index];
 		match current.data {
 			case Identifier: name -> {
 				this.index++;
-				return Some(name);
+				return name;
 			}
 			else -> {
 				this.error("unexpected token " + current.toString() + ", expected identifier", current.span);
-				return None;
+				return "";
 			}
 		}
 	}
@@ -196,7 +199,7 @@ struct Parser {
 			}
 			case KeywordVar
 			| KeywordConst -> return this.parseVarDeclStmt();
-			case KeywordCase -> if this.countScope(ParserScope::MatchStmt) != this.countScope(ParserScope::CaseStmt) {
+			case KeywordCase -> if this.countScope(ParserScope::MatchExpr) != this.countScope(ParserScope::CaseStmt) {
 				return this.parseCaseStmt();
 			} else {
 				return this.parseCaseDecl();
@@ -207,7 +210,7 @@ struct Parser {
 				else -> return this.parseIfStmt();
 			}
 			case KeywordElse -> if this.peek() is Arrow
-								&& this.countScope(ParserScope::MatchStmt) != this.countScope(ParserScope::CaseStmt) {
+								&& this.countScope(ParserScope::MatchExpr) != this.countScope(ParserScope::CaseStmt) {
 				const start = this.currentSpan();
 				this.index += 2;
 
@@ -269,9 +272,9 @@ struct Parser {
 				const start = this.currentSpan();
 				this.next();
 
-				var value = Optional!<ParsedExpr>::None;
+				var value = ParsedExpr::Empty(start);
 				if !(this.current() is Semicolon || this.current() is RCurly) {
-					value = Some(this.parseExpr());
+					value = this.parseExpr();
 				}
 				discard this.accept(TokenType::Semicolon);
 
@@ -282,9 +285,9 @@ struct Parser {
 				const start = this.currentSpan();
 				this.next();
 
-				var value = Optional!<ParsedExpr>::None;
+				var value = ParsedExpr::Empty(start);
 				if !(this.current() is Semicolon || this.current() is RCurly) {
-					value = Some(this.parseExpr());
+					value = this.parseExpr();
 				}
 				discard this.accept(TokenType::Semicolon);
 
@@ -315,7 +318,8 @@ struct Parser {
 			return ParsedStmt::Garbage(start..this.currentSpan(), false);
 		}
 
-		const name = this.expectIdentifier() else {
+		const name = this.expectIdentifier();
+		if name.isEmpty() {
 			return ParsedStmt::Garbage(start..this.currentSpan(), false);
 		}
 
@@ -332,13 +336,15 @@ struct Parser {
 			return ParsedStmt::Garbage(start..this.currentSpan(), false);
 		}
 
-		var name = this.expectIdentifier() else {
+		var name = this.expectIdentifier();
+		if name.isEmpty() {
 			return ParsedStmt::Garbage(start..this.currentSpan(), false);
 		}
 
 		while this.current() is Slash {
 			this.next();
-			const segment = this.expectIdentifier() else {
+			const segment = this.expectIdentifier();
+			if name.isEmpty() {
 				return ParsedStmt::Garbage(start..this.currentSpan(), false);
 			}
 
@@ -387,7 +393,8 @@ struct Parser {
 		var error = false;
 		while !this.accept(TokenType::RSquare) {
 			const start = this.currentSpan();
-			const name = this.expectIdentifier() else {
+			const name = this.expectIdentifier();
+			if name.isEmpty() {
 				error = true;
 				break;
 			}
@@ -447,7 +454,8 @@ struct Parser {
 		var error = false;
 		while !this.accept(TokenType::GreaterThan) {
 			const start = this.currentSpan();
-			const name = this.expectIdentifier() else {
+			const name = this.expectIdentifier();
+			if name.isEmpty() {
 				error = true;
 				break;
 			}
@@ -457,15 +465,15 @@ struct Parser {
 				break;
 			}
 
-			const concept = this.expectIdentifier() else {
+			const concept = this.expectIdentifier();
+			if concept.isEmpty() {
 				error = true;
 				break;
 			}
 
-			var value = Optional!<ParsedExpr>::None;
-
+			var value = ParsedExpr::Empty(this.previousSpan());
 			if this.accept(TokenType::Assign) {
-				value = Some(this.parseHighPrecedenceExpr());
+				value = this.parseHighPrecedenceExpr();
 			}
 
 			const end = this.previousSpan();
@@ -491,12 +499,12 @@ struct Parser {
 			return ParsedStmt::Garbage(start..this.previousSpan(), false);
 		}
 
-		const name = this.expectIdentifier() else {
+		const name = this.expectIdentifier();
+		if name.isEmpty() {
 			return ParsedStmt::Garbage(start..this.previousSpan(), false);
 		}
 
-		var decl = ParsedNamespace(annotations, template_parameters, name);
-		decl.name_span = this.previousSpan();
+		var decl = ParsedNamespace(start, this.previousSpan(), annotations, template_parameters, name, SharedPtr!<List!<ParsedStmt>>(List!<ParsedStmt>()));
 
 		if !this.expect(TokenType::LCurly) {
 			return ParsedStmt::Garbage(start..this.previousSpan(), false);
@@ -518,34 +526,27 @@ struct Parser {
 	}
 
 	func parseTypeDecl(this: &&Parser, start: Span, annotations: List!<ParsedAnnotation>, template_parameters: List!<ParsedTemplateParameterDecl>) -> ParsedStmt {
-		var decl = ParsedTypeDecl(annotations, template_parameters);
-		match this.current() {
-			case KeywordStruct -> {
-				decl.kind = Struct;
-				this.next();
-			}
-			case KeywordEnum -> {
-				decl.kind = Enum;
-				this.next();
-			}
-			case KeywordVariant -> {
-				decl.kind = Variant;
-				this.next();
-			}
+		const kind = match this.current() {
+			case KeywordStruct -> yield TypeDeclKind::Struct;
+			case KeywordEnum -> yield TypeDeclKind::Enum;
+			case KeywordVariant -> yield TypeDeclKind::Variant;
 			else -> {
 				return ParsedStmt::Garbage(start..this.previousSpan(), false);
 			}
 		}
 
-		var name = this.expectIdentifier() else {
+		this.next();
+
+		const name = this.expectIdentifier();
+		if name.isEmpty() {
 			return ParsedStmt::Garbage(start..this.previousSpan(), false);
 		}
-		decl.name = name;
-		decl.name_span = this.previousSpan();
+		const name_span = this.previousSpan();
 
-		if decl.kind == Enum || decl.kind == Variant {
+		var id_type = ParsedType::Empty(Span());
+		if kind == Enum || kind == Variant {
 			if this.accept(TokenType::Colon) {
-				decl.id_type = Some(this.parseType());
+				id_type = this.parseType();
 			}
 		}
 
@@ -555,17 +556,26 @@ struct Parser {
 
 		this.pushScope(ParserScope::TypeDecl);
 
+		var children: SharedPtr!<List!<ParsedStmt>> = List!<ParsedStmt>();
 		while !this.accept(TokenType::RCurly) {
 			const child = this.parseStmt();
 			if !(child is Garbage) {
-				decl.children.append(child);
+				children.append(child);
 			}
 		}
 
 		this.popScope();
 
-		decl.span = start..this.previousSpan();
-		return ParsedStmt::TypeDecl(decl, decl.span, false);
+		const span = start..this.previousSpan();
+		return ParsedStmt::TypeDecl(ParsedTypeDecl(
+			span, name_span,
+			annotations,
+			template_parameters,
+			kind,
+			name,
+			id_type,
+			children
+		), span, false);
 	}
 
 	func parseFunctionDecl(this: &&Parser, start: Span, annotations: List!<ParsedAnnotation>, template_parameters: List!<ParsedTemplateParameterDecl>) -> ParsedStmt {
@@ -575,23 +585,31 @@ struct Parser {
 			return ParsedStmt::Garbage(this.currentSpan(), false);
 		}
 
-		var decl = ParsedFunctionDecl(annotations, template_parameters, is_comptime, signature);
+		var body = ParsedStmt::Garbage(start, false);
 		if this.accept(TokenType::Assign) {
 			if this.accept(TokenType::KeywordExtern) {
-				decl.body = ParsedFunctionBody::Extern;
+				body = ParsedStmt::ExternFunctionBody(this.previousSpan(), false);
 			} else if this.expect(TokenType::KeywordDefault) {
-				decl.body = ParsedFunctionBody::Default;
+				body = ParsedStmt::DefaultFunctionBody(this.previousSpan(), false);
 			}
 
 			discard this.accept(TokenType::Semicolon);
 		} else {
 			this.pushScope(ParserScope::FunctionDecl);
-			decl.body = ParsedFunctionBody::Compound(this.parseCompoundStmt());
+			const compound_stmt = this.parseCompoundStmt();
+			body = ParsedStmt::Compound(compound_stmt, compound_stmt.span, false);
 			this.popScope();
 		}
-		decl.span = start..this.previousSpan();
 
-		return ParsedStmt::FunctionDecl(decl, decl.span, true);
+		const span = start..this.previousSpan();
+		return ParsedStmt::FunctionDecl(Box!<ParsedFunctionDecl>(ParsedFunctionDecl(
+			span,
+			annotations,
+			template_parameters,
+			is_comptime,
+			signature,
+			body
+		)), span, true);
 	}
 
 	func parseFunctionSignature(this: &&Parser) -> Optional!<ParsedFunctionSignature> {
@@ -601,11 +619,9 @@ struct Parser {
 		match this.current() {
 			case KeywordFunc -> {
 				this.next();
-				name = this.expectIdentifier() ?? "";
+				name = this.expectIdentifier();
 			}
-			case KeywordOperator -> {
-				name = this.parseOperatorName();
-			}
+			case KeywordOperator -> name = this.parseOperatorName();
 			else -> return None;
 		}
 
@@ -623,7 +639,8 @@ struct Parser {
 			const parameter_start = this.currentSpan();
 
 			const annotations = this.parseAnnotations();
-			const parameter_name = this.expectIdentifier() else {
+			const parameter_name = this.expectIdentifier();
+			if parameter_name.isEmpty() {
 				error = true;
 				break;
 			}
@@ -634,9 +651,9 @@ struct Parser {
 			}
 
 			const param_type = this.parseType();
-			var initializer = Optional!<ParsedExpr>::None;
+			var initializer = ParsedExpr::Empty(this.previousSpan());
 			if this.accept(TokenType::Assign) {
-				initializer = Some(this.parseExpr());
+				initializer = this.parseExpr();
 			}
 
 			parameters.append(ParsedParameterDecl(
@@ -677,23 +694,24 @@ struct Parser {
 			}
 		}
 
-		const name = this.expectIdentifier() else {
+		const name = this.expectIdentifier();
+		if name.isEmpty() {
 			return None;
 		}
 
-		var var_type = Optional!<ParsedType>::None;
+		var var_type = ParsedType::Empty(this.previousSpan());
 		if this.accept(TokenType::Colon) {
-			var_type = Some(this.parseType());
+			var_type = this.parseType();
 		}
 
-		if var_type is None && !(this.current() is Assign) {
+		if var_type is Empty && !(this.current() is Assign) {
 			this.error("variable must be declared with a type or an initializer", start..this.previousSpan());
 			return None;
 		}
 
-		var initializer = Optional!<ParsedExpr>::None;
+		var initializer = ParsedExpr::Empty(this.previousSpan());
 		if this.accept(TokenType::Assign) {
-			initializer = Some(this.parseExpr());
+			initializer = this.parseExpr();
 		}
 
 		return Some(ParsedVarDecl(start..this.previousSpan(), name, is_const, var_type, initializer));
@@ -705,18 +723,19 @@ struct Parser {
 			return ParsedStmt::Garbage(start, false);
 		}
 
-		const name = this.expectIdentifier() else {
+		const name = this.expectIdentifier();
+		if name.isEmpty() {
 			return ParsedStmt::Garbage(start, false);
 		}
 
-		var payload = Optional!<ParsedType>::None;
+		var payload = ParsedType::Empty(this.previousSpan());
 		if this.accept(TokenType::Colon) {
-			payload = Some(this.parseType());
+			payload = this.parseType();
 		}
 
-		var id = Optional!<ParsedExpr>::None;
+		var id = ParsedExpr::Empty(this.previousSpan());
 		if this.accept(TokenType::Assign) {
-			id = Some(this.parseExpr());
+			id = this.parseExpr();
 		}
 
 		discard this.accept(TokenType::Semicolon);
@@ -730,7 +749,8 @@ struct Parser {
 			return ParsedStmt::Garbage(start, false);
 		}
 
-		const name = this.expectIdentifier() else {
+		const name = this.expectIdentifier();
+		if name.isEmpty() {
 			return ParsedStmt::Garbage(start..this.previousSpan(), false);
 		}
 
@@ -741,11 +761,11 @@ struct Parser {
 		const type = this.parseType();
 
 		discard this.accept(TokenType::Semicolon);
-		return ParsedStmt::Alias((name: name, type: type), start..this.previousSpan(), true);
+		return ParsedStmt::Alias(ParsedTypeAlias(name, type), start..this.previousSpan(), true);
 	}
 
 	func parseCompoundStmt(this: &&Parser) -> ParsedCompoundStmt {
-		var stmt = ParsedCompoundStmt(this.currentSpan());
+		var stmt = ParsedCompoundStmt(this.currentSpan(), SharedPtr!<List!<ParsedStmt>>(List!<ParsedStmt>()));
 
 		if !this.expect(TokenType::LCurly) {
 			return stmt;
@@ -776,7 +796,7 @@ struct Parser {
 		}
 
 		if this.accept(TokenType::KeywordElse) {
-			var capture_name = Optional!<String>::None;
+			var capture_name = "";
 			var capture_kind = ReferenceKind::None;
 			if this.accept(TokenType::Colon) {
 				if this.accept(TokenType::Ampersand) {
@@ -816,17 +836,16 @@ struct Parser {
 		this.pushScope(ParserScope::IfStmt);
 		const then_branch = this.parseCompoundStmt();
 
-		var else_branch = Optional!<Box!<ParsedStmt>>::None;
+		var else_branch = ParsedStmt::Empty(Span(), false);
 		if this.accept(TokenType::KeywordElse) {
-			var parsed_else_branch = this.parseStmt();
-			parsed_else_branch.is_comptime = is_comptime;
-			else_branch = Some(Box!<ParsedStmt>(parsed_else_branch));
+			else_branch = this.parseStmt();
+			else_branch.is_comptime = is_comptime;
 		}
 
 		this.popScope();
 
 		return ParsedStmt::If(
-			ParsedIfStmt(condition, then_branch, else_branch),
+			Box!<ParsedIfStmt>(ParsedIfStmt(condition, ParsedStmt::Compound(then_branch, then_branch.span, false), else_branch)),
 			start..this.previousSpan(), is_comptime
 		);
 	}
@@ -913,7 +932,8 @@ struct Parser {
 			capture_kind = ReferenceKind::Var;
 		}
 
-		const capture_name = this.expectIdentifier() else {
+		const capture_name = this.expectIdentifier();
+		if capture_name.isEmpty() {
 			return ParsedStmt::Garbage(start..this.previousSpan(), false);
 		}
 		const capture_span = this.previousSpan();
@@ -945,7 +965,7 @@ struct Parser {
 			patterns.append(this.parseOperand());
 		} while this.accept(TokenType::Pipe);
 
-		var capture_name = Optional!<String>::None;
+		var capture_name = "";
 		var capture_kind = ReferenceKind::None;
 		if this.accept(TokenType::Colon) {
 			if this.accept(TokenType::Ampersand) {
@@ -966,7 +986,7 @@ struct Parser {
 		this.popScope();
 
 		return ParsedStmt::Case(
-			ParsedCaseStmt(patterns, capture_name, capture_kind, body),
+			Box!<ParsedCaseStmt>(ParsedCaseStmt(patterns, capture_name, capture_kind, body)),
 			start..this.previousSpan(), false
 		);
 	}
@@ -997,24 +1017,22 @@ struct Parser {
 				this.next();
 				var is_named = false;
 				var types: List!<ParsedType>;
-				var elements: List!<(name: String, type: ParsedType)>;
+				var elements: List!<ParsedTupleTypeElement>;
 
 				while !this.accept(TokenType::RParen) {
 					var name = "";
 					if this.peek() is Colon {
 						is_named = true;
-						match this.expectIdentifier() {
-							case Some: id -> {
-								name = id;
-								discard this.expect(TokenType::Colon);
-							}
-							else -> this.recover(TokenType::Colon);
+						name = this.expectIdentifier();
+						if name.isEmpty() {
+							this.next();
 						}
+						discard this.expect(TokenType::Colon);
 					}
 
 					const type = this.parseType();
 					types.append(type);
-					elements.append((name: name, type: type));
+					elements.append(ParsedTupleTypeElement(name, type));
 
 					if !(this.current() is RParen) {
 						if !this.expect(TokenType::Comma) {
@@ -1026,7 +1044,7 @@ struct Parser {
 
 				if this.accept(TokenType::Arrow) {
 					const return_type = Box!<ParsedType>(this.parseType());
-					return ParsedType::Function((parameter_types: types, return_type: return_type), start..this.previousSpan());
+					return ParsedType::Function(ParsedFunctionType(types, return_type), start..this.previousSpan());
 				} else {
 					return ParsedType::Tuple(elements, start..this.previousSpan());
 				}
@@ -1038,7 +1056,7 @@ struct Parser {
 				if this.accept(TokenType::Comma) {
 					const size = Box!<ParsedExpr>(this.parseExpr());
 					discard this.expect(TokenType::RSquare);
-					return ParsedType::Array((element_type: element_type, size: size), start..this.previousSpan());
+					return ParsedType::Array(ParsedArrayType(element_type, size), start..this.previousSpan());
 				} else {
 					discard this.expect(TokenType::RSquare);
 					return ParsedType::List(element_type, start..this.previousSpan());
@@ -1050,7 +1068,7 @@ struct Parser {
 				discard this.expect(TokenType::Comma);
 				const value_type = Box!<ParsedType>(this.parseType());
 				discard this.expect(TokenType::RCurly);
-				return ParsedType::Dict((key_type: key_type, value_type: value_type), start..this.previousSpan());
+				return ParsedType::Dict(ParsedDictType(key_type, value_type), start..this.previousSpan());
 			}
 			else -> {
 				this.next();
@@ -1085,17 +1103,15 @@ struct Parser {
 	func parseNameSegment(this: &&Parser) -> Optional!<ParsedNameSegment> {
 		const start = this.currentSpan();
 		var name = "";
-		if this.current() is KeywordOperator {
+		if this.current() is Identifier {
+			name = this.expectIdentifier();
+		} else if this.current() is KeywordOperator {
 			name = this.parseOperatorName();
 		} else {
-			match this.expectIdentifier() {
-				case Some: id -> name = id;
-				else -> return None;
-			}
+			return None;
 		}
 
 		const template_parameters = this.parseTemplateParameters();
-
 		return Some(ParsedNameSegment(start..this.previousSpan(), name, template_parameters));
 	}
 
@@ -1165,7 +1181,8 @@ struct Parser {
 		match this.parsePrefixOperator() {
 			case Some: op -> {
 				const rhs = this.parseExpr(op.precedence());
-				lhs = ParsedExpr::Operator(ParsedOperatorExpr(op, rhs), start..rhs.span);
+				var operands: SharedPtr!<List!<ParsedExpr>> = List!<ParsedExpr>(1u, rhs);
+				lhs = ParsedExpr::Operator(ParsedOperatorExpr(op, operands), start..rhs.span);
 			}
 			else -> lhs = this.parseOperand();
 		}
@@ -1182,12 +1199,10 @@ struct Parser {
 				break;
 			}
 
+			var operands: SharedPtr!<List!<ParsedExpr>> = List!<ParsedExpr>(1u, lhs);
 			if op == Call {
-				var args: List!<ParsedExpr>;
-				args.append(lhs);
-
 				while !this.accept(TokenType::RParen) {
-					args.append(this.parseExpr());
+					operands.append(this.parseExpr());
 
 					if !(this.current() is RParen) {
 						if !this.expect(TokenType::Comma) {
@@ -1196,14 +1211,9 @@ struct Parser {
 						}
 					}
 				}
-
-				lhs = ParsedExpr::Operator(ParsedOperatorExpr(op, args), start..this.previousSpan());
 			} else if op == Index {
-				var args: List!<ParsedExpr>;
-				args.append(lhs);
-
 				while !this.accept(TokenType::RSquare) {
-					args.append(this.parseExpr());
+					operands.append(this.parseExpr());
 
 					if !(this.current() is RSquare) {
 						if !this.expect(TokenType::Comma) {
@@ -1212,8 +1222,6 @@ struct Parser {
 						}
 					}
 				}
-
-				lhs = ParsedExpr::Operator(ParsedOperatorExpr(op, args), start..this.previousSpan());
 			} else if op == InlineIf {
 				if this.accept(TokenType::KeywordVar) || this.accept(TokenType::KeywordConst) {
 					// expression followed by an if-var stmt
@@ -1221,9 +1229,7 @@ struct Parser {
 					break;
 				}
 
-				var args: List!<ParsedExpr>;
-				args.append(lhs);
-				args.append(this.parseExpr());
+				operands.append(this.parseExpr());
 
 				if !this.accept(TokenType::KeywordElse) {
 					// expression followed by an if stmt
@@ -1231,19 +1237,20 @@ struct Parser {
 					break;
 				}
 
-				args.append(this.parseExpr());
-				lhs = ParsedExpr::Operator(ParsedOperatorExpr(op, args), start..this.previousSpan());
+				operands.append(this.parseExpr());
 			} else if op == MemberAccess {
-				const rhs = this.parseOperand();
-				lhs = ParsedExpr::Operator(ParsedOperatorExpr(lhs, op, rhs), start..this.previousSpan());
-			} else if op.isUnaryOperator() {
-				lhs = ParsedExpr::Operator(ParsedOperatorExpr(op, lhs), start..this.previousSpan());
+				operands.append(this.parseOperand());
 			} else if op.isBinaryOperator() {
-				const rhs = this.parseExpr(op.precedence());
-				lhs = ParsedExpr::Operator(ParsedOperatorExpr(lhs, op, rhs), start..this.previousSpan());
-			} else {
+				operands.append(this.parseExpr(op.precedence()));
+			} else if !op.isUnaryOperator() {
 				this.error("unknown operator " + op.toString(), this.previousSpan());
+				continue;
 			}
+
+			lhs = ParsedExpr::Operator(
+				ParsedOperatorExpr(op, operands),
+				start..this.previousSpan()
+			);
 		}
 
 		return lhs;
@@ -1553,20 +1560,20 @@ struct Parser {
 
 				var parameter_types: List!<ParsedType>;
 				for e in elements {
-					match e.value.toType() {
-						case Some: t -> parameter_types.append(t);
-						case None -> {
-							is_valid_function_type = false;
-							break;
-						}
+					const t = e.value.toType();
+					if t is Garbage {
+						is_valid_function_type = false;
+						break;
 					}
+
+					parameter_types.append(t);
 				}
 
 				const return_type = Box!<ParsedType>(this.parseType());
-				const function_type = ParsedType::Function((
-					parameter_types: parameter_types,
-					return_type: return_type
-				), start..this.previousSpan());
+				const function_type = ParsedType::Function(
+					ParsedFunctionType(parameter_types, return_type),
+					start..this.previousSpan()
+				);
 				return ParsedExpr::Type(function_type, start..this.previousSpan());
 			}
 		}
@@ -1628,12 +1635,12 @@ struct Parser {
 
 		const value = this.parseExpr();
 
-		this.pushScope(ParserScope::MatchStmt);
+		this.pushScope(ParserScope::MatchExpr);
 		const body = this.parseCompoundStmt();
 		this.popScope();
 
 		return ParsedExpr::Match(
-			ParsedMatchExpr(value, body),
+			Box!<ParsedMatchExpr>(ParsedMatchExpr(value, body)),
 			start..this.previousSpan()
 		);
 	}
@@ -1650,13 +1657,20 @@ struct Parser {
 				return ParsedExpr::Garbage(this.currentSpan());
 			}
 
-			var decl = ParsedFunctionDecl(List!<ParsedAnnotation>(), List!<ParsedTemplateParameterDecl>(), false, signature);
 			this.pushScope(ParserScope::FunctionDecl);
-			decl.body = ParsedFunctionBody::Compound(this.parseCompoundStmt());
+			const compound_stmt = this.parseCompoundStmt();
+			const body = ParsedStmt::Compound(compound_stmt, compound_stmt.span, false);
 			this.popScope();
-			decl.span = start..this.previousSpan();
 
-			return ParsedExpr::AnonymousFunction(decl, decl.span);
+			const span = start..this.previousSpan();
+			return ParsedExpr::AnonymousFunction(Box!<ParsedFunctionDecl>(ParsedFunctionDecl(
+				span,
+				List!<ParsedAnnotation>(),
+				List!<ParsedTemplateParameterDecl>(),
+				false,
+				signature,
+				body
+			)), span);
 		} else {
 			const name = this.parseName();
 
@@ -1677,10 +1691,10 @@ struct Parser {
 				}
 			}
 
-			return ParsedExpr::FunctionRef((
-				name: name,
-				parameter_types: parameter_types
-			), start..this.previousSpan());
+			return ParsedExpr::FunctionRef(
+				ParsedFunctionRefExpr(name, parameter_types),
+				start..this.previousSpan()
+			);
 		}
 	}
 

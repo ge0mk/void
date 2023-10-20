@@ -7,6 +7,7 @@ import std/io;
 import std/list;
 import std/map;
 import std/set;
+import std/shared;
 import std/shared_list;
 import std/string;
 
@@ -17,6 +18,7 @@ import lexer;
 import llvm_c;
 import llvm_codegen;
 import llvm_util;
+import operators;
 import options;
 import parser;
 import optimizations;
@@ -57,18 +59,18 @@ variant Symbol {
 	case VariantCase: uint;
 	case TemplateParameter: TemplateParameter;
 	case Variable: SharedHandle!<VarDecl>;
+}
 
-	func toString(this: &Symbol) -> String {
-		match this {
-			case Namespace: value -> return "namespace " + value.signature();
-			case Type: value -> return "type " + value.signature();
-			case Function: value -> return "function " + value.signature();
-			case MemberVariable: value -> return "member variable";
-			case EnumCase: value -> return "enum case";
-			case VariantCase: value -> return "variant case";
-			case TemplateParameter: value -> return "template parameter " + value.toString();
-			case Variable: value -> return "variable " + value.signature();
-		}
+func format(symbol: &Symbol) -> String {
+	match symbol {
+		case Namespace: value -> return "namespace " + value.signature();
+		case Type: value -> return "type " + value.signature();
+		case Function: value -> return "function " + value.signature();
+		case MemberVariable: value -> return "member variable";
+		case EnumCase: value -> return "enum case";
+		case VariantCase: value -> return "variant case";
+		case TemplateParameter: value -> return "template parameter " + format(value);
+		case Variable: value -> return "variable " + value.signature();
 	}
 }
 
@@ -584,9 +586,8 @@ struct TCContext {
 
 		this.program.createDefaultFunctions(Type(type, ReferenceKind::None));
 		if type.body is Enum || type.body is Variant {
-			if type.parsed_id_type.hasValue() {
-				type.id_type = this.checkTypeUsage(type.parsed_id_type.value(), false);
-			} else {
+			type.id_type = this.checkTypeUsage(type.parsed_id_type, false);
+			if type.id_type.isUnknown() {
 				type.id_type = this.program.int_type;
 			}
 
@@ -770,7 +771,7 @@ struct TCContext {
 		}
 
 		if const parsed_function = function.body as Unchecked {
-			if parsed_function.body is Extern && function.extern_name == "" {
+			if parsed_function.body is ExternFunctionBody && function.extern_name == "" {
 				function.extern_name = function.name;
 			}
 		}
@@ -793,9 +794,8 @@ struct TCContext {
 			case Builtin: builtin_function -> this.validateBuiltinFunctionDecl(builtin_function, function.signature(), function.signature_span);
 			case Stmt -> this.error("function body is already checked", function.span);
 			case Unchecked: parsed_function -> match parsed_function.body {
-				case Garbage -> {} // do nothing
-				case Extern -> function.body = FunctionBody::Extern;
-				case Default -> {
+				case ExternFunctionBody -> function.body = FunctionBody::Extern;
+				case DefaultFunctionBody -> {
 					function.body = function.getDefaultFunctionBody();
 					match function.body {
 						case Builtin: builtin_function -> this.validateBuiltinFunctionDecl(builtin_function, function.signature(), function.signature_span);
@@ -803,6 +803,7 @@ struct TCContext {
 					}
 				}
 				case Compound: compound_stmt -> this.checkFunctionBody(&&function.operator unwrap(), compound_stmt);
+				else -> {}
 			}
 		}
 
@@ -974,7 +975,7 @@ struct TCContext {
 		this.checkStmtList(parsed_body.children, &&body.children.operator unwrap());
 
 		if this.active_member_variables != required_member_variables {
-			if body.isTerminator(this.program.never_type) {
+			if body.isTerminator(this.program.never_type, false) {
 				if decl.name == "constructor" {
 					this.error("not all member variables initialized", decl.signature_span);
 				} else if decl.name == "destructor" {
@@ -1007,14 +1008,15 @@ struct TCContext {
 
 				for id in unhandled_member_variables {
 					const member_access_expr = Expr::MemberVarInvoke(
-						MemberVarInvokeExpr(this_var_invoke_expr, id),
+						Box!<MemberVarInvokeExpr>(MemberVarInvokeExpr(this_var_invoke_expr, id)),
 						decl.signature_span,
 						parent_type.member_variables[id].type.varRef()
 					);
 
 					var parameters = List!<Expr>(1u, member_access_expr);
-					if decl.name == "constructor" && !(parent_type.member_variables[id].initializer is Undefined) {
-						parameters.append(parent_type.member_variables[id].initializer);
+					const initializer = parent_type.member_variables[id].initializer;
+					if decl.name == "constructor" && !(initializer is Undefined || initializer is Void) {
+						parameters.append(initializer);
 					}
 
 					const call = this.checkCall(
@@ -1030,7 +1032,7 @@ struct TCContext {
 			}
 		}
 
-		if !body.isTerminator(this.program.never_type) {
+		if !body.isTerminator(this.program.never_type, false) {
 			body.children.append(this.collectCleanupCallsForCurrentScope());
 
 			if this.current_return_type == this.program.void_type {
@@ -1064,9 +1066,8 @@ struct TCContext {
 			}
 
 			var checked_parameter = TemplateParameterDecl(name, concept, false);
-
-			if const value = parameter.value {
-				checked_parameter.value = Some(this.checkTemplateParameter(value));
+			if !(parameter.value is Empty) {
+				checked_parameter.value = this.checkTemplateParameter(parameter.value);
 			}
 
 			result.append(checked_parameter);
@@ -1080,6 +1081,9 @@ struct TCContext {
 		var result: List!<Stmt>;
 
 		match parsed_stmt {
+			case Empty -> {}
+			case ExternFunctionBody
+			| DefaultFunctionBody -> panic("unreachable"); // should be handled by checkFunctionBody()
 			case Pragma: value -> {
 				if this.current_function.isAlive() {
 					this.error("invalid pragma", parsed_stmt.span);
@@ -1181,18 +1185,14 @@ struct TCContext {
 			return;
 		}
 
-		if !parsed_decl.type.hasValue() {
+		if parsed_decl.type is Empty {
 			this.error("member variables must have a type specified", parsed_decl.span);
 			return;
 		}
 
 		const name = parsed_decl.name;
-		const type = this.checkTypeUsage(parsed_decl.type.value(), false);
-		const initializer = match parsed_decl.initializer {
-			case Some: parsed_expr -> yield this.checkExpr(parsed_expr, type, false);
-			else -> yield Expr::Undefined(Span(), Type::unknown());
-		}
-
+		const type = this.checkTypeUsage(parsed_decl.type, false);
+		const initializer = this.checkExpr(parsed_decl.initializer, type, false);
 		type_decl.createMemberVariable(parsed_decl.span, name, type, initializer);
 	}
 
@@ -1207,20 +1207,22 @@ struct TCContext {
 			return;
 		}
 
-		if parsed_decl.payload.hasValue() && type_decl.body is Enum {
+		if !(parsed_decl.payload is Empty) && type_decl.body is Enum {
 			this.error("only variant cases are allowed to have a payload attached", parsed_decl.span);
 		}
 
 		const name = parsed_decl.name;
-		var id = type_decl.getNextCaseId();
-		if parsed_decl.id.hasValue() {
-			const id_expr = this.checkExpr(parsed_decl.id.value(), type_decl.id_type, true);
+		var id = 0;
+		if parsed_decl.id is Empty {
+			id = type_decl.getNextCaseId();
+		} else {
+			const id_expr = this.checkExpr(parsed_decl.id, type_decl.id_type, true);
 			id = this.interpret(id_expr).toInt();
 		}
 
 		var payload_type = this.program.void_type;
-		if parsed_decl.payload.hasValue() {
-			payload_type = this.checkTypeUsage(parsed_decl.payload.value(), false);
+		if !(parsed_decl.payload is Empty) {
+			payload_type = this.checkTypeUsage(parsed_decl.payload, false);
 		}
 
 		if type_decl.body is Enum {
@@ -1231,21 +1233,17 @@ struct TCContext {
 	}
 
 	func checkVarDecl(this: &&TCContext, parsed_stmt: &ParsedVarDecl, is_comptime: bool) -> List!<Stmt> {
-		var type = Type::unknown();
-		if parsed_stmt.type.hasValue() {
-			type = this.checkTypeUsage(parsed_stmt.type.value(), false);
-		}
+		var type = this.checkTypeUsage(parsed_stmt.type, false);
 
 		var initializer: List!<Expr>;
 		this.pushScope(ScopeKind::Expr);
-		if parsed_stmt.initializer.hasValue() {
-			const parsed_initializer = parsed_stmt.initializer.value();
-			if parsed_initializer.isAnonymousTuple() && !type.isUnknown() {
-				for element in (parsed_initializer as Tuple).value() {
+		if !(parsed_stmt.initializer is Empty) {
+			if parsed_stmt.initializer.isAnonymousTuple() && !type.isUnknown() {
+				for element in (parsed_stmt.initializer as Tuple).value() {
 					initializer.append(this.checkExpr(element.value, Type::unknown(), is_comptime));
 				}
 			} else  {
-				initializer.append(this.checkExpr(parsed_initializer, type, is_comptime));
+				initializer.append(this.checkExpr(parsed_stmt.initializer, type, is_comptime));
 				if type.isUnknown() {
 					type = initializer[0u].type;
 				}
@@ -1346,7 +1344,7 @@ struct TCContext {
 
 		this.checkStmtList(parsed_stmt.children, &&result.children.operator unwrap());
 
-		if !result.isTerminator(this.program.never_type) {
+		if !result.isTerminator(this.program.never_type, this.isCurrentScopeInsideMatch()) {
 			result.children.append(this.collectCleanupCallsForCurrentScope());
 		}
 
@@ -1360,7 +1358,7 @@ struct TCContext {
 	func checkStmtList(this: &&TCContext, input: &List!<ParsedStmt>, output: &&List!<Stmt>) -> void {
 		for stmt in input {
 			if const previous = output.last() {
-				if previous.isTerminator(this.program.never_type) {
+				if previous.isTerminator(this.program.never_type, this.isCurrentScopeInsideMatch()) {
 					this.error("unreachable code", stmt.span);
 				}
 			}
@@ -1389,24 +1387,23 @@ struct TCContext {
 			const condition_value = this.interpret(condition);
 			this.interpret(condition_cleanup);
 
-			if condition_value.toInt() != 0 {
-				return this.checkCompoundStmt(if_stmt.then_branch, true);
-			} else if if_stmt.else_branch.hasValue() && !(condition_value is Undefined) {
-				return this.checkStmt(if_stmt.else_branch.value());
-			} else {
+			if condition_value is Undefined {
 				return Stmt::Empty(span);
+			}
+
+			if condition_value.toInt() != 0 {
+				return this.checkStmt(if_stmt.then_branch);
+			} else {
+				return this.checkStmt(if_stmt.else_branch);
 			}
 		} else {
 			const prev_active_member_variables = this.active_member_variables;
-			const then_branch = this.checkCompoundStmt(if_stmt.then_branch, true);
-			const then_branch_active_member_variables = this.active_member_variables;
-			this.active_member_variables = prev_active_member_variables;
 
-			var else_branch = Stmt::Empty(Span());
-			if if_stmt.else_branch.hasValue() {
-				const parsed_else_branch = if_stmt.else_branch.value();
-				else_branch = this.checkStmt(parsed_else_branch);
-			}
+			const then_branch = this.checkStmt(if_stmt.then_branch);
+			const then_branch_active_member_variables = this.active_member_variables;
+
+			this.active_member_variables = prev_active_member_variables;
+			const else_branch = this.checkStmt(if_stmt.else_branch);
 
 			if then_branch_active_member_variables != this.active_member_variables {
 				this.error("if & then branch (de)initialize different member variables", span);
@@ -1416,7 +1413,9 @@ struct TCContext {
 				return Stmt::Empty(span);
 			}
 
-			return Stmt::If(IfStmt(condition, condition_cleanup, then_branch, else_branch), span);
+			return Stmt::If(Box!<IfStmt>(
+				IfStmt(condition, condition_cleanup, then_branch, else_branch)
+			), span);
 		}
 	}
 
@@ -1424,7 +1423,7 @@ struct TCContext {
 		// if var x = y { ... }
 		// ->
 		// match y {
-		//    Ok | Some: #val -> { var x = #val; ... }
+		//    Ok | Some: #value -> { var x = #value; ... }
 		//    else -> {}
 		// }
 
@@ -1432,7 +1431,7 @@ struct TCContext {
 		var result: List!<Stmt>;
 
 		this.pushScope(ScopeKind::Expr);
-		const value = this.checkExpr(parsed_var_decl.initializer.value(), Type::unknown(), is_comptime);
+		const value = this.checkExpr(parsed_var_decl.initializer, Type::unknown(), is_comptime);
 
 		if value is Undefined {
 			this.popScope();
@@ -1453,34 +1452,33 @@ struct TCContext {
 		}
 
 		var body = parsed_stmt.body;
-		var capture_invoke_expr = ParsedExpr::Name(ParsedName(parsed_var_decl.span, "#val"), parsed_var_decl.span);
+		var capture_invoke_expr = ParsedExpr::Name(makeParsedName(parsed_var_decl.span, "#value"), parsed_var_decl.span);
 		if value.type.reference_kind == Var {
-			capture_invoke_expr = ParsedExpr::Operator(ParsedOperatorExpr(Operator::VarRef, capture_invoke_expr), capture_invoke_expr.span);
+			capture_invoke_expr = makeParsedOperatorExpr(Operator::VarRef, capture_invoke_expr, capture_invoke_expr.span);
 		} else if value.type.reference_kind == Const {
-			capture_invoke_expr = ParsedExpr::Operator(ParsedOperatorExpr(Operator::ConstRef, capture_invoke_expr), capture_invoke_expr.span);
+			capture_invoke_expr = makeParsedOperatorExpr(Operator::ConstRef, capture_invoke_expr, capture_invoke_expr.span);
 		}
 
 		body.children.insert(0u, ParsedStmt::VarDecl(ParsedVarDecl(
 			parsed_var_decl.span,
 			parsed_var_decl.name,
 			parsed_var_decl.is_const,
-			Optional!<ParsedType>::None,
-			Optional!<ParsedExpr>::Some(capture_invoke_expr)
+			ParsedType::Empty(Span()),
+			capture_invoke_expr
 		), parsed_stmt.var_decl.span, false));
 
 		var cases: List!<ParsedStmt>;
 
 		// Ok | Some: #val -> { var x = #val; ... }
-		cases.append(ParsedStmt::Case(ParsedCaseStmt(
-			List!<ParsedExpr>(1u, ParsedExpr::Name(ParsedName(value.span, ok_case_name), value.span)),
-			Optional!<String>::Some("#val"),
-			value.type.reference_kind,
+		cases.append(ParsedStmt::Case(Box!<ParsedCaseStmt>(ParsedCaseStmt(
+			List!<ParsedExpr>(1u, ParsedExpr::Name(makeParsedName(value.span, ok_case_name), value.span)),
+			"#value", value.type.reference_kind,
 			ParsedStmt::Compound(body, body.span, false)
-		), value.span, false));
+		)), value.span, false));
 
 		// else -> {}
 		cases.append(ParsedStmt::ElseCase(Box!<ParsedStmt>(
-			ParsedStmt::Compound(ParsedCompoundStmt(value.span), value.span, false)
+			ParsedStmt::Compound(ParsedCompoundStmt(value.span, SharedPtr!<List!<ParsedStmt>>(List!<ParsedStmt>())), value.span, false)
 		), value.span, false));
 
 		result.append(Stmt::Expr(this.checkMatchExpr(value, cases, Type::unknown(), is_comptime, span), span));
@@ -1499,7 +1497,7 @@ struct TCContext {
 		// }
 
 		const parsed_var_decl = parsed_stmt.var_decl;
-		const value = this.checkExpr(parsed_var_decl.initializer.value(), Type::unknown(), is_comptime);
+		const value = this.checkExpr(parsed_var_decl.initializer, Type::unknown(), is_comptime);
 		if value is Undefined {
 			return List!<Stmt>();
 		}
@@ -1513,14 +1511,14 @@ struct TCContext {
 			ok_case_name = "Ok";
 			error_case_name = "Error";
 
-			if parsed_stmt.capture_name.hasValue() {
+			if !parsed_stmt.capture_name.isEmpty() {
 				capture = true;
 			}
 		} else if value_type_decl.getVariantCase("Some").hasValue() {
 			ok_case_name = "Some";
 			error_case_name = "None";
 
-			if parsed_stmt.capture_name.hasValue() {
+			if !parsed_stmt.capture_name.isEmpty() {
 				this.error("can't capure error on this value type", span);
 			}
 		} else {
@@ -1530,28 +1528,26 @@ struct TCContext {
 
 		var cases: List!<ParsedStmt>;
 
-		var value_invoke_expr = ParsedExpr::Name(ParsedName(parsed_var_decl.span, "#value"), parsed_var_decl.span);
+		var value_invoke_expr = ParsedExpr::Name(makeParsedName(parsed_var_decl.span, "#value"), parsed_var_decl.span);
 		match value.type.reference_kind {
-			case Var -> value_invoke_expr = ParsedExpr::Operator(ParsedOperatorExpr(Operator::VarRef, value_invoke_expr), parsed_var_decl.span);
-			case Const -> value_invoke_expr = ParsedExpr::Operator(ParsedOperatorExpr(Operator::ConstRef, value_invoke_expr), parsed_var_decl.span);
+			case Var -> value_invoke_expr = makeParsedOperatorExpr(Operator::VarRef, value_invoke_expr, parsed_var_decl.span);
+			case Const -> value_invoke_expr = makeParsedOperatorExpr(Operator::ConstRef, value_invoke_expr, parsed_var_decl.span);
 			else -> {}
 		}
 
 		// case Ok: val -> yield val
-		cases.append(ParsedStmt::Case(ParsedCaseStmt(
-			List!<ParsedExpr>(1u, ParsedExpr::Name(ParsedName(parsed_var_decl.span, ok_case_name), parsed_var_decl.span)),
-			Optional!<String>::Some("#value"),
-			value.type.reference_kind,
-			ParsedStmt::Yield(Optional!<ParsedExpr>::Some(value_invoke_expr), parsed_var_decl.span, false)
-		), parsed_var_decl.span, false));
+		cases.append(ParsedStmt::Case(Box!<ParsedCaseStmt>(ParsedCaseStmt(
+			List!<ParsedExpr>(1u, ParsedExpr::Name(makeParsedName(parsed_var_decl.span, ok_case_name), parsed_var_decl.span)),
+			"#value", value.type.reference_kind,
+			ParsedStmt::Yield(value_invoke_expr, parsed_var_decl.span, false)
+		)), parsed_var_decl.span, false));
 
 		// case Error: (&&err) -> { ... }
-		cases.append(ParsedStmt::Case(ParsedCaseStmt(
-			List!<ParsedExpr>(1u, ParsedExpr::Name(ParsedName(parsed_var_decl.span, error_case_name), parsed_var_decl.span)),
-			parsed_stmt.capture_name,
-			parsed_stmt.capture_kind,
+		cases.append(ParsedStmt::Case(Box!<ParsedCaseStmt>(ParsedCaseStmt(
+			List!<ParsedExpr>(1u, ParsedExpr::Name(makeParsedName(parsed_var_decl.span, error_case_name), parsed_var_decl.span)),
+			parsed_stmt.capture_name, parsed_stmt.capture_kind,
 			ParsedStmt::Compound(parsed_stmt.body, parsed_stmt.body.span, false)
-		), parsed_var_decl.span, false));
+		)), parsed_var_decl.span, false));
 
 		this.pushScope(ScopeKind::Expr);
 		const initializer = this.checkMatchExpr(value, cases, Type::unknown(), is_comptime, span);
@@ -1598,7 +1594,9 @@ struct TCContext {
 			}
 		} else {
 			const body = this.checkCompoundStmt(parsed_stmt.body, false);
-			result.append(Stmt::While(WhileStmt(condition, condition_cleanup, body, WhileStmtKind::While), span));
+			result.append(Stmt::While(Box!<WhileStmt>(
+				WhileStmt(condition, condition_cleanup, body, WhileStmtKind::While)
+			), span));
 		}
 		this.popScope();
 
@@ -1636,7 +1634,9 @@ struct TCContext {
 				this.error("invalid condition type: expected " + this.program.bool_type.signature() + " but got " + condition.type.signature(), condition.span);
 			}
 
-			result.append(Stmt::While(WhileStmt(condition, condition_cleanup, body, WhileStmtKind::DoWhile), span));
+			result.append(Stmt::While(Box!<WhileStmt>(
+				WhileStmt(condition, condition_cleanup, body, WhileStmtKind::DoWhile)
+			), span));
 		}
 		this.popScope();
 
@@ -1705,13 +1705,15 @@ struct TCContext {
 
 		this.checkStmtList(parsed_stmt.body.children, &&body.children.operator unwrap());
 
-		if !body.isTerminator(this.program.never_type) {
+		if !body.isTerminator(this.program.never_type, this.isCurrentScopeInsideMatch()) {
 			body.children.append(this.collectCleanupCallsForCurrentScope());
 		}
 
 		this.popScope();
 
-		result.children.append(Stmt::While(WhileStmt(condition, condition_cleanup, Stmt::Compound(body, body.span), WhileStmtKind::While), span));
+		result.children.append(Stmt::While(Box!<WhileStmt>(
+			WhileStmt(condition, condition_cleanup, Stmt::Compound(body, body.span), WhileStmtKind::While)
+		), span));
 		result.children.append(this.collectCleanupCallsForCurrentScope());
 		this.popScope();
 
@@ -1791,7 +1793,9 @@ struct TCContext {
 		}
 
 		var body = Stmt::Empty(parsed_stmt.body.span);
-		if parsed_stmt.capture_name.hasValue() {
+		if parsed_stmt.capture_name.isEmpty() {
+			body = this.checkStmt(parsed_stmt.body);
+		} else {
 			if patterns.size() != 1 {
 				this.error("capturing case statements must have exactly 1 pattern", span);
 				return Stmt::Empty(span);
@@ -1826,7 +1830,7 @@ struct TCContext {
 				capture_init = capture_init.removeDereference();
 			}
 
-			const variable = this.current_function.createVariable(span, parsed_stmt.capture_name.value(), capture_type, capture_type.reference_kind != Var, false);
+			const variable = this.current_function.createVariable(span, parsed_stmt.capture_name, capture_type, capture_type.reference_kind != Var, false);
 
 			this.addVariableToCurrentScope(variable);
 
@@ -1839,17 +1843,15 @@ struct TCContext {
 
 			const checked_body = this.checkStmt(parsed_stmt.body);
 			compound_stmt.children.append(checked_body);
-			if !checked_body.isTerminator(this.program.never_type) {
+			if !checked_body.isTerminator(this.program.never_type, true) {
 				compound_stmt.children.append(this.collectCleanupCallsForCurrentScope());
 			}
 
 			this.popScope();
 			body = Stmt::Compound(compound_stmt, span);
-		} else {
-			body = this.checkStmt(parsed_stmt.body);
 		}
 
-		return Stmt::Case(CaseStmt(span, patterns, body), span);
+		return Stmt::Case(Box!<CaseStmt>(CaseStmt(span, patterns, body)), span);
 	}
 
 	func checkElseCaseStmt(this: &&TCContext, parsed_body: &ParsedStmt, span: Span) -> Stmt {
@@ -1882,32 +1884,27 @@ struct TCContext {
 		return this.checkReturnStmt(value, value_cleanup, span);
 	}
 
-	func checkReturnStmt(this: &&TCContext, parsed_value: Optional!<ParsedExpr>, span: Span) -> List!<Stmt> {
-		var value = Expr::Void(span, this.program.void_type);
-		var value_cleanup: List!<Stmt>;
+	func checkReturnStmt(this: &&TCContext, parsed_value: ParsedExpr, span: Span) -> List!<Stmt> {
+		this.pushScope(ScopeKind::Expr);
+		var value = this.checkExpr(parsed_value, this.current_return_type, false);
 
-		if parsed_value.hasValue() {
-			this.pushScope(ScopeKind::Expr);
-			value = this.checkExpr(parsed_value.value(), this.current_return_type, false);
+		if value.type.decl.isAlive() {
+			const type_decl = value.type.decl;
+			if value.type != this.current_return_type && type_decl.unwrapped_type == this.current_return_type.decl && value.type.reference_kind == this.current_return_type.reference_kind {
+				value = this.checkCall(
+					Name("operator unwrap"),
+					List!<Expr>(1u, value), false, false, CallKind::MemberCall, false, span
+				);
 
-			if value.type.decl.isAlive() {
-				const type_decl = value.type.decl;
-				if value.type != this.current_return_type && type_decl.unwrapped_type == this.current_return_type.decl && value.type.reference_kind == this.current_return_type.reference_kind {
-					value = this.checkCall(
-						Name("operator unwrap"),
-						List!<Expr>(1u, value), false, false, CallKind::MemberCall, false, span
-					);
-
-					if this.current_return_type.reference_kind != None {
-						value = value.removeDereference();
-						value.type.reference_kind = this.current_return_type.reference_kind;
-					}
+				if this.current_return_type.reference_kind != None {
+					value = value.removeDereference();
+					value.type.reference_kind = this.current_return_type.reference_kind;
 				}
 			}
-
-			value_cleanup = this.collectCleanupCallsForCurrentScope();
-			this.popScope();
 		}
+
+		const value_cleanup = this.collectCleanupCallsForCurrentScope();
+		this.popScope();
 
 		return this.checkReturnStmt(value, value_cleanup, span);
 	}
@@ -1970,26 +1967,28 @@ struct TCContext {
 		return result;
 	}
 
-	func checkYieldStmt(this: &&TCContext, parsed_value: Optional!<ParsedExpr>, span: Span) -> List!<Stmt> {
+	func checkYieldStmt(this: &&TCContext, parsed_value: ParsedExpr, span: Span) -> List!<Stmt> {
 		var result: List!<Stmt>;
 
-		if parsed_value.hasValue() {
-			this.pushScope(ScopeKind::Expr);
-			const checked_value = this.checkExpr(parsed_value.value(), this.yield_type, false);
-			const value_cleanup = this.collectCleanupCallsForCurrentScope();
-			this.popScope();
+		this.pushScope(ScopeKind::Expr);
+		const checked_value = this.checkExpr(parsed_value, this.yield_type, false);
+		const value_cleanup = this.collectCleanupCallsForCurrentScope();
+		this.popScope();
 
-			if checked_value is Undefined {
-				return result;
-			}
+		if checked_value is Undefined {
+			return result;
+		}
 
-			if this.yield_type.isUnknown() {
-				this.yield_type = checked_value.type;
-			} else if checked_value.type != this.yield_type {
-				this.error("invalid yield type: expected " + this.yield_type.signature() + " but got " + checked_value.type.signature(), span);
-				return result;
-			}
+		if this.yield_type.isUnknown() {
+			this.yield_type = checked_value.type;
+		} else if checked_value.type != this.yield_type {
+			this.error("invalid yield type: expected " + this.yield_type.signature() + " but got " + checked_value.type.signature(), span);
+			return result;
+		}
 
+		if checked_value.type == this.program.void_type {
+			result.append(Stmt::Expr(checked_value, checked_value.span));
+		} else {
 			if !this.yield_var.isAlive() {
 				this.yield_var = this.current_function.createVariable(Span(), "#yield_var", checked_value.type, checked_value.type.reference_kind != Var, false);
 				this.createDestructorCall(this.yield_var);
@@ -2009,15 +2008,9 @@ struct TCContext {
 					this.program.void_type
 				), span));
 			}
-
-			result.append(value_cleanup);
-		} else if this.yield_type.isUnknown() {
-			this.yield_type = this.program.void_type;
-		} else if this.yield_type != this.program.void_type {
-			this.error("invalid yield type: expected " + this.yield_type.signature() + " but got " + this.program.void_type.signature(), span);
-			return result;
 		}
 
+		result.append(value_cleanup);
 		result.append(this.collectCleanupCalls(ScopeKind::Match));
 		result.append(Stmt::Yield(span));
 		return result;
@@ -2038,7 +2031,7 @@ struct TCContext {
 		if !(expr is Void) {
 			const expr_stmt = Stmt::Expr(expr, span);
 			result.append(expr_stmt);
-			if !expr_stmt.isTerminator(this.program.never_type) {
+			if !expr_stmt.isTerminator(this.program.never_type, this.isCurrentScopeInsideMatch()) {
 				result.append(cleanup);
 			}
 		}
@@ -2055,6 +2048,7 @@ struct TCContext {
 	// expr typechecking functions
 	func checkExpr(this: &&TCContext, parsed_expr: &ParsedExpr, expected_type: Type, is_comptime: bool) -> Expr {
 		match parsed_expr {
+			case Empty -> return Expr::Void(parsed_expr.span, this.program.void_type)
 			case Char: char_literal -> return this.checkCharLiteralExpr(char_literal, parsed_expr.span);
 			case String: string_literal -> return this.checkStringLiteralExpr(string_literal, parsed_expr.span);
 			case Number: number_literal -> return this.checkNumberLiteralExpr(number_literal, expected_type, parsed_expr.span);
@@ -2255,11 +2249,11 @@ struct TCContext {
 			}
 			case Case: case_stmt -> match_expr.cases.append(case_stmt);
 			case ElseCase: body -> {
-				if match_expr.else_case.hasValue() {
-					this.error("mutiple definitions of an else case in the same match expr", stmt.span);
-					this.info("else case first declared here:", match_expr.else_case.value().span);
+				if match_expr.else_case is Empty {
+					match_expr.else_case = body;
 				} else {
-					match_expr.else_case = Some(body);
+					this.error("mutiple definitions of an else case in the same match expr", stmt.span);
+					this.info("else case first declared here:", match_expr.else_case.span);
 				}
 			}
 			case Empty -> {}
@@ -2307,7 +2301,7 @@ struct TCContext {
 
 				match this.match_value {
 					case Call: call_expr -> match_value_var = call_expr.result_var;
-					case ShallowCopy: shallow_copy_expr -> match shallow_copy_expr.destination.operator unwrap() {
+					case ShallowCopy: shallow_copy_expr -> match shallow_copy_expr.destination {
 						case VarInvoke: variable -> match_value_var = variable;
 						else -> panic("invalid temporary variable");
 					}
@@ -2317,7 +2311,7 @@ struct TCContext {
 			}
 		}
 
-		var match_expr = MatchExpr(this.match_value);
+		var match_expr = MatchExpr(this.match_value, List!<CaseStmt>(), Stmt::Empty(Span()), SharedHandle!<VarDecl>());
 
 		if match_value_var.isAlive() {
 			this.match_value = this.createVarInvokeExpr(match_value_var, this.match_value.span).removeDereference();
@@ -2349,9 +2343,8 @@ struct TCContext {
 			all_cases_are_terminators &= case_stmt.body.isTerminator(this.program.never_type, false);
 		}
 
-		if match_expr.else_case.hasValue() {
-			const else_case_body = match_expr.else_case.value().operator unwrap();
-			all_cases_are_terminators &= else_case_body.isTerminator(this.program.never_type, false);
+		if !(match_expr.else_case is Empty) {
+			all_cases_are_terminators &= match_expr.else_case.isTerminator(this.program.never_type, false);
 		}
 
 		if all_cases_are_terminators && !does_yield {
@@ -2407,14 +2400,14 @@ struct TCContext {
 			else -> {}
 		}
 
-		if covered_cases.size() < number_of_possible_cases && !match_expr.else_case.hasValue() {
+		if covered_cases.size() < number_of_possible_cases && match_expr.else_case is Empty {
 			this.error("match stmt doesn't cover all possible cases", this.match_value.span);
-		} else if covered_cases.size() == number_of_possible_cases && match_expr.else_case.hasValue() {
-			this.error("else branch is unreachable", match_expr.else_case.value().span);
+		} else if covered_cases.size() == number_of_possible_cases && !(match_expr.else_case is Empty) {
+			this.error("else branch is unreachable", match_expr.else_case.span);
 		}
 
 		match_expr.yield_var = this.yield_var;
-		const result = Expr::Match(match_expr, span, result_type);
+		const result = Expr::Match(Box!<MatchExpr>(match_expr), span, result_type);
 
 		this.match_value = prev_match_value;
 		this.match_type = prev_match_type;
@@ -2515,12 +2508,12 @@ struct TCContext {
 		}
 
 		if result_candidates.isEmpty() {
-			this.error("no matching symbol found for '" + checked_name.toString() + "'", checked_name.span);
+			this.error("no matching symbol found for '" + format(checked_name) + "'", checked_name.span);
 			return Expr::Undefined(span, Type::unknown());
 		} else if result_candidates.size() > 1 {
 			this.error("too many matching symbols found", span);
 			for s in symbols {
-				this.info("   " + s.toString(), Span());
+				this.info("   " + format(s), Span());
 			}
 		}
 
@@ -2804,7 +2797,10 @@ struct TCContext {
 			result_type.reference_kind = object.type.reference_kind;
 		}
 
-		return Expr::MemberVarInvoke(MemberVarInvokeExpr(object, member_variable.id), span, result_type).addDereference();
+		return Expr::MemberVarInvoke(
+			Box!<MemberVarInvokeExpr>(MemberVarInvokeExpr(object, member_variable.id)),
+			span, result_type
+		).addDereference();
 	}
 
 	func checkValidateExpr(this: &&TCContext, parsed_value: &ParsedExpr, op: Operator, is_comptime: bool, span: Span) -> Expr {
@@ -2844,56 +2840,53 @@ struct TCContext {
 		var yield_type = ok_case_decl.type;
 		if yield_type == this.program.void_type {
 			// case Ok -> yield
-			cases.append(ParsedStmt::Case(ParsedCaseStmt(
-				List!<ParsedExpr>(1u, ParsedExpr::Name(ParsedName(span, "Ok"), span)),
-				Optional!<String>::None,
-				ok_case_decl.type.reference_kind,
-				ParsedStmt::Yield(Optional!<ParsedExpr>::None, span, false)
-			), span, false));
+			cases.append(ParsedStmt::Case(Box!<ParsedCaseStmt>(ParsedCaseStmt(
+				List!<ParsedExpr>(1u, ParsedExpr::Name(makeParsedName(span, "Ok"), span)),
+				"", ok_case_decl.type.reference_kind,
+				ParsedStmt::Yield(ParsedExpr::Empty(span), span, false)
+			)), span, false));
 		} else {
 			// case Ok: val -> yield val
-			var value_invoke_expr = ParsedExpr::Name(ParsedName(span, "#value"), span);
+			var value_invoke_expr = ParsedExpr::Name(makeParsedName(span, "#value"), span);
 			match ok_case_decl.type.reference_kind {
-				case Var -> value_invoke_expr = ParsedExpr::Operator(ParsedOperatorExpr(Operator::VarRef, value_invoke_expr), span);
-				case Const -> value_invoke_expr = ParsedExpr::Operator(ParsedOperatorExpr(Operator::ConstRef, value_invoke_expr), span);
+				case Var -> value_invoke_expr = makeParsedOperatorExpr(Operator::VarRef, value_invoke_expr, span);
+				case Const -> value_invoke_expr = makeParsedOperatorExpr(Operator::ConstRef, value_invoke_expr, span);
 				else -> {}
 			}
 
-			cases.append(ParsedStmt::Case(ParsedCaseStmt(
-				List!<ParsedExpr>(1u, ParsedExpr::Name(ParsedName(span, "Ok"), span)),
-				Optional!<String>::Some("#value"),
-				ok_case_decl.type.reference_kind,
-				ParsedStmt::Yield(Optional!<ParsedExpr>::Some(value_invoke_expr), span, false)
-			), span, false));
+			cases.append(ParsedStmt::Case(Box!<ParsedCaseStmt>(ParsedCaseStmt(
+				List!<ParsedExpr>(1u, ParsedExpr::Name(makeParsedName(span, "Ok"), span)),
+				"#value", ok_case_decl.type.reference_kind,
+				ParsedStmt::Yield(value_invoke_expr, span, false)
+			)), span, false));
 		}
 
-		var error_invoke_expr = ParsedExpr::Name(ParsedName(span, "#error"), span);
+		var error_invoke_expr = ParsedExpr::Name(makeParsedName(span, "#error"), span);
 		match error_case_decl.type.reference_kind {
-			case Var -> error_invoke_expr = ParsedExpr::Operator(ParsedOperatorExpr(Operator::VarRef, error_invoke_expr), span);
-			case Const -> error_invoke_expr = ParsedExpr::Operator(ParsedOperatorExpr(Operator::ConstRef, error_invoke_expr), span);
+			case Var -> error_invoke_expr = makeParsedOperatorExpr(Operator::VarRef, error_invoke_expr, span);
+			case Const -> error_invoke_expr = makeParsedOperatorExpr(Operator::ConstRef, error_invoke_expr, span);
 			else -> {}
 		}
 
 		if op == Try {
 			// case Error: error -> throw error
-			cases.append(ParsedStmt::Case(ParsedCaseStmt(
-				List!<ParsedExpr>(1u, ParsedExpr::Name(ParsedName(span, "Error"), span)),
-				Optional!<String>::Some("#error"),
-				error_case_decl.type.reference_kind,
+			cases.append(ParsedStmt::Case(Box!<ParsedCaseStmt>(ParsedCaseStmt(
+				List!<ParsedExpr>(1u, ParsedExpr::Name(makeParsedName(span, "Error"), span)),
+				"#error", error_case_decl.type.reference_kind,
 				ParsedStmt::Throw(error_invoke_expr, span, false)
-			), span, false));
+			)), span, false));
 		} else if op == Must {
 			// case Error: error -> panic(error)
-			cases.append(ParsedStmt::Case(ParsedCaseStmt(
-				List!<ParsedExpr>(1u, ParsedExpr::Name(ParsedName(span, "Error"), span)),
-				Optional!<String>::Some("#error"),
-				error_case_decl.type.reference_kind,
-				ParsedStmt::Expr(ParsedExpr::Operator(ParsedOperatorExpr(
-					ParsedExpr::Name(ParsedName(span, "panic"), span),
+			cases.append(ParsedStmt::Case(Box!<ParsedCaseStmt>(ParsedCaseStmt(
+				List!<ParsedExpr>(1u, ParsedExpr::Name(makeParsedName(span, "Error"), span)),
+				"#error", error_case_decl.type.reference_kind,
+				ParsedStmt::Expr(makeParsedOperatorExpr(
+					ParsedExpr::Name(makeParsedName(span, "panic"), span),
 					Operator::Call,
-					error_invoke_expr
-				), span), span, false)
-			), span, false));
+					error_invoke_expr,
+					span
+				), span, false)
+			)), span, false));
 		} else {
 			this.error("invalid operator for validate expr: must be try or must", span);
 			abort();
@@ -2909,23 +2902,21 @@ struct TCContext {
 		//     true -> yield x;
 		//     false -> yield z;
 		// }
-		var match_body = ParsedCompoundStmt(span);
+		var children: SharedPtr!<List!<ParsedStmt>> = List!<ParsedStmt>();
 
-		match_body.children.append(ParsedStmt::Case(ParsedCaseStmt(
+		children.append(ParsedStmt::Case(Box!<ParsedCaseStmt>(ParsedCaseStmt(
 			List!<ParsedExpr>(1u, ParsedExpr::Bool(true, then_value.span)),
-			Optional!<String>::None,
-			ReferenceKind::None,
-			ParsedStmt::Yield(Optional!<ParsedExpr>::Some(then_value), then_value.span, false)
-		), then_value.span, false));
+			"", ReferenceKind::None,
+			ParsedStmt::Yield(then_value, then_value.span, false)
+		)), then_value.span, false));
 
-		match_body.children.append(ParsedStmt::Case(ParsedCaseStmt(
+		children.append(ParsedStmt::Case(Box!<ParsedCaseStmt>(ParsedCaseStmt(
 			List!<ParsedExpr>(1u, ParsedExpr::Bool(false, else_value.span)),
-			Optional!<String>::None,
-			ReferenceKind::None,
-			ParsedStmt::Yield(Optional!<ParsedExpr>::Some(else_value), else_value.span, false)
-		), else_value.span, false));
+			"", ReferenceKind::None,
+			ParsedStmt::Yield(else_value, else_value.span, false)
+		)), else_value.span, false));
 
-		return this.checkMatchExpr(ParsedMatchExpr(condition, match_body), expected_type, is_comptime, span);
+		return this.checkMatchExpr(ParsedMatchExpr(condition, ParsedCompoundStmt(span, children)), expected_type, is_comptime, span);
 	}
 
 	func checkOperatorIsExpr(this: &&TCContext, parsed_lhs: &ParsedExpr, parsed_rhs: &ParsedExpr, is_comptime: bool, span: Span) -> Expr {
@@ -3001,14 +2992,10 @@ struct TCContext {
 			}
 		}
 
-		const parsed_target_type = parsed_rhs.toType() else {
-			this.error("rhs of cast is not a type", parsed_rhs.span);
-			return Expr::Undefined(span, Type::unknown());
-		}
-
 		const source_type = lhs.type;
-		var target_type = this.checkTypeUsage(parsed_target_type, false);
+		const target_type = this.checkTypeUsage(parsed_rhs.toType(), false);
 		if target_type.isUnknown() {
+			this.error("invalid target type for cast", parsed_rhs.span);
 			return Expr::Undefined(span, Type::unknown());
 		}
 
@@ -3067,40 +3054,39 @@ struct TCContext {
 
 		const yield_type = this.getType(Name("Optional", List!<TemplateParameter>(1u, TemplateParameter::Type(case_decl.type))), span);
 
-		var value_invoke_expr = ParsedExpr::Name(ParsedName(span, "#value"), span);
+		var value_invoke_expr = ParsedExpr::Name(makeParsedName(span, "#value"), span);
 		match case_decl.type.reference_kind {
-			case Var -> value_invoke_expr = ParsedExpr::Operator(ParsedOperatorExpr(Operator::VarRef, value_invoke_expr), span);
-			case Const -> value_invoke_expr = ParsedExpr::Operator(ParsedOperatorExpr(Operator::ConstRef, value_invoke_expr), span);
+			case Var -> value_invoke_expr = makeParsedOperatorExpr(Operator::VarRef, value_invoke_expr, span);
+			case Const -> value_invoke_expr = makeParsedOperatorExpr(Operator::ConstRef, value_invoke_expr, span);
 			else -> {}
 		}
 
 		var cases: List!<ParsedStmt>;
 
 		// case Foo: val -> yield Some(val)
-		cases.append(ParsedStmt::Case(ParsedCaseStmt(
-			List!<ParsedExpr>(1u, ParsedExpr::Name(ParsedName(span, case_name), span)),
-			Optional!<String>::Some("#value"),
-			case_decl.type.reference_kind,
-			ParsedStmt::Yield(Optional!<ParsedExpr>::Some(
-				ParsedExpr::Operator(ParsedOperatorExpr(
-					ParsedExpr::Name(ParsedName(span, "Some"), span),
-					Operator::Call,
-					value_invoke_expr
-				), span)
+		cases.append(ParsedStmt::Case(Box!<ParsedCaseStmt>(ParsedCaseStmt(
+			List!<ParsedExpr>(1u, ParsedExpr::Name(makeParsedName(span, case_name), span)),
+			"#value", case_decl.type.reference_kind,
+			ParsedStmt::Yield(makeParsedOperatorExpr(
+				ParsedExpr::Name(makeParsedName(span, "Some"), span),
+				Operator::Call,
+				value_invoke_expr,
+				span
 			), span, false)
-		), span, false));
+		)), span, false));
 
 		// else -> yield None
 		cases.append(ParsedStmt::ElseCase(Box!<ParsedStmt>(
-			ParsedStmt::Yield(Optional!<ParsedExpr>::Some(
-				ParsedExpr::Name(ParsedName(span, "None"), span)
-			), span, false)
+			ParsedStmt::Yield(
+				ParsedExpr::Name(makeParsedName(span, "None"), span),
+				span, false
+			)
 		), span, false));
 
 		return this.checkMatchExpr(value, cases, yield_type, is_comptime, span);
 	}
 
-	func lookupNamespace(this: &&TCContext, namespaces_to_search: &Set!<SharedHandle!<Namespace>>, name: &NameSegment) -> Set!<SharedHandle!<Namespace>> {
+	func lookupNamespace(this: &&TCContext, namespaces_to_search: &Set!<SharedHandle!<Namespace>>, name: &NameSegment, span: Span) -> Set!<SharedHandle!<Namespace>> {
 		var result: Set!<SharedHandle!<Namespace>>;
 
 		for n in namespaces_to_search {
@@ -3121,7 +3107,7 @@ struct TCContext {
 			result.grow(result.size() + matching_children.size());
 			for child in matching_children {
 				if child.isIncompleteTemplate() {
-					result.add(this.createTemplateInstance(child, name.template_parameters, name.span));
+					result.add(this.createTemplateInstance(child, name.template_parameters, span));
 				} else {
 					result.add(child);
 				}
@@ -3155,7 +3141,7 @@ struct TCContext {
 			matching_namespaces.add(n);
 
 			for i in intersecting_segments..name_segments.size() {
-				matching_namespaces = this.lookupNamespace(matching_namespaces, name_segments[i]);
+				matching_namespaces = this.lookupNamespace(matching_namespaces, name_segments[i], span);
 			}
 
 			namespaces_to_search.add(matching_namespaces);
@@ -3169,7 +3155,7 @@ struct TCContext {
 			}
 		}
 
-		for n in this.lookupNamespace(namespaces_to_search, last_segment) {
+		for n in this.lookupNamespace(namespaces_to_search, last_segment, span) {
 			if (filter & Namespaces) != None {
 				result.append(Symbol::Namespace(n, n.parent));
 			}
@@ -3193,7 +3179,7 @@ struct TCContext {
 					else -> panic("invalid numeric type");
 				}
 
-				for n in this.lookupNamespace(namespaces_to_search, NameSegment(numeric_type_name, numeric_type_template_parameters)) {
+				for n in this.lookupNamespace(namespaces_to_search, NameSegment(numeric_type_name, numeric_type_template_parameters), span) {
 					if n.linked_type.isAlive() {
 						result.append(Symbol::Type(n.linked_type, n.parent));
 					}
@@ -3280,26 +3266,22 @@ struct TCContext {
 		if name_segments.isEmpty() && last_segment.template_parameters.isEmpty() && (filter & TemplateParameters) != None {
 			if this.current_function.isAlive() {
 				for template_parameter in this.current_function.template_parameters {
-					if template_parameter.name != last_segment.name {
+					if template_parameter.name != last_segment.name || template_parameter.value is None {
 						continue;
 					}
 
-					if const value = template_parameter.value {
-						result.append(Symbol::TemplateParameter(value, SharedHandle!<Namespace>()));
-					}
+					result.append(Symbol::TemplateParameter(template_parameter.value, SharedHandle!<Namespace>()));
 				}
 			}
 
 			var current_namespace = this.current_namespace;
 			while current_namespace.isAlive() {
 				for template_parameter in current_namespace.template_parameters {
-					if template_parameter.name != last_segment.name {
+					if template_parameter.name != last_segment.name || template_parameter.value is None {
 						continue;
 					}
 
-					if const value = template_parameter.value {
-						result.append(Symbol::TemplateParameter(value, current_namespace));
-					}
+					result.append(Symbol::TemplateParameter(template_parameter.value, current_namespace));
 				}
 
 				current_namespace = current_namespace.parent;
@@ -3333,7 +3315,7 @@ struct TCContext {
 		if candidates.isEmpty() {
 			if !quiet {
 				this.error("no matching type found", span);
-				this.info("looking for " + name.toString(), Span());
+				this.info("looking for " + format(name), Span());
 			}
 
 			return Type::unknown();
@@ -3342,7 +3324,7 @@ struct TCContext {
 		} else {
 			if !quiet {
 				this.error("more than one matching types found", span);
-				this.info("looking for " + name.toString(), Span());
+				this.info("looking for " + format(name), Span());
 			}
 
 			return Type::unknown();
@@ -3418,7 +3400,7 @@ struct TCContext {
 	func validateFunctionCanditates(this: &&TCContext, candidates: &List!<SharedHandle!<FunctionDecl>>, required_name: &Name, required_parameter_types: &List!<Type>, span: Span) -> bool {
 		if candidates.isEmpty() {
 			this.error("no matching function found", span);
-			this.info("looking for " + required_name.toString() + format(required_parameter_types), Span());
+			this.info("looking for " + format(required_name) + format(required_parameter_types), Span());
 			return false;
 		}
 
@@ -3479,12 +3461,14 @@ struct TCContext {
 				return -1;
 			}
 
-			if const value = template_parameter_decl.value {
-				if value != template_parameter {
-					return -1;
-				} else {
-					count += 1;
-				}
+			if template_parameter_decl.value is None {
+				continue;
+			}
+
+			if template_parameter_decl.value != template_parameter {
+				return -1;
+			} else {
+				count += 1;
 			}
 		}
 
@@ -3725,7 +3709,7 @@ struct TCContext {
 				result.append(result[i - 1]);
 			}
 
-			result[i].value = Some(values[i]);
+			result[i].value = values[i];
 		}
 
 		return result;
@@ -3742,18 +3726,16 @@ struct TCContext {
 				template_parameters.append(this.checkTemplateParameter(parameter));
 			}
 
-			result.segments.append(NameSegment(segment.span, segment.name, template_parameters));
+			result.segments.append(NameSegment(segment.name, template_parameters));
 		}
 
 		return result;
 	}
 
 	func checkTemplateParameter(this: &&TCContext, parameter: &ParsedExpr) -> TemplateParameter {
-		if const parsed_type = parameter.toType() {
-			const type = this.checkTypeUsage(parsed_type, true);
-			if !type.isUnknown() {
-				return TemplateParameter::Type(type);
-			}
+		const type = this.checkTypeUsage(parameter.toType(), true);
+		if !type.isUnknown() {
+			return TemplateParameter::Type(type);
 		}
 
 		const checked_parameter = this.checkExpr(parameter, Type::unknown(), true);
@@ -3769,6 +3751,7 @@ struct TCContext {
 
 	func checkTypeUsage(this: &&TCContext, parsed_type: &ParsedType, quiet: bool) -> Type {
 		match parsed_type {
+			case Empty -> return Type::unknown();
 			case Name: name -> return this.getType(this.checkName(name), parsed_type.span, quiet);
 			case ConstReference: base -> {
 				const checked_base = this.checkTypeUsage(base, quiet);
@@ -3857,7 +3840,7 @@ struct TCContext {
 
 		var negate_result = false;
 		var compare_result_zero = false;
-		const name_str = name.toString();
+		const name_str = format(name);
 		if candidates.isEmpty() && kind == Operator {
 			if name_str == "operator ==" {
 				candidates = this.lookupFunction(Name("operator !="), parent_type, argument_types, allow_unwrapping_this, allow_unwrapping, span);
@@ -3902,8 +3885,8 @@ struct TCContext {
 			|| name == "operator >" || name == "operator >=";
 	}
 
-	func unwrapArguments(this: &&TCContext, arguments: &List!<Expr>, required_parameter_types: &List!<Type>, is_comptime: bool) -> List!<Expr> {
-		var result = arguments;
+	func unwrapArguments(this: &&TCContext, arguments: &List!<Expr>, required_parameter_types: &List!<Type>, is_comptime: bool) -> SharedPtr!<List!<Expr>> {
+		var result: SharedPtr!<List!<Expr>> = arguments;
 
 		for i in 0u..result.size() {
 			if result[i].type.decl != required_parameter_types[i].decl {
@@ -4103,7 +4086,7 @@ struct TCContext {
 
 		match arguments[0u] {
 			case MemberVarInvoke: member_access_expr -> {
-				const object = member_access_expr.object.operator unwrap() as VarInvoke else {
+				const object = member_access_expr.object as VarInvoke else {
 					return;
 				}
 

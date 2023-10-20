@@ -1,0 +1,271 @@
+import std/core;
+import std/string;
+
+enum Operator {
+	case Add;
+	case Sub;
+	case Mul;
+	case Div;
+	case Mod;
+
+	case Increment;
+	case Decrement;
+	case Negate;
+
+	case BitwiseAnd;
+	case BitwiseOr;
+	case BitwiseXOr;
+	case BitwiseNot;
+
+	case ShiftLeft;
+	case ShiftRight;
+
+	case LogicalAnd;
+	case LogicalOr;
+	case LogicalNot;
+
+	case Coalescing;
+
+	case Assign;
+	case Initialize;
+
+	case AddAssign;
+	case SubAssign;
+	case MulAssign;
+	case DivAssign;
+	case ModAssign;
+
+	case BitwiseAndAssign;
+	case BitwiseOrAssign;
+	case BitwiseXOrAssign;
+
+	case ShiftLeftAssign;
+	case ShiftRightAssign;
+
+	case CoalescingAssign;
+
+	case Equal;
+	case NotEqual;
+	case LessThan;
+	case LessEqual;
+	case GreaterThan;
+	case GreaterEqual;
+	case Spaceship;
+
+	case Range;			// a..b
+
+	case Call;			// foo(...)
+	case Index;			// foo[...]
+
+	case ConstRef;		// &foo
+	case VarRef;		// &&foo
+
+	case Is;			// foo is bar
+	case As;			// foo as bar
+
+	case Try;			// try foo
+	case Must;			// must foo
+	case InlineIf;		// a if b else c
+
+	case MemberAccess;	// foo.bar
+
+	func isUnaryOperator(this: Operator) -> bool {
+		match this {
+			case Increment
+			| Decrement
+			| Negate
+			| BitwiseNot
+			| LogicalNot
+			| ConstRef
+			| VarRef
+			| Try
+			| Must -> return true;
+			else -> return false;
+		}
+	}
+
+	func isBinaryOperator(this: Operator) -> bool {
+		match this {
+			case Add | Sub
+			| Mul | Div | Mod
+			| BitwiseAnd
+			| BitwiseOr
+			| BitwiseXOr
+			| ShiftLeft
+			| ShiftRight
+			| LogicalAnd
+			| LogicalOr
+			| Coalescing
+			| Assign
+			| Initialize
+			| AddAssign
+			| SubAssign
+			| MulAssign
+			| DivAssign
+			| ModAssign
+			| BitwiseAndAssign
+			| BitwiseOrAssign
+			| BitwiseXOrAssign
+			| ShiftLeftAssign
+			| ShiftRightAssign
+			| CoalescingAssign
+			| Equal | NotEqual
+			| LessThan | LessEqual
+			| GreaterThan | GreaterEqual
+			| Spaceship
+			| Range
+			| Is | As
+			| MemberAccess -> return true;
+			else -> return false;
+		}
+	}
+
+	func isTernaryOperator(this: Operator) -> bool {
+		match this {
+			case InlineIf -> return true;
+			else -> return false;
+		}
+	}
+
+	func isAssignmentOperator(this: Operator) -> bool {
+		match this {
+			case Assign
+			| Initialize
+			| AddAssign
+			| SubAssign
+			| MulAssign
+			| DivAssign
+			| ModAssign
+			| BitwiseAndAssign
+			| BitwiseOrAssign
+			| BitwiseXOrAssign
+			| ShiftLeftAssign
+			| ShiftRightAssign
+			| CoalescingAssign -> return true;
+			else -> return false;
+		}
+	}
+
+	func precedence(this: Operator) -> int {
+		match this {
+			case MemberAccess -> return 18;
+
+			case Call
+			| Index
+			| Increment
+			| Decrement -> return 17;
+
+			case Negate
+			| BitwiseNot
+			| LogicalNot
+			| ConstRef
+			| VarRef
+			| Try
+			| Must -> return 16;
+
+			case Is
+			| As -> return 15;
+
+			case Coalescing -> return 14;
+
+			case Mul
+			| Div
+			| Mod -> return 13;
+
+			case Add
+			| Sub -> return 12;
+
+			case Range -> return 11;
+
+			case ShiftLeft
+			| ShiftRight -> return 10;
+
+			case Spaceship -> return 9;
+
+			case LessThan
+			| LessEqual
+			| GreaterThan
+			| GreaterEqual -> return 8;
+
+			case Equal
+			| NotEqual -> return 7;
+
+			case BitwiseAnd -> return 6;
+			case BitwiseXOr -> return 5;
+			case BitwiseOr -> return 4;
+
+			case LogicalAnd -> return 3;
+			case LogicalOr -> return 2;
+
+			case InlineIf -> return 1;
+
+			case Assign
+			| Initialize
+			| AddAssign
+			| SubAssign
+			| MulAssign
+			| DivAssign
+			| ModAssign
+			| BitwiseAndAssign
+			| BitwiseOrAssign
+			| BitwiseXOrAssign
+			| ShiftLeftAssign
+			| ShiftRightAssign
+			| CoalescingAssign -> return 0;
+		}
+	}
+
+	func toString(this: Operator) -> String {
+		match this {
+			case Add -> return "+";
+			case Sub -> return "-";
+			case Mul -> return "*";
+			case Div -> return "/";
+			case Mod -> return "%";
+			case Increment -> return "++";
+			case Decrement -> return "--";
+			case Negate -> return "-";
+			case BitwiseAnd -> return "&";
+			case BitwiseOr -> return "|";
+			case BitwiseXOr -> return "^";
+			case BitwiseNot -> return "~";
+			case ShiftLeft -> return "<<";
+			case ShiftRight -> return ">>";
+			case LogicalAnd -> return "&&";
+			case LogicalOr -> return "||";
+			case LogicalNot -> return "!";
+			case Coalescing -> return "??";
+			case Assign -> return "=";
+			case Initialize -> return ":=";
+			case AddAssign -> return "+=";
+			case SubAssign -> return "-=";
+			case MulAssign -> return "*=";
+			case DivAssign -> return "/=";
+			case ModAssign -> return "%=";
+			case BitwiseAndAssign -> return "&=";
+			case BitwiseOrAssign -> return "|=";
+			case BitwiseXOrAssign -> return "^=";
+			case ShiftLeftAssign -> return "<<=";
+			case ShiftRightAssign -> return ">>=";
+			case CoalescingAssign -> return "??=";
+			case Equal -> return "==";
+			case NotEqual -> return "!=";
+			case LessThan -> return "<";
+			case LessEqual -> return "<=";
+			case GreaterThan -> return ">";
+			case GreaterEqual -> return ">=";
+			case Spaceship -> return "<=>";
+			case Range -> return "..";
+			case Call -> return "()";
+			case Index -> return "[]";
+			case ConstRef -> return "&";
+			case VarRef -> return "&&";
+			case Is -> return "is";
+			case As -> return "as";
+			case Try -> return "try";
+			case Must -> return "must";
+			case InlineIf -> return "if..else";
+			case MemberAccess -> return ".";
+		}
+	}
+}
