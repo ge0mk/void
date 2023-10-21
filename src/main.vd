@@ -30,7 +30,8 @@ func parseArguments(arguments: Range!<String>) -> Optional!<CompilerOptions> {
 	options.target_data_layout = args_parser.value("target-data-layout", "", "target data layout string passed to llvm") ?? "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128";
 	options.codegen_only = args_parser.flag("codegen-only", "c", "don't compile output code to a binary") ?? false;
 	options.generate_debug_info = args_parser.flag("generate-debug-info", "g", "generate debug information") ?? false;
-	options.dont_codegen_builtins = args_parser.flag("cg-no-builtins", "m", "don't codegen inlinable builtin functions") ?? false;
+	options.codegen_inline_builtin_functions = !(args_parser.flag("cg-no-builtins", "m", "don't codegen inlineable builtin functions") ?? false);
+	options.codegen_lazy = args_parser.flag("cg-lazy", "M", "codegen functions lazily as needed") ?? false;
 	options.optimized_build = args_parser.flag("optimize", "O", "enable optimizations") ?? false;
 
 	if args_parser.flag("strip-symbols", "s", "strip symbols") ?? false {

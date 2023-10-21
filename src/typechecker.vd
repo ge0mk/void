@@ -123,6 +123,11 @@ func typecheck(program: &&Program) -> void {
 		return;
 	}
 
+	if program.options.codegen_lazy {
+		context.cg_context.codegenFunctionDecl(program.main_function);
+		context.cg_context.codegenFunctionBody(program.main_function);
+	}
+
 	match program.llvm_context.loadModuleFromFile(program.options.install_path + "/rt.ll") {
 		case Some: rt_module -> discard LLVMLinkModules2(program.llvm_module, rt_module);
 		else -> program.has_errors = true;
@@ -654,13 +659,21 @@ struct TCContext {
 			return;
 		}
 
-		const signature = match function.body {
-			case Unchecked: parsed_body -> yield parsed_body.signature;
-			case Builtin | InlineBuiltin -> {
-				this.cg_context.codegenFunctionDecl(function);
-				function.parent_namespace.addUncheckedFunctionBody(function);
+		if function.body is Builtin || function.body is InlineBuiltin {
+			function.parent_namespace.addUncheckedFunctionBody(function);
+			if this.program.options.codegen_lazy {
 				return;
 			}
+
+			if function.body is Builtin || this.program.options.codegen_inline_builtin_functions {
+				this.cg_context.codegenFunctionDecl(function);
+			}
+
+			return;
+		}
+
+		const signature = match function.body {
+			case Unchecked: &parsed_body -> yield parsed_body.signature;
 			else -> return;
 		}
 
@@ -776,7 +789,9 @@ struct TCContext {
 			}
 		}
 
-		this.cg_context.codegenFunctionDecl(function);
+		if !this.program.options.codegen_lazy {
+			this.cg_context.codegenFunctionDecl(function);
+		}
 
 		this.current_namespace = prev_namespace;
 		this.current_function = prev_function;
@@ -807,7 +822,11 @@ struct TCContext {
 			}
 		}
 
-		this.cg_context.codegenFunctionBody(function);
+		if !this.program.options.codegen_lazy {
+			if !(function.body is InlineBuiltin) || this.program.options.codegen_inline_builtin_functions {
+				this.cg_context.codegenFunctionBody(function);
+			}
+		}
 
 		this.current_namespace = prev_namespace;
 		this.current_function = prev_function;

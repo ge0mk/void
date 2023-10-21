@@ -103,6 +103,16 @@ struct CGContext {
 		}
 	}
 
+	func getFunction(this: &&CGContext, function: SharedHandle!<FunctionDecl>) -> LLVMValueRef {
+		if function.llvm_func != vptr::null() {
+			return function.llvm_func;
+		}
+
+		this.codegenFunctionDecl(function);
+		this.codegenFunctionBody(function);
+		return function.llvm_func;
+	}
+
 	func getVariable(this: &CGContext, variable: SharedHandle!<VarDecl>) -> LLVMValueRef {
 		const impl = this.variables.get(variable) else {
 			panic("invalid codegen for variable '" + variable.name + "'");
@@ -415,10 +425,6 @@ struct CGContext {
 			return;
 		}
 
-		if function.body is InlineBuiltin && this.program.options.dont_codegen_builtins {
-			return;
-		}
-
 		var return_type = this.getType(function.return_type);
 		var parameter_types: List!<LLVMTypeRef>;
 
@@ -458,11 +464,6 @@ struct CGContext {
 
 		match function.body {
 			case Empty | Extern -> return;
-			case InlineBuiltin -> {
-				if this.program.options.dont_codegen_builtins {
-					return;
-				}
-			}
 			case Unchecked -> {
 				this.error("unchecked function: " + function.signature(), function.signature_span);
 				return;
@@ -1589,7 +1590,7 @@ struct CGContext {
 				discard LLVMBuildBr(this.builder, this.yield_target);
 			}
 			case Return: &value -> {
-				if value is Void && this.current_function == this.program.main_function.llvm_func {
+				if value is Void && this.current_function == this.getFunction(this.program.main_function) {
 					this.setCurrentDebugLocation(stmt.span);
 					discard LLVMBuildRet(this.builder, LLVMConstInt(this.int_type, 0, false));
 				} else {
@@ -1812,7 +1813,7 @@ struct CGContext {
 				return val;
 			}
 			case TypeRef -> return LLVMValueRef();
-			case FunctionRef: function -> return function.llvm_func;
+			case FunctionRef: function -> return this.getFunction(function);
 		}
 	}
 
@@ -1839,7 +1840,10 @@ struct CGContext {
 
 		const result = match function.body {
 			case InlineBuiltin: function -> yield this.codegenInlineBuiltinFunctionCall(function, parameters);
-			else -> yield LLVMBuildCall2(this.builder, function.llvm_type, function.llvm_func, parameters, "");
+			else -> {
+				const llvm_function = this.getFunction(function);
+				yield LLVMBuildCall2(this.builder, function.llvm_type, llvm_function, parameters, "");
+			}
 		}
 
 		match return_kind {

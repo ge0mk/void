@@ -54,7 +54,8 @@ struct CompilerOptions {
 	var symbol_type: SymbolType;
 	var output_type: OutputType;
 	var generate_debug_info: bool;
-	var dont_codegen_builtins: bool;
+	var codegen_inline_builtin_functions: bool;
+	var codegen_lazy: bool;
 	var optimized_build: bool;
 
 	var run: bool;
