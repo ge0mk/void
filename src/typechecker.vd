@@ -793,7 +793,7 @@ struct TCContext {
 			case Empty | Extern | InlineBuiltin -> {}
 			case Builtin: builtin_function -> this.validateBuiltinFunctionDecl(builtin_function, function.signature(), function.signature_span);
 			case Stmt -> this.error("function body is already checked", function.span);
-			case Unchecked: parsed_function -> match parsed_function.body {
+			case Unchecked: &parsed_function -> match parsed_function.body {
 				case ExternFunctionBody -> function.body = FunctionBody::Extern;
 				case DefaultFunctionBody -> {
 					function.body = function.getDefaultFunctionBody();
@@ -802,7 +802,7 @@ struct TCContext {
 						else -> {}
 					}
 				}
-				case Compound: compound_stmt -> this.checkFunctionBody(&&function.operator unwrap(), compound_stmt);
+				case Compound: &compound_stmt -> this.checkFunctionBody(&&function.operator unwrap(), compound_stmt);
 				else -> {}
 			}
 		}
@@ -1104,30 +1104,30 @@ struct TCContext {
 					this.checkImport(name, parsed_stmt.span);
 				}
 			}
-			case Namespace: parsed_namespace -> {
+			case Namespace: &parsed_namespace -> {
 				if this.current_function.isAlive() {
 					this.error("namespaces & types must be declared outside of functions", parsed_namespace.name_span);
 				}
 				discard this.checkNamespaceDecl(parsed_namespace);
 			}
-			case TypeDecl: parsed_type_decl -> {
+			case TypeDecl: &parsed_type_decl -> {
 				if this.current_function.isAlive() {
 					this.error("namespaces & types must be declared outside of functions", parsed_type_decl.name_span);
 				}
 				discard this.checkTypeDecl(parsed_type_decl);
 			}
-			case FunctionDecl: parsed_function_decl -> {
+			case FunctionDecl: &parsed_function_decl -> {
 				discard this.checkFunctionDecl(parsed_function_decl);
 			}
-			case Alias: data -> {
-				const target = this.checkTypeUsage(data.type, false);
+			case Alias: &parsed_alias -> {
+				const target = this.checkTypeUsage(parsed_alias.type, false);
 				if target.reference_kind != None {
 					this.error("aliases to reference types aren't allowed", parsed_stmt.span);
 				} else if !target.isUnknown() {
-					this.current_namespace.aliases[data.name] = target.decl.linked_namespace;
+					this.current_namespace.aliases[parsed_alias.name] = target.decl.linked_namespace;
 				}
 			}
-			case VarDecl: parsed_var_decl -> {
+			case VarDecl: &parsed_var_decl -> {
 				if parsed_stmt.is_comptime {
 					for stmt in this.checkVarDecl(parsed_var_decl, true) {
 						discard this.interpret(stmt);
@@ -1140,29 +1140,29 @@ struct TCContext {
 					this.error("non comptime variable declared outside of type / function", parsed_stmt.span);
 				}
 			}
-			case CaseDecl: parsed_case_decl -> {
+			case CaseDecl: &parsed_case_decl -> {
 				if this.current_namespace.linked_type.isAlive() {
 					this.checkCaseDecl(parsed_case_decl);
 				} else {
 					this.error("case decls must be inside a enum or variant type", parsed_case_decl.span);
 				}
 			}
-			case Compound: compound_stmt -> result.append(this.checkCompoundStmt(compound_stmt, true));
-			case If: if_stmt -> result.append(this.checkIfStmt(if_stmt, parsed_stmt.is_comptime, parsed_stmt.span));
-			case IfVar: if_var_stmt -> result.append(this.checkIfVarStmt(if_var_stmt, parsed_stmt.is_comptime, parsed_stmt.span));
-			case VarElse: var_else_stmt -> result.append(this.checkVarElseStmt(var_else_stmt, parsed_stmt.is_comptime, parsed_stmt.span));
-			case While: while_stmt -> result.append(this.checkWhileStmt(while_stmt, parsed_stmt.is_comptime, parsed_stmt.span));
-			case DoWhile: do_while_stmt -> result.append(this.checkDoWhileStmt(do_while_stmt, parsed_stmt.is_comptime, parsed_stmt.span));
-			case For: for_stmt -> result.append(this.checkForStmt(for_stmt, parsed_stmt.is_comptime, parsed_stmt.span));
-			case Case: case_stmt -> result.append(this.checkCaseStmt(case_stmt, parsed_stmt.span));
-			case ElseCase: body -> result.append(this.checkElseCaseStmt(body, parsed_stmt.span));
+			case Compound: &compound_stmt -> result.append(this.checkCompoundStmt(compound_stmt, true));
+			case If: &if_stmt -> result.append(this.checkIfStmt(if_stmt, parsed_stmt.is_comptime, parsed_stmt.span));
+			case IfVar: &if_var_stmt -> result.append(this.checkIfVarStmt(if_var_stmt, parsed_stmt.is_comptime, parsed_stmt.span));
+			case VarElse: &var_else_stmt -> result.append(this.checkVarElseStmt(var_else_stmt, parsed_stmt.is_comptime, parsed_stmt.span));
+			case While: &while_stmt -> result.append(this.checkWhileStmt(while_stmt, parsed_stmt.is_comptime, parsed_stmt.span));
+			case DoWhile: &do_while_stmt -> result.append(this.checkDoWhileStmt(do_while_stmt, parsed_stmt.is_comptime, parsed_stmt.span));
+			case For: &for_stmt -> result.append(this.checkForStmt(for_stmt, parsed_stmt.is_comptime, parsed_stmt.span));
+			case Case: &case_stmt -> result.append(this.checkCaseStmt(case_stmt, parsed_stmt.span));
+			case ElseCase: &body -> result.append(this.checkElseCaseStmt(body, parsed_stmt.span));
 			case Break -> result.append(this.checkBreakStmt(parsed_stmt.span));
 			case Continue -> result.append(this.checkContinueStmt(parsed_stmt.span));
-			case Throw: value -> result.append(this.checkThrowStmt(value, parsed_stmt.span));
-			case Return: value -> result.append(this.checkReturnStmt(value, parsed_stmt.span));
-			case Yield: value -> result.append(this.checkYieldStmt(value, parsed_stmt.span));
-			case Discard: value -> result.append(this.checkExprStmt(value, true, parsed_stmt.is_comptime, parsed_stmt.span));
-			case Expr: parsed_expr -> result.append(this.checkExprStmt(parsed_expr, false, parsed_stmt.is_comptime, parsed_stmt.span));
+			case Throw: &value -> result.append(this.checkThrowStmt(value, parsed_stmt.span));
+			case Return: &value -> result.append(this.checkReturnStmt(value, parsed_stmt.span));
+			case Yield: &value -> result.append(this.checkYieldStmt(value, parsed_stmt.span));
+			case Discard: &value -> result.append(this.checkExprStmt(value, true, parsed_stmt.is_comptime, parsed_stmt.span));
+			case Expr: &parsed_expr -> result.append(this.checkExprStmt(parsed_expr, false, parsed_stmt.is_comptime, parsed_stmt.span));
 			case Garbage -> {}
 		}
 
@@ -1239,7 +1239,7 @@ struct TCContext {
 		this.pushScope(ScopeKind::Expr);
 		if !(parsed_stmt.initializer is Empty) {
 			if parsed_stmt.initializer.isAnonymousTuple() && !type.isUnknown() {
-				for element in (parsed_stmt.initializer as Tuple).value() {
+				for &element in (parsed_stmt.initializer as Tuple).value() {
 					initializer.append(this.checkExpr(element.value, Type::unknown(), is_comptime));
 				}
 			} else  {
@@ -1356,7 +1356,7 @@ struct TCContext {
 	}
 
 	func checkStmtList(this: &&TCContext, input: &List!<ParsedStmt>, output: &&List!<Stmt>) -> void {
-		for stmt in input {
+		for &stmt in input {
 			if const previous = output.last() {
 				if previous.isTerminator(this.program.never_type, this.isCurrentScopeInsideMatch()) {
 					this.error("unreachable code", stmt.span);
@@ -1366,7 +1366,7 @@ struct TCContext {
 			const checked_stmt = this.checkStmt(stmt);
 			match checked_stmt {
 				case Empty -> continue;
-				case Compound: compound_stmt -> output.append(compound_stmt.children);
+				case Compound: &compound_stmt -> output.append(compound_stmt.children);
 				else -> output.append(checked_stmt);
 			}
 		}
@@ -1755,7 +1755,7 @@ struct TCContext {
 			if match_type_decl.body is Variant {
 				var case_name = "";
 				match parsed_pattern {
-					case Name: parsed_name -> {
+					case Name: &parsed_name -> {
 						if parsed_name.segments.size() != 1 {
 							this.error("invalid variant case as match patter", parsed_pattern.span);
 						} else if !parsed_name.segments[0u].template_parameters.isEmpty() {
@@ -2049,20 +2049,20 @@ struct TCContext {
 	func checkExpr(this: &&TCContext, parsed_expr: &ParsedExpr, expected_type: Type, is_comptime: bool) -> Expr {
 		match parsed_expr {
 			case Empty -> return Expr::Void(parsed_expr.span, this.program.void_type)
-			case Char: char_literal -> return this.checkCharLiteralExpr(char_literal, parsed_expr.span);
-			case String: string_literal -> return this.checkStringLiteralExpr(string_literal, parsed_expr.span);
-			case Number: number_literal -> return this.checkNumberLiteralExpr(number_literal, expected_type, parsed_expr.span);
-			case Bool: value -> return Expr::Integer(value as int, parsed_expr.span, this.program.bool_type);
-			case Name: parsed_name -> return this.checkNameExpr(parsed_name, expected_type, is_comptime, parsed_expr.span);
-			case Operator: parsed_operator -> return this.checkOperatorExpr(parsed_operator, expected_type, is_comptime, parsed_expr.span);
-			case Paren: child -> return this.checkExpr(child, expected_type, is_comptime);
-			case Array: elements -> return this.checkArrayExpr(elements, expected_type, is_comptime, parsed_expr.span);
-			case Tuple: elements -> return this.checkTupleExpr(elements, expected_type, is_comptime, parsed_expr.span);
-			case Dict: elements -> return this.checkDictExpr(elements, expected_type, is_comptime, parsed_expr.span);
-			case Match: match_expr -> return this.checkMatchExpr(match_expr, expected_type, is_comptime, parsed_expr.span);
-			case FunctionRef: data -> return this.checkFunctionRefExpr(data.name, data.parameter_types, parsed_expr.span);
-			case Type: parsed_type -> return Expr::TypeRef(this.checkTypeUsage(parsed_type, false), parsed_expr.span, Type::unknown());
-			case AnonymousFunction: parsed_function_decl -> return this.checkAnonymousFunctionExpr(parsed_function_decl);
+			case Char: &char_literal -> return this.checkCharLiteralExpr(char_literal, parsed_expr.span);
+			case String: &string_literal -> return this.checkStringLiteralExpr(string_literal, parsed_expr.span);
+			case Number: &number_literal -> return this.checkNumberLiteralExpr(number_literal, expected_type, parsed_expr.span);
+			case Bool: &value -> return Expr::Integer(value as int, parsed_expr.span, this.program.bool_type);
+			case Name: &parsed_name -> return this.checkNameExpr(parsed_name, expected_type, is_comptime, parsed_expr.span);
+			case Operator: &parsed_operator -> return this.checkOperatorExpr(parsed_operator, expected_type, is_comptime, parsed_expr.span);
+			case Paren: &child -> return this.checkExpr(child, expected_type, is_comptime);
+			case Array: &elements -> return this.checkArrayExpr(elements, expected_type, is_comptime, parsed_expr.span);
+			case Tuple: &elements -> return this.checkTupleExpr(elements, expected_type, is_comptime, parsed_expr.span);
+			case Dict: &elements -> return this.checkDictExpr(elements, expected_type, is_comptime, parsed_expr.span);
+			case Match: &match_expr -> return this.checkMatchExpr(match_expr, expected_type, is_comptime, parsed_expr.span);
+			case FunctionRef: &data -> return this.checkFunctionRefExpr(data.name, data.parameter_types, parsed_expr.span);
+			case Type: &parsed_type -> return Expr::TypeRef(this.checkTypeUsage(parsed_type, false), parsed_expr.span, Type::unknown());
+			case AnonymousFunction: &parsed_function_decl -> return this.checkAnonymousFunctionExpr(parsed_function_decl);
 			case Garbage -> return Expr::Undefined(parsed_expr.span, Type::unknown());
 		}
 	}
@@ -2070,7 +2070,7 @@ struct TCContext {
 	func checkExprList(this: &&TCContext, parsed_exprs: &List!<ParsedExpr>, is_comptime: bool) -> List!<Expr> {
 		var result: List!<Expr>;
 		result.grow(parsed_exprs.size());
-		for e in parsed_exprs {
+		for &e in parsed_exprs {
 			result.append(this.checkExpr(e, Type::unknown(), is_comptime));
 		}
 		return result;
@@ -2541,12 +2541,12 @@ struct TCContext {
 					arguments.append(lhs);
 
 					match parsed_expr.operands[1u] {
-						case Tuple: elements -> {
-							for element in elements {
+						case Tuple: &elements -> {
+							for &element in elements {
 								arguments.append(this.checkExpr(element.value, Type::unknown(), is_comptime));
 							}
 						}
-						case Paren: child -> arguments.append(this.checkExpr(child, Type::unknown(), is_comptime));
+						case Paren: &child -> arguments.append(this.checkExpr(child, Type::unknown(), is_comptime));
 						else -> arguments.append(this.checkExpr(parsed_expr.operands[1u], member_variable.type, is_comptime));
 					}
 
@@ -2571,7 +2571,7 @@ struct TCContext {
 				const function = parsed_expr.operands[0u];
 				var arguments = this.checkExprList(List!<ParsedExpr>(parsed_expr.operands[1u..parsed_expr.operands.size()]), is_comptime);
 
-				for arg in arguments {
+				for &arg in arguments {
 					if arg is Undefined {
 						return Expr::Undefined(span, Type::unknown());
 					}
@@ -2753,7 +2753,8 @@ struct TCContext {
 			}
 			else -> {
 				var arguments: List!<Expr>;
-				for arg in parsed_expr.operands {
+				arguments.grow(parsed_expr.operands.size());
+				for &arg in parsed_expr.operands {
 					if arguments.size() == 1 {
 						arguments.append(this.checkExpr(arg, arguments[0u].type, is_comptime));
 					} else {
@@ -2947,8 +2948,8 @@ struct TCContext {
 			arguments.append(lhs);
 
 			var case_name = "";
-			match parsed_rhs {
-				case Name: parsed_name -> case_name = parsed_name.segments[0u].name;
+			match &parsed_rhs {
+				case Name: &parsed_name -> case_name = parsed_name.segments[0u].name;
 				else -> {
 					this.error("invalid rhs for 'operator is'", span);
 					return Expr::Undefined(span, Type::unknown());
@@ -3752,8 +3753,8 @@ struct TCContext {
 	func checkTypeUsage(this: &&TCContext, parsed_type: &ParsedType, quiet: bool) -> Type {
 		match parsed_type {
 			case Empty -> return Type::unknown();
-			case Name: name -> return this.getType(this.checkName(name), parsed_type.span, quiet);
-			case ConstReference: base -> {
+			case Name: &name -> return this.getType(this.checkName(name), parsed_type.span, quiet);
+			case ConstReference: &base -> {
 				const checked_base = this.checkTypeUsage(base, quiet);
 				if checked_base.reference_kind != None {
 					if !quiet {
@@ -3764,7 +3765,7 @@ struct TCContext {
 				}
 				return checked_base.constRef();
 			}
-			case VarReference: base -> {
+			case VarReference: &base -> {
 				const checked_base = this.checkTypeUsage(base, quiet);
 				if checked_base.reference_kind != None {
 					if !quiet {
@@ -3775,11 +3776,11 @@ struct TCContext {
 				}
 				return checked_base.varRef();
 			}
-			case Tuple: elements -> {
+			case Tuple: &elements -> {
 				var names: List!<String>;
 				var types: List!<Type>;
 
-				for e in elements {
+				for &e in elements {
 					types.append(this.checkTypeUsage(e.type, quiet));
 					if e.name == "" {
 						names.append(String(1u, ('a'b as uint + names.size()) as byte));
@@ -3796,7 +3797,7 @@ struct TCContext {
 
 				return this.getType(Name("Tuple", template_parameters), parsed_type.span);
 			}
-			case Function: function_type -> {
+			case Function: &function_type -> {
 				var parameter_types: List!<Type>;
 				for t in function_type.parameter_types {
 					parameter_types.append(this.checkTypeUsage(t, quiet));
@@ -3823,7 +3824,7 @@ struct TCContext {
 	}
 
 	func checkCall(this: &&TCContext, name: &Name, arguments: &List!<Expr>, allow_unwrapping_this: bool, allow_unwrapping: bool, kind: CallKind, is_comptime: bool, span: Span) -> Expr {
-		for arg in arguments {
+		for &arg in arguments {
 			if arg is Undefined {
 				return Expr::Undefined(span, Type::unknown());
 			}
@@ -4011,7 +4012,7 @@ struct TCContext {
 			checked_arguments.append(this.checkExpr(parsed_argument, Type::unknown(), is_comptime));
 		}
 
-		for arg in checked_arguments {
+		for &arg in checked_arguments {
 			if arg is Undefined {
 				return Expr::Undefined(span, Type::unknown());
 			}

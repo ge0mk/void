@@ -617,7 +617,7 @@ struct CGContext {
 				discard LLVMBuildRet(this.builder, this.codegenInlineBuiltinFunctionCall(builtin_funcion, parameters));
 			}
 			case Builtin: builtin_funcion -> this.codegenBuiltinFunction(builtin_funcion, function.signature_span);
-			case Stmt: stmt -> this.codegenStmt(stmt);
+			case Stmt: &stmt -> this.codegenStmt(stmt);
 			else -> panic("invalid function body for codegen");
 		}
 
@@ -1567,15 +1567,15 @@ struct CGContext {
 
 	func codegenStmt(this: &&CGContext, stmt: &Stmt) -> void {
 		match stmt {
-			case Compound: compound_stmt -> this.codegenCompoundStmt(compound_stmt);
-			case Expr: expr -> {
+			case Compound: &compound_stmt -> this.codegenCompoundStmt(compound_stmt);
+			case Expr: &expr -> {
 				discard this.codegenExpr(expr);
 				if expr.type == this.program.never_type {
 					discard LLVMBuildUnreachable(this.builder);
 				}
 			}
-			case If: if_stmt -> this.codegenIfStmt(if_stmt, stmt.span);
-			case While: while_stmt -> this.codegenWhileStmt(while_stmt, stmt.span);
+			case If: &if_stmt -> this.codegenIfStmt(if_stmt, stmt.span);
+			case While: &while_stmt -> this.codegenWhileStmt(while_stmt, stmt.span);
 			case Break -> {
 				this.setCurrentDebugLocation(stmt.span);
 				discard LLVMBuildBr(this.builder, this.break_target);
@@ -1588,7 +1588,7 @@ struct CGContext {
 				this.setCurrentDebugLocation(stmt.span);
 				discard LLVMBuildBr(this.builder, this.yield_target);
 			}
-			case Return: value -> {
+			case Return: &value -> {
 				if value is Void && this.current_function == this.program.main_function.llvm_func {
 					this.setCurrentDebugLocation(stmt.span);
 					discard LLVMBuildRet(this.builder, LLVMConstInt(this.int_type, 0, false));
@@ -1725,8 +1725,6 @@ struct CGContext {
 	}
 
 	func codegenExpr(this: &&CGContext, expr: &Expr) -> LLVMValueRef {
-		const span = expr.span;
-
 		match expr {
 			case Undefined -> {
 				if expr.type == this.program.void_type || expr.type.isUnknown() {
@@ -1746,7 +1744,7 @@ struct CGContext {
 				result = LLVMBuildInsertValue(this.builder, result, LLVMConstInt(this.int_type, value.size() as int, false), 2u, ""); // capacity
 				return result;
 			}
-			case ConstAggregate: elements -> {
+			case ConstAggregate: &elements -> {
 				var result = LLVMConstNull(this.getType(expr.type));
 				for i in 0u..elements.size() {
 					const element = this.codegenExpr(elements[i]);
@@ -1754,16 +1752,16 @@ struct CGContext {
 				}
 				return result;
 			}
-			case Call: call_expr -> return this.codegenCall(call_expr, expr.span);
-			case VarInvoke: variable -> {
+			case Call: &call_expr -> return this.codegenCall(call_expr, expr.span);
+			case VarInvoke: &variable -> {
 				if variable.type.reference_kind == None || variable.is_parameter {
 					return this.getVariable(variable);
 				} else {
-					this.setCurrentDebugLocation(span);
+					this.setCurrentDebugLocation(expr.span);
 					return LLVMBuildLoad2(this.builder, this.getType(variable.type), this.getVariable(variable), "");
 				}
 			}
-			case MemberVarInvoke: member_var_invoke_expr -> {
+			case MemberVarInvoke: &member_var_invoke_expr -> {
 				const object_type_decl = member_var_invoke_expr.object.type.decl;
 				const member_decl = object_type_decl.member_variables[member_var_invoke_expr.id];
 
@@ -1775,7 +1773,7 @@ struct CGContext {
 					id += 2;
 				}
 
-				this.setCurrentDebugLocation(span);
+				this.setCurrentDebugLocation(expr.span);
 				const ptr = LLVMBuildStructGEP2(this.builder, object_type, object, id, "");
 
 				if member_decl.type.reference_kind == None {
@@ -1784,16 +1782,16 @@ struct CGContext {
 					return LLVMBuildLoad2(this.builder, this.getType(member_decl.type), ptr, "");
 				}
 			}
-			case Dereference: base -> {
-				this.setCurrentDebugLocation(span);
+			case Dereference: &base -> {
+				this.setCurrentDebugLocation(expr.span);
 				return LLVMBuildLoad2(this.builder, this.getType(expr.type), this.codegenExpr(base), "");
 			}
-			case Match: match_expr -> return this.codegenMatchExpr(match_expr, expr.span);
+			case Match: &match_expr -> return this.codegenMatchExpr(match_expr, expr.span);
 			case ShallowCopy: shallow_copy_expr -> {
 				var dst = LLVMValueRef();
 				match shallow_copy_expr.destination {
-					case VarInvoke: variable -> dst = this.getVariable(variable);
-					case MemberVarInvoke: member_var_invoke_expr -> {
+					case VarInvoke: &variable -> dst = this.getVariable(variable);
+					case MemberVarInvoke: &member_var_invoke_expr -> {
 						const object = this.codegenExpr(member_var_invoke_expr.object);
 						const object_type = this.getType(member_var_invoke_expr.object.type.base());
 
@@ -1809,7 +1807,7 @@ struct CGContext {
 
 				const val = this.codegenExpr(shallow_copy_expr.value);
 
-				this.setCurrentDebugLocation(span);
+				this.setCurrentDebugLocation(expr.span);
 				discard LLVMBuildStore(this.builder, val, dst);
 				return val;
 			}
