@@ -26,7 +26,7 @@ build/stage0.ll:
 	wget -O build/stage0.ll https://github.com/ge0mk/void/releases/latest/download/bootstrap.ll
 
 test-stage0: build/stage0
-	python3 test.py build/stage0 -q -- -m -b -s
+	python3 test.py build/stage0 -q -- -M -b -s
 
 stage1: build/stage1
 
@@ -34,10 +34,10 @@ build/stage1: build/stage1.ll
 	clang build/stage1.ll -o build/stage1 -lc -lm -lLLVM
 
 build/stage1.ll: build/stage0 rt.ll std/*.vd src/*.vd src/llvm_c.vd
-	build/stage0 src/main.vd -o stage1 -c -g -m
+	build/stage0 src/main.vd -o stage1 -c -g -M
 
 test-stage1: build/stage1
-	python3 test.py build/stage1 -q -- -m -b -s
+	python3 test.py build/stage1 -q -- -M -b -s
 
 stage2: build/stage2
 
@@ -45,10 +45,10 @@ build/stage2: build/stage2.ll
 	clang build/stage2.ll -o build/stage2 -lc -lm -lLLVM
 
 build/stage2.ll: build/stage1
-	build/stage1 src/main.vd -o stage2 -c -g -m
+	build/stage1 src/main.vd -o stage2 -c -g -M
 
 test-stage2: build/stage2
-	python3 test.py build/stage2 -q -- -m -b -s
+	python3 test.py build/stage2 -q -- -M -b -s
 
 src/llvm_c.vd: src/llvm.h
 	python3 binding_generator.py src/llvm.h src/llvm_c.vd
@@ -57,16 +57,16 @@ rt.ll: rt.c
 	clang rt.c -S -emit-llvm -O3 -o rt.ll
 
 generate-bootstrap-files: build/stage2
-	build/stage2 src/main.vd -o bootstrap -c -m -O
-	build/stage2 src/main.vd -o bootstrap -c -m -O -b
-	build/stage2 src/main.vd -o bootstrap-stripped -c -m -O -s
-	build/stage2 src/main.vd -o bootstrap-stripped -c -m -O -s -b
+	build/stage2 src/main.vd -o bootstrap -c -M -O3
+	build/stage2 src/main.vd -o bootstrap -c -M -O3 -b
+	build/stage2 src/main.vd -o bootstrap-stripped -c -M -O3 -s
+	build/stage2 src/main.vd -o bootstrap-stripped -c -M -O3 -s -b
 
 	-@mkdir bootstrap -p
 	-@cp -f build/bootstrap* bootstrap/
 
 update-stage0.ll: build/stage2
-	build/stage2 src/main.vd -o stage0 -c -m -O
+	build/stage2 src/main.vd -o stage0 -c -M -O3
 
 update-stage0:
 	-@$(MAKE) --no-print-directory update-stage0.ll
