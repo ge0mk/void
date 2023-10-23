@@ -4,34 +4,86 @@ import std/string;
 import std/list;
 import std/io;
 
+alias ParsedArgument = (
+	unparsed: String,
+	key: String,
+	value: String,
+	is_short: bool,
+	is_valid: bool
+);
+
 struct ArgsParser {
-	var args: List!<String>;
+	var args: List!<ParsedArgument>;
 
 	func constructor(this: &&ArgsParser, args: Range!<String>, description: String) -> void {
-		this.args := args;
-		this.args.remove(0u);
+		this.args := ();
+		for i in 1u..args.size() {
+			this.args.append(parseArgument(args[i]));
+		}
+	}
+
+	func parseArgument(arg: String) -> ParsedArgument {
+		if arg.isEmpty() || arg == "-" {
+			return ParsedArgument(arg, "", arg, false, false);
+		}
+
+		if arg[0u] != '-'b {
+			return ParsedArgument(arg, "", arg, false, true);
+		}
+
+		var is_short = arg[1u] != '-'b;
+		var cursor = 1u if is_short else 2u;
+
+		const key_start = cursor;
+		while cursor < arg.size() {
+			if !isAlpha(arg[cursor]) && !isDigit(arg[cursor]) && arg[cursor] != '-'b {
+				break;
+			}
+
+			cursor++;
+		}
+
+		const key = arg.substring(key_start..cursor);
+
+		if cursor >= arg.size() {
+			if is_short && key.size() > 1 {
+				return ParsedArgument(arg, key.substring(0u..1u), key.substring(1u..key.size()), true, true);
+			} else {
+				return ParsedArgument(arg, key, "", is_short, true);
+			}
+		}
+
+		if arg[cursor] != '='b {
+			return ParsedArgument(arg, key, "", is_short, false);
+		}
+
+		const value = arg.substring((cursor + 1)..arg.size());
+		return ParsedArgument(arg, key, value, is_short, true);
 	}
 
 	func constructor(this: &&ArgsParser, other: ArgsParser) -> void = default;
 	func destructor(this: &&ArgsParser) -> void = default;
 
 	// --foo / --foo=[on|off]
-	func flag(this: &&ArgsParser, name: String, short: String, description: String) -> Optional!<bool> {
+	func flag(this: &&ArgsParser, short: String, long: String, description: String) -> Optional!<bool> {
 		for i in 0u..this.args.size() {
 			const arg = this.args[i];
+			if arg.key.isEmpty() && arg.value == "-" {
+				break;
+			}
 
-			if arg == "--" + name || arg == "-" + short {
-				this.args.remove(i);
+			if arg.key != (short if arg.is_short else long) {
+				continue;
+			}
+
+			this.args.remove(i);
+
+			if arg.value.isEmpty() {
 				return Some(true);
-			} else if arg.startsWith("--" + name + "=") {
-				const val = arg.substring((name.size() + 3)..arg.size());
-				if val == "on" || val == "true" || val == "yes" {
-					this.args.remove(i);
-					return Some(true);
-				} else if val == "off" || val == "false" || val == "no" {
-					this.args.remove(i);
-					return Some(false);
-				}
+			} else if arg.value == "on" || arg.value == "true" || arg.value == "yes" {
+				return Some(true);
+			} else {
+				return Some(false);
 			}
 		}
 
@@ -39,59 +91,92 @@ struct ArgsParser {
 	}
 
 	// --foo=bar / --foo bar, returns 'bar'
-	func value(this: &&ArgsParser, name: String, short: String, description: String) -> Optional!<String> {
+	func value(this: &&ArgsParser, short: String, long: String, description: String) -> Optional!<String> {
 		for i in 0u..this.args.size() {
 			const arg = this.args[i];
-
-			if (arg == "--" + name || arg == "-" + short) && i < this.args.size() - 1 {
-				const val = this.args[i + 1];
-				this.args.remove(i..(i+2));
-				return Some(val);
-			} else if arg.startsWith("--" + name + "=") {
-				const val = arg.substring((name.size() + 3)..arg.size());
-				this.args.remove(i);
-				return Some(val);
+			if arg.key.isEmpty() && arg.value == "-" {
+				break;
 			}
-		}
 
-		return None;
-	}
-
-	// --foo=[a|b|c] / --foo [a|b|c], returns index in possible values
-	func choice(this: &&ArgsParser, name: String, short: String, description: String, values: Range!<String>) -> Optional!<uint> {
-		for i in 0u..this.args.size() {
-			const arg = this.args[i];
-
-			if (arg == "--" + name || arg == "-" + short) && i < this.args.size() - 1 {
-				const val = this.args[i + 1];
-				this.args.remove(i..(i+2));
-				return values.find(val);
-			} else if arg.startsWith("--" + name + "=") {
-				const val = arg.substring((name.size() + 3)..arg.size());
-				this.args.remove(i);
-				return values.find(val);
+			if arg.key != (short if arg.is_short else long) {
+				continue;
 			}
+
+			this.args.remove(i);
+
+			if !arg.value.isEmpty() {
+				return Some(arg.value);
+			} else if this.args.size() > i {
+				if this.args[i].key.isEmpty() {
+					const value = this.args[i].value;
+					this.args.remove(i);
+					return Some(value);
+				}
+			}
+
+			break;
 		}
 
 		return None;
 	}
 
 	// returns first arg that doesn't start with '-'
-	func anonymous(this: &&ArgsParser, name: String, description: String) -> Optional!<String> {
+	func anonymous(this: &&ArgsParser, description: String) -> Optional!<String> {
 		for i in 0u..this.args.size() {
 			const arg = this.args[i];
+			if arg.key.isEmpty() && arg.value == "-" {
+				break;
+			}
 
-			if !arg.startsWith("-") {
+			if arg.key.isEmpty() {
 				this.args.remove(i);
-				return Some(arg);
+				return Some(arg.value);
 			}
 		}
 
 		return None;
 	}
 
-	// print errors / help messages, returns whether all args were used
-	func finalize(this: &&ArgsParser) -> bool {
-		return false;
+	func subcommand(this: &&ArgsParser, commands: Range!<String>) -> Optional!<uint> {
+		if this.args.isEmpty() {
+			return None;
+		} else if !this.args[0u].key.isEmpty() {
+			return None;
+		} else if const index = commands.find(this.args[0u].value) {
+			this.args.remove(0u);
+			return Some(index);
+		}
+
+		return None;
+	}
+
+	func getArgsAfterSeparator(this: &&ArgsParser) -> List!<String> {
+		var result: List!<String>;
+		var after_separator = false;
+
+		for arg in this.args {
+			if after_separator {
+				result.append(arg.unparsed);
+			}
+
+			if arg.key.isEmpty() && arg.value == "-" {
+				after_separator = true;
+			}
+		}
+
+		return result;
+	}
+
+	func getUnusedArgs(this: &&ArgsParser) -> List!<String> {
+		var result: List!<String>;
+		for arg in this.args {
+			if arg.key.isEmpty() && arg.value == "-" {
+				break;
+			}
+
+			result.append(arg.unparsed);
+		}
+
+		return result;
 	}
 }

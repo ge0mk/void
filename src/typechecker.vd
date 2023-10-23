@@ -119,7 +119,7 @@ func typecheck(program: &&Program) -> void {
 		context.error("no main function specified", Span());
 	}
 
-	if program.has_errors {
+	if program.has_errors || program.options.mode == Check {
 		return;
 	}
 
@@ -661,12 +661,10 @@ struct TCContext {
 
 		if function.body is Builtin || function.body is InlineBuiltin {
 			function.parent_namespace.addUncheckedFunctionBody(function);
-			if this.program.options.codegen_lazy {
-				return;
-			}
-
-			if function.body is Builtin || this.program.options.codegen_inline_builtin_functions {
-				this.cg_context.codegenFunctionDecl(function);
+			if this.program.options.codegen_asap {
+				if function.body is Builtin || this.program.options.codegen_inline_builtin_functions {
+					this.cg_context.codegenFunctionDecl(function);
+				}
 			}
 
 			return;
@@ -789,7 +787,7 @@ struct TCContext {
 			}
 		}
 
-		if !this.program.options.codegen_lazy {
+		if this.program.options.codegen_asap {
 			this.cg_context.codegenFunctionDecl(function);
 		}
 
@@ -822,7 +820,7 @@ struct TCContext {
 			}
 		}
 
-		if !this.program.options.codegen_lazy {
+		if this.program.options.codegen_asap {
 			if !(function.body is InlineBuiltin) || this.program.options.codegen_inline_builtin_functions {
 				this.cg_context.codegenFunctionBody(function);
 			}
@@ -4157,7 +4155,7 @@ struct TCContext {
 	}
 
 	func optimizeCallExpr(this: &&TCContext, call_expr: &&Expr) -> void {
-		if !this.program.options.optimized_build {
+		if this.program.options.optimization_level == 0 {
 			return;
 		}
 

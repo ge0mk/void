@@ -520,7 +520,7 @@ struct CGContext {
 				true,		// is definition
 				function.signature_span.line as uint + 1,
 				LLVMDIFlags::LLVMDIFlagZero,
-				this.program.options.optimized_build
+				this.program.options.optimization_level != 0
 			);
 
 			LLVMSetSubprogram(function.llvm_func, function.llvm_di);

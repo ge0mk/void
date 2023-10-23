@@ -132,7 +132,7 @@ struct Program {
 				LLVMDWARFSourceLanguage::LLVMDWARFSourceLanguageC,
 				this.files[0u].llvm_di_file,
 				"",			// producer
-				this.options.optimized_build,
+				this.options.optimization_level != 0,
 				"",			// flags
 				0u,			// runtime version
 				"",			// split name

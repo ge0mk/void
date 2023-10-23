@@ -16,51 +16,72 @@ func parseArguments(arguments: Range!<String>) -> Optional!<CompilerOptions> {
 	var args_parser = ArgsParser(arguments, "");
 	var options: CompilerOptions;
 
-	options.dump_tokens = args_parser.flag("dump-tokens", "t", "dump tokens") ?? false;
-	options.dump_ast = args_parser.flag("dump-ast", "a", "dump ast") ?? false;
-	options.dump_program = args_parser.flag("dump-program", "p", "dump program") ?? false;
+	var subcommands: List!<String>;
+	subcommands.append("compile");
+	subcommands.append("check");
+	subcommands.append("run");
 
-	options.hide_errors = args_parser.flag("hide_errors", "q", "do not display error messages") ?? false;
+	options.mode = (args_parser.subcommand(subcommands.range()) ?? 0u) as Mode;
 
-	options.program_name = args_parser.value("program-name", "o", "program name & output file name") ?? "";
-	options.build_dir = args_parser.value("build-dir", "B", "build dir & output file location") ?? "build";
+	options.dump_tokens = args_parser.flag("t", "dump-tokens", "dump tokens") ?? false;
+	options.dump_ast = args_parser.flag("a", "dump-ast", "dump ast") ?? false;
+	options.dump_program = args_parser.flag("p", "dump-program", "dump program") ?? false;
+
+	options.hide_errors = args_parser.flag("q", "hide_errors", "do not display error messages") ?? false;
+
+	options.program_name = args_parser.value("o", "program-name", "program name & output file name") ?? "";
+	options.build_dir = args_parser.value("B", "build-dir", "build dir & output file location") ?? "build";
 
 	// TODO: replace default values with host platform specific ones
-	options.target_triple = args_parser.value("target-triple", "", "target triple string passed to llvm") ?? "x86_64-pc-linux-gnu";
-	options.target_data_layout = args_parser.value("target-data-layout", "", "target data layout string passed to llvm") ?? "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128";
-	options.codegen_only = args_parser.flag("codegen-only", "c", "don't compile output code to a binary") ?? false;
-	options.generate_debug_info = args_parser.flag("generate-debug-info", "g", "generate debug information") ?? false;
-	options.codegen_inline_builtin_functions = !(args_parser.flag("cg-no-builtins", "m", "don't codegen inlineable builtin functions") ?? false);
-	options.codegen_lazy = args_parser.flag("cg-lazy", "M", "codegen functions lazily as needed") ?? false;
-	options.optimized_build = args_parser.flag("optimize", "O", "enable optimizations") ?? false;
+	options.target_triple = args_parser.value("", "target-triple", "target triple string passed to llvm") ?? "x86_64-pc-linux-gnu";
+	options.target_data_layout = args_parser.value("", "target-data-layout", "target data layout string passed to llvm") ?? "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128";
+	options.codegen_only = args_parser.flag("c", "codegen-only", "don't compile output code to a binary") ?? false;
+	options.generate_debug_info = args_parser.flag("g", "generate-debug-info", "generate debug information") ?? false;
+	options.codegen_inline_builtin_functions = !(args_parser.flag("m", "cg-no-builtins", "don't codegen inlineable builtin functions") ?? false);
 
-	if args_parser.flag("strip-symbols", "s", "strip symbols") ?? false {
+	options.codegen_lazy = args_parser.flag("M", "cg-lazy", "codegen functions lazily as needed") ?? false;
+	options.codegen_asap = !(options.codegen_lazy || options.mode == Check);
+
+	const optimization_level = args_parser.value("O", "optimization-level", "enable optimizations") ?? "0";
+	if optimization_level == "1" {
+		options.optimization_level = 1;
+	} else if optimization_level == "2" {
+		options.optimization_level = 2;
+	} else if optimization_level == "3" {
+		options.optimization_level = 3;
+	} else if optimization_level == "s" {
+		options.optimization_level = 4;
+	} else if optimization_level == "z" {
+		options.optimization_level = 5;
+	}
+
+	if args_parser.flag("s", "strip-symbols", "strip symbols") ?? false {
 		options.symbol_type = None;
 	}
 
-	if args_parser.flag("bitcode", "b", "generate llvm bitcode") ?? false {
-		options.output_type = Bitcode;
+	if args_parser.flag("b", "bitcode", "generate llvm bitcode") ?? false {
+		options.output_type = LLVMBitcode;
 	}
 
-	if args_parser.flag("emit-llvm", "S", "generate llvm ir") ?? false {
-		options.output_type = Assembly;
+	if args_parser.flag("S", "emit-llvm", "generate llvm ir") ?? false {
+		options.output_type = LLVMAssembly;
 	}
 
-	var library = args_parser.value("link-library", "l", "library to link against");
+	var library = args_parser.value("l", "link-library", "library to link against");
 	while library.hasValue() {
 		options.link_libraries.append(library.value());
-		library = args_parser.value("link-library", "l", "library to link against");
+		library = args_parser.value("l", "link-library", "library to link against");
 	}
 
-	options.run = args_parser.flag("run", "r", "run") ?? false;
-
-	match args_parser.anonymous("path", "path to the root module file") {
+	match args_parser.anonymous("path to the root module file") {
 		case Some: value -> options.root_module_path = value;
 		else -> {
 			eprintln("no root module specified");
 			return None;
 		}
 	}
+
+	options.secondary_args = args_parser.getArgsAfterSeparator();
 
 	const path = options.root_module_path;
 	if !path.endsWith(".vd") || path.size() <= 3 {
@@ -115,52 +136,59 @@ func main(args: Range!<String>) -> int {
 		print(program.dump());
 	}
 
-	if options.run {
-		if program.has_errors {
-			return 1;
+	match options.mode {
+		case Check -> return 1 if program.has_errors else 0;
+		case Run -> {
+			if program.has_errors {
+				return 1;
+			}
+
+			var main_args: List!<String>;
+			var main_env: List!<String>;
+
+			main_args.append(options.program_name);
+			main_args.append(options.secondary_args);
+
+			return program.runMainFunction(main_args, main_env);
 		}
+		case Compile -> {
+			const assembly_path = match options.output_type {
+				case LLVMAssembly -> yield program.printLLVMIRToFile();
+				case LLVMBitcode -> yield program.writeLLVMBitcodeToFile();
+			}
 
-		var main_args: List!<String>;
-		var main_env: List!<String>;
+			if program.has_errors || assembly_path is None {
+				return 1;
+			}
 
-		main_args.append("_");
+			if options.codegen_only {
+				return 0;
+			}
 
-		return program.runMainFunction(main_args, main_env);
-	} else {
-		const assembly_path = match options.output_type {
-			case Assembly -> yield program.printLLVMIRToFile();
-			case Bitcode -> yield program.writeLLVMBitcodeToFile();
+			var clang_command = "clang " + assembly_path.value();
+			clang_command += " -o " + options.getOutputBinaryPath();
+			clang_command += " -lc -lm";
+
+			for lib in options.link_libraries {
+				clang_command += " -l" + lib;
+			}
+
+			if options.symbol_type == None {
+				clang_command += " -s";
+			}
+
+			if options.generate_debug_info {
+				clang_command += " -g";
+			}
+
+			clang_command += " " + options.getOptimizationLevelAsClangArg();
+
+			if !options.secondary_args.isEmpty() {
+				clang_command += " " + " ".join(options.secondary_args);
+			}
+
+			clang_command += "\0";
+			return system(clang_command.data()) as int;
 		}
-
-		if program.has_errors || assembly_path is None {
-			return 1;
-		}
-
-		if options.codegen_only {
-			return 0;
-		}
-
-		var clang_command = "clang " + assembly_path.value();
-		clang_command += " -o " + options.getOutputBinaryPath();
-		clang_command += " -lc -lm";
-
-		for lib in options.link_libraries {
-			clang_command += " -l" + lib;
-		}
-
-		if options.symbol_type == None {
-			clang_command += " -s";
-		}
-
-		if options.generate_debug_info {
-			clang_command += " -g";
-		}
-
-		if options.optimized_build {
-			clang_command += " -O3";
-		}
-
-		clang_command += "\0";
-		return system(clang_command.data()) as int;
 	}
 }

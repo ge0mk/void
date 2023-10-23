@@ -5,6 +5,12 @@ import std/path;
 import std/set;
 import std/string;
 
+enum Mode {
+	case Compile;
+	case Check;
+	case Run;
+}
+
 enum SymbolType {
 	case None;
 	case Name;	// only name -> will probably cause duplicate names
@@ -12,8 +18,8 @@ enum SymbolType {
 }
 
 enum OutputType {
-	case Assembly;
-	case Bitcode;
+	case LLVMAssembly;
+	case LLVMBitcode;
 }
 
 struct ImportedModule {
@@ -35,6 +41,8 @@ struct ImportedModule {
 }
 
 struct CompilerOptions {
+	var mode: Mode;
+
 	var dump_tokens: bool;
 	var dump_ast: bool;
 	var dump_program: bool;
@@ -48,6 +56,8 @@ struct CompilerOptions {
 
 	var import_search_paths: List!<Path>;
 
+	var optimization_level: uint; // 0 - 3, 4 = size, 5 = more size
+
 	var target_triple: String;
 	var target_data_layout: String;
 	var codegen_only: bool;
@@ -55,16 +65,19 @@ struct CompilerOptions {
 	var output_type: OutputType;
 	var generate_debug_info: bool;
 	var codegen_inline_builtin_functions: bool;
+	var codegen_asap: bool;
 	var codegen_lazy: bool;
-	var optimized_build: bool;
 
 	var run: bool;
 
 	var link_libraries: List!<String>;
 
+	var secondary_args: List!<String>;
+
 	func constructor(this: &&CompilerOptions) -> void {
+		this.mode := Compile;
 		this.symbol_type := Full;
-		this.output_type := Assembly;
+		this.output_type := LLVMAssembly;
 	}
 
 	func constructor(this: &&CompilerOptions, other: CompilerOptions) -> void = default;
@@ -73,7 +86,7 @@ struct CompilerOptions {
 	operator =(this: &&CompilerOptions, other: CompilerOptions) -> void = default;
 	operator ==(this: CompilerOptions, other: CompilerOptions) -> bool = default;
 
-	func getImportPaths(this: CompilerOptions, module: String) -> List!<ImportedModule> {
+	func getImportPaths(this: &CompilerOptions, module: &String) -> List!<ImportedModule> {
 		var result: List!<ImportedModule>;
 
 		for i in 0u..this.import_search_paths.size() {
@@ -103,11 +116,22 @@ struct CompilerOptions {
 		return result;
 	}
 
-	func getOutputCodePath(this: CompilerOptions, file_ending: String) -> String {
+	func getOutputCodePath(this: &CompilerOptions, file_ending: String) -> String {
 		return this.build_dir + "/" + this.program_name + file_ending;
 	}
 
-	func getOutputBinaryPath(this: CompilerOptions) -> String {
+	func getOutputBinaryPath(this: &CompilerOptions) -> String {
 		return this.build_dir + "/" + this.program_name;
+	}
+
+	func getOptimizationLevelAsClangArg(this: &CompilerOptions) -> String {
+		match this.optimization_level {
+			case 1 -> return "-O1";
+			case 2 -> return "-O2";
+			case 3 -> return "-O3";
+			case 4 -> return "-Os";
+			case 5 -> return "-Oz";
+			else -> return "-O0";
+		}
 	}
 }
