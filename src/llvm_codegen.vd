@@ -1473,7 +1473,13 @@ struct CGContext {
 				const llvm_function_type = LLVMFunctionType(return_type, parameter_types, false);
 
 				const call_parameters = List!<LLVMValueRef>(parameters[1u..parameters.size()]);
-				return LLVMBuildCall2(this.builder, llvm_function_type, parameters[0u], call_parameters, "");
+				const result = LLVMBuildCall2(this.builder, llvm_function_type, parameters[0u], call_parameters, "");
+
+				if return_type == this.void_type {
+					return LLVMValueRef();
+				} else {
+					return result;
+				}
 			}
 
 			case IntCast: target -> {
