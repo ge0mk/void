@@ -388,7 +388,7 @@ struct TCContext {
 
 		for imported_module in imported_modules {
 			if const module = this.program.getModule(imported_module.path) {
-				this.current_namespace.imported_namespaces.append(module);
+				this.current_namespace.addImportedNamespace(module);
 				continue;
 			}
 
@@ -397,7 +397,7 @@ struct TCContext {
 				continue;
 			}
 
-			this.current_namespace.imported_namespaces.append(module);
+			this.current_namespace.addImportedNamespace(module);
 			discard this.check(module, this.current_target_state);
 		}
 	}
@@ -3156,7 +3156,7 @@ struct TCContext {
 		name_segments.removeLast();
 
 		var namespaces_to_search: Set!<SharedHandle!<Namespace>>;
-		for n in this.program.getVisibleNamespaces(this.current_namespace) {
+		for n in this.current_namespace.visible_namespaces {
 			const intersecting_segments = n.full_name.intersection(name_segments);
 
 			var matching_namespaces: Set!<SharedHandle!<Namespace>>;

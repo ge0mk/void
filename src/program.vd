@@ -286,45 +286,30 @@ struct Program {
 
 		var child = this.namespaces.append(Namespace(name, template_parameters, parent_namespace));
 
+		// initialize file namespace
 		if is_file {
 			child.file_namespace = child;
 		} else {
 			child.file_namespace = parent_namespace.file_namespace;
 		}
 
+		// add child to parent namespace
 		parent_namespace.children.append(child);
 		parent_namespace.children_by_name[name].append(child);
 		parent_namespace.updateMinState(NamespaceState::Unchecked);
 
+		// initialize visible namespaces
+		child.visible_namespaces.add(child);
+		if !is_file {
+			child.visible_namespaces.add(parent_namespace.visible_namespaces);
+		}
+
+		// initialize llvm debug info
 		if this.di_builder != vptr::null() {
 			child.llvm_di = LLVMDIBuilderCreateNameSpace(this.di_builder, parent_namespace.llvm_di, child.name, true);
 		}
 
 		return child;
-	}
-
-	func getVisibleNamespaces(this: &&Program, pov: SharedHandle!<Namespace>) -> Set!<SharedHandle!<Namespace>> {
-		var result: Set!<SharedHandle!<Namespace>>;
-		result.add(pov);
-
-		for other in pov.imported_namespaces {
-			result.add(other);
-		}
-
-		var current = pov;
-		while current.parent.isAlive() {
-			result.add(current.parent);
-			current = current.parent;
-			for other in current.imported_namespaces {
-				result.add(other);
-			}
-
-			if current.file_namespace == current {
-				break;
-			}
-		}
-
-		return result;
 	}
 
 	func createModule(this: &&Program, imported_module: ImportedModule) -> SharedHandle!<Namespace> {
@@ -601,7 +586,8 @@ struct Namespace {
 	var children_by_name: Map!<String, List!<SharedHandle!<Namespace>>>;
 	var aliases: Map!<String, SharedHandle!<Namespace>>;
 
-	var imported_namespaces: List!<SharedHandle!<Namespace>>;
+	var imported_namespaces: Set!<SharedHandle!<Namespace>>;
+	var visible_namespaces: Set!<SharedHandle!<Namespace>>;
 	var file_namespace: SharedHandle!<Namespace>;
 
 	var template_instances: List!<SharedHandle!<Namespace>>;
@@ -727,6 +713,18 @@ struct Namespace {
 
 		if this.parent.isAlive() {
 			this.parent.updateMinState(min_state);
+		}
+	}
+
+	func addImportedNamespace(this: &&Namespace, other: SharedHandle!<Namespace>) -> void {
+		this.imported_namespaces.add(other);
+		this.addVisibleNamespace(other);
+	}
+
+	func addVisibleNamespace(this: &&Namespace, other: SharedHandle!<Namespace>) -> void {
+		this.visible_namespaces.add(other);
+		for c in this.children {
+			c.addVisibleNamespace(other);
 		}
 	}
 
