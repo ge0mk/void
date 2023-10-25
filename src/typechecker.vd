@@ -115,11 +115,15 @@ func typecheck(program: &&Program) -> void {
 		}
 	} while changes;
 
+	if program.options.mode == Check {
+		return;
+	}
+
 	if program.main_function.isEmpty() {
 		context.error("no main function specified", Span());
 	}
 
-	if program.has_errors || program.options.mode == Check {
+	if program.has_errors {
 		return;
 	}
 
