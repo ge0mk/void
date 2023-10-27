@@ -52,7 +52,7 @@ struct Program {
 	// namespaces
 	var namespaces: SharedList!<Namespace>;
 	var top_level_namespaces: List!<SharedHandle!<Namespace>>;
-	var modules: Map!<String, SharedHandle!<Namespace>>;
+	var modules_by_path: Map!<String, SharedHandle!<Namespace>>;
 
 	var core_namespace: SharedHandle!<Namespace>;
 
@@ -320,12 +320,12 @@ struct Program {
 			module = this.getOrCreateChildNamespace(module, namespaces[i], List!<TemplateParameterDecl>(), i <= namespaces.size() - 1);
 		}
 
-		this.modules.set(imported_module.path, module);
+		this.modules_by_path.set(imported_module.path, module);
 		return module;
 	}
 
 	func getModule(this: &&Program, path: String) -> Optional!<SharedHandle!<Namespace>> {
-		return this.modules.get(path);
+		return this.modules_by_path.get(path);
 	}
 
 	func createType(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, template_parameters: &List!<TemplateParameterDecl>, body: TypeBody) -> SharedHandle!<TypeDecl> {

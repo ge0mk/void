@@ -150,6 +150,8 @@ struct TCContext {
 	var interpreter: Interpreter;
 	var cg_context: CGContext;
 
+	var modules_by_import_name: Map!<String, List!<SharedHandle!<Namespace>>>;
+
 	var current_target_state: NamespaceState;
 	var current_namespace: SharedHandle!<Namespace>;
 	var current_function: SharedHandle!<FunctionDecl>;
@@ -379,24 +381,36 @@ struct TCContext {
 	}
 
 	func checkImport(this: &&TCContext, import_name: String, span: Span) -> void {
-		const imported_modules = this.program.options.getImportPaths(import_name);
+		var modules: List!<SharedHandle!<Namespace>>;
 
-		if imported_modules.isEmpty() {
-			this.error("no matching module found", span);
-			return;
+		if this.modules_by_import_name.contains(import_name) {
+			modules = this.modules_by_import_name[import_name];
+		} else {
+			const imported_modules = this.program.options.getImportPaths(import_name);
+			if imported_modules.isEmpty() {
+				this.error("no matching module found", span);
+				return;
+			}
+
+			for imported_module in imported_modules {
+				if const module = this.program.getModule(imported_module.path) {
+					modules.append(module);
+					continue;
+				}
+
+				match this.loadModule(imported_module) {
+					case Ok: module -> modules.append(module);
+					case Error: error -> {
+						this.error("couldn't load module " + imported_module.path + ": " + String::fromErrorCode(error), span);
+						continue;
+					}
+				}
+			}
+
+			this.modules_by_import_name[import_name] = modules;
 		}
 
-		for imported_module in imported_modules {
-			if const module = this.program.getModule(imported_module.path) {
-				this.current_namespace.addImportedNamespace(module);
-				continue;
-			}
-
-			const module = this.loadModule(imported_module) else: error {
-				this.error("couldn't load module " + imported_module.path + ": " + String::fromErrorCode(error), span);
-				continue;
-			}
-
+		for module in modules {
 			this.current_namespace.addImportedNamespace(module);
 			discard this.check(module, this.current_target_state);
 		}
