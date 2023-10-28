@@ -10,6 +10,7 @@ const char* error_toCString(int error) {
 		case 0: return "Not an error";
 		case 256: return "Out of bounds array access";
 		case 257: return "Optional value is None";
+		case 258: return "Assertion failed";
 		case -1: return "Unexpected end of file";
 		default: return strerror(error);
 	}

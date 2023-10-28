@@ -120,12 +120,6 @@ struct NumericIterator {
 	}
 }
 
-func assert(cond: bool) -> void {
-	if !cond {
-		abort();
-	}
-}
-
 enum ReferenceKind {
 	case None;
 	case Const;
@@ -334,6 +328,7 @@ enum Error: i32 {
 
 	case EBOUNDS = 256;
 	case EOPTNONE = 257;
+	case EASSERTFAILED = 258;
 
 	case EOF = -1;
 
@@ -343,6 +338,18 @@ enum Error: i32 {
 
 @[extern_name: "error_panic"]
 func panic(error: Error) -> never = extern;
+
+func assert(cond: bool) -> void {
+	if !cond {
+		panic(Error::EASSERTFAILED);
+	}
+}
+
+func assert(cond: bool, error: Error) -> void {
+	if !cond {
+		panic(error);
+	}
+}
 
 template <Tok: type, Terr: type>
 variant Result {
