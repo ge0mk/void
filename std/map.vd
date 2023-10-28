@@ -24,9 +24,7 @@ struct MapIterator {
 	}
 
 	func getNext(this: &&MapIterator!<Tkey, Tvalue>) -> (key: Tkey, value: Tvalue) {
-		if this.keys >= this.end {
-			panic(Error::EINVAL);
-		}
+		assert(this.keys < this.end, Error::EINVAL);
 
 		this.keys = this.keys + 1;
 		this.values = this.values + 1;
@@ -255,9 +253,7 @@ struct Map {
 			new_values = libc::stdlib::realloc(this.values as vptr, new_capacity * sizeOf!<Tvalue>()) as vptr!<Tvalue>;
 		}
 
-		if new_keys == vptr::null() || new_values == vptr::null() {
-			panic(Error::ENOMEM);
-		}
+		assert(new_keys != vptr::null() && new_values != vptr::null(), Error::ENOMEM);
 
 		this.keys = new_keys;
 		this.values = new_values;

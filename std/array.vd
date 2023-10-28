@@ -22,42 +22,24 @@ namespace Array {
 	}
 
 	operator [](this: &Array!<T, Size>, index: uint) -> &T {
-		if index < 0u || index >= Size {
-			panic(Error::EBOUNDS);
-		}
-
+		assert(index < Size, Error::EBOUNDS);
 		return &this.data()[index];
 	}
 
 	operator [](this: &&Array!<T, Size>, index: uint) -> &&T {
-		if index < 0u || index >= Size {
-			panic(Error::EBOUNDS);
-		}
-
+		assert(index < Size, Error::EBOUNDS);
 		return &&this.data()[index];
 	}
 
 	operator [](this: &Array!<T, Size>, range: NumericRange!<uint>) -> Range!<T> {
-		if range.start < 0u || range.end > Size {
-			panic(Error::EBOUNDS);
-		}
-
-		if range.start >= range.end || range.step != 1u {
-			panic(Error::EINVAL);
-		}
-
+		assert(range.end <= Size, Error::EBOUNDS);
+		assert(range.start <= range.end && range.step == 1, Error::EINVAL);
 		return Range!<T>(this.data() + range.start, range.end - range.start);
 	}
 
 	operator [](this: &&Array!<T, Size>, range: NumericRange!<uint>) -> VRange!<T> {
-		if range.start < 0u || range.end > Size {
-			panic(Error::EBOUNDS);
-		}
-
-		if range.start >= range.end || range.step != 1u {
-			panic(Error::EINVAL);
-		}
-
+		assert(range.end <= Size, Error::EBOUNDS);
+		assert(range.start <= range.end && range.step == 1, Error::EINVAL);
 		return VRange!<T>(this.data() + range.start, range.end - range.start);
 	}
 

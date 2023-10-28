@@ -44,10 +44,7 @@ struct Range {
 	}
 
 	operator [](this: &Range!<T>, index: uint) -> &T {
-		if index >= this.size {
-			panic(Error::EINVAL);
-		}
-
+		assert(index < this.size, Error::EINVAL);
 		return &this.data[index];
 	}
 
@@ -102,10 +99,7 @@ struct RangeIterator {
 	}
 
 	func getNext(this: &&RangeIterator!<T>) -> &T {
-		if this.current >= this.end {
-			panic(Error::EINVAL);
-		}
-
+		assert(this.current < this.end, Error::EINVAL);
 		this.current = this.current + 1;
 		return &this.current[-1];
 	}
@@ -150,10 +144,7 @@ struct VRange {
 	}
 
 	operator [](this: &VRange!<T>, index: uint) -> &&T {
-		if index >= this.size {
-			panic(Error::EINVAL);
-		}
-
+		assert(index < this.size, Error::EINVAL);
 		return &&this.data[index];
 	}
 
@@ -208,10 +199,7 @@ struct VRangeIterator {
 	}
 
 	func getNext(this: &&VRangeIterator!<T>) -> &&T {
-		if this.current >= this.end {
-			panic(Error::EINVAL);
-		}
-
+		assert(this.current < this.end, Error::EINVAL);
 		this.current = this.current + 1;
 		return &&this.current[-1];
 	}

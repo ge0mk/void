@@ -30,26 +30,17 @@ struct SharedHandle {
 	}
 
 	operator unwrap(this: SharedHandle!<T>) -> &&T {
-		if this.data == vptr::null() {
-			panic(Error::EOPTNONE);
-		}
-
+		assert(this.data != vptr::null(), Error::EOPTNONE);
 		return &&this.data[0u];
 	}
 
 	operator unwrap(this: &SharedHandle!<T>) -> &&T {
-		if this.data == vptr::null() {
-			panic(Error::EOPTNONE);
-		}
-
+		assert(this.data != vptr::null(), Error::EOPTNONE);
 		return &&this.data[0u];
 	}
 
 	operator unwrap(this: &&SharedHandle!<T>) -> &&T {
-		if this.data == vptr::null() {
-			panic(Error::EOPTNONE);
-		}
-
+		assert(this.data != vptr::null(), Error::EOPTNONE);
 		return &&this.data[0u];
 	}
 }

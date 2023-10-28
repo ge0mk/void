@@ -137,13 +137,8 @@ struct WeakPtr {
 	}
 
 	func forceLock(this: &WeakPtr!<T>) -> SharedPtr!<T> {
-		if this.data == vptr::null() {
-			panic(Error::EOPTNONE);
-		}
-
-		if this.data[0u].strong_count <= 0 {
-			panic(Error::EOPTNONE);
-		}
+		assert(this.data != vptr::null(), Error::EOPTNONE);
+		assert(this.data[0u].strong_count > 0, Error::EOPTNONE);
 
 		return SharedPtr!<T>(this);
 	}

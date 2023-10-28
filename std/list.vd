@@ -109,30 +109,18 @@ struct List {
 	}
 
 	operator [](this: &List!<T>, index: uint) -> &T {
-		if index >= this.size() {
-			panic(Error::EBOUNDS);
-		}
-
+		assert(index < this.size(), Error::EBOUNDS);
 		return &this.data[index];
 	}
 
 	operator [](this: &&List!<T>, index: uint) -> &&T {
-		if index >= this.size() {
-			panic(Error::EBOUNDS);
-		}
-
+		assert(index < this.size(), Error::EBOUNDS);
 		return &&this.data[index];
 	}
 
 	operator [](this: &List!<T>, range: NumericRange!<uint>) -> Range!<T> {
-		if range.end > this.size() {
-			panic(Error::EBOUNDS);
-		}
-
-		if range.start > range.end || range.step != 1u {
-			panic(Error::EINVAL);
-		}
-
+		assert(range.end <= this.size(), Error::EBOUNDS);
+		assert(range.start <= range.end && range.step == 1, Error::EINVAL);
 		return Range!<T>(this.data as cptr!<T> + range.start, range.end - range.start);
 	}
 
@@ -232,9 +220,7 @@ struct List {
 	}
 
 	func insert(this: &&List!<T>, index: uint, @[shallow] value: T) -> void {
-		if index > this.size() {
-			panic(Error::EBOUNDS);
-		}
+		assert(index <= this.size(), Error::EBOUNDS);
 
 		this.grow();
 		memmove!<T>(this.data + index + 1, this.data as cptr!<T> + index, this.size - index);
@@ -244,9 +230,7 @@ struct List {
 	}
 
 	func insert(this: &&List!<T>, index: uint, values: Range!<T>) -> void {
-		if index > this.size() {
-			panic(Error::EBOUNDS);
-		}
+		assert(index <= this.size(), Error::EBOUNDS);
 
 		this.grow(this.size() + values.size());
 		memmove!<T>(this.data + index + values.size(), this.data as cptr!<T> + index, this.size - index);
@@ -264,9 +248,7 @@ struct List {
 	}
 
 	func remove(this: &&List!<T>, index: uint) -> void {
-		if index >= this.size() {
-			panic(Error::EBOUNDS);
-		}
+		assert(index < this.size(), Error::EBOUNDS);
 
 		this.data[index].destructor();
 		this.size -= 1u;
@@ -274,13 +256,8 @@ struct List {
 	}
 
 	func remove(this: &&List!<T>, range: NumericRange!<uint>) -> void {
-		if range.start > this.size || range.end > this.size {
-			panic(Error::EBOUNDS);
-		}
-
-		if range.start > range.end || range.step != 1u {
-			panic(Error::EINVAL);
-		}
+		assert(range.end <= this.size, Error::EBOUNDS);
+		assert(range.start <= range.end && range.step == 1, Error::EINVAL);
 
 		for index in range {
 			this.data[index].destructor();
@@ -291,10 +268,6 @@ struct List {
 	}
 
 	func removeLast(this: &&List!<T>) -> void {
-		if this.size == 0 {
-			panic(Error::EBOUNDS);
-		}
-
 		this.remove(this.size - 1);
 	}
 
@@ -360,9 +333,7 @@ struct List {
 			new_data = libc::stdlib::realloc(this.data as vptr, new_capacity * sizeOf!<T>()) as vptr!<T>;
 		}
 
-		if new_data == vptr::null() {
-			panic(Error::ENOMEM);
-		}
+		assert(new_data != vptr::null(), Error::ENOMEM);
 
 		this.data = new_data;
 		this.capacity = new_capacity;

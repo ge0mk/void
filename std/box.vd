@@ -7,13 +7,13 @@ struct Box {
 
 	func constructor(this: &&Box!<T>, @[shallow] other: Box!<T>) -> void {
 		this.data := libc::stdlib::malloc(sizeOf!<T>()) as vptr!<T>;
-		assert(this.data != vptr::null());
+		assert(this.data != vptr::null(), Error::ENOMEM);
 		this.data[0u].constructor(other.data[0u]);
 	}
 
 	func constructor(this: &&Box!<T>, @[shallow] value: T) -> void {
 		this.data := libc::stdlib::malloc(sizeOf!<T>()) as vptr!<T>;
-		assert(this.data != vptr::null());
+		assert(this.data != vptr::null(), Error::ENOMEM);
 		this.data[0u].constructor(value);
 	}
 

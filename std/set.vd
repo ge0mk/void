@@ -249,9 +249,7 @@ struct Set {
 			new_data = libc::stdlib::realloc(this.data as vptr, new_capacity * sizeOf!<T>()) as vptr!<T>;
 		}
 
-		if new_data == vptr::null() {
-			panic(Error::ENOMEM);
-		}
+		assert(new_data != vptr::null(), Error::ENOMEM);
 
 		this.data = new_data;
 		this.capacity = new_capacity;

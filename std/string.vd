@@ -133,30 +133,18 @@ struct String {
 	}
 
 	operator [](this: &String, index: uint) -> &byte {
-		if index >= this.size() {
-			panic(Error::EBOUNDS);
-		}
-
+		assert(index < this.size(), Error::EBOUNDS);
 		return &this.data()[index];
 	}
 
 	operator [](this: &&String, index: uint) -> &&byte {
-		if index >= this.size() {
-			panic(Error::EBOUNDS);
-		}
-
+		assert(index < this.size(), Error::EBOUNDS);
 		return &&this.vdata()[index];
 	}
 
 	operator [](this: &String, range: NumericRange!<uint>) -> Range!<byte> {
-		if range.end > this.size() {
-			panic(Error::EBOUNDS);
-		}
-
-		if range.start > range.end || range.step != 1u {
-			panic(Error::EINVAL);
-		}
-
+		assert(range.end <= this.size(), Error::EBOUNDS);
+		assert(range.start <= range.end && range.step == 1, Error::EINVAL);
 		return Range!<byte>(this.data() + range.start, range.end - range.start);
 	}
 
@@ -193,9 +181,7 @@ struct String {
 	}
 
 	func insert(this: &&String, index: uint, value: byte) -> void {
-		if index > this.size() {
-			panic(Error::EBOUNDS);
-		}
+		assert(index <= this.size(), Error::EBOUNDS);
 
 		this.grow();
 		this._move(index + 1, index);
@@ -209,9 +195,7 @@ struct String {
 	}
 
 	func insert(this: &&String, index: uint, bytes: Range!<byte>) -> void {
-		if index > this.size() {
-			panic(Error::EBOUNDS);
-		}
+		assert(index <= this.size(), Error::EBOUNDS);
 
 		this.grow(this.size() + bytes.size());
 		this._move(index + bytes.size(), index);
@@ -220,22 +204,15 @@ struct String {
 	}
 
 	func remove(this: &&String, index: uint) -> void {
-		if index >= this.size() {
-			panic(Error::EBOUNDS);
-		}
+		assert(index < this.size(), Error::EBOUNDS);
 
 		this._move(index, index + 1);
 		this._setSize(this.size() - 1);
 	}
 
 	func remove(this: &&String, range: NumericRange!<uint>) -> void {
-		if range.start > this.size() || range.end > this.size() {
-			panic(Error::EBOUNDS);
-		}
-
-		if range.start > range.end || range.step != 1u {
-			panic(Error::EINVAL);
-		}
+		assert(range.end <= this.size(), Error::EBOUNDS);
+		assert(range.start <= range.end && range.step == 1, Error::EINVAL);
 
 		this._move(range.start, range.end);
 		this._setSize(this.size() - (range.end - range.start));
@@ -301,13 +278,8 @@ struct String {
 	}
 
 	func replace(this: &&String, range: NumericRange!<uint>, @[shallow] with: String) -> void {
-		if range.start > this.size() || range.end > this.size() {
-			panic(Error::EBOUNDS);
-		}
-
-		if range.start > range.end || range.step != 1u {
-			panic(Error::EINVAL);
-		}
+		assert(range.end <= this.size(), Error::EBOUNDS);
+		assert(range.start <= range.end && range.step == 1u, Error::EINVAL);
 
 		const difference = with.size() as int - range.size() as int;
 		const count = (difference if difference >= 0 else -difference) as uint;
@@ -473,9 +445,7 @@ struct String {
 			new_data = libc::stdlib::realloc(this.data as vptr, new_capacity * sizeOf!<byte>()) as vptr!<byte>;
 		}
 
-		if new_data == vptr::null() {
-			panic(Error::ENOMEM);
-		}
+		assert(new_data != vptr::null(), Error::ENOMEM);
 
 		const size = this.size();
 
