@@ -2528,6 +2528,9 @@ struct TCContext {
 					));
 				}
 				case TemplateParameter: parameter -> match parameter {
+					case Boolean: value -> {
+						result_candidates.append(Expr::Integer(value as int, span, this.program.bool_type));
+					}
 					case Integer: value -> {
 						if expected_type.isIntType() {
 							result_candidates.append(Expr::Integer(value, span, expected_type));
@@ -3776,7 +3779,13 @@ struct TCContext {
 
 		const checked_parameter = this.checkExpr(parameter, Type::unknown(), true);
 		match this.interpret(checked_parameter) {
-			case Integer: val -> return TemplateParameter::Integer(val);
+			case Integer: val -> {
+				if checked_parameter.type == this.program.bool_type {
+					return TemplateParameter::Boolean(val != 0);
+				} else {
+					return TemplateParameter::Integer(val);
+				}
+			}
 			case String: val -> return TemplateParameter::String(val);
 			case TypeRef: type -> return TemplateParameter::Type(type);
 			else -> this.error("invalid template parameter", parameter.span);

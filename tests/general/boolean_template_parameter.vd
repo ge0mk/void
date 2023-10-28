@@ -1,0 +1,11 @@
+import std/core;
+
+template <X: bool>
+func foo() -> bool {
+	return X;
+}
+
+func main() -> void {
+	assert(foo!<true>() == true);
+	assert(foo!<false>() == false);
+}
