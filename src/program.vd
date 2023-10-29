@@ -364,10 +364,6 @@ struct Program {
 		return function;
 	}
 
-	func createFunction(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, template_parameters: &List!<TemplateParameterDecl>, parameter_types: List!<Type>, return_type: Type, body: InlineBuiltinFunction) -> SharedHandle!<FunctionDecl> {
-		return this.createFunction(parent_namespace, name, template_parameters, parameter_types, return_type, FunctionBody::InlineBuiltin(body));
-	}
-
 	func createFunction(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, template_parameters: &List!<TemplateParameterDecl>, parameter_types: &List!<Type>, return_type: Type, body: BuiltinFunction) -> SharedHandle!<FunctionDecl> {
 		return this.createFunction(parent_namespace, name, template_parameters, parameter_types, return_type, FunctionBody::Builtin(body));
 	}
@@ -376,20 +372,12 @@ struct Program {
 		return this.createFunction(parent_namespace, name, template_parameters, List!<Type>(), Type::unknown(), body);
 	}
 
-	func createFunction(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, template_parameters: &List!<TemplateParameterDecl>, body: InlineBuiltinFunction) -> SharedHandle!<FunctionDecl> {
-		return this.createFunction(parent_namespace, name, template_parameters, List!<Type>(), Type::unknown(), FunctionBody::InlineBuiltin(body));
-	}
-
 	func createFunction(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, template_parameters: &List!<TemplateParameterDecl>, body: BuiltinFunction) -> SharedHandle!<FunctionDecl> {
 		return this.createFunction(parent_namespace, name, template_parameters, List!<Type>(), Type::unknown(), FunctionBody::Builtin(body));
 	}
 
 	func createFunction(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, parameter_types: &List!<Type>, return_type: Type, body: FunctionBody) -> SharedHandle!<FunctionDecl> {
 		return this.createFunction(parent_namespace, name, List!<TemplateParameterDecl>(), parameter_types, return_type, body);
-	}
-
-	func createFunction(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, parameter_types: &List!<Type>, return_type: Type, body: InlineBuiltinFunction) -> SharedHandle!<FunctionDecl> {
-		return this.createFunction(parent_namespace, name, List!<TemplateParameterDecl>(), parameter_types, return_type, FunctionBody::InlineBuiltin(body));
 	}
 
 	func createFunction(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, parameter_types: &List!<Type>, return_type: Type, body: BuiltinFunction) -> SharedHandle!<FunctionDecl> {
@@ -1132,6 +1120,32 @@ struct Type {
 			else -> return false;
 		}
 	}
+
+	func getPrimitiveSizeInBits(this: &Type) -> uint {
+		if this.reference_kind != None {
+			return sizeOf!<vptr>() * 8;
+		}
+
+		if this.decl.isEmpty() {
+			return 0;
+		}
+
+		match this.decl.body {
+			case Void -> return 0;
+			case Bool -> return 1;
+			case Byte -> return 8;
+			case Int: bits -> return bits;
+			case UInt: bits -> return bits;
+			case Float: bits -> return bits;
+			case Pointer -> return sizeOf!<vptr>() * 8;
+			case Enum -> return this.decl.id_type.getPrimitiveSizeInBits();
+			else -> return 0;
+		}
+	}
+
+	func getBitMask(this: &Type) -> int {
+		return -1 >> (sizeOf!<uint>() * 8 - this.getPrimitiveSizeInBits()) as int;
+	}
 }
 
 struct FunctionDecl {
@@ -1198,14 +1212,8 @@ struct FunctionDecl {
 				out.push("ExternFunction", true);
 				out.pop();
 			}
-			case InlineBuiltin: f -> {
-				out.push("InlineBuiltinFunction", true);
-				f.dump(&&out);
-				out.pop();
-			}
 			case Builtin: f -> {
 				out.push("BuiltinFunction", true);
-				f.dump(&&out);
 				out.pop();
 			}
 			case Stmt: stmt -> stmt.dump(&&out, true);
@@ -1284,7 +1292,6 @@ variant TypeBody {
 variant FunctionBody {
 	case Empty;
 	case Extern;
-	case InlineBuiltin: InlineBuiltinFunction;
 	case Builtin: BuiltinFunction;
 	case Stmt: Stmt;
 	case Unchecked: ParsedFunctionDecl;
@@ -1369,88 +1376,81 @@ struct VarDecl {
 	}
 }
 
-variant InlineBuiltinFunction {
+enum PrimitiveOp {
+	case NoOp;
+	case ConstNull;
+	case Copy;
+
+	case BitwiseEQ;
+	case BitwiseNE;
+
+	case BitwiseAnd;
+	case BitwiseOr;
+	case BitwiseXOr;
+	case BitwiseNot;
+	case BitwiseShl;
+	case BitwiseLShr;
+	case BitwiseAShr;
+
+	case IntAdd;
+	case IntSub;
+	case IntMul;
+	case IntNeg;
+	case IntInc;
+	case IntDec;
+
+	case SIntLT;
+	case SIntLE;
+	case SIntGT;
+	case SIntGE;
+	case SIntCmp;
+
+	case SIntDiv;
+	case SIntMod;
+
+	case UIntLT;
+	case UIntLE;
+	case UIntGT;
+	case UIntGE;
+	case UIntCmp;
+
+	case UIntDiv;
+	case UIntMod;
+
+	case FloatEQ;
+	case FloatNE;
+	case FloatLT;
+	case FloatLE;
+	case FloatGT;
+	case FloatGE;
+	case FloatCmp;
+
+	case FloatAdd;
+	case FloatSub;
+	case FloatMul;
+	case FloatDiv;
+	case FloatMod;
+	case FloatNeg;
+
+	case Assign = 64;
+
+	operator |(lhs: PrimitiveOp, rhs: PrimitiveOp) -> PrimitiveOp = default;
+
+	func isAssignment(op: PrimitiveOp) -> bool {
+		return ((op as uint) & 64) != 0;
+	}
+
+	func getOp(op: PrimitiveOp) -> PrimitiveOp {
+		return ((op as uint) & ~64u) as PrimitiveOp;
+	}
+}
+
+variant BuiltinFunction {
 	var base_type: Type;
 
-	case NoOp;
+	case Empty;
+	case PrimitiveOp: PrimitiveOp;
 
-	case BitStoreNull;
-	case BitStoreValue;
-
-	case BitOpEQ;
-	case BitOpNE;
-
-	case BitOpAnd;
-	case BitOpOr;
-	case BitOpXOr;
-	case BitOpNot;
-	case BitOpShl;
-	case BitOpLShr;
-	case BitOpAShr;
-	case BitOpAndAssign;
-	case BitOpOrAssign;
-	case BitOpXOrAssign;
-	case BitOpShlAssign;
-	case BitOpLShrAssign;
-	case BitOpAShrAssign;
-
-	case IntOpAdd;
-	case IntOpSub;
-	case IntOpMul;
-	case IntOpNeg;
-	case IntOpInc;
-	case IntOpDec;
-
-	case IntOpAddAssign;
-	case IntOpSubAssign;
-	case IntOpMulAssign;
-
-	case SIntOpLT;
-	case SIntOpLE;
-	case SIntOpGT;
-	case SIntOpGE;
-	case SIntOpCmp;
-
-	case SIntOpDiv;
-	case SIntOpMod;
-
-	case SIntOpDivAssign;
-	case SIntOpModAssign;
-
-	case UIntOpLT;
-	case UIntOpLE;
-	case UIntOpGT;
-	case UIntOpGE;
-	case UIntOpCmp;
-
-	case UIntOpDiv;
-	case UIntOpMod;
-
-	case UIntOpDivAssign;
-	case UIntOpModAssign;
-
-	case FloatOpEQ;
-	case FloatOpNE;
-	case FloatOpLT;
-	case FloatOpLE;
-	case FloatOpGT;
-	case FloatOpGE;
-	case FloatOpCmp;
-
-	case FloatOpAdd;
-	case FloatOpSub;
-	case FloatOpMul;
-	case FloatOpDiv;
-	case FloatOpMod;
-	case FloatOpNeg;
-
-	case FloatOpAddAssign;
-	case FloatOpSubAssign;
-	case FloatOpMulAssign;
-	case FloatOpDivAssign;
-	case FloatOpModAssign;
-
-	case PointerGetNull;
 	case PointerToRef;
 	case RefToPointer;
 	case PointerCast;
@@ -1479,115 +1479,6 @@ variant InlineBuiltinFunction {
 	case ArrayGetSize;
 	case ArrayGetDataPointer;
 
-	func name(this: &InlineBuiltinFunction) -> String {
-		match this {
-			case NoOp -> return "NoOp";
-			case BitStoreNull -> return "BitStoreNull";
-			case BitStoreValue -> return "BitStoreValue";
-			case BitOpEQ -> return "BitOpEQ";
-			case BitOpNE -> return "BitOpNE";
-			case BitOpAnd -> return "BitOpAnd";
-			case BitOpOr -> return "BitOpOr";
-			case BitOpXOr -> return "BitOpXOr";
-			case BitOpNot -> return "BitOpNot";
-			case BitOpShl -> return "BitOpShl";
-			case BitOpLShr -> return "BitOpLShr";
-			case BitOpAShr -> return "BitOpAShr";
-			case BitOpAndAssign -> return "BitOpAndAssign";
-			case BitOpOrAssign -> return "BitOpOrAssign";
-			case BitOpXOrAssign -> return "BitOpXOrAssign";
-			case BitOpShlAssign -> return "BitOpShlAssign";
-			case BitOpLShrAssign -> return "BitOpLShrAssign";
-			case BitOpAShrAssign -> return "BitOpAShrAssign";
-			case IntOpAdd -> return "IntOpAdd";
-			case IntOpSub -> return "IntOpSub";
-			case IntOpMul -> return "IntOpMul";
-			case IntOpNeg -> return "IntOpNeg";
-			case IntOpInc -> return "IntOpInc";
-			case IntOpDec -> return "IntOpDec";
-			case IntOpAddAssign -> return "IntOpAddAssign";
-			case IntOpSubAssign -> return "IntOpSubAssign";
-			case IntOpMulAssign -> return "IntOpMulAssign";
-			case SIntOpLT -> return "SIntOpLT";
-			case SIntOpLE -> return "SIntOpLE";
-			case SIntOpGT -> return "SIntOpGT";
-			case SIntOpGE -> return "SIntOpGE";
-			case SIntOpCmp -> return "SIntOpCmp";
-			case SIntOpDiv -> return "SIntOpDiv";
-			case SIntOpMod -> return "SIntOpMod";
-			case SIntOpDivAssign -> return "SIntOpDivAssign";
-			case SIntOpModAssign -> return "SIntOpModAssign";
-			case UIntOpLT -> return "UIntOpLT";
-			case UIntOpLE -> return "UIntOpLE";
-			case UIntOpGT -> return "UIntOpGT";
-			case UIntOpGE -> return "UIntOpGE";
-			case UIntOpCmp -> return "UIntOpCmp";
-			case UIntOpDiv -> return "UIntOpDiv";
-			case UIntOpMod -> return "UIntOpMod";
-			case UIntOpDivAssign -> return "UIntOpDivAssign";
-			case UIntOpModAssign -> return "UIntOpModAssign";
-			case FloatOpEQ -> return "FloatOpEQ";
-			case FloatOpNE -> return "FloatOpNE";
-			case FloatOpLT -> return "FloatOpLT";
-			case FloatOpLE -> return "FloatOpLE";
-			case FloatOpGT -> return "FloatOpGT";
-			case FloatOpGE -> return "FloatOpGE";
-			case FloatOpCmp -> return "FloatOpCmp";
-			case FloatOpAdd -> return "FloatOpAdd";
-			case FloatOpSub -> return "FloatOpSub";
-			case FloatOpMul -> return "FloatOpMul";
-			case FloatOpDiv -> return "FloatOpDiv";
-			case FloatOpMod -> return "FloatOpMod";
-			case FloatOpNeg -> return "FloatOpNeg";
-			case FloatOpAddAssign -> return "FloatOpAddAssign";
-			case FloatOpSubAssign -> return "FloatOpSubAssign";
-			case FloatOpMulAssign -> return "FloatOpMulAssign";
-			case FloatOpDivAssign -> return "FloatOpDivAssign";
-			case FloatOpModAssign -> return "FloatOpModAssign";
-			case PointerGetNull -> return "PointerGetNull";
-			case PointerToRef -> return "PointerToRef";
-			case RefToPointer -> return "RefToPointer";
-			case PointerCast -> return "PointerCast";
-			case PointerDiff -> return "PointerDiff";
-			case PointerOffset -> return "PointerOffset";
-			case PointerOpIndex -> return "PointerOpIndex";
-			case FunctionPointerCall -> return "FunctionPointerCall";
-			case IntCast -> return "IntCast";
-			case FloatCast -> return "FloatCast";
-			case IntToFloat -> return "IntToFloat";
-			case FloatToInt -> return "FloatToInt";
-			case SizeOf -> return "SizeOf";
-			case AlignmentOf -> return "AlignmentOf";
-			case ReferenceKindOf -> return "ReferenceKindOf";
-			case VariantOpIs -> return "VariantOpIs";
-			case VariantOpUnsafeAs -> return "VariantOpUnsafeAs";
-			case ArrayGetSize -> return "ArrayGetSize";
-			case ArrayGetDataPointer -> return "ArrayGetDataPointer";
-		}
-	}
-
-	func dump(this: &InlineBuiltinFunction, out: &&TreeFormatter) -> void {
-		out.attribute(this.name());
-
-		if this.base_type.isAlive() {
-			out.value(this.base_type.signature());
-		}
-
-		match this {
-			case IntCast: type -> out.value(type.signature());
-			case FloatCast: type -> out.value(type.signature());
-			case IntToFloat: type -> out.value(type.signature());
-			case FloatToInt: type -> out.value(type.signature());
-			case VariantOpUnsafeAs: id -> out.value(format(id));
-			case VariantOpIs: id -> out.value(format(id));
-			else -> {}
-		}
-	}
-}
-
-variant BuiltinFunction {
-	var base_type: Type;
-
 	case StructValueConstructor;
 	case StructDefaultConstructor;
 	case StructCopyConstructor;
@@ -1608,35 +1499,28 @@ variant BuiltinFunction {
 	case ArrayOpAssign;
 	case ArrayOpEqual;
 
-	func name(this: &BuiltinFunction) -> String {
+	func isInlineable(this: &BuiltinFunction) -> bool {
 		match this {
-			case StructValueConstructor -> return "StructValueConstructor";
-			case StructDefaultConstructor -> return "StructDefaultConstructor";
-			case StructCopyConstructor -> return "StructCopyConstructor";
-			case StructDestructor -> return "StructDestructor";
-			case StructOpAssign -> return "StructOpAssign";
-			case StructOpEqual -> return "StructOpEqual";
-			case StructOpCmp -> return "StructOpCmp";
-			case VariantCaseConstructor -> return "VariantCaseConstructor";
-			case VariantCopyConstructor -> return "VariantCopyConstructor";
-			case VariantDestructor -> return "VariantDestructor";
-			case VariantOpAssign -> return "VariantOpAssign";
-			case VariantOpEqual -> return "VariantOpEqual";
-			case ArrayDefaultConstructor -> return "ArrayDefaultConstructor";
-			case ArrayCopyConstructor -> return "ArrayCopyConstructor";
-			case ArrayDestructor -> return "ArrayDestructor";
-			case ArrayOpAssign -> return "ArrayOpAssign";
-			case ArrayOpEqual -> return "ArrayOpEqual";
-		}
-	}
-
-	func dump(this: &BuiltinFunction, out: &&TreeFormatter) -> void {
-		out.attribute(this.name());
-		out.value(this.base_type.signature());
-
-		match this {
-			case VariantCaseConstructor: id -> out.value(format(id));
-			else -> {}
+			case PrimitiveOp
+			| PointerToRef
+			| RefToPointer
+			| PointerCast
+			| PointerDiff
+			| PointerOffset
+			| PointerOpIndex
+			| FunctionPointerCall
+			| IntCast
+			| FloatCast
+			| IntToFloat
+			| FloatToInt
+			| SizeOf
+			| AlignmentOf
+			| ReferenceKindOf
+			| VariantOpUnsafeAs
+			| VariantOpIs
+			| ArrayGetSize
+			| ArrayGetDataPointer -> return true;
+			else -> return false;
 		}
 	}
 }
@@ -1824,21 +1708,21 @@ variant Expr {
 
 	func toBool(this: &Expr) -> bool {
 		match this {
-			case Integer: val -> return val != 0;
+			case Integer: val -> return (val & this.type.getBitMask()) as bool;
 			else -> return false;
 		}
 	}
 
 	func toInt(this: &Expr) -> int {
 		match this {
-			case Integer: val -> return val;
+			case Integer: val -> return (val & this.type.getBitMask());
 			else -> return 0;
 		}
 	}
 
 	func toUInt(this: &Expr) -> uint {
 		match this {
-			case Integer: val -> return val as uint;
+			case Integer: val -> return (val & this.type.getBitMask()) as uint;
 			else -> return 0u;
 		}
 	}

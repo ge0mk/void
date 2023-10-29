@@ -677,7 +677,7 @@ struct TCContext {
 			return;
 		}
 
-		if function.body is Builtin || function.body is InlineBuiltin {
+		if function.body is Builtin {
 			function.parent_namespace.addUncheckedFunctionBody(function);
 			if this.program.options.codegen_asap {
 				if function.body is Builtin || this.program.options.codegen_inline_builtin_functions {
@@ -821,16 +821,18 @@ struct TCContext {
 		this.current_function = function;
 
 		match function.body {
-			case Empty | Extern | InlineBuiltin -> {}
+			case Empty | Extern -> {}
 			case Builtin: builtin_function -> this.validateBuiltinFunctionDecl(builtin_function, function.signature(), function.signature_span);
 			case Stmt -> this.error("function body is already checked", function.span);
 			case Unchecked: &parsed_function -> match parsed_function.body {
 				case ExternFunctionBody -> function.body = FunctionBody::Extern;
 				case DefaultFunctionBody -> {
-					function.body = function.getDefaultFunctionBody();
-					match function.body {
-						case Builtin: builtin_function -> this.validateBuiltinFunctionDecl(builtin_function, function.signature(), function.signature_span);
-						else -> {}
+					const builtin_function = function.getDefaultFunctionBody();
+					if builtin_function is Empty {
+						this.error("cannot generate default function body for this function", function.signature_span);
+					} else {
+						function.body = FunctionBody::Builtin(builtin_function);
+						this.validateBuiltinFunctionDecl(builtin_function, function.signature(), function.signature_span);
 					}
 				}
 				case Compound: &compound_stmt -> this.checkFunctionBody(&&function.operator unwrap(), compound_stmt);
@@ -839,8 +841,13 @@ struct TCContext {
 		}
 
 		if this.program.options.codegen_asap {
-			if !(function.body is InlineBuiltin) || this.program.options.codegen_inline_builtin_functions {
-				this.cg_context.codegenFunctionBody(function);
+			match function.body {
+				case Builtin: builtin_function -> {
+					if !builtin_function.isInlineable() || this.program.options.codegen_inline_builtin_functions {
+						this.cg_context.codegenFunctionBody(function);
+					}
+				}
+				else -> this.cg_context.codegenFunctionBody(function);
 			}
 		}
 
@@ -849,6 +856,10 @@ struct TCContext {
 	}
 
 	func validateBuiltinFunctionDecl(this: &&TCContext, body: BuiltinFunction, caller_signature: String, caller_span: Span) -> void {
+		if body.isInlineable() { // inlineable builtin functions don't call any other functions and thus are always valid
+			return;
+		}
+
 		const parent_type = body.base_type.decl;
 
 		for v in parent_type.member_variables {
@@ -895,6 +906,7 @@ struct TCContext {
 						this.info("required by " + caller_signature, caller_span);
 					}
 				}
+				else -> {}
 			}
 		}
 
@@ -1426,7 +1438,7 @@ struct TCContext {
 				return Stmt::Empty(span);
 			}
 
-			if condition_value.toInt() != 0 {
+			if condition_value.toBool() {
 				return this.checkStmt(if_stmt.then_branch);
 			} else {
 				return this.checkStmt(if_stmt.else_branch);
@@ -1618,7 +1630,7 @@ struct TCContext {
 			var condition_value = this.interpret(condition);
 			this.interpret(condition_cleanup);
 
-			while condition_value.toInt() != 0 {
+			while condition_value.toBool() {
 				const child = this.checkCompoundStmt(parsed_stmt.body, false);
 				if !(child is Empty) {
 					result.append(child);
@@ -1656,7 +1668,7 @@ struct TCContext {
 
 				const condition_value = this.interpret(condition);
 				this.interpret(condition_cleanup);
-			} while condition_value.toInt() != 0;
+			} while condition_value.toBool();
 		} else {
 			const body = this.checkCompoundStmt(parsed_stmt.body, false);
 
@@ -3671,7 +3683,7 @@ struct TCContext {
 		var instance: SharedHandle!<FunctionDecl>;
 
 		match base.body {
-			case InlineBuiltin: builtin_function -> match builtin_function {
+			case Builtin: builtin_function -> match builtin_function {
 				case IntCast
 				| FloatCast
 				| IntToFloat
@@ -3720,7 +3732,7 @@ struct TCContext {
 						else -> panic(Error::EINVAL);
 					}
 
-					instance = this.program.createFunction(base.parent_namespace, name, parameter_types, return_type, FunctionBody::InlineBuiltin(body));
+					instance = this.program.createFunction(base.parent_namespace, name, parameter_types, return_type, FunctionBody::Builtin(body));
 					instance.template_parameters.append(TemplateParameterDecl("Type", this.program.any_concept, false, template_parameters[0u]));
 				}
 				else -> this.error("cannot create template instance of builtin function " + base.signature(), base.signature_span);

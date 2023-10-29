@@ -609,15 +609,7 @@ struct CGContext {
 
 		// codegen body
 		match function.body {
-			case InlineBuiltin: builtin_funcion -> {
-				var parameters: List!<LLVMValueRef>;
-				for i in 0u32..LLVMCountParams(this.current_function) {
-					parameters.append(LLVMGetParam(this.current_function, i));
-				}
-
-				discard LLVMBuildRet(this.builder, this.codegenInlineBuiltinFunctionCall(builtin_funcion, parameters));
-			}
-			case Builtin: builtin_funcion -> this.codegenBuiltinFunction(builtin_funcion, function.signature_span);
+			case Builtin: builtin_function -> this.codegenBuiltinFunction(builtin_function, function.signature_span);
 			case Stmt: &stmt -> this.codegenStmt(stmt);
 			else -> panic("invalid function body for codegen");
 		}
@@ -652,6 +644,7 @@ struct CGContext {
 		const param1 = LLVMGetParam(this.current_function, 1u);
 
 		match function {
+			case Empty -> panic("empty builtin function");
 			case StructValueConstructor -> {
 				for i in 0u..decl.member_variables.size() {
 					const member_ptr = LLVMBuildStructGEP2(this.builder, type, param0, i, "");
@@ -1121,7 +1114,7 @@ struct CGContext {
 						const member_type = decl.member_variables[i].type.decl;
 						sign = this.codegenCall(member_type.op_compare, parameters, ReturnKind::Value, signature_span);
 					} else {
-						sign = this.codegenInlineBuiltinFunctionCall(InlineBuiltinFunction::UIntOpCmp(decl.member_variables[i].type), parameters);
+						sign = this.codegenInlineBuiltinFunctionCall(BuiltinFunction::PrimitiveOp(PrimitiveOp::UIntCmp, decl.member_variables[i].type), parameters);
 					}
 					cmp_values.append(sign);
 					cmp_blocks.append(LLVMGetInsertBlock(this.builder));
@@ -1222,227 +1215,94 @@ struct CGContext {
 				LLVMPositionBuilderAtEnd(this.builder, uneq_block);
 				discard LLVMBuildRet(this.builder, LLVMConstInt(this.bool_type, 0, false));
 			}
+			else -> {
+				var parameters: List!<LLVMValueRef>;
+				for i in 0u32..LLVMCountParams(this.current_function) {
+					parameters.append(LLVMGetParam(this.current_function, i));
+				}
+
+				discard LLVMBuildRet(this.builder, this.codegenInlineBuiltinFunctionCall(function, parameters));
+			}
 		}
 	}
 
-	func codegenInlineBuiltinFunctionCall(this: &&CGContext, function: InlineBuiltinFunction, parameters: &List!<LLVMValueRef>) -> LLVMValueRef {
+	func codegenPrimitiveOp(this: &&CGContext, type: LLVMTypeRef, op: PrimitiveOp, parameters: &List!<LLVMValueRef>) -> LLVMValueRef {
+		var lhs = parameters.at(0u) ?? LLVMValueRef();
+		var rhs = parameters.at(1u) ?? LLVMValueRef();
+		if op.isAssignment() && op.getOp() > Copy {
+			lhs = LLVMBuildLoad2(this.builder, type, lhs, "");
+		}
+
+		var result: LLVMValueRef;
+		match op.getOp() {
+			case NoOp -> {}
+			case ConstNull -> result = LLVMConstNull(type);
+			case Copy -> result = rhs;
+			case BitwiseEQ -> result = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntEQ, lhs, rhs, "");
+			case BitwiseNE -> result = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntNE, lhs, rhs, "");
+			case BitwiseAnd -> result = LLVMBuildAnd(this.builder, lhs, rhs, "");
+			case BitwiseOr -> result = LLVMBuildOr(this.builder, lhs, rhs, "");
+			case BitwiseXOr -> result = LLVMBuildXor(this.builder, lhs, rhs, "");
+			case BitwiseNot -> result = LLVMBuildNot(this.builder, lhs, "");
+			case BitwiseShl -> result = LLVMBuildShl(this.builder, lhs, rhs, "");
+			case BitwiseLShr -> result = LLVMBuildLShr(this.builder, lhs, rhs, "");
+			case BitwiseAShr -> result = LLVMBuildAShr(this.builder, lhs, rhs, "");
+			case IntAdd -> result = LLVMBuildAdd(this.builder, lhs, rhs, "");
+			case IntSub -> result = LLVMBuildSub(this.builder, lhs, rhs, "");
+			case IntMul -> result = LLVMBuildMul(this.builder, lhs, rhs, "");
+			case IntNeg -> result = LLVMBuildNeg(this.builder, lhs, "");
+			case IntInc -> result = LLVMBuildAdd(this.builder, lhs, LLVMConstInt(type, 1, false), "");
+			case IntDec -> result = LLVMBuildSub(this.builder, lhs, LLVMConstInt(type, 1, false), "");
+			case SIntLT -> result = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntSLT, lhs, rhs, "");
+			case SIntLE -> result = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntSLE, lhs, rhs, "");
+			case SIntGT -> result = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntSGT, lhs, rhs, "");
+			case SIntGE -> result = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntSGE, lhs, rhs, "");
+			case SIntCmp -> result = LLVMBuildSub(this.builder,
+				LLVMBuildZExt(this.builder, LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntSGT, lhs, rhs, ""), this.int_type, ""),
+				LLVMBuildZExt(this.builder, LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntSLT, lhs, rhs, ""), this.int_type, ""), ""
+			);
+			case SIntDiv -> result = LLVMBuildSDiv(this.builder, lhs, rhs, "");
+			case SIntMod -> result = LLVMBuildSRem(this.builder, lhs, rhs, "");
+			case UIntLT -> result = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntULT, lhs, rhs, "");
+			case UIntLE -> result = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntULE, lhs, rhs, "");
+			case UIntGT -> result = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntUGT, lhs, rhs, "");
+			case UIntGE -> result = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntUGE, lhs, rhs, "");
+			case UIntCmp -> result = LLVMBuildSub(this.builder,
+				LLVMBuildZExt(this.builder, LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntUGT, lhs, rhs, ""), this.int_type, ""),
+				LLVMBuildZExt(this.builder, LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntULT, lhs, rhs, ""), this.int_type, ""), ""
+			);
+			case UIntDiv -> result = LLVMBuildUDiv(this.builder, lhs, rhs, "");
+			case UIntMod -> result = LLVMBuildURem(this.builder, lhs, rhs, "");
+			case FloatEQ -> result = LLVMBuildFCmp(this.builder, LLVMRealPredicate::LLVMRealOEQ, lhs, rhs, "");
+			case FloatNE -> result = LLVMBuildFCmp(this.builder, LLVMRealPredicate::LLVMRealONE, lhs, rhs, "");
+			case FloatLT -> result = LLVMBuildFCmp(this.builder, LLVMRealPredicate::LLVMRealOLT, lhs, rhs, "");
+			case FloatLE -> result = LLVMBuildFCmp(this.builder, LLVMRealPredicate::LLVMRealOLE, lhs, rhs, "");
+			case FloatGT -> result = LLVMBuildFCmp(this.builder, LLVMRealPredicate::LLVMRealOGT, lhs, rhs, "");
+			case FloatGE -> result = LLVMBuildFCmp(this.builder, LLVMRealPredicate::LLVMRealOGE, lhs, rhs, "");
+			case FloatCmp -> result = LLVMBuildSub(this.builder,
+				LLVMBuildZExt(this.builder, LLVMBuildFCmp(this.builder, LLVMRealPredicate::LLVMRealOGT, lhs, rhs, ""), this.int_type, ""),
+				LLVMBuildZExt(this.builder, LLVMBuildFCmp(this.builder, LLVMRealPredicate::LLVMRealOLT, lhs, rhs, ""), this.int_type, ""), ""
+			);
+			case FloatAdd -> result = LLVMBuildFAdd(this.builder, lhs, rhs, "");
+			case FloatSub -> result = LLVMBuildFSub(this.builder, lhs, rhs, "");
+			case FloatMul -> result = LLVMBuildFMul(this.builder, lhs, rhs, "");
+			case FloatDiv -> result = LLVMBuildFDiv(this.builder, lhs, rhs, "");
+			case FloatMod -> result = LLVMBuildFRem(this.builder, lhs, rhs, "");
+			case FloatNeg -> result = LLVMBuildFNeg(this.builder, lhs, "");
+			case Assign -> {}
+		}
+
+		if op.isAssignment() {
+			discard LLVMBuildStore(this.builder, result, parameters[0u]);
+			return LLVMValueRef();
+		} else {
+			return result;
+		}
+	}
+
+	func codegenInlineBuiltinFunctionCall(this: &&CGContext, function: BuiltinFunction, parameters: &List!<LLVMValueRef>) -> LLVMValueRef {
 		match function {
-			case NoOp -> return LLVMValueRef();
-
-			case BitStoreNull -> {
-				discard LLVMBuildStore(this.builder, LLVMConstNull(this.getType(function.base_type)), parameters[0u]);
-				return LLVMValueRef();
-			}
-			case BitStoreValue -> {
-				discard LLVMBuildStore(this.builder, parameters[1u], parameters[0u]);
-				return LLVMValueRef();
-			}
-
-			case BitOpEQ -> return LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntEQ, parameters[0u], parameters[1u], "");
-			case BitOpNE -> return LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntNE, parameters[0u], parameters[1u], "");
-
-			case BitOpAnd -> return LLVMBuildAnd(this.builder, parameters[0u], parameters[1u], "");
-			case BitOpOr -> return LLVMBuildOr(this.builder, parameters[0u], parameters[1u], "");
-			case BitOpXOr -> return LLVMBuildXor(this.builder, parameters[0u], parameters[1u], "");
-			case BitOpNot -> return LLVMBuildNot(this.builder, parameters[0u], "");
-			case BitOpShl -> return LLVMBuildShl(this.builder, parameters[0u], parameters[1u], "");
-			case BitOpLShr -> return LLVMBuildLShr(this.builder, parameters[0u], parameters[1u], "");
-			case BitOpAShr -> return LLVMBuildAShr(this.builder, parameters[0u], parameters[1u], "");
-
-			case BitOpAndAssign -> {
-				const type = this.getType(function.base_type);
-				const lhs = LLVMBuildLoad2(this.builder, type, parameters[0u], "");
-				const result = LLVMBuildAnd(this.builder, lhs, parameters[1u], "");
-				discard LLVMBuildStore(this.builder, result, parameters[0u]);
-				return LLVMValueRef();
-			}
-			case BitOpOrAssign -> {
-				const type = this.getType(function.base_type);
-				const lhs = LLVMBuildLoad2(this.builder, type, parameters[0u], "");
-				const result = LLVMBuildOr(this.builder, lhs, parameters[1u], "");
-				discard LLVMBuildStore(this.builder, result, parameters[0u]);
-				return LLVMValueRef();
-			}
-			case BitOpXOrAssign -> {
-				const type = this.getType(function.base_type);
-				const lhs = LLVMBuildLoad2(this.builder, type, parameters[0u], "");
-				const result = LLVMBuildXor(this.builder, lhs, parameters[1u], "");
-				discard LLVMBuildStore(this.builder, result, parameters[0u]);
-				return LLVMValueRef();
-			}
-			case BitOpShlAssign -> {
-				const type = this.getType(function.base_type);
-				const lhs = LLVMBuildLoad2(this.builder, type, parameters[0u], "");
-				const result = LLVMBuildShl(this.builder, lhs, parameters[1u], "");
-				discard LLVMBuildStore(this.builder, result, parameters[0u]);
-				return LLVMValueRef();
-			}
-			case BitOpLShrAssign -> {
-				const type = this.getType(function.base_type);
-				const lhs = LLVMBuildLoad2(this.builder, type, parameters[0u], "");
-				const result = LLVMBuildLShr(this.builder, lhs, parameters[1u], "");
-				discard LLVMBuildStore(this.builder, result, parameters[0u]);
-				return LLVMValueRef();
-			}
-			case BitOpAShrAssign -> {
-				const type = this.getType(function.base_type);
-				const lhs = LLVMBuildLoad2(this.builder, type, parameters[0u], "");
-				const result = LLVMBuildAShr(this.builder, lhs, parameters[1u], "");
-				discard LLVMBuildStore(this.builder, result, parameters[0u]);
-				return LLVMValueRef();
-			}
-
-			case IntOpAdd -> return LLVMBuildAdd(this.builder, parameters[0u], parameters[1u], "");
-			case IntOpSub -> return LLVMBuildSub(this.builder, parameters[0u], parameters[1u], "");
-			case IntOpMul -> return LLVMBuildMul(this.builder, parameters[0u], parameters[1u], "");
-			case IntOpNeg -> return LLVMBuildNeg(this.builder, parameters[0u], "");
-
-			case IntOpInc -> {
-				const type = this.getType(function.base_type);
-				const lhs = LLVMBuildLoad2(this.builder, type, parameters[0u], "");
-				const result = LLVMBuildAdd(this.builder, lhs, LLVMConstInt(type, 1, false), "");
-				discard LLVMBuildStore(this.builder, result, parameters[0u]);
-				return LLVMValueRef();
-			}
-			case IntOpDec -> {
-				const type = this.getType(function.base_type);
-				const lhs = LLVMBuildLoad2(this.builder, type, parameters[0u], "");
-				const result = LLVMBuildSub(this.builder, lhs, LLVMConstInt(type, 1, false), "");
-				discard LLVMBuildStore(this.builder, result, parameters[0u]);
-				return LLVMValueRef();
-			}
-
-			case IntOpAddAssign -> {
-				const type = this.getType(function.base_type);
-				const lhs = LLVMBuildLoad2(this.builder, type, parameters[0u], "");
-				const result = LLVMBuildAdd(this.builder, lhs, parameters[1u], "");
-				discard LLVMBuildStore(this.builder, result, parameters[0u]);
-				return LLVMValueRef();
-			}
-			case IntOpSubAssign -> {
-				const type = this.getType(function.base_type);
-				const lhs = LLVMBuildLoad2(this.builder, type, parameters[0u], "");
-				const result = LLVMBuildSub(this.builder, lhs, parameters[1u], "");
-				discard LLVMBuildStore(this.builder, result, parameters[0u]);
-				return LLVMValueRef();
-			}
-			case IntOpMulAssign -> {
-				const type = this.getType(function.base_type);
-				const lhs = LLVMBuildLoad2(this.builder, type, parameters[0u], "");
-				const result = LLVMBuildMul(this.builder, lhs, parameters[1u], "");
-				discard LLVMBuildStore(this.builder, result, parameters[0u]);
-				return LLVMValueRef();
-			}
-
-			case SIntOpLT -> return LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntSLT, parameters[0u], parameters[1u], "");
-			case SIntOpLE -> return LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntSLE, parameters[0u], parameters[1u], "");
-			case SIntOpGT -> return LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntSGT, parameters[0u], parameters[1u], "");
-			case SIntOpGE -> return LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntSGE, parameters[0u], parameters[1u], "");
-			case SIntOpCmp -> return LLVMBuildSub(this.builder, 
-				LLVMBuildZExt(this.builder, LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntSGT, parameters[0u], parameters[1u], ""), this.int_type, ""),
-				LLVMBuildZExt(this.builder, LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntSLT, parameters[0u], parameters[1u], ""), this.int_type, ""), ""
-			);
-
-			case SIntOpDiv -> return LLVMBuildSDiv(this.builder, parameters[0u], parameters[1u], "");
-			case SIntOpMod -> return LLVMBuildSRem(this.builder, parameters[0u], parameters[1u], "");
-
-			case SIntOpDivAssign -> {
-				const type = this.getType(function.base_type);
-				const lhs = LLVMBuildLoad2(this.builder, type, parameters[0u], "");
-				const result = LLVMBuildSDiv(this.builder, lhs, parameters[1u], "");
-				discard LLVMBuildStore(this.builder, result, parameters[0u]);
-				return LLVMValueRef();
-			}
-			case SIntOpModAssign -> {
-				const type = this.getType(function.base_type);
-				const lhs = LLVMBuildLoad2(this.builder, type, parameters[0u], "");
-				const result = LLVMBuildSRem(this.builder, lhs, parameters[1u], "");
-				discard LLVMBuildStore(this.builder, result, parameters[0u]);
-				return LLVMValueRef();
-			}
-
-			case UIntOpLT -> return LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntULT, parameters[0u], parameters[1u], "");
-			case UIntOpLE -> return LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntULE, parameters[0u], parameters[1u], "");
-			case UIntOpGT -> return LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntUGT, parameters[0u], parameters[1u], "");
-			case UIntOpGE -> return LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntUGE, parameters[0u], parameters[1u], "");
-			case UIntOpCmp -> return LLVMBuildSub(this.builder, 
-				LLVMBuildZExt(this.builder, LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntUGT, parameters[0u], parameters[1u], ""), this.int_type, ""),
-				LLVMBuildZExt(this.builder, LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntULT, parameters[0u], parameters[1u], ""), this.int_type, ""), ""
-			);
-
-			case UIntOpDiv -> return LLVMBuildUDiv(this.builder, parameters[0u], parameters[1u], "");
-			case UIntOpMod -> return LLVMBuildURem(this.builder, parameters[0u], parameters[1u], "");
-
-			case UIntOpDivAssign -> {
-				const type = this.getType(function.base_type);
-				const lhs = LLVMBuildLoad2(this.builder, type, parameters[0u], "");
-				const result = LLVMBuildUDiv(this.builder, lhs, parameters[1u], "");
-				discard LLVMBuildStore(this.builder, result, parameters[0u]);
-				return LLVMValueRef();
-			}
-			case UIntOpModAssign -> {
-				const type = this.getType(function.base_type);
-				const lhs = LLVMBuildLoad2(this.builder, type, parameters[0u], "");
-				const result = LLVMBuildURem(this.builder, lhs, parameters[1u], "");
-				discard LLVMBuildStore(this.builder, result, parameters[0u]);
-				return LLVMValueRef();
-			}
-
-			case FloatOpEQ -> return LLVMBuildFCmp(this.builder, LLVMRealPredicate::LLVMRealOEQ, parameters[0u], parameters[1u], "");
-			case FloatOpNE -> return LLVMBuildFCmp(this.builder, LLVMRealPredicate::LLVMRealONE, parameters[0u], parameters[1u], "");
-			case FloatOpLT -> return LLVMBuildFCmp(this.builder, LLVMRealPredicate::LLVMRealOLT, parameters[0u], parameters[1u], "");
-			case FloatOpLE -> return LLVMBuildFCmp(this.builder, LLVMRealPredicate::LLVMRealOLE, parameters[0u], parameters[1u], "");
-			case FloatOpGT -> return LLVMBuildFCmp(this.builder, LLVMRealPredicate::LLVMRealOGT, parameters[0u], parameters[1u], "");
-			case FloatOpGE -> return LLVMBuildFCmp(this.builder, LLVMRealPredicate::LLVMRealOGE, parameters[0u], parameters[1u], "");
-			case FloatOpCmp -> return LLVMBuildSub(this.builder, 
-				LLVMBuildZExt(this.builder, LLVMBuildFCmp(this.builder, LLVMRealPredicate::LLVMRealOGT, parameters[0u], parameters[1u], ""), this.int_type, ""),
-				LLVMBuildZExt(this.builder, LLVMBuildFCmp(this.builder, LLVMRealPredicate::LLVMRealOLT, parameters[0u], parameters[1u], ""), this.int_type, ""), ""
-			);
-
-			case FloatOpAdd -> return LLVMBuildFAdd(this.builder, parameters[0u], parameters[1u], "");
-			case FloatOpSub -> return LLVMBuildFSub(this.builder, parameters[0u], parameters[1u], "");
-			case FloatOpMul -> return LLVMBuildFMul(this.builder, parameters[0u], parameters[1u], "");
-			case FloatOpDiv -> return LLVMBuildFDiv(this.builder, parameters[0u], parameters[1u], "");
-			case FloatOpMod -> return LLVMBuildFRem(this.builder, parameters[0u], parameters[1u], "");
-			case FloatOpNeg -> return LLVMBuildFNeg(this.builder, parameters[0u], "");
-
-			case FloatOpAddAssign -> {
-				const type = this.getType(function.base_type);
-				const lhs = LLVMBuildLoad2(this.builder, type, parameters[0u], "");
-				const result = LLVMBuildFAdd(this.builder, lhs, parameters[1u], "");
-				discard LLVMBuildStore(this.builder, result, parameters[0u]);
-				return LLVMValueRef();
-			}
-			case FloatOpSubAssign -> {
-				const type = this.getType(function.base_type);
-				const lhs = LLVMBuildLoad2(this.builder, type, parameters[0u], "");
-				const result = LLVMBuildFSub(this.builder, lhs, parameters[1u], "");
-				discard LLVMBuildStore(this.builder, result, parameters[0u]);
-				return LLVMValueRef();
-			}
-			case FloatOpMulAssign -> {
-				const type = this.getType(function.base_type);
-				const lhs = LLVMBuildLoad2(this.builder, type, parameters[0u], "");
-				const result = LLVMBuildFMul(this.builder, lhs, parameters[1u], "");
-				discard LLVMBuildStore(this.builder, result, parameters[0u]);
-				return LLVMValueRef();
-			}
-			case FloatOpDivAssign -> {
-				const type = this.getType(function.base_type);
-				const lhs = LLVMBuildLoad2(this.builder, type, parameters[0u], "");
-				const result = LLVMBuildFDiv(this.builder, lhs, parameters[1u], "");
-				discard LLVMBuildStore(this.builder, result, parameters[0u]);
-				return LLVMValueRef();
-			}
-			case FloatOpModAssign -> {
-				const type = this.getType(function.base_type);
-				const lhs = LLVMBuildLoad2(this.builder, type, parameters[0u], "");
-				const result = LLVMBuildFRem(this.builder, lhs, parameters[1u], "");
-				discard LLVMBuildStore(this.builder, result, parameters[0u]);
-				return LLVMValueRef();
-			}
-
-			case PointerGetNull -> return LLVMConstNull(this.getType(function.base_type));
+			case PrimitiveOp: op -> return this.codegenPrimitiveOp(this.getType(function.base_type), op, parameters);
 			case PointerToRef -> return parameters[0u];	// reference & pointer types are the same in llvm
 			case RefToPointer -> return parameters[0u];	// reference & pointer types are the same in llvm
 			case PointerCast -> return parameters[0u];	// all pointer types are the same in llvm
@@ -1569,6 +1429,7 @@ struct CGContext {
 				indices.append(LLVMConstInt(this.int_type, 0, false));
 				return LLVMBuildGEP2(this.builder, this.getType(function.base_type), parameters[0u], indices, "");
 			}
+			else -> panic("builtin function is not inlineable");
 		}
 	}
 
@@ -1845,10 +1706,17 @@ struct CGContext {
 		}
 
 		const result = match function.body {
-			case InlineBuiltin: function -> yield this.codegenInlineBuiltinFunctionCall(function, parameters);
+			case Builtin: builtin_function -> {
+				if builtin_function.isInlineable() {
+					yield this.codegenInlineBuiltinFunctionCall(builtin_function, parameters);
+				} else {
+					const llvm_func = this.getFunction(function);
+					yield LLVMBuildCall2(this.builder, function.llvm_type, llvm_func, parameters, "");
+				}
+			}
 			else -> {
-				const llvm_function = this.getFunction(function);
-				yield LLVMBuildCall2(this.builder, function.llvm_type, llvm_function, parameters, "");
+				const llvm_func = this.getFunction(function);
+				yield LLVMBuildCall2(this.builder, function.llvm_type, llvm_func, parameters, "");
 			}
 		}
 
