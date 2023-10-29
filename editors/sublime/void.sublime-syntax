@@ -54,10 +54,7 @@ contexts:
 
     - match: \bcase\b
       scope: keyword.declaration
-      branch_point: case_stmt
-      branch:
-        - case_stmt
-        - case_decl
+      push: case_stmt
 
     - match: \b(else)\s*->
       captures:
@@ -432,81 +429,51 @@ contexts:
     - include: operand
 
   const_decl:
+    - match: '(\w+)\s*:'
+      captures:
+        1: variable.other.constant
+      set: type
+
     - match: \w+
       scope: variable.other.constant
-      set:
-        - match: '\s*:'
-          set: [var_decl_init, type]
-
-        - include: var_decl_init
-
-  var_decl:
-    - match: \w+
-      scope: variable.other.readwrite
-      set:
-        - match: '\s*:'
-          set: [var_decl_init, type]
-
-        - include: var_decl_init
-
-  var_decl_init:
-    - match: '\s*='
-      scope: keyword.operator.assignment
-      set: [var_decl_end, expr]
-
-    - include: var_decl_end
-
-  var_decl_end:
-    - match: ''
       pop: true
 
-  case_decl:
-    - match: \w+
-      scope: entity.name.constant
-      set:
-        - match: ':'
-          set: [var_decl_init, type]
+  var_decl:
+    - match: '(\w+)\s*:'
+      captures:
+        1: variable.other.readwrite
+      set: type
 
-        - include: var_decl_init
+    - match: \w+
+      scope: variable.other.readwrite
+      pop: true
 
   case_stmt:
-    - match: ''
-      set: [case_stmt_pattern_list, case_stmt_pattern]
+    - match: '([a-zA-Z_]\w*)\s*:\s*(&?&?)(\w+)\s*->'
+      captures:
+        1: entity.name.constant
+        2: keyword.operator
+        3: variable.other.readwrite
+      pop: true
 
-  case_stmt_pattern_list:
-    - match: \|
-      push: case_stmt_pattern
-
-    - match: ':'
-      set: case_stmt_capture
-
-    - match: ->
-      pop: 1 # go to stmt
-
-    - match: '\N'
-      fail: case_stmt
-
-  case_stmt_pattern:
-    - include: operand
+    - match: '([a-zA-Z_]\w*)\s*:'
+      captures:
+        1: entity.name.constant
+      set: type
 
     - match: '[a-zA-Z_]\w*'
       scope: entity.name.constant
+
+    - match: \|
+
+    - match: '->'
       pop: true
 
-    - match: '\N'
-      fail: case_stmt
+    - include: expr_stmt
 
-  case_stmt_capture:
-    - match: \s*(&?&?)(\w+)
-      captures:
-        1: keyword.operator
-        2: variable.other.readwrite
-
-    - match: \s*->
-      pop: 1 # go to stmt
-
-    - match: ''
-      fail: case_stmt
+    - match: ;
+      scope: punctuation.terminator
+      pop: true
 
   operand:
     - include: comments
