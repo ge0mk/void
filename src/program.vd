@@ -475,10 +475,14 @@ struct TemplateParameterDecl {
 
 	func signature(this: &TemplateParameterDecl) -> String {
 		var result = this.name + ": ";
-		result += ("..." if this.is_variadic else "") + this.concept.name;
+		result += ("..." if this.is_variadic else "");
+		result += this.concept.name;
+
 		if !(this.value is None) {
-			result += " = " + format(this.value);
+			result += " = ";
+			result += format(this.value);
 		}
+
 		return result;
 	}
 
@@ -638,7 +642,11 @@ struct Namespace {
 
 	func signature(this: &Namespace) -> String {
 		if this.parent.isAlive() {
-			return this.parent.signature() + "::" + this.name + format(this.template_parameters);
+			var result = this.parent.signature();
+			result += "::";
+			result += this.name;
+			result += format(this.template_parameters);
+			return result;
 		}
 
 		return this.name + format(this.template_parameters);
@@ -1229,7 +1237,9 @@ struct FunctionDecl {
 	func signature(this: &FunctionDecl) -> String {
 		var result = this.parent_namespace.signature();
 
-		result += "::" + this.name + this.template_parameters.format();
+		result += "::";
+		result += this.name;
+		result += this.template_parameters.format();
 		result += "(";
 
 		for i in 0u..this.parameter_types.size() {
@@ -1239,7 +1249,8 @@ struct FunctionDecl {
 			result += this.parameter_types[i].signature();
 		}
 
-		result += ") -> " + this.return_type.signature();
+		result += ") -> ";
+		result += this.return_type.signature();
 		return result;
 	}
 

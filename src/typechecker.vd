@@ -822,7 +822,7 @@ struct TCContext {
 
 		match function.body {
 			case Empty | Extern -> {}
-			case Builtin: builtin_function -> this.validateBuiltinFunctionDecl(builtin_function, function.signature(), function.signature_span);
+			case Builtin: builtin_function -> this.validateBuiltinFunctionDecl(function, builtin_function);
 			case Stmt -> this.error("function body is already checked", function.span);
 			case Unchecked: &parsed_function -> match parsed_function.body {
 				case ExternFunctionBody -> function.body = FunctionBody::Extern;
@@ -832,7 +832,7 @@ struct TCContext {
 						this.error("cannot generate default function body for this function", function.signature_span);
 					} else {
 						function.body = FunctionBody::Builtin(builtin_function);
-						this.validateBuiltinFunctionDecl(builtin_function, function.signature(), function.signature_span);
+						this.validateBuiltinFunctionDecl(function, builtin_function);
 					}
 				}
 				case Compound: &compound_stmt -> this.checkFunctionBody(&&function.operator unwrap(), compound_stmt);
@@ -855,7 +855,7 @@ struct TCContext {
 		this.current_function = prev_function;
 	}
 
-	func validateBuiltinFunctionDecl(this: &&TCContext, body: BuiltinFunction, caller_signature: String, caller_span: Span) -> void {
+	func validateBuiltinFunctionDecl(this: &&TCContext, function: SharedHandle!<FunctionDecl>, body: BuiltinFunction) -> void {
 		if body.isInlineable() { // inlineable builtin functions don't call any other functions and thus are always valid
 			return;
 		}
@@ -873,37 +873,37 @@ struct TCContext {
 				case StructDefaultConstructor | ArrayDefaultConstructor -> {
 					if t.default_constructor.isEmpty() {
 						this.error(t.signature() + " is missing a default constructor", t.name_span);
-						this.info("required by " + caller_signature, caller_span);
+						this.info("required by " + function.signature(), function.signature_span);
 					}
 				}
 				case StructValueConstructor | StructCopyConstructor | VariantCaseConstructor | VariantCopyConstructor | ArrayCopyConstructor -> {
 					if t.copy_constructor.isEmpty() {
 						this.error(t.signature() + " is missing a copy constructor", t.name_span);
-						this.info("required by " + caller_signature, caller_span);
+						this.info("required by " + function.signature(), function.signature_span);
 					}
 				}
 				case StructDestructor | VariantDestructor | ArrayDestructor -> {
 					if t.destructor.isEmpty() {
 						this.error(t.signature() + " is missing a destructor", t.name_span);
-						this.info("required by " + caller_signature, caller_span);
+						this.info("required by " + function.signature(), function.signature_span);
 					}
 				}
 				case StructOpAssign | VariantOpAssign | ArrayOpAssign -> {
 					if t.op_assign.isEmpty() {
 						this.error(t.signature() + " is missing an assignment operator", t.name_span);
-						this.info("required by " + caller_signature, caller_span);
+						this.info("required by " + function.signature(), function.signature_span);
 					}
 				}
 				case StructOpEqual | VariantOpEqual | ArrayOpEqual -> {
 					if t.op_equal.isEmpty() {
 						this.error(t.signature() + " is missing an equal operator", t.name_span);
-						this.info("required by " + caller_signature, caller_span);
+						this.info("required by " + function.signature(), function.signature_span);
 					}
 				}
 				case StructOpCmp -> {
 					if t.op_compare.isEmpty() {
 						this.error(t.signature() + " is missing a compare operator", t.name_span);
-						this.info("required by " + caller_signature, caller_span);
+						this.info("required by " + function.signature(), function.signature_span);
 					}
 				}
 				else -> {}
@@ -921,36 +921,36 @@ struct TCContext {
 				case VariantCaseConstructor: id -> {
 					if id == c.id && t.copy_constructor.isEmpty() {
 						this.error(t.signature() + " is missing a copy constructor", t.name_span);
-						this.info("required by " + caller_signature, caller_span);
+						this.info("required by " + function.signature(), function.signature_span);
 					}
 				}
 				case VariantCopyConstructor -> {
 					if t.copy_constructor.isEmpty() {
 						this.error(t.signature() + " is missing a copy constructor", t.name_span);
-						this.info("required by " + caller_signature, caller_span);
+						this.info("required by " + function.signature(), function.signature_span);
 					}
 				}
 				case VariantDestructor -> {
 					if t.destructor.isEmpty() {
 						this.error(t.signature() + " is missing a destructor", t.name_span);
-						this.info("required by " + caller_signature, caller_span);
+						this.info("required by " + function.signature(), function.signature_span);
 					}
 				}
 				case VariantOpAssign -> {
 					if t.copy_constructor.isEmpty() {
 						this.error(t.signature() + " is missing a copy constructor", t.name_span);
-						this.info("required by " + caller_signature, caller_span);
+						this.info("required by " + function.signature(), function.signature_span);
 					}
 
 					if t.destructor.isEmpty() {
 						this.error(t.signature() + " is missing a destructor", t.name_span);
-						this.info("required by " + caller_signature, caller_span);
+						this.info("required by " + function.signature(), function.signature_span);
 					}
 				}
 				case VariantOpEqual -> {
 					if t.op_equal.isEmpty() {
 						this.error(t.signature() + " is missing an equal operator", t.name_span);
-						this.info("required by " + caller_signature, caller_span);
+						this.info("required by " + function.signature(), function.signature_span);
 					}
 				}
 				else -> {}
@@ -3185,6 +3185,8 @@ struct TCContext {
 		name_segments.removeLast();
 
 		var namespaces_to_search: Set!<SharedHandle!<Namespace>>;
+		namespaces_to_search.grow(8u);
+
 		for n in this.current_namespace.visible_namespaces {
 			const intersecting_segments = n.full_name.intersection(name_segments);
 
@@ -3486,29 +3488,28 @@ struct TCContext {
 	}
 
 	func getMatchingTemplateParameterCount(this: &&TCContext, template_decls: &List!<TemplateParameterDecl>, template_parameters: &List!<TemplateParameter>) -> int {
-		if template_decls.size() == 0 && template_parameters.size() == 0 {
-			return 0;
+		if template_decls.size() == 0 {
+			if template_parameters.size() == 0 {
+				return 0;
+			} else {
+				return -1;
+			}
 		}
+
+		const is_variadic = template_decls[template_decls.size() - 1].is_variadic;
 
 		if template_parameters.size() < template_decls.size() {
-			return -1;
-		}
-
-		const is_variadic = match template_decls.last() {
-			case Some: template_decl -> yield template_decl.is_variadic;
-			else -> yield false;
-		}
-
-		if template_parameters.size() > template_decls.size() && !is_variadic {
+			if !(is_variadic && template_parameters.size() == template_decls.size() - 1) {
+				return -1;
+			}
+		} else if template_parameters.size() > template_decls.size() && !is_variadic {
 			return -1;
 		}
 
 		var count = 0;
 		for i in 0u..template_parameters.size() {
-			const template_parameter = template_parameters[i];
-			const template_parameter_decl = template_decls[uint::min(i, template_decls.size() - 1)];
-
-			if !this.doesConceptAcceptTemplateParameter(template_parameter_decl.concept, template_parameter) {
+			const template_parameter_decl = &template_decls[uint::min(i, template_decls.size() - 1)];
+			if !this.doesConceptAcceptTemplateParameter(template_parameter_decl.concept, template_parameters[i]) {
 				return -1;
 			}
 
@@ -3516,7 +3517,7 @@ struct TCContext {
 				continue;
 			}
 
-			if template_parameter_decl.value != template_parameter {
+			if template_parameter_decl.value != template_parameters[i] {
 				return -1;
 			} else {
 				count += 1;
@@ -3526,8 +3527,8 @@ struct TCContext {
 		return count;
 	}
 
-	func doesConceptAcceptTemplateParameter(this: &&TCContext, concept: SharedHandle!<Concept>, parameter: TemplateParameter) -> bool {
-		match concept.operator unwrap() {
+	func doesConceptAcceptTemplateParameter(this: &&TCContext, concept: &Concept, parameter: &TemplateParameter) -> bool {
+		match concept {
 			case Boolean -> return parameter is Boolean;
 			case Integer -> return parameter is Integer;
 			case String -> return parameter is String;
