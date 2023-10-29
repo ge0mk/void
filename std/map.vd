@@ -88,12 +88,12 @@ struct Map {
 		return this.size == 0u;
 	}
 
-	func keys(this: &Map!<Tkey, Tvalue>) -> Range!<Tkey> {
-		return Range!<Tkey>(this.keys as cptr!<Tkey>, this.size);
+	func keys(this: &Map!<Tkey, Tvalue>) -> Range!<Tkey, false> {
+		return Range!<Tkey, false>(this.keys as cptr!<Tkey>, this.size);
 	}
 
-	func values(this: &Map!<Tkey, Tvalue>) -> Range!<Tvalue> {
-		return Range!<Tvalue>(this.values as cptr!<Tvalue>, this.size);
+	func values(this: &Map!<Tkey, Tvalue>) -> Range!<Tvalue, false> {
+		return Range!<Tvalue, false>(this.values as cptr!<Tvalue>, this.size);
 	}
 
 	func iterator(this: &Map!<Tkey, Tvalue>) -> MapIterator!<Tkey, Tvalue> {

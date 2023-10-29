@@ -65,11 +65,11 @@ struct SharedList {
 		return SharedHandle!<T>(data);
 	}
 
-	func range(this: &SharedList!<T>) -> Range!<SharedHandle!<T>> {
+	func range(this: &SharedList!<T>) -> Range!<SharedHandle!<T>, false> {
 		return this.elements.range();
 	}
 
-	func iterator(this: &SharedList!<T>) -> RangeIterator!<SharedHandle!<T>> {
+	func iterator(this: &SharedList!<T>) -> RangeIterator!<SharedHandle!<T>, false> {
 		return this.elements.iterator();
 	}
 

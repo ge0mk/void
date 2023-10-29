@@ -12,7 +12,7 @@ import program;
 import span;
 import typechecker;
 
-func parseArguments(arguments: Range!<String>) -> Optional!<CompilerOptions> {
+func parseArguments(arguments: Range!<String, false>) -> Optional!<CompilerOptions> {
 	var args_parser = ArgsParser(arguments, "");
 	var options: CompilerOptions;
 
@@ -21,7 +21,7 @@ func parseArguments(arguments: Range!<String>) -> Optional!<CompilerOptions> {
 	subcommands.append("check");
 	subcommands.append("run");
 
-	options.mode = (args_parser.subcommand(subcommands.range()) ?? 0u) as Mode;
+	options.mode = (args_parser.subcommand(Range!<String, false>(subcommands.range())) ?? 0u) as Mode;
 
 	options.dump_tokens = args_parser.flag("t", "dump-tokens", "dump tokens") ?? false;
 	options.dump_ast = args_parser.flag("a", "dump-ast", "dump ast") ?? false;
@@ -119,7 +119,7 @@ func parseArguments(arguments: Range!<String>) -> Optional!<CompilerOptions> {
 	return Some(options);
 }
 
-func main(args: Range!<String>) -> int {
+func main(args: Range!<String, false>) -> int {
 	const options = parseArguments(args) else {
 		return 1;
 	}

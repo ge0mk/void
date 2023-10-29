@@ -15,7 +15,7 @@ alias ParsedArgument = (
 struct ArgsParser {
 	var args: List!<ParsedArgument>;
 
-	func constructor(this: &&ArgsParser, args: Range!<String>, description: String) -> void {
+	func constructor(this: &&ArgsParser, args: Range!<String, false>, description: String) -> void {
 		this.args := ();
 		for i in 1u..args.size() {
 			this.args.append(parseArgument(args[i]));
@@ -137,7 +137,7 @@ struct ArgsParser {
 		return None;
 	}
 
-	func subcommand(this: &&ArgsParser, commands: Range!<String>) -> Optional!<uint> {
+	func subcommand(this: &&ArgsParser, commands: Range!<String, false>) -> Optional!<uint> {
 		if this.args.isEmpty() {
 			return None;
 		} else if !this.args[0u].key.isEmpty() {

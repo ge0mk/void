@@ -46,7 +46,7 @@ struct String {
 		this._fill(0u, fill_char);
 	}
 
-	func constructor(this: &&String, bytes: Range!<byte>) -> void {
+	func constructor(this: &&String, bytes: Range!<byte, false>) -> void {
 		this.constructor();
 
 		if bytes.size() > short_capacity {
@@ -61,7 +61,7 @@ struct String {
 	}
 
 	func fromCString(data: cptr!<byte>) -> String {
-		return String(Range!<byte>(data, strlen(data)));
+		return String(Range!<byte, false>(data, strlen(data)));
 	}
 
 	func fromErrorCode(error: Error) -> String {
@@ -128,8 +128,8 @@ struct String {
 		return this.size() == 0u;
 	}
 
-	func bytes(this: &String) -> Range!<byte> {
-		return Range!<byte>(this.data(), this.size());
+	func bytes(this: &String) -> Range!<byte, false> {
+		return Range!<byte, false>(this.data(), this.size());
 	}
 
 	operator [](this: &String, index: uint) -> &byte {
@@ -142,10 +142,10 @@ struct String {
 		return &&this.vdata()[index];
 	}
 
-	operator [](this: &String, range: NumericRange!<uint>) -> Range!<byte> {
+	operator [](this: &String, range: NumericRange!<uint>) -> Range!<byte, false> {
 		assert(range.end <= this.size(), Error::EBOUNDS);
 		assert(range.start <= range.end && range.step == 1, Error::EINVAL);
-		return Range!<byte>(this.data() + range.start, range.end - range.start);
+		return Range!<byte, false>(this.data() + range.start, range.end - range.start);
 	}
 
 	func substring(this: &String, range: NumericRange!<uint>) -> String {
@@ -174,7 +174,7 @@ struct String {
 		this.append(other.bytes());
 	}
 
-	func append(this: &&String, bytes: Range!<byte>) -> void {
+	func append(this: &&String, bytes: Range!<byte, false>) -> void {
 		this.grow(this.size() + bytes.size());
 		this._copy(this.size(), bytes.data(), bytes.size());
 		this._setSize(this.size() + bytes.size());
@@ -194,7 +194,7 @@ struct String {
 		this.insert(index, other.bytes());
 	}
 
-	func insert(this: &&String, index: uint, bytes: Range!<byte>) -> void {
+	func insert(this: &&String, index: uint, bytes: Range!<byte, false>) -> void {
 		assert(index <= this.size(), Error::EBOUNDS);
 
 		this.grow(this.size() + bytes.size());

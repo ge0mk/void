@@ -29,7 +29,7 @@ struct List {
 		this.size = other.size();
 	}
 
-	func constructor(this: &&List!<T>, range: Range!<T>) -> void {
+	func constructor(this: &&List!<T>, range: Range!<T, false>) -> void {
 		this.data := vptr::null() as vptr!<T>;
 		this.size := 0;
 		this.capacity := 0;
@@ -43,7 +43,7 @@ struct List {
 		this.size = range.size();
 	}
 
-	func constructor(this: &&List!<T>, range: VRange!<T>) -> void {
+	func constructor(this: &&List!<T>, range: Range!<T, true>) -> void {
 		this.data := vptr::null() as vptr!<T>;
 		this.size := 0;
 		this.capacity := 0;
@@ -118,10 +118,16 @@ struct List {
 		return &&this.data[index];
 	}
 
-	operator [](this: &List!<T>, range: NumericRange!<uint>) -> Range!<T> {
+	operator [](this: &List!<T>, range: NumericRange!<uint>) -> Range!<T, false> {
 		assert(range.end <= this.size(), Error::EBOUNDS);
 		assert(range.start <= range.end && range.step == 1, Error::EINVAL);
-		return Range!<T>(this.data as cptr!<T> + range.start, range.end - range.start);
+		return Range!<T, false>(this.data as cptr!<T> + range.start, range.end - range.start);
+	}
+
+	operator [](this: &&List!<T>, range: NumericRange!<uint>) -> Range!<T, true> {
+		assert(range.end <= this.size(), Error::EBOUNDS);
+		assert(range.start <= range.end && range.step == 1, Error::EINVAL);
+		return Range!<T, true>(this.data + range.start, range.end - range.start);
 	}
 
 	func first(this: &List!<T>) -> Optional!<T> {
@@ -140,20 +146,20 @@ struct List {
 		return Some(this.data[this.size - 1u]);
 	}
 
-	func range(this: &List!<T>) -> Range!<T> {
-		return Range!<T>(this.data as cptr!<T>, this.size);
+	func range(this: &List!<T>) -> Range!<T, false> {
+		return Range!<T, false>(this.data as cptr!<T>, this.size);
 	}
 
-	func vrange(this: &&List!<T>) -> VRange!<T> {
-		return VRange!<T>(this.data, this.size);
+	func range(this: &&List!<T>) -> Range!<T, true> {
+		return Range!<T, true>(this.data, this.size);
 	}
 
-	func iterator(this: &List!<T>) -> RangeIterator!<T> {
-		return RangeIterator!<T>(this.data as cptr!<T>, this.data as cptr!<T> + this.size);
+	func iterator(this: &List!<T>) -> RangeIterator!<T, false> {
+		return RangeIterator!<T, false>(this.data as cptr!<T>, this.data as cptr!<T> + this.size);
 	}
 
-	func iterator(this: &&List!<T>) -> VRangeIterator!<T> {
-		return VRangeIterator!<T>(this.data, this.data + this.size);
+	func iterator(this: &&List!<T>) -> RangeIterator!<T, true> {
+		return RangeIterator!<T, true>(this.data, this.data + this.size);
 	}
 
 	func find(this: &List!<T>, @[shallow] value: T) -> Optional!<uint> {
@@ -170,7 +176,7 @@ struct List {
 		return this.find(value) is Some;
 	}
 
-	func startsWith(this: &List!<T>, values: Range!<T>) -> bool {
+	func startsWith(this: &List!<T>, values: Range!<T, false>) -> bool {
 		if values.size() > this.size {
 			return false;
 		}
@@ -184,7 +190,7 @@ struct List {
 		return true;
 	}
 
-	func endsWith(this: &List!<T>, values: Range!<T>) -> bool {
+	func endsWith(this: &List!<T>, values: Range!<T, false>) -> bool {
 		if values.size() > this.size {
 			return false;
 		}
@@ -204,7 +210,7 @@ struct List {
 		this.size += 1u;
 	}
 
-	func append(this: &&List!<T>, values: Range!<T>) -> void {
+	func append(this: &&List!<T>, values: Range!<T, false>) -> void {
 		this.grow(this.size() + values.size());
 
 		var index = 0u;
@@ -229,7 +235,7 @@ struct List {
 		this.size += 1u;
 	}
 
-	func insert(this: &&List!<T>, index: uint, values: Range!<T>) -> void {
+	func insert(this: &&List!<T>, index: uint, values: Range!<T, false>) -> void {
 		assert(index <= this.size(), Error::EBOUNDS);
 
 		this.grow(this.size() + values.size());

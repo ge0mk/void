@@ -6,6 +6,6 @@ import std/range;
 import std/string;
 import std/io;
 
-func main(args: Range!<String>) -> void {
+func main(args: Range!<String, false>) -> void {
 	println(args[1u]);
 }
