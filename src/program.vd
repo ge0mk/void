@@ -79,6 +79,9 @@ struct Program {
 
 	var byte_type: Type;
 
+	var cptr_type_old: Type;
+	var vptr_type_old: Type;
+
 	var cptr_type: Type;
 	var vptr_type: Type;
 
@@ -833,7 +836,7 @@ struct TypeDecl {
 			}
 			case Pointer: pointer_type -> {
 				out.push("PointerTypeDecl", is_last);
-				out.attribute("const" if pointer_type.is_const else "var");
+				out.attribute("var" if pointer_type.is_mutable else "const");
 				out.value(pointer_type.pointee_type.signature());
 			}
 			case Function -> {
@@ -1090,7 +1093,7 @@ struct Type {
 		}
 
 		match this.decl.body {
-			case Pointer: pointer_type -> return pointer_type.is_const;
+			case Pointer: pointer_type -> return !pointer_type.is_mutable;
 			else -> return false;
 		}
 	}
@@ -1288,7 +1291,7 @@ variant TypeBody {
 	// size in bits attached
 	case Float: uint;
 
-	case Pointer: (pointee_type: Type, is_const: bool);
+	case Pointer: (pointee_type: Type, is_mutable: bool);
 	case Function: (parameter_types: List!<Type>, return_type: Type);
 
 	case Tuple;

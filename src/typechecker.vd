@@ -3592,7 +3592,12 @@ struct TCContext {
 						return SharedHandle!<Namespace>();
 					}
 
-					type_instance = this.program.createPtrTypeInstance(base.parent, pointer_type.is_const, pointee_type).decl;
+					if base.name == "ptr" {
+						const is_mutable = (template_parameters[1u] as Boolean).value();
+						type_instance = this.program.createPtrTypeInstance(base.parent, is_mutable, pointee_type).decl;
+					} else {
+						type_instance = this.program.createPtrTypeInstanceOld(base.parent, pointer_type.is_mutable, pointee_type).decl;
+					}
 				}
 				case Function -> {
 					const return_type = (template_parameters[0u] as Type).value();
@@ -3615,8 +3620,8 @@ struct TCContext {
 					var element_ptr_type_template_parameters: List!<TemplateParameter>;
 					element_ptr_type_template_parameters.append(TemplateParameter::Type(element_type));
 
-					const element_cptr_type = this.getType(Name("cptr", element_ptr_type_template_parameters), Span(), false);
-					const element_vptr_type = this.getType(Name("vptr", element_ptr_type_template_parameters), Span(), false);
+					const element_cptr_type = this.getType(Name("ptr", element_ptr_type_template_parameters + TemplateParameter::Boolean(false)), Span(), false);
+					const element_vptr_type = this.getType(Name("ptr", element_ptr_type_template_parameters + TemplateParameter::Boolean(true)), Span(), false);
 
 					type_instance = this.program.createArrayTypeInstance(base.parent, element_type, size as uint, element_cptr_type, element_vptr_type);
 				}

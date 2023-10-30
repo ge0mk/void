@@ -36,11 +36,15 @@ func createCoreDecls(program: &&Program, dest_namespace: SharedHandle!<Namespace
 	// requires ptr-sized signed int type for <=> operator
 	createByteType(&&program, dest_namespace);
 
-	createOpaquePtrType(&&program, dest_namespace, true);
-	createOpaquePtrType(&&program, dest_namespace, false);
+	createOpaquePtrTypeOld(&&program, dest_namespace, false);
+	createOpaquePtrTypeOld(&&program, dest_namespace, true);
 
-	createPtrTypeTemplate(&&program, dest_namespace, true);
-	createPtrTypeTemplate(&&program, dest_namespace, false);
+	createPtrTypeTemplateOld(&&program, dest_namespace, false);
+	createPtrTypeTemplateOld(&&program, dest_namespace, true);
+
+	createOpaquePtrType(&&program, dest_namespace, false);
+	createOpaquePtrType(&&program, dest_namespace, true);
+	createPtrTypeTemplate(&&program, dest_namespace);
 
 	createFunctionTypeTemplate(&&program, dest_namespace);
 
@@ -272,14 +276,14 @@ func createByteType(program: &&Program, dest_namespace: SharedHandle!<Namespace>
 	createBitwiseOperators(&&program, type, type_namespace, false);
 }
 
-func createOpaquePtrType(program: &&Program, dest_namespace: SharedHandle!<Namespace>, is_const: bool) -> void {
-	const type = Type(program.createType(dest_namespace, "cptr" if is_const else "vptr", TypeBody::Pointer((pointee_type: Type::unknown(), is_const: is_const))), ReferenceKind::None);
+func createOpaquePtrTypeOld(program: &&Program, dest_namespace: SharedHandle!<Namespace>, is_mutable: bool) -> void {
+	const type = Type(program.createType(dest_namespace, "vptr" if is_mutable else "cptr", TypeBody::Pointer((pointee_type: Type::unknown(), is_mutable: is_mutable))), ReferenceKind::None);
 	const type_namespace = type.decl.linked_namespace;
 
-	if is_const {
-		program.cptr_type = type;
+	if is_mutable {
+		program.vptr_type_old = type;
 	} else {
-		program.vptr_type = type;
+		program.cptr_type_old = type;
 	}
 
 	createBasicFunctions(&&program, type, type_namespace);
@@ -288,9 +292,9 @@ func createOpaquePtrType(program: &&Program, dest_namespace: SharedHandle!<Names
 	discard program.createFunction(type_namespace, "null", List!<Type>(), type, BuiltinFunction::PrimitiveOp(PrimitiveOp::ConstNull, type));
 }
 
-func createPtrTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>, is_const: bool) -> void {
-	const name = "cptr" if is_const else "vptr";
-	const body = TypeBody::Pointer((pointee_type: Type::unknown(), is_const: is_const));
+func createPtrTypeTemplateOld(program: &&Program, dest_namespace: SharedHandle!<Namespace>, is_mutable: bool) -> void {
+	const name = "vptr" if is_mutable else "cptr";
+	const body = TypeBody::Pointer((pointee_type: Type::unknown(), is_mutable: is_mutable));
 
 	var template_parameters: List!<TemplateParameterDecl>;
 	template_parameters.append(TemplateParameterDecl("Pointee", program.any_concept, false));
@@ -298,9 +302,9 @@ func createPtrTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Nam
 	discard program.createType(dest_namespace, name, template_parameters, body);
 }
 
-func createPtrTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, is_const: bool, pointee_type: Type) -> Type {
-	const name = "cptr" if is_const else "vptr";
-	const body = TypeBody::Pointer((pointee_type: pointee_type, is_const: is_const));
+func createPtrTypeInstanceOld(program: &&Program, dest_namespace: SharedHandle!<Namespace>, is_mutable: bool, pointee_type: Type) -> Type {
+	const name = "vptr" if is_mutable else "cptr";
+	const body = TypeBody::Pointer((pointee_type: pointee_type, is_mutable: is_mutable));
 
 	var template_parameters: List!<TemplateParameterDecl>;
 	template_parameters.append(TemplateParameterDecl("Pointee", program.any_concept, false, TemplateParameter::Type(pointee_type)));
@@ -314,7 +318,7 @@ func createPtrTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Nam
 	const empty_parameter_types = List!<Type>();
 	discard program.createFunction(type_namespace, "null", empty_parameter_types, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::ConstNull, type));
 
-	const pointee_reference_type = pointee_type.constRef() if is_const else pointee_type.varRef();
+	const pointee_reference_type = pointee_type.varRef() if is_mutable else pointee_type.constRef();
 
 	discard program.createUnaryFunction(type_namespace, "value", type, pointee_reference_type, BuiltinFunction::PointerToRef(type));
 	discard program.createUnaryFunction(type_namespace, "addressOf", pointee_reference_type, type, BuiltinFunction::RefToPointer(type));
@@ -324,8 +328,79 @@ func createPtrTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Nam
 	discard program.createBinaryFunction(type_namespace, "operator +", type, program.int_type, type, BuiltinFunction::PointerOffset(type));
 	discard program.createBinaryFunction(type_namespace, "operator +", type, program.uint_type, type, BuiltinFunction::PointerOffset(type));
 
-	discard program.createBinaryFunction(type_namespace, "operator []", type, program.int_type, pointee_type.constRef() if is_const else pointee_type.varRef(), BuiltinFunction::PointerOpIndex(type));
-	discard program.createBinaryFunction(type_namespace, "operator []", type, program.uint_type, pointee_type.constRef() if is_const else pointee_type.varRef(), BuiltinFunction::PointerOpIndex(type));
+	discard program.createBinaryFunction(type_namespace, "operator []", type, program.int_type, pointee_type.varRef() if is_mutable else pointee_type.constRef(), BuiltinFunction::PointerOpIndex(type));
+	discard program.createBinaryFunction(type_namespace, "operator []", type, program.uint_type, pointee_type.varRef() if is_mutable else pointee_type.constRef(), BuiltinFunction::PointerOpIndex(type));
+
+	discard program.createBinaryFunction(type_namespace, "operator ==", type, program.cptr_type_old, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::BitwiseEQ, type));
+	discard program.createBinaryFunction(type_namespace, "operator ==", type, program.vptr_type_old, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::BitwiseEQ, type));
+
+	discard program.createBinaryFunction(type_namespace, "operator !=", type, program.cptr_type_old, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::BitwiseNE, type));
+	discard program.createBinaryFunction(type_namespace, "operator !=", type, program.vptr_type_old, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::BitwiseNE, type));
+
+	discard program.createBinaryFunction(type_namespace, "operator <=>", type, program.cptr_type_old, program.int_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::UIntCmp, type));
+	discard program.createBinaryFunction(type_namespace, "operator <=>", type, program.vptr_type_old, program.int_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::UIntCmp, type));
+
+	return type;
+}
+
+func createOpaquePtrType(program: &&Program, dest_namespace: SharedHandle!<Namespace>, is_mutable: bool) -> void {
+	var template_parameters: List!<TemplateParameterDecl>;
+	template_parameters.append(TemplateParameterDecl("Mutable", program.bool_concept, false, TemplateParameter::Boolean(is_mutable)));
+
+	const body = TypeBody::Pointer((pointee_type: Type::unknown(), is_mutable: is_mutable));
+	const type = Type(program.createType(dest_namespace, "ptr", template_parameters, body), ReferenceKind::None);
+	const type_namespace = type.decl.linked_namespace;
+
+	if is_mutable {
+		program.vptr_type = type;
+	} else {
+		program.cptr_type = type;
+	}
+
+	createBasicFunctions(&&program, type, type_namespace);
+	createIntComparisonOperators(&&program, type, type_namespace, false);
+
+	discard program.createFunction(type_namespace, "null", List!<Type>(), type, BuiltinFunction::PrimitiveOp(PrimitiveOp::ConstNull, type));
+}
+
+func createPtrTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>) -> void {
+	const body = TypeBody::Pointer((pointee_type: Type::unknown(), is_mutable: false));
+
+	var template_parameters: List!<TemplateParameterDecl>;
+	template_parameters.append(TemplateParameterDecl("Pointee", program.any_concept, false));
+	template_parameters.append(TemplateParameterDecl("Mutable", program.bool_concept, false));
+
+	discard program.createType(dest_namespace, "ptr", template_parameters, body);
+}
+
+func createPtrTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, is_mutable: bool, pointee_type: Type) -> Type {
+	const body = TypeBody::Pointer((pointee_type: pointee_type, is_mutable: is_mutable));
+
+	var template_parameters: List!<TemplateParameterDecl>;
+	template_parameters.append(TemplateParameterDecl("Pointee", program.any_concept, false, TemplateParameter::Type(pointee_type)));
+	template_parameters.append(TemplateParameterDecl("Mutable", program.bool_concept, false, TemplateParameter::Boolean(is_mutable)));
+
+	const type = Type(program.createType(dest_namespace, "ptr", template_parameters, body), ReferenceKind::None);
+	const type_namespace = type.decl.linked_namespace;
+
+	createBasicFunctions(&&program, type, type_namespace);
+	createIntComparisonOperators(&&program, type, type_namespace, false);
+
+	const empty_parameter_types = List!<Type>();
+	discard program.createFunction(type_namespace, "null", empty_parameter_types, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::ConstNull, type));
+
+	const pointee_reference_type = pointee_type.varRef() if is_mutable else pointee_type.constRef();
+
+	discard program.createUnaryFunction(type_namespace, "value", type, pointee_reference_type, BuiltinFunction::PointerToRef(type));
+	discard program.createUnaryFunction(type_namespace, "addressOf", pointee_reference_type, type, BuiltinFunction::RefToPointer(type));
+
+	discard program.createBinaryFunction(type_namespace, "operator -", type, type, program.int_type, BuiltinFunction::PointerDiff(type));
+
+	discard program.createBinaryFunction(type_namespace, "operator +", type, program.int_type, type, BuiltinFunction::PointerOffset(type));
+	discard program.createBinaryFunction(type_namespace, "operator +", type, program.uint_type, type, BuiltinFunction::PointerOffset(type));
+
+	discard program.createBinaryFunction(type_namespace, "operator []", type, program.int_type, pointee_type.varRef() if is_mutable else pointee_type.constRef(), BuiltinFunction::PointerOpIndex(type));
+	discard program.createBinaryFunction(type_namespace, "operator []", type, program.uint_type, pointee_type.varRef() if is_mutable else pointee_type.constRef(), BuiltinFunction::PointerOpIndex(type));
 
 	discard program.createBinaryFunction(type_namespace, "operator ==", type, program.cptr_type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::BitwiseEQ, type));
 	discard program.createBinaryFunction(type_namespace, "operator ==", type, program.vptr_type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::BitwiseEQ, type));
