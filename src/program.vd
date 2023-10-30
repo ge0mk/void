@@ -79,9 +79,6 @@ struct Program {
 
 	var byte_type: Type;
 
-	var cptr_type_old: Type;
-	var vptr_type_old: Type;
-
 	var cptr_type: Type;
 	var vptr_type: Type;
 

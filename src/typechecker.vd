@@ -3592,12 +3592,8 @@ struct TCContext {
 						return SharedHandle!<Namespace>();
 					}
 
-					if base.name == "ptr" {
-						const is_mutable = (template_parameters[1u] as Boolean).value();
-						type_instance = this.program.createPtrTypeInstance(base.parent, is_mutable, pointee_type).decl;
-					} else {
-						type_instance = this.program.createPtrTypeInstanceOld(base.parent, pointer_type.is_mutable, pointee_type).decl;
-					}
+					const is_mutable = (template_parameters[1u] as Boolean).value();
+					type_instance = this.program.createPtrTypeInstance(base.parent, is_mutable, pointee_type).decl;
 				}
 				case Function -> {
 					const return_type = (template_parameters[0u] as Type).value();
