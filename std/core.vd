@@ -333,7 +333,7 @@ enum Error: i32 {
 	case EOF = -1;
 
 	@[extern_name: "error_toCString"]
-	func toCString(this: Error) -> cptr!<byte> = extern;
+	func toCString(this: Error) -> ptr!<byte, false> = extern;
 }
 
 @[extern_name: "error_panic"]

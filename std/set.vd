@@ -6,25 +6,25 @@ import std/libc/string;
 
 template <T: type>
 struct Set {
-	var data: vptr!<T>;
+	var data: ptr!<T, true>;
 	var size: uint;
 	var capacity: uint;
 
 	func constructor(this: &&Set!<T>) -> void {
-		this.data := vptr::null() as vptr!<T>;
-		this.size := 0;
-		this.capacity := 0;
+		this.data := ();
+		this.size := ();
+		this.capacity := ();
 	}
 
 	func constructor(this: &&Set!<T>, range: Range!<T, false>) -> void {
-		this.data := vptr::null() as vptr!<T>;
-		this.size := 0;
-		this.capacity := 0;
+		this.data := ();
+		this.size := ();
+		this.capacity := ();
 		this.add(range);
 	}
 
 	func constructor(this: &&Set!<T>, other: Set!<T>) -> void {
-		this.data := vptr::null() as vptr!<T>;
+		this.data := ptr!<T, true>::null();
 		this.size := 0;
 		this.capacity := 0;
 
@@ -48,8 +48,8 @@ struct Set {
 	func destructor(this: &&Set!<T>) -> void {
 		this.clear();
 
-		if this.data != vptr::null() {
-			libc::stdlib::free(this.data as vptr);
+		if this.data != ptr!<T, true>::null() {
+			free!<T>(this.data);
 		}
 	}
 
@@ -61,16 +61,16 @@ struct Set {
 		return this.size == 0u;
 	}
 
-	func data(this: &Set!<T>) -> cptr!<T> {
-		return this.data as cptr!<T>;
+	func data(this: &Set!<T>) -> ptr!<T, false> {
+		return this.data as ptr!<T, false>;
 	}
 
 	func range(this: &Set!<T>) -> Range!<T, false> {
-		return Range!<T, false>(this.data as cptr!<T>, this.size);
+		return Range!<T, false>(this.data as ptr!<T, false>, this.size);
 	}
 
 	func iterator(this: &Set!<T>) -> RangeIterator!<T, false> {
-		return RangeIterator!<T, false>(this.data as cptr!<T>, this.data as cptr!<T> + this.size);
+		return RangeIterator!<T, false>(this.data as ptr!<T, false>, this.data as ptr!<T, false> + this.size);
 	}
 
 	func getInsertPos(this: &Set!<T>, @[shallow] value: T, exact_match: &&bool) -> uint {
@@ -109,7 +109,7 @@ struct Set {
 
 		this.grow();
 
-		memmove!<T>(this.data + index + 1, this.data as cptr!<T> + index, this.size - index);
+		memmove!<T>(this.data + index + 1, this.data as ptr!<T, false> + index, this.size - index);
 
 		this.data[index].constructor(value);
 		this.size += 1u;
@@ -136,7 +136,7 @@ struct Set {
 
 		this.data[index].destructor();
 		this.size -= 1u;
-		memmove!<T>(this.data + index, this.data as cptr!<T> + index + 1, this.size - index);
+		memmove!<T>(this.data + index, this.data as ptr!<T, false> + index + 1, this.size - index);
 	}
 
 	func remove(this: &&Set!<T>, range: Range!<T, false>) -> void {
@@ -242,14 +242,14 @@ struct Set {
 			return;
 		}
 
-		var new_data: vptr!<T>;
-		if this.data == vptr::null() {
-			new_data = libc::stdlib::malloc(new_capacity * sizeOf!<T>()) as vptr!<T>;
+		var new_data: ptr!<T, true>;
+		if this.data == ptr!<T, true>::null() {
+			new_data = malloc!<T>(new_capacity);
 		} else {
-			new_data = libc::stdlib::realloc(this.data as vptr, new_capacity * sizeOf!<T>()) as vptr!<T>;
+			new_data = realloc!<T>(this.data, new_capacity);
 		}
 
-		assert(new_data != vptr::null(), Error::ENOMEM);
+		assert(new_data != ptr!<T, true>::null(), Error::ENOMEM);
 
 		this.data = new_data;
 		this.capacity = new_capacity;

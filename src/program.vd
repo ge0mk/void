@@ -160,7 +160,7 @@ struct Program {
 		for i in 0u..options.import_search_paths.size() {
 			var ns = this.namespaces.append(Namespace(format(i), List!<TemplateParameterDecl>(), SharedHandle!<Namespace>()));
 
-			if this.di_builder != vptr::null() {
+			if this.di_builder != LLVMDIBuilderRef::null() {
 				ns.llvm_di = LLVMDIBuilderCreateNameSpace(this.di_builder, this.files[0u].llvm_di_module, ns.name, true);
 			}
 
@@ -182,7 +182,7 @@ struct Program {
 	}
 
 	func destructor(this: &&Program) -> void {
-		if this.di_builder != vptr::null() {
+		if this.di_builder != LLVMDIBuilderRef::null() {
 			LLVMDisposeDIBuilder(this.di_builder);
 		}
 
@@ -308,7 +308,7 @@ struct Program {
 		}
 
 		// initialize llvm debug info
-		if this.di_builder != vptr::null() {
+		if this.di_builder != LLVMDIBuilderRef::null() {
 			child.llvm_di = LLVMDIBuilderCreateNameSpace(this.di_builder, parent_namespace.llvm_di, child.name, true);
 		}
 
@@ -410,7 +410,7 @@ struct Program {
 	}
 
 	func finalizeDI(this: &Program) -> void {
-		if this.di_builder != vptr::null() {
+		if this.di_builder != LLVMDIBuilderRef::null() {
 			LLVMDIBuilderFinalize(this.di_builder);
 		}
 	}
@@ -1134,7 +1134,7 @@ struct Type {
 
 	func getPrimitiveSizeInBits(this: &Type) -> uint {
 		if this.reference_kind != None {
-			return sizeOf!<vptr>() * 8;
+			return sizeOf!<ptr!<false>>() * 8;
 		}
 
 		if this.decl.isEmpty() {
@@ -1148,7 +1148,7 @@ struct Type {
 			case Int: bits -> return bits;
 			case UInt: bits -> return bits;
 			case Float: bits -> return bits;
-			case Pointer -> return sizeOf!<vptr>() * 8;
+			case Pointer -> return sizeOf!<ptr!<false>>() * 8;
 			case Enum -> return this.decl.id_type.getPrimitiveSizeInBits();
 			else -> return 0;
 		}

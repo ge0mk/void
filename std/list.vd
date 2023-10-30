@@ -6,20 +6,20 @@ import std/libc/string;
 
 template <T: type>
 struct List {
-	var data: vptr!<T>;
+	var data: ptr!<T, true>;
 	var size: uint;
 	var capacity: uint;
 
 	func constructor(this: &&List!<T>) -> void {
-		this.data := vptr::null() as vptr!<T>;
-		this.size := 0;
-		this.capacity := 0;
+		this.data := ();
+		this.size := ();
+		this.capacity := ();
 	}
 
 	func constructor(this: &&List!<T>, other: List!<T>) -> void {
-		this.data := vptr::null() as vptr!<T>;
-		this.size := 0;
-		this.capacity := 0;
+		this.data := ();
+		this.size := ();
+		this.capacity := ();
 
 		this.grow(other.size());
 
@@ -30,9 +30,9 @@ struct List {
 	}
 
 	func constructor(this: &&List!<T>, range: Range!<T, false>) -> void {
-		this.data := vptr::null() as vptr!<T>;
-		this.size := 0;
-		this.capacity := 0;
+		this.data := ();
+		this.size := ();
+		this.capacity := ();
 
 		this.grow(range.size());
 
@@ -44,9 +44,9 @@ struct List {
 	}
 
 	func constructor(this: &&List!<T>, range: Range!<T, true>) -> void {
-		this.data := vptr::null() as vptr!<T>;
-		this.size := 0;
-		this.capacity := 0;
+		this.data := ();
+		this.size := ();
+		this.capacity := ();
 
 		this.grow(range.size());
 
@@ -58,9 +58,9 @@ struct List {
 	}
 
 	func constructor(this: &&List!<T>, size: uint, @[shallow] value: T) -> void {
-		this.data := vptr::null() as vptr!<T>;
-		this.size := 0;
-		this.capacity := 0;
+		this.data := ();
+		this.size := ();
+		this.capacity := ();
 
 		this.grow(size);
 
@@ -83,8 +83,8 @@ struct List {
 	func destructor(this: &&List!<T>) -> void {
 		this.clear();
 
-		if this.data != vptr::null() {
-			libc::stdlib::free(this.data as vptr);
+		if this.data != ptr!<T, true>::null() {
+			free!<T>(this.data);
 		}
 	}
 
@@ -96,8 +96,12 @@ struct List {
 		return this.size == 0u;
 	}
 
-	func data(this: &List!<T>) -> cptr!<T> {
-		return this.data as cptr!<T>;
+	func data(this: &List!<T>) -> ptr!<T, false> {
+		return this.data as ptr!<T, false>;
+	}
+
+	func data(this: &&List!<T>) -> ptr!<T, true> {
+		return this.data as ptr!<T, true>;
 	}
 
 	func at(this: &List!<T>, index: uint) -> Optional!<T> {
@@ -121,7 +125,7 @@ struct List {
 	operator [](this: &List!<T>, range: NumericRange!<uint>) -> Range!<T, false> {
 		assert(range.end <= this.size(), Error::EBOUNDS);
 		assert(range.start <= range.end && range.step == 1, Error::EINVAL);
-		return Range!<T, false>(this.data as cptr!<T> + range.start, range.end - range.start);
+		return Range!<T, false>(this.data as ptr!<T, false> + range.start, range.end - range.start);
 	}
 
 	operator [](this: &&List!<T>, range: NumericRange!<uint>) -> Range!<T, true> {
@@ -147,7 +151,7 @@ struct List {
 	}
 
 	func range(this: &List!<T>) -> Range!<T, false> {
-		return Range!<T, false>(this.data as cptr!<T>, this.size);
+		return Range!<T, false>(this.data as ptr!<T, false>, this.size);
 	}
 
 	func range(this: &&List!<T>) -> Range!<T, true> {
@@ -155,7 +159,7 @@ struct List {
 	}
 
 	func iterator(this: &List!<T>) -> RangeIterator!<T, false> {
-		return RangeIterator!<T, false>(this.data as cptr!<T>, this.data as cptr!<T> + this.size);
+		return RangeIterator!<T, false>(this.data as ptr!<T, false>, this.data as ptr!<T, false> + this.size);
 	}
 
 	func iterator(this: &&List!<T>) -> RangeIterator!<T, true> {
@@ -229,7 +233,7 @@ struct List {
 		assert(index <= this.size(), Error::EBOUNDS);
 
 		this.grow();
-		memmove!<T>(this.data + index + 1, this.data as cptr!<T> + index, this.size - index);
+		memmove!<T>(this.data + index + 1, this.data as ptr!<T, false> + index, this.size - index);
 
 		this.data[index].constructor(value);
 		this.size += 1u;
@@ -239,7 +243,7 @@ struct List {
 		assert(index <= this.size(), Error::EBOUNDS);
 
 		this.grow(this.size() + values.size());
-		memmove!<T>(this.data + index + values.size(), this.data as cptr!<T> + index, this.size - index);
+		memmove!<T>(this.data + index + values.size(), this.data as ptr!<T, false> + index, this.size - index);
 
 		var offset = index;
 		for element in values {
@@ -258,7 +262,7 @@ struct List {
 
 		this.data[index].destructor();
 		this.size -= 1u;
-		memmove!<T>(this.data + index, this.data as cptr!<T> + index + 1, this.size - index);
+		memmove!<T>(this.data + index, this.data as ptr!<T, false> + index + 1, this.size - index);
 	}
 
 	func remove(this: &&List!<T>, range: NumericRange!<uint>) -> void {
@@ -270,7 +274,7 @@ struct List {
 		}
 
 		this.size -= range.end - range.start;
-		memmove!<T>(this.data + range.start, this.data as cptr!<T> + range.end, this.size - range.start);
+		memmove!<T>(this.data + range.start, this.data as ptr!<T, false> + range.end, this.size - range.start);
 	}
 
 	func removeLast(this: &&List!<T>) -> void {
@@ -332,14 +336,14 @@ struct List {
 			return;
 		}
 
-		var new_data: vptr!<T>;
-		if this.data == vptr::null() {
-			new_data = libc::stdlib::malloc(new_capacity * sizeOf!<T>()) as vptr!<T>;
+		var new_data: ptr!<T, true>;
+		if this.data == ptr!<T, true>::null() {
+			new_data = malloc!<T>(new_capacity);
 		} else {
-			new_data = libc::stdlib::realloc(this.data as vptr, new_capacity * sizeOf!<T>()) as vptr!<T>;
+			new_data = realloc!<T>(this.data, new_capacity);
 		}
 
-		assert(new_data != vptr::null(), Error::ENOMEM);
+		assert(new_data != ptr!<T, true>::null(), Error::ENOMEM);
 
 		this.data = new_data;
 		this.capacity = new_capacity;

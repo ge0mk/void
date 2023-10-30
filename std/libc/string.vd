@@ -1,29 +1,29 @@
 import std/core;
 import std/libc/errno;
 
-func strlen(str: cptr!<byte>) -> uint = extern;
-func strerror(error: Error) -> cptr!<byte> = extern;
-func strncmp(lhs: cptr!<byte>, rhs: cptr!<byte>, n: uint) -> i32 = extern;
+func strlen(str: ptr!<byte, false>) -> uint = extern;
+func strerror(error: Error) -> ptr!<byte, false> = extern;
+func strncmp(lhs: ptr!<byte, false>, rhs: ptr!<byte, false>, n: uint) -> i32 = extern;
 
-func memchr(s: cptr!<byte>, c: i32, n: uint) -> cptr!<byte> = extern;
-func memrchr(s: cptr!<byte>, c: i32, n: uint) -> cptr!<byte> = extern;
-func memmem(haystack: cptr!<byte>, haystack_len: uint, needle: cptr!<byte>, needle_len: uint) -> cptr!<byte> = extern;
+func memchr(s: ptr!<byte, false>, c: i32, n: uint) -> ptr!<byte, false> = extern;
+func memrchr(s: ptr!<byte, false>, c: i32, n: uint) -> ptr!<byte, false> = extern;
+func memmem(haystack: ptr!<byte, false>, haystack_len: uint, needle: ptr!<byte, false>, needle_len: uint) -> ptr!<byte, false> = extern;
 
-func memcpy(dest: vptr, src: cptr, n: uint) -> vptr = extern;
-func memmove(dest: vptr, src: cptr, n: uint) -> vptr = extern;
-func memset(data: vptr, c: i32, n: uint) -> vptr = extern;
+func memcpy(dest: ptr!<true>, src: ptr!<false>, n: uint) -> ptr!<true> = extern;
+func memmove(dest: ptr!<true>, src: ptr!<false>, n: uint) -> ptr!<true> = extern;
+func memset(data: ptr!<true>, c: i32, n: uint) -> ptr!<true> = extern;
 
 template <T: type>
-func memcpy(dest: vptr!<T>, src: cptr!<T>, n: uint) -> void {
-	discard memcpy(dest as vptr, src as cptr, n * sizeOf!<T>());
+func memcpy(dest: ptr!<T, true>, src: ptr!<T, false>, n: uint) -> void {
+	discard memcpy(dest as ptr!<true>, src as ptr!<false>, n * sizeOf!<T>());
 }
 
 template <T: type>
-func memmove(dest: vptr!<T>, src: cptr!<T>, n: uint) -> void {
-	discard memmove(dest as vptr, src as cptr, n * sizeOf!<T>());
+func memmove(dest: ptr!<T, true>, src: ptr!<T, false>, n: uint) -> void {
+	discard memmove(dest as ptr!<true>, src as ptr!<false>, n * sizeOf!<T>());
 }
 
 template <T: type>
-func memset(dest: vptr!<T>, val: byte, n: uint) -> void {
-	discard memset(dest as vptr, val as i32, n * sizeOf!<T>());
+func memset(dest: ptr!<T, true>, val: byte, n: uint) -> void {
+	discard memset(dest as ptr!<true>, val as i32, n * sizeOf!<T>());
 }

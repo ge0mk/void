@@ -116,17 +116,17 @@ def main(args):
 			if t.startswith("const "):
 				pointee = parse_type(t[6:-1])
 				if pointee == "void":
-					return "cptr"
+					return "ptr!<false>"
 				else:
-					return "cptr!<" + pointee + ">"
+					return "ptr!<" + pointee + ", false>"
 			else:
 				pointee = parse_type(t[:-1])
 				if pointee == "void":
-					return "vptr"
+					return "ptr!<true>"
 				else:
-					return "vptr!<" + parse_type(t[:-1]) + ">"
+					return "ptr!<" + parse_type(t[:-1]) + ", true>"
 		elif t.endswith("*const"):
-			return "cptr!<" + parse_type(t[:-6]) + ">"
+			return "ptr!<" + parse_type(t[:-6]) + ", false>"
 		elif "(*)" in t:
 			sep = t.find("(*)")
 			return_type = parse_type(t[:sep])

@@ -7,7 +7,7 @@ import std/libc/stdlib;
 import std/libc/string;
 
 struct String {
-	var data: vptr!<byte>;
+	var data: ptr!<byte, true>;
 	var size: uint;
 	var capacity: uint;
 	var short_size_and_flags: uint;
@@ -37,7 +37,7 @@ struct String {
 
 		if count > short_capacity {
 			this._setIsShort(false);
-			this.data = libc::stdlib::malloc(count * sizeOf!<byte>()) as vptr!<byte>;
+			this.data = malloc!<byte>(count);
 		}
 
 		this._setSize(count);
@@ -51,32 +51,32 @@ struct String {
 
 		if bytes.size() > short_capacity {
 			this._setIsShort(false);
-			this.data = libc::stdlib::malloc(bytes.size() * sizeOf!<byte>()) as vptr!<byte>;
+			this.data = malloc!<byte>(bytes.size());
 		}
 
-		memcpy!<byte>(this.vdata(), bytes.data(), bytes.size());
+		this._copy(0u, bytes.data(), bytes.size());
 
 		this._setSize(bytes.size());
 		this._setCapacity(bytes.size());
 	}
 
-	func fromCString(data: cptr!<byte>) -> String {
+	func fromCString(data: ptr!<byte, false>) -> String {
 		return String(Range!<byte, false>(data, strlen(data)));
 	}
 
 	func fromErrorCode(error: Error) -> String {
-		return String::fromCString(libc::string::strerror(error));
+		return String::fromCString(strerror(error));
 	}
 
 	operator =(this: &&String, other: String) -> void {
 		this.grow(other.size());
-		memcpy!<byte>(this.vdata(), other.data(), other.size());
+		this._copy(0u, other.data(), other.size());
 		this._setSize(other.size());
 	}
 
 	func destructor(this: &&String) -> void {
 		if this.isOwner() && !this.isShort() {
-			libc::stdlib::free(this.data as vptr);
+			free!<byte>(this.data);
 		}
 	}
 
@@ -108,19 +108,19 @@ struct String {
 		}
 	}
 
-	func data(this: &String) -> cptr!<byte> {
+	func data(this: &String) -> ptr!<byte, false> {
 		if this.isShort() {
-			return cptr!<vptr!<byte>>::addressOf(&this.data) as cptr!<byte>;
+			return ptr!<ptr!<byte, true>, false>::addressOf(&this.data) as ptr!<byte, false>;
 		} else {
-			return this.data as cptr!<byte>;
+			return this.data as ptr!<byte, false>;
 		}
 	}
 
-	func vdata(this: &&String) -> vptr!<byte> {
+	func vdata(this: &&String) -> ptr!<byte, true> {
 		if this.isShort() {
-			return vptr!<vptr!<byte>>::addressOf(&&this.data) as vptr!<byte>;
+			return ptr!<ptr!<byte, true>, true>::addressOf(&&this.data) as ptr!<byte, true>;
 		} else {
-			return this.data as vptr!<byte>;
+			return this.data as ptr!<byte, true>;
 		}
 	}
 
@@ -223,8 +223,8 @@ struct String {
 			return None;
 		}
 
-		const pos = libc::string::memchr(this.data() + start, value as i32, this.size() - start);
-		if pos == cptr::null() {
+		const pos = memchr(this.data() + start, value as i32, this.size() - start);
+		if pos == ptr!<byte, false>::null() {
 			return None;
 		}
 
@@ -236,8 +236,8 @@ struct String {
 			return None;
 		}
 
-		const pos = libc::string::memmem(this.data() + start, this.size() - start, needle.data(), needle.size());
-		if pos == cptr::null() {
+		const pos = memmem(this.data() + start, this.size() - start, needle.data(), needle.size());
+		if pos == ptr!<byte, false>::null() {
 			return None;
 		}
 
@@ -249,8 +249,8 @@ struct String {
 			return None;
 		}
 
-		const pos = libc::string::memrchr(this.data(), value as i32, this.size() - end);
-		if pos == cptr::null() {
+		const pos = memrchr(this.data(), value as i32, this.size() - end);
+		if pos == ptr!<byte, false>::null() {
 			return None;
 		}
 
@@ -438,14 +438,14 @@ struct String {
 			return;
 		}
 
-		var new_data = vptr::null() as vptr!<byte>;
+		var new_data = ptr!<byte, true>::null();
 		if !this.isOwner() || this.isShort() {
-			new_data = libc::stdlib::malloc(new_capacity * sizeOf!<byte>()) as vptr!<byte>;
+			new_data = malloc!<byte>(new_capacity);
 		} else {
-			new_data = libc::stdlib::realloc(this.data as vptr, new_capacity * sizeOf!<byte>()) as vptr!<byte>;
+			new_data = realloc!<byte>(this.data, new_capacity);
 		}
 
-		assert(new_data != vptr::null(), Error::ENOMEM);
+		assert(new_data != ptr!<byte, true>::null(), Error::ENOMEM);
 
 		const size = this.size();
 
@@ -485,19 +485,19 @@ struct String {
 	}
 
 	func _fill(this: &&String, start: uint, fill_char: byte) -> void {
-		memset!<byte>(this.vdata() + start, fill_char, this.size() - start);
+		memset!<byte>(this.vdata() as ptr!<byte, true> + start, fill_char, this.size() - start);
 	}
 
 	func _move(this: &&String, dst: uint, src: uint) -> void {
 		const data = this.vdata();
-		memmove!<byte>(data + dst, data as cptr!<byte> + src, this.size() - src);
+		memmove!<byte>(data + dst, data as ptr!<byte, false> + src, this.size() - src);
 	}
 
-	func _copy(this: &&String, dst: uint, src: cptr!<byte>, length: uint) -> void {
-		memcpy!<byte>(this.vdata() + dst, src, length);
+	func _copy(this: &&String, dst: uint, src: ptr!<byte, false>, length: uint) -> void {
+		memcpy!<byte>(this.vdata() + dst, src as ptr!<byte, false>, length);
 	}
 
-	func _cmp(this: &String, offset: uint, other_data: cptr!<byte>, length: uint) -> int {
+	func _cmp(this: &String, offset: uint, other_data: ptr!<byte, false>, length: uint) -> int {
 		return strncmp(this.data() + offset, other_data, length) as int;
 	}
 }

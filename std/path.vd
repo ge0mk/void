@@ -7,7 +7,7 @@ import std/string;
 
 struct PathIterator {
 	var path: Path;
-	var dir: vptr!<DIR>;
+	var dir: ptr!<DIR, true>;
 	var next_element: Optional!<Path>;
 
 	func constructor(this: &&PathIterator, path: Path) -> void {
@@ -37,11 +37,11 @@ struct PathIterator {
 
 	func next(this: &&PathIterator) -> Optional!<Path> {
 		const entry = readdir(this.dir);
-		if entry == vptr::null() {
+		if entry == ptr!<dirent, true>::null() {
 			return None;
 		}
 
-		const entry_name = String::fromCString(entry[0].d_name.data() as cptr!<byte>);
+		const entry_name = String::fromCString(entry[0].d_name.data() as ptr!<byte, false>);
 		return Some(this.path / entry_name);
 	}
 }
@@ -49,7 +49,7 @@ struct PathIterator {
 struct RecursivePathIterator {
 	var path: Path;
 	var current_path: List!<String>;
-	var dir_stack: List!<vptr!<DIR>>;
+	var dir_stack: List!<ptr!<DIR, true>>;
 	var next_element: Optional!<Path>;
 
 	func constructor(this: &&RecursivePathIterator, path: Path) -> void {
@@ -88,14 +88,14 @@ struct RecursivePathIterator {
 
 		const current_dir = this.dir_stack.last().value();
 		const entry = readdir(current_dir);
-		if entry == vptr::null() {
+		if entry == ptr!<dirent, true>::null() {
 			discard closedir(current_dir);
 			this.dir_stack.removeLast();
 			this.current_path.removeLast();
 			return this.next();
 		}
 
-		const entry_name = String::fromCString(entry[0].d_name.data() as cptr!<byte>);
+		const entry_name = String::fromCString(entry[0].d_name.data() as ptr!<byte, false>);
 
 		// file
 		if entry[0].d_type == DT::REG {
@@ -210,7 +210,7 @@ struct Path {
 		const cmode = "r\0";
 		const cfile = libc::stdio::fopen(cpath.data(), cmode.data());
 
-		if cfile == vptr::null() {
+		if cfile == ptr!<FILE, true>::null() {
 			return false;
 		}
 
@@ -222,7 +222,7 @@ struct Path {
 		const cpath = this.toString() + '\0'b;
 		const cdir = libc::dirent::opendir(cpath.data());
 
-		if cdir == vptr::null() {
+		if cdir == ptr!<DIR, true>::null() {
 			return false;
 		}
 
@@ -232,7 +232,7 @@ struct Path {
 
 	func cwd() -> Path {
 		var buffer = String(4096u, '\0'b);
-		discard libc::unistd::getcwd(vptr!<byte>::addressOf(&&buffer[0u]), buffer.size() - 1);
+		discard libc::unistd::getcwd(buffer.vdata(), buffer.size() - 1);
 		return Path(String::fromCString(buffer.data()));
 	}
 
@@ -247,7 +247,7 @@ struct Path {
 	func getLinkTarget(this: &Path) -> Path {
 		var buffer = String(4096u, '\0'b);
 		const c_path = this.toString() + '\0'b;
-		discard libc::unistd::readlink(c_path.data(), vptr!<byte>::addressOf(&&buffer[0u]), buffer.size() - 1);
+		discard libc::unistd::readlink(c_path.data(), buffer.vdata(), buffer.size() - 1);
 		return Path(String::fromCString(buffer.data()));
 	}
 

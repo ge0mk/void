@@ -102,13 +102,13 @@ enum FilePermissions {
 }
 
 struct File {
-	var c_file: vptr!<FILE>;
-	var ref_count: vptr!<uint>;
+	var c_file: ptr!<FILE, true>;
+	var ref_count: ptr!<uint, true>;
 
-	func constructor(this: &&File, c_file: vptr!<FILE>, ref_count: vptr!<uint>) -> void {
+	func constructor(this: &&File, c_file: ptr!<FILE, true>, ref_count: ptr!<uint, true>) -> void {
 		this.c_file := c_file;
 		this.ref_count := ref_count;
-		if this.ref_count != vptr::null() {
+		if this.ref_count != ptr!<uint, true>::null() {
 			this.ref_count.value()++;
 		}
 	}
@@ -116,7 +116,7 @@ struct File {
 	func constructor(this: &&File, other: File) -> void {
 		this.c_file := other.c_file;
 		this.ref_count := other.ref_count;
-		if this.ref_count != vptr::null() {
+		if this.ref_count != ptr!<uint, true>::null() {
 			this.ref_count.value()++;
 		}
 	}
@@ -127,14 +127,14 @@ struct File {
 	}
 
 	func destructor(this: &&File) -> void {
-		if this.ref_count == vptr::null() {
+		if this.ref_count == ptr!<uint, true>::null() {
 			return;
 		}
 
 		this.ref_count.value()--;
 		if this.ref_count.value() == 0u {
 			libc::stdio::fclose(this.c_file);
-			libc::stdlib::free(this.ref_count as vptr);
+			free!<uint>(this.ref_count);
 		}
 	}
 
@@ -152,12 +152,12 @@ struct File {
 
 		const cmode = try mode.toStringForFOpen();
 		const c_file = fdopen(fd, cmode.data());
-		if c_file == vptr::null() {
+		if c_file == ptr!<FILE, true>::null() {
 			throw errno();
 		}
 
-		const ref_count = malloc(sizeOf!<uint>()) as vptr!<uint>;
-		if ref_count == vptr::null() {
+		const ref_count = malloc!<uint>(1u);
+		if ref_count == ptr!<uint, true>::null() {
 			throw errno();
 		}
 		ref_count.value().constructor(0u);
@@ -175,12 +175,12 @@ struct File {
 
 		const c_mode = try mode.toStringForFOpen();
 		const c_file = fdopen(fd, c_mode.data());
-		if c_file == vptr::null() {
+		if c_file == ptr!<FILE, true>::null() {
 			throw errno();
 		}
 
-		const ref_count = malloc(sizeOf!<uint>()) as vptr!<uint>;
-		if ref_count == vptr::null() {
+		const ref_count = malloc!<uint>(1u);
+		if ref_count == ptr!<uint, true>::null() {
 			throw errno();
 		}
 		ref_count.value().constructor(0u);
@@ -203,7 +203,7 @@ struct File {
 	func readString(this: &&File, size: uint) -> Result!<String> {
 		var result = String(size, '\0'b);
 
-		const r = fread(result.data as vptr, 1u, size, this.c_file);
+		const r = fread!<byte>(result.data, size, this.c_file);
 		const err = ferror(this.c_file);
 		if err != Error::OK {
 			throw err;
@@ -217,7 +217,7 @@ struct File {
 	func readOne(this: &&File) -> Result!<T> {
 		var result: T;
 
-		const r = fread(vptr!<T>::addressOf(&&result) as vptr, sizeOf!<T>(), 1u, this.c_file);
+		const r = fread!<T>(ptr!<T, true>::addressOf(&&result) as vptr, 1u, this.c_file);
 		const err = ferror(this.c_file);
 		if err != Error::OK {
 			throw err;
@@ -230,17 +230,17 @@ struct File {
 
 	template<T: type>
 	func readSome(this: &&File, count: uint) -> Result!<List!<T>> {
-		var buffer = libc::stdlib::malloc(count * sizeOf!<T>()) as vptr!<T>;
+		var buffer = malloc!<T>(count);
 
-		const r = fread(buffer as vptr, sizeOf!<T>(), count, this.c_file);
+		const r = fread!<T>(buffer, count, this.c_file);
 		const err = ferror(this.c_file);
 		if err != Error::OK {
-			libc::stdlib::free(buffer as vptr);
+			free!<T>(buffer);
 			throw err;
 		}
 
-		const result = List!<T>(Range!<T>(buffer as cptr!<T>, r));
-		libc::stdlib::free(buffer as vptr);
+		const result = List!<T>(Range!<T>(buffer as ptr!<T, false>, r));
+		free!<T>(buffer);
 		return Ok(result);
 	}
 
@@ -272,7 +272,7 @@ struct File {
 	}
 
 	func writeString(this: &&File, str: String) -> Result!<void> {
-		const r = fwrite(str.data() as cptr, 1u, str.size(), this.c_file);
+		const r = fwrite!<byte>(str.data(), str.size(), this.c_file);
 		if r != str.size() {
 			throw ferror(this.c_file);
 		}
@@ -283,7 +283,7 @@ struct File {
 	template<T: type>
 	func writeOne(this: &&File, value: T) -> Result!<void> {
 		const tmp = value;
-		const r = fwrite(cptr!<T>::addressOf(&tmp) as cptr, sizeOf!<T>(), 1, this.c_file);
+		const r = fwrite!<T>(ptr!<T, false>::addressOf(&tmp), 1u, this.c_file);
 		if r != 1 {
 			throw ferror(this.c_file);
 		}
@@ -293,7 +293,7 @@ struct File {
 
 	template<T: type>
 	func writeList(this: &&File, values: List!<T>) -> Result!<void> {
-		const r = fwrite(values.data() as cptr, sizeOf!<T>(), values.size(), this.c_file);
+		const r = fwrite!<T>(values.data(), values.size(), this.c_file);
 		if r != values.size() {
 			throw ferror(this.c_file);
 		}
@@ -306,14 +306,14 @@ struct File {
 	}
 
 	func stdin() -> File {
-		return File(libc::stdio::stdin(), vptr::null() as vptr!<uint>);
+		return File(libc::stdio::stdin(), ptr!<uint, true>::null());
 	}
 
 	func stdout() -> File {
-		return File(libc::stdio::stdout(), vptr::null() as vptr!<uint>);
+		return File(libc::stdio::stdout(), ptr!<uint, true>::null());
 	}
 
 	func stderr() -> File {
-		return File(libc::stdio::stderr(), vptr::null() as vptr!<uint>);
+		return File(libc::stdio::stderr(), ptr!<uint, true>::null());
 	}
 }

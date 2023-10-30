@@ -73,10 +73,10 @@ struct CGContext {
 
 		match type.reference_kind {
 			case None -> {
-				if type.decl.llvm_type == vptr::null() {
+				if type.decl.llvm_type == LLVMTypeRef::null() {
 					this.codegenType(type.decl);
 
-					if type.decl.llvm_type == vptr::null() {
+					if type.decl.llvm_type == LLVMTypeRef::null() {
 						panic("invalid codegen for type '" + type.signature() + "'");
 					}
 				}
@@ -88,10 +88,10 @@ struct CGContext {
 	}
 
 	func getDIType(this: &&CGContext, type: Type) -> LLVMMetadataRef {
-		if type.decl.llvm_di == vptr::null() {
+		if type.decl.llvm_di == LLVMMetadataRef::null() {
 			this.codegenTypeDI(type.decl);
 
-			if type.decl.llvm_di == vptr::null() {
+			if type.decl.llvm_di == LLVMMetadataRef::null() {
 				panic("invalid debug info for type '" + type.signature() + "'");
 			}
 		}
@@ -104,7 +104,7 @@ struct CGContext {
 	}
 
 	func getFunction(this: &&CGContext, function: SharedHandle!<FunctionDecl>) -> LLVMValueRef {
-		if function.llvm_func != vptr::null() {
+		if function.llvm_func != LLVMValueRef::null() {
 			return function.llvm_func;
 		}
 
@@ -143,7 +143,7 @@ struct CGContext {
 	}
 
 	func codegenType(this: &&CGContext, type: SharedHandle!<TypeDecl>) -> void {
-		if type.isIncompleteTemplate() || type.llvm_type != vptr::null() {
+		if type.isIncompleteTemplate() || type.llvm_type != LLVMTypeRef::null() {
 			return;
 		}
 
@@ -226,7 +226,7 @@ struct CGContext {
 	}
 
 	func codegenTypeDI(this: &&CGContext, type: SharedHandle!<TypeDecl>) -> void {
-		if type.isIncompleteTemplate() || type.llvm_di != vptr::null() {
+		if type.isIncompleteTemplate() || type.llvm_di != LLVMMetadataRef::null() {
 			return;
 		}
 
@@ -421,7 +421,7 @@ struct CGContext {
 	}
 
 	func codegenFunctionDecl(this: &&CGContext, function: SharedHandle!<FunctionDecl>) -> void {
-		if function.isIncompleteTemplate() || function.llvm_func != vptr::null() {
+		if function.isIncompleteTemplate() || function.llvm_func != LLVMValueRef::null() {
 			return;
 		}
 
@@ -471,7 +471,7 @@ struct CGContext {
 			else -> {}
 		}
 
-		if function.llvm_func == vptr::null() {
+		if function.llvm_func == LLVMValueRef::null() {
 			this.error("function decl for " + function.signature() + " not yet built", function.signature_span);
 			return;
 		}
@@ -566,7 +566,7 @@ struct CGContext {
 								this.di_builder,
 								parameter,
 								di_variable,
-								LLVMDIBuilderCreateExpression(this.di_builder, vptr!<u64>::null(), 0u),
+								LLVMDIBuilderCreateExpression(this.di_builder, ptr!<u64, true>::null(), 0u),
 								this.getDebugLocation(variable.span),
 								entry_block
 							);
@@ -596,7 +596,7 @@ struct CGContext {
 							this.di_builder,
 							address,
 							di_variable,
-							LLVMDIBuilderCreateExpression(this.di_builder, vptr!<u64>::null(), 0u),
+							LLVMDIBuilderCreateExpression(this.di_builder, ptr!<u64, true>::null(), 0u),
 							this.getDebugLocation(variable.span),
 							entry_block
 						);

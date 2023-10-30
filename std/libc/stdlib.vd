@@ -1,6 +1,22 @@
 import std/core;
 
-func malloc(size: uint) -> vptr = extern;
-func realloc(data: vptr, size: uint) -> vptr = extern;
-func free(data: vptr) -> void = extern;
-func system(command: cptr!<byte>) -> i32 = extern;
+func system(command: ptr!<byte, false>) -> i32 = extern;
+
+func malloc(size: uint) -> ptr!<true> = extern;
+func realloc(data: ptr!<true>, size: uint) -> ptr!<true> = extern;
+func free(data: ptr!<true>) -> void = extern;
+
+template <T: type>
+func malloc(count: uint) -> ptr!<T, true> {
+	return malloc(count * sizeOf!<T>()) as ptr!<T, true>;
+}
+
+template <T: type>
+func realloc(data: ptr!<T, true>, count: uint) -> ptr!<T, true> {
+	return realloc(data as ptr!<true>, count * sizeOf!<T>()) as ptr!<T, true>;
+}
+
+template <T: type>
+func free(data: ptr!<T, true>) -> void {
+	free(data as ptr!<true>);
+}

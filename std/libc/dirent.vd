@@ -23,8 +23,8 @@ struct dirent {
 	var d_name: Array!<byte, 256>;
 }
 
-func closedir(dir: vptr!<DIR>) -> i32 = extern;
-func opendir(name: cptr!<byte>) -> vptr!<DIR> = extern;
-func fdopendir(fd: i32) -> vptr!<DIR> = extern;
+func closedir(dir: ptr!<DIR, true>) -> i32 = extern;
+func opendir(name: ptr!<byte, false>) -> ptr!<DIR, true> = extern;
+func fdopendir(fd: i32) -> ptr!<DIR, true> = extern;
 
-func readdir(dir: vptr!<DIR>) -> vptr!<dirent> = extern;
+func readdir(dir: ptr!<DIR, true>) -> ptr!<dirent, true> = extern;

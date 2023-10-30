@@ -3,23 +3,23 @@ import std/libc/stdlib;
 
 template <T: type>
 struct Box {
-	var data: vptr!<T>;
+	var data: ptr!<T, true>;
 
 	func constructor(this: &&Box!<T>, @[shallow] other: Box!<T>) -> void {
-		this.data := libc::stdlib::malloc(sizeOf!<T>()) as vptr!<T>;
-		assert(this.data != vptr::null(), Error::ENOMEM);
+		this.data := malloc!<T>(1u);
+		assert(this.data != ptr!<T, true>::null(), Error::ENOMEM);
 		this.data[0u].constructor(other.data[0u]);
 	}
 
 	func constructor(this: &&Box!<T>, @[shallow] value: T) -> void {
-		this.data := libc::stdlib::malloc(sizeOf!<T>()) as vptr!<T>;
-		assert(this.data != vptr::null(), Error::ENOMEM);
+		this.data := malloc!<T>(1u);
+		assert(this.data != ptr!<T, true>::null(), Error::ENOMEM);
 		this.data[0u].constructor(value);
 	}
 
 	func destructor(this: &&Box!<T>) -> void {
 		this.data[0u].destructor();
-		libc::stdlib::free(this.data as vptr);
+		free!<T>(this.data);
 	}
 
 	operator =(this: &&Box!<T>, @[shallow] other: Box!<T>) -> void {

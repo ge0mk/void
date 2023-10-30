@@ -6,11 +6,11 @@ pragma generate_std_array_builtins;
 template <T: type, Size: uint>
 namespace Array {
 	func iterator(this: &Array!<T, Size>) -> RangeIterator!<T, false> {
-		return RangeIterator!<T, false>(this.data() as cptr!<T>, this.data() as cptr!<T> + Size);
+		return RangeIterator!<T, false>(this.data() as ptr!<T, false>, this.data() as ptr!<T, false> + Size);
 	}
 
 	func iterator(this: &&Array!<T, Size>) -> RangeIterator!<T, true> {
-		return RangeIterator!<T, true>(this.data() as vptr!<T>, this.data() as vptr!<T> + Size);
+		return RangeIterator!<T, true>(this.data() as ptr!<T, true>, this.data() as ptr!<T, true> + Size);
 	}
 
 	func at(this: &Array!<T, Size>, index: uint) -> Optional!<&T> {
@@ -34,21 +34,21 @@ namespace Array {
 	operator [](this: &Array!<T, Size>, range: NumericRange!<uint>) -> Range!<T, false> {
 		assert(range.end <= Size, Error::EBOUNDS);
 		assert(range.start <= range.end && range.step == 1, Error::EINVAL);
-		return Range!<T, false>(this.data() as cptr!<T> + range.start, range.end - range.start);
+		return Range!<T, false>(this.data() + range.start, range.end - range.start);
 	}
 
 	operator [](this: &&Array!<T, Size>, range: NumericRange!<uint>) -> Range!<T, true> {
 		assert(range.end <= Size, Error::EBOUNDS);
 		assert(range.start <= range.end && range.step == 1, Error::EINVAL);
-		return Range!<T, true>(this.data() as vptr!<T> + range.start, range.end - range.start);
+		return Range!<T, true>(this.data() + range.start, range.end - range.start);
 	}
 
 	func range(this: &Array!<T, Size>) -> Range!<T, false> {
-		return Range!<T, false>(this.data() as cptr!<T>, this.size());
+		return Range!<T, false>(this.data(), this.size());
 	}
 
 	func range(this: &&Array!<T, Size>) -> Range!<T, true> {
-		return Range!<T, true>(this.data() as vptr!<T>, this.size());
+		return Range!<T, true>(this.data(), this.size());
 	}
 
 	func find(this: &Array!<T, Size>, value: T) -> Optional!<uint> {

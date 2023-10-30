@@ -6,11 +6,11 @@ import std/libc/string;
 
 template <Tkey: type, Tvalue: type>
 struct MapIterator {
-	var keys: cptr!<Tkey>;
-	var values: cptr!<Tvalue>;
-	var end: cptr!<Tkey>;
+	var keys: ptr!<Tkey, false>;
+	var values: ptr!<Tvalue, false>;
+	var end: ptr!<Tkey, false>;
 
-	func constructor(this: &&MapIterator!<Tkey, Tvalue>, keys: cptr!<Tkey>, values: cptr!<Tvalue>, end: cptr!<Tkey>) -> void {
+	func constructor(this: &&MapIterator!<Tkey, Tvalue>, keys: ptr!<Tkey, false>, values: ptr!<Tvalue, false>, end: ptr!<Tkey, false>) -> void {
 		this.keys := keys;
 		this.values := values;
 		this.end := end;
@@ -34,23 +34,23 @@ struct MapIterator {
 
 template <Tkey: type, Tvalue: type>
 struct Map {
-	var keys: vptr!<Tkey>;
-	var values: vptr!<Tvalue>;
+	var keys: ptr!<Tkey, true>;
+	var values: ptr!<Tvalue, true>;
 	var size: uint;
 	var capacity: uint;
 
 	func constructor(this: &&Map!<Tkey, Tvalue>) -> void {
-		this.keys := vptr::null() as vptr!<Tkey>;
-		this.values := vptr::null() as vptr!<Tvalue>;
-		this.size := 0;
-		this.capacity := 0;
+		this.keys := ();
+		this.values := ();
+		this.size := ();
+		this.capacity := ();
 	}
 
 	func constructor(this: &&Map!<Tkey, Tvalue>, other: Map!<Tkey, Tvalue>) -> void {
-		this.keys := vptr::null() as vptr!<Tkey>;
-		this.values := vptr::null() as vptr!<Tvalue>;
-		this.size := 0;
-		this.capacity := 0;
+		this.keys := ();
+		this.values := ();
+		this.size := ();
+		this.capacity := ();
 
 		this.grow(other.size());
 		for index in 0u..other.size() {
@@ -63,9 +63,9 @@ struct Map {
 	func destructor(this: &&Map!<Tkey, Tvalue>) -> void {
 		this.clear();
 
-		if this.keys != vptr::null() {
-			libc::stdlib::free(this.keys as vptr);
-			libc::stdlib::free(this.values as vptr);
+		if this.keys != ptr!<Tkey, true>::null() {
+			free!<Tkey>(this.keys);
+			free!<Tvalue>(this.values);
 		}
 	}
 
@@ -89,15 +89,15 @@ struct Map {
 	}
 
 	func keys(this: &Map!<Tkey, Tvalue>) -> Range!<Tkey, false> {
-		return Range!<Tkey, false>(this.keys as cptr!<Tkey>, this.size);
+		return Range!<Tkey, false>(this.keys as ptr!<Tkey, false>, this.size);
 	}
 
 	func values(this: &Map!<Tkey, Tvalue>) -> Range!<Tvalue, false> {
-		return Range!<Tvalue, false>(this.values as cptr!<Tvalue>, this.size);
+		return Range!<Tvalue, false>(this.values as ptr!<Tvalue, false>, this.size);
 	}
 
 	func iterator(this: &Map!<Tkey, Tvalue>) -> MapIterator!<Tkey, Tvalue> {
-		return MapIterator!<Tkey, Tvalue>(this.keys as cptr!<Tkey>, this.values as cptr!<Tvalue>, this.keys as cptr!<Tkey> + this.size());
+		return MapIterator!<Tkey, Tvalue>(this.keys as ptr!<Tkey, false>, this.values as ptr!<Tvalue, false>, this.keys as ptr!<Tkey, false> + this.size());
 	}
 
 	operator ==(@[shallow] this: Map!<Tkey, Tvalue>, @[shallow] other: Map!<Tkey, Tvalue>) -> bool {
@@ -155,8 +155,8 @@ struct Map {
 
 		this.grow();
 
-		memmove!<Tkey>(this.keys + index + 1, this.keys as cptr!<Tkey> + index, this.size - index);
-		memmove!<Tvalue>(this.values + index + 1, this.values as cptr!<Tvalue> + index, this.size - index);
+		memmove!<Tkey>(this.keys + index + 1, this.keys as ptr!<Tkey, false> + index, this.size - index);
+		memmove!<Tvalue>(this.values + index + 1, this.values as ptr!<Tvalue, false> + index, this.size - index);
 
 		this.keys[index].constructor(key);
 		this.values[index].constructor(value);
@@ -195,8 +195,8 @@ struct Map {
 		this.values[index].destructor();
 		this.size -= 1u;
 
-		memmove!<Tkey>(this.keys + index, this.keys as cptr!<Tkey> + index + 1, this.size - index);
-		memmove!<Tvalue>(this.values + index, this.values as cptr!<Tvalue> + index + 1, this.size - index);
+		memmove!<Tkey>(this.keys + index, this.keys as ptr!<Tkey, false> + index + 1, this.size - index);
+		memmove!<Tvalue>(this.values + index, this.values as ptr!<Tvalue, false> + index + 1, this.size - index);
 	}
 
 	operator [](this: &&Map!<Tkey, Tvalue>, @[shallow] key: Tkey) -> &&Tvalue {
@@ -208,8 +208,8 @@ struct Map {
 
 		this.grow();
 
-		memmove!<Tkey>(this.keys + index + 1, this.keys as cptr!<Tkey> + index, this.size - index);
-		memmove!<Tvalue>(this.values + index + 1, this.values as cptr!<Tvalue> + index, this.size - index);
+		memmove!<Tkey>(this.keys + index + 1, this.keys as ptr!<Tkey, false> + index, this.size - index);
+		memmove!<Tvalue>(this.values + index + 1, this.values as ptr!<Tvalue, false> + index, this.size - index);
 
 		this.keys[index].constructor(key);
 		this.values[index].constructor();
@@ -243,17 +243,18 @@ struct Map {
 			return;
 		}
 
-		var new_keys: vptr!<Tkey>;
-		var new_values: vptr!<Tvalue>;
-		if this.keys == vptr::null() {
-			new_keys = libc::stdlib::malloc(new_capacity * sizeOf!<Tkey>()) as vptr!<Tkey>;
-			new_values = libc::stdlib::malloc(new_capacity * sizeOf!<Tvalue>()) as vptr!<Tvalue>;
+		var new_keys: ptr!<Tkey, true>;
+		var new_values: ptr!<Tvalue, true>;
+
+		if this.keys == ptr!<Tkey, true>::null() {
+			new_keys = malloc!<Tkey>(new_capacity);
+			new_values = malloc!<Tvalue>(new_capacity);
 		} else {
-			new_keys = libc::stdlib::realloc(this.keys as vptr, new_capacity * sizeOf!<Tkey>()) as vptr!<Tkey>;
-			new_values = libc::stdlib::realloc(this.values as vptr, new_capacity * sizeOf!<Tvalue>()) as vptr!<Tvalue>;
+			new_keys = realloc!<Tkey>(this.keys, new_capacity);
+			new_values = realloc!<Tvalue>(this.values, new_capacity);
 		}
 
-		assert(new_keys != vptr::null() && new_values != vptr::null(), Error::ENOMEM);
+		assert(new_keys != ptr!<Tkey, true>::null() && new_values != ptr!<Tvalue, true>::null(), Error::ENOMEM);
 
 		this.keys = new_keys;
 		this.values = new_values;

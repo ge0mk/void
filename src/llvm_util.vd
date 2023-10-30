@@ -8,10 +8,10 @@ import llvm_c;
 
 func createInterpreterForModule(module: LLVMModuleRef) -> Result!<LLVMExecutionEngineRef, String> {
 	var result: LLVMExecutionEngineRef;
-	var out_error: vptr!<byte>;
+	var out_error: ptr!<byte, true>;
 
-	if LLVMCreateInterpreterForModule(vptr!<LLVMExecutionEngineRef>::addressOf(&&result), module, vptr!<vptr!<byte>>::addressOf(&&out_error)) != 0 {
-		const error = String::fromCString(out_error as cptr!<byte>);
+	if LLVMCreateInterpreterForModule(ptr!<LLVMExecutionEngineRef, true>::addressOf(&&result), module, ptr!<ptr!<byte, true>, true>::addressOf(&&out_error)) != 0 {
+		const error = String::fromCString(out_error as ptr!<byte, false>);
 		LLVMDisposeMessage(out_error);
 		throw error;
 	}
@@ -21,10 +21,10 @@ func createInterpreterForModule(module: LLVMModuleRef) -> Result!<LLVMExecutionE
 
 func createJITCompilerForModule(module: LLVMModuleRef, optimization_level: uint) -> Result!<LLVMExecutionEngineRef, String> {
 	var result: LLVMExecutionEngineRef;
-	var out_error: vptr!<byte>;
+	var out_error: ptr!<byte, true>;
 
-	if LLVMCreateJITCompilerForModule(vptr!<LLVMExecutionEngineRef>::addressOf(&&result), module, optimization_level as u32, vptr!<vptr!<byte>>::addressOf(&&out_error)) != 0 {
-		const error = String::fromCString(out_error as cptr!<byte>);
+	if LLVMCreateJITCompilerForModule(ptr!<LLVMExecutionEngineRef, true>::addressOf(&&result), module, optimization_level as u32, ptr!<ptr!<byte, true>, true>::addressOf(&&out_error)) != 0 {
+		const error = String::fromCString(out_error as ptr!<byte, false>);
 		LLVMDisposeMessage(out_error);
 		throw error;
 	}
@@ -34,17 +34,17 @@ func createJITCompilerForModule(module: LLVMModuleRef, optimization_level: uint)
 
 func loadModuleFromFile(ctx: LLVMContextRef, path: String) -> Optional!<LLVMModuleRef> {
 	var buffer: LLVMMemoryBufferRef;
-	var message: vptr!<byte>;
+	var message: ptr!<byte, true>;
 
 	const buffer_status = LLVMCreateMemoryBufferWithContentsOfFile(
 		(path + '\0'b).data(),
-		vptr!<LLVMMemoryBufferRef>::addressOf(&&buffer),
-		vptr!<vptr!<byte>>::addressOf(&&message)
+		ptr!<LLVMMemoryBufferRef, true>::addressOf(&&buffer),
+		ptr!<ptr!<byte, true>, true>::addressOf(&&message)
 	);
 
 	if buffer_status != 0 {
 		eprint("couldn't load module " + path + ": ");
-		eprintln(String::fromCString(message as cptr!<byte>));
+		eprintln(String::fromCString(message as ptr!<byte, false>));
 		return None;
 	}
 	LLVMDisposeMessage(message);
@@ -52,13 +52,13 @@ func loadModuleFromFile(ctx: LLVMContextRef, path: String) -> Optional!<LLVMModu
 	var module: LLVMModuleRef;
 	const module_status = LLVMParseIRInContext(
 		ctx, buffer,
-		vptr!<vptr!<LLVMOpaqueModule>>::addressOf(&&module),
-		vptr!<vptr!<byte>>::addressOf(&&message)
+		ptr!<ptr!<LLVMOpaqueModule, true>, true>::addressOf(&&module),
+		ptr!<ptr!<byte, true>, true>::addressOf(&&message)
 	);
 
 	if module_status != 0 {
 		eprint("couldn't parse module " + path + ": ");
-		eprintln(String::fromCString(message as cptr!<byte>));
+		eprintln(String::fromCString(message as ptr!<byte, false>));
 		return None;
 	}
 	LLVMDisposeMessage(message);
@@ -67,9 +67,9 @@ func loadModuleFromFile(ctx: LLVMContextRef, path: String) -> Optional!<LLVMModu
 }
 
 func printModuleToFile(module: LLVMModuleRef, path: String) -> bool {
-	var error_message = vptr::null() as vptr!<byte>;
-	if LLVMPrintModuleToFile(module, (path + '\0'b).data(), vptr!<vptr!<byte>>::addressOf(&&error_message)) != 0 {
-		eprintln(String::fromCString(error_message as cptr!<byte>));
+	var error_message = ptr!<byte, true>::null();
+	if LLVMPrintModuleToFile(module, (path + '\0'b).data(), ptr!<ptr!<byte, true>, true>::addressOf(&&error_message)) != 0 {
+		eprintln(String::fromCString(error_message as ptr!<byte, false>));
 		LLVMDisposeMessage(error_message);
 		return false;
 	}
@@ -79,7 +79,7 @@ func printModuleToFile(module: LLVMModuleRef, path: String) -> bool {
 
 func printModuleToString(module: LLVMModuleRef) -> String {
 	const data = LLVMPrintModuleToString(module);
-	const result = String::fromCString(data as cptr!<byte>);
+	const result = String::fromCString(data as ptr!<byte, false>);
 	LLVMDisposeMessage(data);
 	return result;
 }
@@ -87,9 +87,9 @@ func printModuleToString(module: LLVMModuleRef) -> String {
 func verifyModule(module: LLVMModuleRef, failure_action: LLVMVerifierFailureAction) -> Result!<void, String> {
 	var result = Result!<void, String>::Ok;
 
-	var message = vptr::null() as vptr!<byte>;
-	if LLVMVerifyModule(module, failure_action, vptr!<vptr!<byte>>::addressOf(&&message)) != 0 {
-		result = Result!<void, String>::Error(String::fromCString(message as cptr!<byte>));
+	var message = ptr!<byte, true>::null();
+	if LLVMVerifyModule(module, failure_action, ptr!<ptr!<byte, true>, true>::addressOf(&&message)) != 0 {
+		result = Result!<void, String>::Error(String::fromCString(message as ptr!<byte, false>));
 	}
 	LLVMDisposeMessage(message);
 
@@ -141,7 +141,7 @@ func LLVMIntrinsicGetType(ctx: LLVMContextRef, id: u32, parameter_types: &List!<
 }
 
 func LLVMDIBuilderCreateDebugLocation(ctx: LLVMContextRef, line: uint, column: uint, scope: LLVMMetadataRef) -> LLVMMetadataRef {
-	return LLVMDIBuilderCreateDebugLocation(ctx, line as u32, column as u32, scope, vptr::null() as vptr!<LLVMOpaqueMetadata>);
+	return LLVMDIBuilderCreateDebugLocation(ctx, line as u32, column as u32, scope, ptr!<LLVMOpaqueMetadata, true>::null());
 }
 
 func LLVMDIBuilderCreateDebugLocation(ctx: LLVMContextRef, line: uint, column: uint, scope: LLVMMetadataRef, inlined_at: LLVMMetadataRef) -> LLVMMetadataRef {
@@ -149,7 +149,7 @@ func LLVMDIBuilderCreateDebugLocation(ctx: LLVMContextRef, line: uint, column: u
 }
 
 func LLVMTemporaryMDNode(ctx: LLVMContextRef) -> LLVMMetadataRef {
-	return LLVMTemporaryMDNode(ctx, vptr!<LLVMMetadataRef>::null(), 0u);
+	return LLVMTemporaryMDNode(ctx, ptr!<LLVMMetadataRef, true>::null(), 0u);
 }
 
 func LLVMSetModuleIdentifier(module: LLVMModuleRef, identifier: String) -> void {
@@ -226,7 +226,7 @@ func LLVMOffsetOfElement(target_data: LLVMTargetDataRef, type: LLVMTypeRef, inde
 }
 
 func LLVMHasBasicBlockTerminator(bb: LLVMBasicBlockRef) -> bool {
-	return LLVMGetBasicBlockTerminator(bb) != vptr::null();
+	return LLVMGetBasicBlockTerminator(bb) != LLVMValueRef::null();
 }
 
 func LLVMBuildSwitch(builder: LLVMBuilderRef, value: LLVMValueRef, else_block: LLVMBasicBlockRef, num_cases: uint) -> LLVMValueRef {
@@ -526,20 +526,20 @@ func LLVMDIBuilderCreateParameterVariable(di_builder: LLVMDIBuilderRef, scope: L
 }
 
 func LLVMRunFunctionAsMain(ee: LLVMExecutionEngineRef, function: LLVMValueRef, args: List!<String>, env: List!<String>) -> int {
-	var argv: List!<cptr!<byte>>;
+	var argv: List!<ptr!<byte, false>>;
 	for &&arg in args {
 		arg.append('\0'b);
 		argv.append(arg.data());
 	}
 
-	var envv: List!<cptr!<byte>>;
+	var envv: List!<ptr!<byte, false>>;
 	for &&val in env {
 		val.append('\0'b);
 		envv.append(val.data());
 	}
-	envv.append(cptr!<byte>::null());
+	envv.append(ptr!<byte, false>::null());
 
-	return LLVMRunFunctionAsMain(ee, function, argv.size() as u32, argv.data(), envv.data()) as int;
+	return LLVMRunFunctionAsMain(ee, function, argv.size() as u32, argv.data() as ptr!<ptr!<byte, false>, false>, envv.data() as ptr!<ptr!<byte, false>, false>) as int;
 }
 
 func LLVMRunFunction(ee: LLVMExecutionEngineRef, function: LLVMValueRef, args: &List!<LLVMGenericValueRef>) -> LLVMGenericValueRef {

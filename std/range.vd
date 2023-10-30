@@ -2,16 +2,10 @@ import std/core;
 
 template <T: type, Mutable: bool>
 struct Range {
-	comptime if Mutable {
-		alias data_ptr_type = vptr!<T>;
-	} else {
-		alias data_ptr_type = cptr!<T>;
-	}
-
-	var data: data_ptr_type;
+	var data: ptr!<T, Mutable>;
 	var size: uint;
 
-	func constructor(this: &&Range!<T, Mutable>, data: data_ptr_type, size: uint) -> void {
+	func constructor(this: &&Range!<T, Mutable>, data: ptr!<T, Mutable>, size: uint) -> void {
 		this.data := data;
 		this.size := size;
 	}
@@ -23,7 +17,7 @@ struct Range {
 
 	comptime if !Mutable {
 		func constructor(this: &&Range!<T, Mutable>, other: Range!<T, true>) -> void {
-			this.data := other.data as data_ptr_type;
+			this.data := other.data as ptr!<T, Mutable>;
 			this.size := other.size;
 		}
 	}
@@ -35,7 +29,7 @@ struct Range {
 		this.size = other.size;
 	}
 
-	func data(this: &Range!<T, Mutable>) -> data_ptr_type {
+	func data(this: &Range!<T, Mutable>) -> ptr!<T, Mutable> {
 		return this.data;
 	}
 
@@ -98,16 +92,10 @@ struct Range {
 
 template <T: type, Mutable: bool>
 struct RangeIterator {
-	comptime if Mutable {
-		alias data_ptr_type = vptr!<T>;
-	} else {
-		alias data_ptr_type = cptr!<T>;
-	}
+	var current: ptr!<T, Mutable>;
+	var end: ptr!<T, Mutable>;
 
-	var current: data_ptr_type;
-	var end: data_ptr_type;
-
-	func constructor(this: &&RangeIterator!<T, Mutable>, begin: data_ptr_type, end: data_ptr_type) -> void {
+	func constructor(this: &&RangeIterator!<T, Mutable>, begin: ptr!<T, Mutable>, end: ptr!<T, Mutable>) -> void {
 		this.current := begin;
 		this.end := end;
 	}

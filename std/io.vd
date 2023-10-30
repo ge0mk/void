@@ -2,15 +2,15 @@ import std/core;
 import std/libc/stdio;
 import std/string;
 
-func fprint(f: vptr!<FILE>, msg: String) -> void {
-	discard libc::stdio::fwrite(msg.data() as cptr, 1u, msg.size(), f);
+func fprint(f: ptr!<FILE, true>, msg: String) -> void {
+	discard libc::stdio::fwrite!<byte>(msg.data(), msg.size(), f);
 }
 
-func fprint(f: vptr!<FILE>, val: byte) -> void {
+func fprint(f: ptr!<FILE, true>, val: byte) -> void {
 	discard libc::stdio::fputc(val as i32, f);
 }
 
-func fprintln(f: vptr!<FILE>, msg: String) -> void {
+func fprintln(f: ptr!<FILE, true>, msg: String) -> void {
 	fprint(f, msg);
 	fprint(f, '\n'b);
 }

@@ -4,27 +4,37 @@ import std/libc/errno;
 struct FILE {}
 
 @[extern_name: "get_stdin"]
-func stdin() -> vptr!<FILE> = extern;
+func stdin() -> ptr!<FILE, true> = extern;
 
 @[extern_name: "get_stdout"]
-func stdout() -> vptr!<FILE> = extern;
+func stdout() -> ptr!<FILE, true> = extern;
 
 @[extern_name: "get_stderr"]
-func stderr() -> vptr!<FILE> = extern;
+func stderr() -> ptr!<FILE, true> = extern;
 
-func fopen(pathname: cptr!<byte>, mode: cptr!<byte>) -> vptr!<FILE> = extern;
-func freopen(pathname: cptr!<byte>, mode: cptr!<byte>, file: vptr!<FILE>) -> vptr!<FILE> = extern;
-func fclose(file: vptr!<FILE>) -> void = extern;
+func fopen(pathname: ptr!<byte, false>, mode: ptr!<byte, false>) -> ptr!<FILE, true> = extern;
+func freopen(pathname: ptr!<byte, false>, mode: ptr!<byte, false>, file: ptr!<FILE, true>) -> ptr!<FILE, true> = extern;
+func fclose(file: ptr!<FILE, true>) -> void = extern;
 
-func feof(file: vptr!<FILE>) -> bool = extern;
-func ferror(file: vptr!<FILE>) -> Error = extern;
-func fflush(file: vptr!<FILE>) -> i32 = extern;
-func clearerr(file: vptr!<FILE>) -> void = extern;
+func feof(file: ptr!<FILE, true>) -> bool = extern;
+func ferror(file: ptr!<FILE, true>) -> Error = extern;
+func fflush(file: ptr!<FILE, true>) -> i32 = extern;
+func clearerr(file: ptr!<FILE, true>) -> void = extern;
 
-func fread(data: vptr, size: uint, elements: uint, file: vptr!<FILE>) -> uint = extern;
-func fwrite(data: cptr, size: uint, elements: uint, file: vptr!<FILE>) -> uint = extern;
+func fread(data: ptr!<true>, element_size: uint, element_count: uint, file: ptr!<FILE, true>) -> uint = extern;
+func fwrite(data: ptr!<false>, element_size: uint, element_count: uint, file: ptr!<FILE, true>) -> uint = extern;
 
-func fgetc(file: vptr!<FILE>) -> i32 = extern;
-func fputc(data: i32, file: vptr!<FILE>) -> i32 = extern;
+template <T: type>
+func fread(data: ptr!<T, true>, count: uint, file: ptr!<FILE, true>) -> uint {
+	return fread(data as ptr!<true>, sizeOf!<T>(), count, file);
+}
 
-func fdopen(fd: i32, mode: cptr!<byte>) -> vptr!<FILE> = extern;
+template <T: type>
+func fwrite(data: ptr!<T, false>, count: uint, file: ptr!<FILE, true>) -> uint {
+	return fwrite(data as ptr!<false>, sizeOf!<T>(), count, file);
+}
+
+func fgetc(file: ptr!<FILE, true>) -> i32 = extern;
+func fputc(data: i32, file: ptr!<FILE, true>) -> i32 = extern;
+
+func fdopen(fd: i32, mode: ptr!<byte, false>) -> ptr!<FILE, true> = extern;
