@@ -362,13 +362,21 @@ struct TCContext {
 		var module = this.program.createModule(imported_module);
 
 		// lex
-		const tokens = Lexer::lex(this.program.files[file_id].source, file_id as u16);
+		var tokens: List!<Token>;
+		var strings: List!<String>;
+		var numbers: List!<ParsedNumber>;
+
+		var lexer = Lexer(&&tokens, &&strings, &&numbers, this.program.files[file_id].source, file_id as u16);
+		while !lexer.eof() {
+			lexer.next();
+		}
+
 		if this.program.options.dump_tokens {
 			print(tokens.dump());
 		}
 
 		// parse
-		var parser = Parser(&&this.program, &tokens);
+		var parser = Parser(&&this.program, &tokens, &strings, &numbers);
 		while !parser.eof() {
 			module.unchecked_children.append(parser.parseStmt());
 		}
@@ -2096,9 +2104,9 @@ struct TCContext {
 	func checkExpr(this: &&TCContext, parsed_expr: &ParsedExpr, expected_type: Type, is_comptime: bool) -> Expr {
 		match parsed_expr {
 			case Empty -> return Expr::Void(parsed_expr.span, this.program.void_type)
-			case Char: &char_literal -> return this.checkCharLiteralExpr(char_literal, parsed_expr.span);
-			case String: &string_literal -> return this.checkStringLiteralExpr(string_literal, parsed_expr.span);
-			case Number: &number_literal -> return this.checkNumberLiteralExpr(number_literal, expected_type, parsed_expr.span);
+			case Char: &literal -> return this.checkCharLiteralExpr(literal.value, literal.postfix, parsed_expr.span);
+			case String: &literal -> return this.checkStringLiteralExpr(literal.value, literal.postfix, parsed_expr.span);
+			case Number: &literal -> return this.checkNumberLiteralExpr(literal.value, literal.postfix, expected_type, parsed_expr.span);
 			case Bool: &value -> return Expr::Integer(value as int, parsed_expr.span, this.program.bool_type);
 			case Name: &parsed_name -> return this.checkNameExpr(parsed_name, expected_type, is_comptime, parsed_expr.span);
 			case Operator: &parsed_operator -> return this.checkOperatorExpr(parsed_operator, expected_type, is_comptime, parsed_expr.span);
@@ -2123,12 +2131,12 @@ struct TCContext {
 		return result;
 	}
 
-	func checkCharLiteralExpr(this: &&TCContext, char_literal: CharLiteral, span: Span) -> Expr {
-		if char_literal.postfix == "b" {
-			return Expr::Integer(char_literal.value as int, span, this.program.byte_type);
-		} else if const bits = getNumericTypeBits(char_literal.postfix) {
+	func checkCharLiteralExpr(this: &&TCContext, char_literal: byte, postfix: String, span: Span) -> Expr {
+		if postfix == "b" {
+			return Expr::Integer(char_literal as int, span, this.program.byte_type);
+		} else if const bits = getNumericTypeBits(postfix) {
 			var name = "";
-			match char_literal.postfix[0u] {
+			match postfix[0u] {
 				case 'i'b -> name = "int";
 				case 'u'b -> name = "uint";
 				else -> {
@@ -2140,44 +2148,44 @@ struct TCContext {
 			var template_parameters: List!<TemplateParameter>;
 			template_parameters.append(TemplateParameter::Integer(bits as int));
 
-			return Expr::Integer(char_literal.value as int, span, this.getType(Name(name, template_parameters), span));
+			return Expr::Integer(char_literal as int, span, this.getType(Name(name, template_parameters), span));
 		}
 
 		this.error("invalid char literal", span);
 		return Expr::Undefined(span, Type::unknown());
 	}
 
-	func checkStringLiteralExpr(this: &&TCContext, string_literal: StringLiteral, span: Span) -> Expr {
-		if string_literal.postfix == "" {
-			return Expr::String(string_literal.value, span, this.getType(Name("String"), span));
+	func checkStringLiteralExpr(this: &&TCContext, string_literal: String, postfix: String, span: Span) -> Expr {
+		if postfix == "" {
+			return Expr::String(string_literal, span, this.getType(Name("String"), span));
 		} else {
 			this.error("invalid string literal", span);
 			return Expr::Undefined(span, Type::unknown());
 		}
 	}
 
-	func checkNumberLiteralExpr(this: &&TCContext, number_literal: NumberLiteral, expected_type: Type, span: Span) -> Expr {
-		if number_literal.postfix == "" {
+	func checkNumberLiteralExpr(this: &&TCContext, number_literal: ParsedNumber, postfix: String, expected_type: Type, span: Span) -> Expr {
+		if postfix == "" {
 			if expected_type.isIntType() {
-				return Expr::Integer(number_literal.value.toInt(), span, expected_type);
+				return Expr::Integer(number_literal.toInt(), span, expected_type);
 			} else if expected_type.isFloatType() {
-				return Expr::Float(number_literal.value.toFloat(), span, expected_type);
-			} else if number_literal.value.isInteger() && !number_literal.value.contains_decimal_point {
-				return Expr::Integer(number_literal.value.toInt(), span, this.program.int_type);
+				return Expr::Float(number_literal.toFloat(), span, expected_type);
+			} else if number_literal.isInteger() && !number_literal.contains_decimal_point {
+				return Expr::Integer(number_literal.toInt(), span, this.program.int_type);
 			} else {
-				return Expr::Float(number_literal.value.toFloat(), span, this.getType(Name("f64"), span));
+				return Expr::Float(number_literal.toFloat(), span, this.getType(Name("f64"), span));
 			}
-		} else if number_literal.postfix == "i" {
-			return Expr::Integer(number_literal.value.toInt(), span, this.program.int_type);
-		} else if number_literal.postfix == "u" {
-			return Expr::Integer(number_literal.value.toInt(), span, this.program.uint_type);
-		} else if number_literal.postfix == "b" {
-			return Expr::Integer(number_literal.value.toInt(), span, this.program.byte_type);
-		} else if number_literal.postfix == "f" {
-			return Expr::Float(number_literal.value.toFloat(), span, this.getType(Name("f64"), span));
-		} else if const bits = getNumericTypeBits(number_literal.postfix) {
+		} else if postfix == "i" {
+			return Expr::Integer(number_literal.toInt(), span, this.program.int_type);
+		} else if postfix == "u" {
+			return Expr::Integer(number_literal.toInt(), span, this.program.uint_type);
+		} else if postfix == "b" {
+			return Expr::Integer(number_literal.toInt(), span, this.program.byte_type);
+		} else if postfix == "f" {
+			return Expr::Float(number_literal.toFloat(), span, this.getType(Name("f64"), span));
+		} else if const bits = getNumericTypeBits(postfix) {
 			var name = "";
-			match number_literal.postfix[0u] {
+			match postfix[0u] {
 				case 'i'b -> name = "int";
 				case 'u'b -> name = "uint";
 				case 'f'b -> name = "float";
@@ -2190,7 +2198,7 @@ struct TCContext {
 			var template_parameters: List!<TemplateParameter>;
 			template_parameters.append(TemplateParameter::Integer(bits as int));
 
-			return Expr::Integer(number_literal.value.toInt(), span, this.getType(Name(name, template_parameters), span));
+			return Expr::Integer(number_literal.toInt(), span, this.getType(Name(name, template_parameters), span));
 		}
 
 		this.error("invalid number literal", span);

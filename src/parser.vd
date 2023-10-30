@@ -33,13 +33,18 @@ struct Parser {
 	var program: &&Program;
 
 	var tokens: &List!<Token>;
+	var strings: &List!<String>;
+	var numbers: &List!<ParsedNumber>;
+
 	var index: uint;
 
 	var scope_stack: List!<ParserScope>;
 
-	func constructor(this: &&Parser, program: &&Program, tokens: &List!<Token>) -> void {
+	func constructor(this: &&Parser, program: &&Program, tokens: &List!<Token>, strings: &List!<String>, numbers: &List!<ParsedNumber>) -> void {
 		this.program := &&program;
 		this.tokens := &tokens;
+		this.strings := &strings;
+		this.numbers := &numbers;
 	}
 
 	func constructor(this: &&Parser, other: Parser) -> void = default;
@@ -100,7 +105,7 @@ struct Parser {
 			return TokenType::EndOfFile;
 		}
 
-		return this.tokens[this.index].type;
+		return this.tokens[this.index].type();
 	}
 
 	func currentSpan(this: &Parser) -> Span {
@@ -116,7 +121,7 @@ struct Parser {
 			return TokenType::EndOfFile;
 		}
 
-		return this.tokens[this.index + 1].type;
+		return this.tokens[this.index + 1].type();
 	}
 
 	func previousSpan(this: &Parser) -> Span {
@@ -161,16 +166,14 @@ struct Parser {
 		}
 
 		const current = this.tokens[this.index];
-		match current.data {
-			case Identifier: name -> {
-				this.index++;
-				return name;
-			}
-			else -> {
-				this.error("unexpected token " + current.toString() + ", expected identifier", current.span);
-				return "";
-			}
+		if current.type() != Identifier {
+			this.error("unexpected token " + current.toString() + ", expected identifier", current.span);
+			return "";
 		}
+
+		this.index++;
+
+		return this.strings[current.data()];
 	}
 
 	func recover(this: &&Parser, token: TokenType) -> void {
@@ -405,16 +408,18 @@ struct Parser {
 					break;
 				}
 
-				match this.tokens[this.index].data {
-					case StringLiteral: literal -> {
+				match this.current() {
+					case StringLiteral -> {
 						const end = this.currentSpan();
+						const value = this.strings[this.tokens[this.index].data()];
 						this.next();
-						annotations.append(ParsedAnnotation::String(literal.value, start..end, name));
+						annotations.append(ParsedAnnotation::String(value, start..end, name));
 					}
-					case NumberLiteral: literal -> {
+					case NumberLiteral -> {
 						const end = this.currentSpan();
+						const value = this.numbers[this.tokens[this.index].data()];
 						this.next();
-						annotations.append(ParsedAnnotation::Number(literal, start..end, name));
+						annotations.append(ParsedAnnotation::Number(value, start..end, name));
 					}
 					else -> {
 						error = true;
@@ -1537,7 +1542,7 @@ struct Parser {
 
 			var name = "";
 			if this.current() is Identifier && this.peek() is Colon {
-				name = (this.tokens[this.index].data as Identifier).value();
+				name = this.strings[this.tokens[this.index].data()];
 				is_named = true;
 				this.index += 2;
 			}
@@ -1706,26 +1711,20 @@ struct Parser {
 				const name = this.parseName();
 				return ParsedExpr::Name(name, name.span)
 			}
-			case CharLiteral
-			| StringLiteral
-			| NumberLiteral -> match this.tokens[this.index].data {
-				case CharLiteral: value -> {
-					this.next();
-					return ParsedExpr::Char(value, start);
-				}
-				case StringLiteral: value -> {
-					this.next();
-					return ParsedExpr::String(value, start);
-				}
-				case NumberLiteral: value -> {
-					this.next();
-					return ParsedExpr::Number(value, start);
-				}
-				else -> {
-					this.index++;
-					this.error("invalid expr operand", start);
-					return ParsedExpr::Garbage(start);
-				}
+			case CharLiteral -> {
+				const value = this.tokens[this.index].data() as byte;
+				this.next();
+				return ParsedExpr::Char((value: value, postfix: this.acceptLiteralPostfix()), start);
+			}
+			case StringLiteral -> {
+				const value = this.strings[this.tokens[this.index].data()];
+				this.next();
+				return ParsedExpr::String((value: value, postfix: this.acceptLiteralPostfix()), start);
+			}
+			case NumberLiteral -> {
+				const value = this.numbers[this.tokens[this.index].data()];
+				this.next();
+				return ParsedExpr::Number((value: value, postfix: this.acceptLiteralPostfix()), start);
 			}
 			case KeywordTrue -> {
 				this.next();
@@ -1746,5 +1745,15 @@ struct Parser {
 				return ParsedExpr::Garbage(start);
 			}
 		}
+	}
+
+	func acceptLiteralPostfix(this: &&Parser) -> String {
+		if this.current() is LiteralPostfix {
+			const postfix = this.strings[this.tokens[this.index].data()];
+			this.next();
+			return postfix;
+		}
+
+		return "";
 	}
 }

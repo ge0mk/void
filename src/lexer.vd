@@ -7,75 +7,15 @@ import std/string;
 
 import span;
 
-struct CharLiteral {
-	// TODO: update for uft-8 char literals
-	var value: byte;
-	var postfix: String;
-
-	func constructor(this: &&CharLiteral, value: byte, postfix: String) -> void {
-		this.value := value;
-		this.postfix := postfix;
-	}
-
-	func constructor(this: &&CharLiteral, other: CharLiteral) -> void = default;
-	operator =(this: &&CharLiteral, other: CharLiteral) -> void = default;
-	func destructor(this: &&CharLiteral) -> void = default;
-
-	operator ==(this: CharLiteral, other: CharLiteral) -> bool = default;
-
-	func dump(this: &CharLiteral) -> String {
-		return "'" + this.value + "'" + this.postfix;
-	}
-}
-
-struct StringLiteral {
-	var value: String;
-	var postfix: String;
-
-	func constructor(this: &&StringLiteral, value: String, postfix: String) -> void {
-		this.value := value;
-		this.postfix := postfix;
-	}
-
-	func constructor(this: &&StringLiteral, other: StringLiteral) -> void = default;
-	operator =(this: &&StringLiteral, other: StringLiteral) -> void = default;
-	func destructor(this: &&StringLiteral) -> void = default;
-
-	operator ==(this: StringLiteral, other: StringLiteral) -> bool = default;
-
-	func dump(this: &StringLiteral) -> String {
-		return "\"" + this.value + "\"" + this.postfix;
-	}
-}
-
-struct NumberLiteral {
-	var value: ParsedNumber;
-	var postfix: String;
-
-	func constructor(this: &&NumberLiteral, value: ParsedNumber, postfix: String) -> void {
-		this.value := value;
-		this.postfix := postfix;
-	}
-
-	func constructor(this: &&NumberLiteral, other: NumberLiteral) -> void = default;
-	operator =(this: &&NumberLiteral, other: NumberLiteral) -> void = default;
-	func destructor(this: &&NumberLiteral) -> void = default;
-
-	operator ==(this: NumberLiteral, other: NumberLiteral) -> bool = default;
-
-	func dump(this: &NumberLiteral) -> String {
-		return format(this.value.significant) + " * " + format(this.value.base) + "^" + format(this.value.exponent) + this.postfix;
-	}
-}
-
-
-enum TokenType {
+enum TokenType: u8 {
 	case Identifier;
 
 	// literals
 	case CharLiteral;
 	case StringLiteral;
 	case NumberLiteral;
+
+	case LiteralPostfix;
 
 	// structural tokens
 	case LParen;					// (
@@ -187,6 +127,7 @@ enum TokenType {
 			case CharLiteral -> return "<char literal>";
 			case StringLiteral -> return "<string literal>";
 			case NumberLiteral -> return "<number literal>";
+			case LiteralPostfix -> return "<literal postfix>";
 			case LParen -> return "<token> (";
 			case RParen -> return "<token> )";
 			case LSquare -> return "<token> [";
@@ -280,40 +221,17 @@ enum TokenType {
 	}
 }
 
-variant TokenData {
-	case None;
-	case Identifier: String;
-	case CharLiteral: CharLiteral;
-	case StringLiteral: StringLiteral;
-	case NumberLiteral: NumberLiteral;
-	case Unknown: byte;
-
-	func toString(this: &TokenData) -> String {
-		match this {
-			case None -> return "";
-			case Identifier: name -> return name;
-			case CharLiteral: char -> return "\'" + char.value + "\'" + char.postfix;
-			case StringLiteral: str -> return "\"" + str.value + "\"" + str.postfix;
-			case NumberLiteral: number -> return format(number.value.toInt()) + number.postfix;
-			case Unknown: byte -> return String(1u, byte);
-		}
-	}
-}
-
 struct Token {
-	var type: TokenType;
-	var data: TokenData;
+	var data: uint;
 	var span: Span;
 
-	func constructor(this: &&Token, type: TokenType, span: Span) -> void {
-		this.type := type;
-		this.data := None;
+	func constructor(this: &&Token, token: TokenType, span: Span) -> void {
+		this.data := token as uint;
 		this.span := span;
 	}
 
-	func constructor(this: &&Token, type: TokenType, data: TokenData, span: Span) -> void {
-		this.type := type;
-		this.data := data;
+	func constructor(this: &&Token, token: TokenType, data: uint, span: Span) -> void {
+		this.data := token as uint | (data << 8);
 		this.span := span;
 	}
 
@@ -323,20 +241,20 @@ struct Token {
 	operator =(this: &&Token, other: Token) -> void = default;
 	operator ==(this: Token, other: Token) -> bool = default;
 
+	func type(this: &Token) -> TokenType {
+		return (this.data & 0xFF) as TokenType;
+	}
+
+	func data(this: &Token) -> uint {
+		return this.data >> 8;
+	}
+
 	func toString(this: &Token) -> String {
-		var result = this.type.toString();
-		if !(this.data is None) {
-			result += " " + this.data.toString();
-		}
-		return result;
+		return this.type().toString();
 	}
 
 	func dump(this: &Token) -> String {
-		var result = "\e[32m" + this.type.toString();
-		if !(this.data is None) {
-			result += "\e[0m \e[34m" + this.data.toString();
-		}
-		return result + "\e[0m - " + this.span.dump() + "\n";
+		return "\e[32m" + this.type().toString() + "\e[0m - " + this.span.dump() + "\n";
 	}
 }
 
@@ -353,6 +271,10 @@ func dump(tokens: &List!<Token>) -> String {
 struct Lexer {
 	var src: String;
 
+	var tokens: &&List!<Token>;
+	var strings: &&List!<String>;
+	var numbers: &&List!<ParsedNumber>;
+
 	var keywords: Map!<String, TokenType>;
 
 	var index: uint;
@@ -360,8 +282,11 @@ struct Lexer {
 	var line: u32;
 	var file_id: u16;
 
-	func constructor(this: &&Lexer, src: String, file_id: u16) -> void {
+	func constructor(this: &&Lexer, tokens: &&List!<Token>, strings: &&List!<String>, numbers: &&List!<ParsedNumber>, src: &String, file_id: u16) -> void {
 		this.src := src;
+		this.tokens := &&tokens;
+		this.strings := &&strings;
+		this.numbers := &&numbers;
 
 		this.keywords := ();
 		this.keywords["alias"] = TokenType::KeywordAlias;
@@ -413,17 +338,8 @@ struct Lexer {
 	func constructor(this: &&Lexer, other: Lexer) -> void = default;
 	func destructor(this: &&Lexer) -> void = default;
 
-	func lex(src: String, file_id: u16) -> List!<Token> {
-		var lexer = Lexer(src, file_id);
-		var result: List!<Token>;
-
-		var token = lexer.next();
-		while token.hasValue() {
-			result.append(token.value());
-			token = lexer.next();
-		}
-
-		return result;
+	func eof(this: &Lexer) -> bool {
+		return this.index >= this.src.size();
 	}
 
 	func span(this: &Lexer, start: uint, end: uint) -> Span {
@@ -494,79 +410,79 @@ struct Lexer {
 		}
 	}
 
-	func next(this: &&Lexer) -> Optional!<Token> {
+	func next(this: &&Lexer) -> void {
 		this.skipWhitespaceAndComments();
 
 		if this.index >= this.src.size() {
-			return None;
+			return;
 		}
 
 		const start = this.index;
 		match this.src[this.index] {
 			case '('b -> {
 				this.index++;
-				return Some(Token(TokenType::LParen, this.span(start, this.index)));
+				this.tokens.append(Token(TokenType::LParen, this.span(start, this.index)));
 			}
 			case ')'b -> {
 				this.index++;
-				return Some(Token(TokenType::RParen, this.span(start, this.index)));
+				this.tokens.append(Token(TokenType::RParen, this.span(start, this.index)));
 			}
 			case '['b -> {
 				this.index++;
-				return Some(Token(TokenType::LSquare, this.span(start, this.index)));
+				this.tokens.append(Token(TokenType::LSquare, this.span(start, this.index)));
 			}
 			case ']'b -> {
 				this.index++;
-				return Some(Token(TokenType::RSquare, this.span(start, this.index)));
+				this.tokens.append(Token(TokenType::RSquare, this.span(start, this.index)));
 			}
 			case '{'b -> {
 				this.index++;
-				return Some(Token(TokenType::LCurly, this.span(start, this.index)));
+				this.tokens.append(Token(TokenType::LCurly, this.span(start, this.index)));
 			}
 			case '}'b -> {
 				this.index++;
-				return Some(Token(TokenType::RCurly, this.span(start, this.index)));
+				this.tokens.append(Token(TokenType::RCurly, this.span(start, this.index)));
 			}
 			case ','b -> {
 				this.index++;
-				return Some(Token(TokenType::Comma, this.span(start, this.index)));
+				this.tokens.append(Token(TokenType::Comma, this.span(start, this.index)));
 			}
 			case ';'b -> {
 				this.index++;
-				return Some(Token(TokenType::Semicolon, this.span(start, this.index)));
+				this.tokens.append(Token(TokenType::Semicolon, this.span(start, this.index)));
 			}
 			case '@'b -> {
 				this.index++;
-				return Some(Token(TokenType::AtSign, this.span(start, this.index)));
+				this.tokens.append(Token(TokenType::AtSign, this.span(start, this.index)));
 			}
 			case '~'b -> {
 				this.index++;
-				return Some(Token(TokenType::Tilde, this.span(start, this.index)));
+				this.tokens.append(Token(TokenType::Tilde, this.span(start, this.index)));
 			}
-			case '.'b -> return Some(this.lexDot());
-			case '?'b -> return Some(this.lexQuestionmark());
-			case ':'b -> return Some(this.lexColon());
-			case '='b -> return Some(this.lexEqual());
-			case '+'b -> return Some(this.lexPlus());
-			case '-'b -> return Some(this.lexMinus());
-			case '*'b -> return Some(this.lexAsterisk());
-			case '/'b -> return Some(this.lexSlash());
-			case '%'b -> return Some(this.lexPercent());
-			case '&'b -> return Some(this.lexAmpersand());
-			case '|'b -> return Some(this.lexPipe());
-			case '^'b -> return Some(this.lexCaret());
-			case '<'b -> return Some(this.lexLess());
-			case '>'b -> return Some(this.lexGreater());
-			case '!'b -> return Some(this.lexExclamationMark());
-			case '\''b -> return Some(this.lexCharLiteral());
-			case '"'b -> return Some(this.lexStringLiteral());
+			case '.'b -> this.tokens.append(this.lexDot());
+			case '?'b -> this.tokens.append(this.lexQuestionmark());
+			case ':'b -> this.tokens.append(this.lexColon());
+			case '='b -> this.tokens.append(this.lexEqual());
+			case '+'b -> this.tokens.append(this.lexPlus());
+			case '-'b -> this.tokens.append(this.lexMinus());
+			case '*'b -> this.tokens.append(this.lexAsterisk());
+			case '/'b -> this.tokens.append(this.lexSlash());
+			case '%'b -> this.tokens.append(this.lexPercent());
+			case '&'b -> this.tokens.append(this.lexAmpersand());
+			case '|'b -> this.tokens.append(this.lexPipe());
+			case '^'b -> this.tokens.append(this.lexCaret());
+			case '<'b -> this.tokens.append(this.lexLess());
+			case '>'b -> this.tokens.append(this.lexGreater());
+			case '!'b -> this.tokens.append(this.lexExclamationMark());
+			case '\''b -> this.lexCharLiteral();
+			case '"'b -> this.lexStringLiteral();
 			else -> if isDigit(this.src[this.index]) {
-				return Some(this.lexNumber());
+				this.lexNumber();
 			} else if isAlpha(this.src[this.index]) || this.src[this.index] == '_'b || this.src[this.index] > 127 {
-				return Some(this.lexName());
+				this.lexName();
 			} else {
 				this.index++;
-				return Some(Token(TokenType::Unknown, TokenData::Unknown(this.src[this.index]), this.span(start, this.index)));
+				this.tokens.append(Token(TokenType::Unknown, this.span(start, this.index)));
 			}
 		}
 	}
@@ -803,7 +719,7 @@ struct Lexer {
 		return this.src.substring(start..this.index);
 	}
 
-	func lexCharLiteral(this: &&Lexer) -> Token {
+	func lexCharLiteral(this: &&Lexer) -> void {
 		const start = this.index;
 
 		this.index++; // skip '
@@ -812,12 +728,16 @@ struct Lexer {
 
 		const postfix = this.lexPostfix();
 		const span = this.span(start, this.index);
-		const literal = CharLiteral(str[0u], postfix);
 
-		return Token(TokenType::CharLiteral, TokenData::CharLiteral(literal), span);
+		this.tokens.append(Token(TokenType::CharLiteral, str[0u] as uint, span));
+
+		if !postfix.isEmpty() {
+			this.tokens.append(Token(TokenType::LiteralPostfix, this.strings.size(), span));
+			this.strings.append(postfix);
+		}
 	}
 
-	func lexStringLiteral(this: &&Lexer) -> Token {
+	func lexStringLiteral(this: &&Lexer) -> void {
 		const start = this.index;
 
 		this.index++; // skip "
@@ -826,12 +746,17 @@ struct Lexer {
 
 		const postfix = this.lexPostfix();
 		const span = this.span(start, this.index);
-		const literal = StringLiteral(str, postfix);
 
-		return Token(TokenType::StringLiteral, TokenData::StringLiteral(literal), span);
+		this.tokens.append(Token(TokenType::StringLiteral, this.strings.size(), span));
+		this.strings.append(str);
+
+		if !postfix.isEmpty() {
+			this.tokens.append(Token(TokenType::LiteralPostfix, this.strings.size(), span));
+			this.strings.append(postfix);
+		}
 	}
 
-	func lexNumber(this: &&Lexer) -> Token {
+	func lexNumber(this: &&Lexer) -> void {
 		const start = this.index;
 		const parsed_number = parseNumber(this.src, start);
 		assert(parsed_number.length != 0);
@@ -840,12 +765,17 @@ struct Lexer {
 
 		const postfix = this.lexPostfix();
 		const span = this.span(start, this.index);
-		const literal = NumberLiteral(parsed_number, postfix);
 
-		return Token(TokenType::NumberLiteral, TokenData::NumberLiteral(literal), span);
+		this.tokens.append(Token(TokenType::NumberLiteral, this.numbers.size(), span));
+		this.numbers.append(parsed_number);
+
+		if !postfix.isEmpty() {
+			this.tokens.append(Token(TokenType::LiteralPostfix, this.strings.size(), span));
+			this.strings.append(postfix);
+		}
 	}
 
-	func lexName(this: &&Lexer) -> Token {
+	func lexName(this: &&Lexer) -> void {
 		const start = this.index;
 
 		while this.index < this.src.size() {
@@ -860,8 +790,11 @@ struct Lexer {
 		const span = this.span(start, this.index);
 
 		match this.keywords.get(name) {
-			case Some: token -> return Token(token, span);
-			else -> return Token(TokenType::Identifier, TokenData::Identifier(name), span);
+			case Some: keyword_id -> this.tokens.append(Token(keyword_id, span));
+			else -> {
+				this.tokens.append(Token(TokenType::Identifier, this.strings.size(), span));
+				this.strings.append(name);
+			}
 		}
 	}
 

@@ -17,7 +17,7 @@ variant ParsedAnnotation {
 
 	case Flag;
 	case String: String;
-	case Number: NumberLiteral;
+	case Number: ParsedNumber;
 }
 
 enum TypeDeclKind {
@@ -92,9 +92,9 @@ variant ParsedExpr {
 
 	case Empty;
 
-	case Char: CharLiteral;
-	case String: StringLiteral;
-	case Number: NumberLiteral;
+	case Char: (value: byte, postfix: String);
+	case String: (value: String, postfix: String);
+	case Number: (value: ParsedNumber, postfix: String);
 	case Bool: bool;
 	case Name: ParsedName;
 
@@ -264,6 +264,10 @@ func dumpModule(stmts: &List!<ParsedStmt>) -> String {
 	return out.finalize();
 }
 
+func format(parsed_number: ParsedNumber) -> String {
+	return format(parsed_number.significant) + " * " + format(parsed_number.base) + "^" + format(parsed_number.exponent);
+}
+
 func dump(this: &ParsedAnnotation, out: &&TreeFormatter, is_last: bool) -> void {
 	out.push("Annotation", is_last);
 	out.attribute(this.name);
@@ -271,7 +275,7 @@ func dump(this: &ParsedAnnotation, out: &&TreeFormatter, is_last: bool) -> void 
 	match this {
 		case Flag -> {}
 		case String: value -> out.value(value);
-		case Number: value -> out.value(value.dump());
+		case Number: value -> out.value(format(value));
 	}
 
 	out.span(this.span);
@@ -675,21 +679,21 @@ func dump(this: &ParsedExpr, out: &&TreeFormatter, is_last: bool) -> void {
 			out.span(this.span);
 			out.pop();
 		}
-		case Char: value -> {
+		case Char: literal -> {
 			out.push("CharLiteral", is_last);
-			out.attribute(value.dump());
+			out.attribute("\'" + literal.value + "\'" + literal.postfix);
 			out.span(this.span);
 			out.pop();
 		}
-		case String: value -> {
+		case String: literal -> {
 			out.push("StringLiteral", is_last);
-			out.attribute(value.dump());
+			out.attribute("\"" + literal.value + "\"" + literal.postfix);
 			out.span(this.span);
 			out.pop();
 		}
-		case Number: value -> {
+		case Number: literal -> {
 			out.push("NumberLiteral", is_last);
-			out.attribute(value.dump());
+			out.attribute(format(literal.value) + literal.postfix);
 			out.span(this.span);
 			out.pop();
 		}
