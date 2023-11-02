@@ -1,0 +1,543 @@
+import std/core;
+import std/io;
+import std/list;
+import std/map;
+import std/string;
+
+import ir;
+import irformatter;
+import llvm_c;
+import llvm_util;
+import options;
+
+struct IRToLLVMConverter {
+	var ctx: &&Context;
+	var options: CompilerOptions;
+
+	var llvm_ctx: LLVMContextRef;
+	var module: LLVMModuleRef;
+	var data_layout: LLVMTargetDataRef;
+	var builder: LLVMBuilderRef;
+
+	var types: Map!<TypeRef, LLVMTypeRef>;
+	var functions: Map!<FuncRef, LLVMValueRef>;
+	var global_variables: Map!<VariableRef, LLVMValueRef>;
+
+	var current_function: FuncRef;
+	var blocks: Map!<BlockRef, LLVMBasicBlockRef>;
+	var registers: List!<LLVMValueRef>;
+	var local_variables: Map!<VariableRef, LLVMValueRef>;
+
+	var di_builder: LLVMDIBuilderRef;
+	var di_namespaces: Map!<NamespaceRef, LLVMMetadataRef>;
+	var di_types: Map!<TypeRef, LLVMMetadataRef>;
+	var di_functions: Map!<FuncRef, LLVMMetadataRef>;
+	var di_global_variables: Map!<VariableRef, LLVMMetadataRef>;
+	var di_local_variables: Map!<VariableRef, LLVMMetadataRef>;
+
+	var void_type: LLVMTypeRef;
+	var bool_type: LLVMTypeRef;
+	var byte_type: LLVMTypeRef;
+	var int_type: LLVMTypeRef;
+	var ptr_type: LLVMTypeRef;
+
+	func constructor(this: &&IRToLLVMConverter, ctx: &&Context, options: &CompilerOptions) => void {
+		this.ctx := &&ctx;
+		this.options := options;
+
+		this.llvm_ctx := LLVMContextCreate();
+		this.module := LLVMModuleCreateWithNameInContext("", this.llvm_ctx);
+		LLVMSetTarget(this.module, options.target_triple);
+		LLVMSetDataLayout(this.module, options.target_data_layout);
+		this.data_layout := LLVMGetModuleDataLayout(this.module);
+		this.builder := LLVMCreateBuilderInContext(this.llvm_ctx);
+
+		this.void_type := LLVMVoidTypeInContext(this.llvm_ctx);
+		this.bool_type := LLVMIntTypeInContext(this.llvm_ctx, 1u);
+		this.byte_type := LLVMIntTypeInContext(this.llvm_ctx, 8u);
+		this.int_type := LLVMIntTypeInContext(this.llvm_ctx, LLVMPointerSize(this.data_layout) as uint * 8);
+		this.ptr_type := LLVMPointerTypeInContext(this.llvm_ctx, 0u);
+
+		LLVMAddModuleFlag(this.module, LLVMModuleFlagBehavior::LLVMModuleFlagBehaviorError, "Dwarf Version", LLVMValueAsMetadata(LLVMConstInt(this.int_type, 5, false)));
+		LLVMAddModuleFlag(this.module, LLVMModuleFlagBehavior::LLVMModuleFlagBehaviorWarning, "Debug Info Version", LLVMValueAsMetadata(LLVMConstInt(this.int_type, 3, false)));
+		this.di_builder := LLVMCreateDIBuilder(this.module);
+	}
+
+	func destructor(this: &&IRToLLVMConverter) => void {
+		LLVMDisposeDIBuilder(this.di_builder);
+		LLVMDisposeBuilder(this.builder);
+		LLVMDisposeModule(this.module);
+		LLVMContextDispose(this.llvm_ctx);
+	}
+
+	func linkModule(this: &&IRToLLVMConverter, path: String) => void {
+		match loadModuleFromFile(this.llvm_ctx, path) {
+			case Ok: module -> discard LLVMLinkModules2(this.module, module);
+			case Error: error -> {
+				this.ctx.error("couldn't load llvm module '" + path + "': " + error, Location());
+			}
+		}
+	}
+
+	func finalizeDI(this: &&IRToLLVMConverter) => void {
+		LLVMDIBuilderFinalize(this.di_builder);
+	}
+
+	func verify(this: &&IRToLLVMConverter) => void {
+		match verifyModule(this.module, LLVMVerifierFailureAction::LLVMReturnStatusAction) {
+			case Error: error -> this.ctx.error(error, Location());
+			default -> {}
+		}
+	}
+
+	func writeLLVMIRToFile(this: &&IRToLLVMConverter, path: String) => void {
+		if !printModuleToFile(this.module, path) {
+			this.ctx.error("couldn't write llvm ir to file '" + path + "'", Location());
+		}
+	}
+
+	func writeBitcodeToFile(this: &&IRToLLVMConverter, path: String) => void {
+		if LLVMWriteBitcodeToFile(this.module, path) != 0 {
+			this.ctx.error("couldn't write llvm ir to file '" + path + "'", Location());
+		}
+	}
+
+	func run(this: &&IRToLLVMConverter) => void {
+		for type in this.ctx.types {
+			discard this.convertType(type.getRef());
+		}
+
+		for function in this.ctx.functions {
+			if !(function.is_inline | function.is_comptime | function.is_incomplete_template) {
+				discard this.convertFunctionDecl(function.getRef());
+			}
+		}
+
+		for function in this.ctx.functions {
+			if !(function.is_inline | function.is_comptime | function.is_incomplete_template) {
+				discard this.convertFunctionBody(function.getRef());
+			}
+		}
+	}
+
+	func convertType(this: &&IRToLLVMConverter, type: TypeRef) => LLVMTypeRef {
+		assert(!type.isNull());
+
+		if type.is_incomplete_template || type.is_comptime {
+			return LLVMTypeRef();
+		}
+
+		if type.reference_kind != None {
+			return this.ptr_type;
+		}
+
+		if const result = this.types.get(type) {
+			return result;
+		}
+
+		const result = match type.body {
+			case Empty -> {
+				this.ctx.error("type has empty body " + type.signature(), type.name_span);
+				yield LLVMTypeRef();
+			}
+			case Void -> yield this.void_type;
+			case Bool -> yield this.bool_type;
+			case Byte -> yield this.byte_type;
+			case Int: int_type -> {
+				if int_type.size == 0 {
+					yield this.int_type;
+				} else {
+					yield LLVMIntTypeInContext(this.llvm_ctx, int_type.size);
+				}
+			}
+			case Float: float_type -> yield match float_type {
+				case F16 -> yield LLVMHalfTypeInContext(this.llvm_ctx);
+				case Bf16 -> yield LLVMBFloatTypeInContext(this.llvm_ctx);
+				case F32 -> yield LLVMFloatTypeInContext(this.llvm_ctx);
+				case F64 -> yield LLVMDoubleTypeInContext(this.llvm_ctx);
+				case F128 -> yield LLVMFP128TypeInContext(this.llvm_ctx);
+				default -> {
+					this.ctx.error("invalid float type: " + format(float_type), type.loc);
+					yield LLVMTypeRef();
+				}
+			}
+			case Pointer | Function -> yield this.ptr_type;
+			/*
+			case Vector: vector_type -> type.llvm_type = LLVMVectorType(this.getType(vector_type.element_type), vector_type.size);
+			case Matrix: matrix_type -> type.llvm_type = LLVMVectorType(this.getType(matrix_type.element_type), matrix_type.columns * matrix_type.rows);
+			case Array: array_type -> type.llvm_type = LLVMArrayType(this.getType(array_type.element_type), array_type.size);
+			case Range | RangeIterator | NumericRange | NumericIterator | Tuple | Struct -> {
+				type.llvm_type = LLVMStructCreateNamed(this.llvm_context, name);
+
+				var element_types: List!<LLVMTypeRef>;
+				for member_variable in type.member_variables {
+					element_types.append(this.getType(member_variable.type));
+				}
+
+				LLVMStructSetBody(type.llvm_type, element_types, type.is_packed);
+			}
+			*/
+			case Enum -> yield this.convertType(type.id_type);
+			/*
+			case Variant -> {
+				type.llvm_type = LLVMStructCreateNamed(this.llvm_context, name);
+
+				var element_types: List!<LLVMTypeRef>;
+				element_types.append(this.getType(type.id_type));
+
+				var max_size = 0u;
+				var max_alignment = 1u;
+
+				for case_decl in type.variant_cases {
+					if case_decl.type == this.program.void_type {
+						continue;
+					}
+
+					var case_type = this.getType(case_decl.type);
+
+					const current_size = LLVMStoreSizeOfType(this.data_layout, case_type) as uint;
+					if current_size > max_size {
+						max_size = current_size;
+					}
+
+					const current_alignment = LLVMPreferredAlignmentOfType(this.data_layout, case_type) as uint;
+					if current_alignment > max_alignment {
+						max_alignment = current_alignment;
+					}
+				}
+
+				const max_alignment_type = LLVMIntTypeInContext(this.llvm_context, max_alignment * 8);
+				element_types.append(LLVMArrayType(max_alignment_type, max_size / max_alignment));
+
+				for member_variable in type.member_variables {
+					element_types.append(this.getType(member_variable.type));
+				}
+
+				LLVMStructSetBody(type.llvm_type, element_types, type.is_packed);
+			}
+			*/
+			case Alias: target -> yield this.convertType(target);
+			case TypeRef | FuncRef -> yield LLVMTypeRef();
+			default -> {
+				this.ctx.todo("codegen type " + type.signature(), type.name_span);
+			}
+		}
+
+		this.types.set(type, result);
+		return result;
+	}
+
+	func convertFunctionDecl(this: &&IRToLLVMConverter, function: FuncRef) => LLVMValueRef {
+		if function.is_incomplete_template || function.is_comptime {
+			return LLVMValueRef();
+		}
+
+		if const f = this.functions.get(function) {
+			return f;
+		}
+
+		const return_type = this.convertType(function.raw_return_type);
+		var parameter_types: List!<LLVMTypeRef>;
+		for type in function.raw_parameter_types {
+			if type.isNull() {
+				this.ctx.error("function parameter type is null: " + function.signature(), function.signature_span);
+				return LLVMValueRef();
+			}
+
+			parameter_types.append(this.convertType(type));
+		}
+
+		const function_type = LLVMFunctionType(return_type, parameter_types, false);
+
+		var name = match this.options.symbol_type {
+			case None -> yield "";
+			case Name -> yield function.name;
+			case Full -> yield function.signature();
+		}
+
+		if function == this.ctx.main_function {
+			name = "void_main";
+		} else if function.is_extern && function.attributes.contains(Attribute::ExternName) {
+			name = function.attributes.get(Attribute::ExternName).value().toString();
+		}
+
+		const result = LLVMAddFunction(this.module, name, function_type);
+		this.functions.set(function, result);
+		return result;
+	}
+
+	func convertFunctionBody(this: &&IRToLLVMConverter, function: FuncRef) => void {
+		if function.is_extern {
+			return;
+		}
+
+		const llvm_func = this.functions.get(function) else {
+			return;
+		}
+
+		this.current_function = function;
+
+		this.registers.clear();
+		this.registers.fill(function.instructions.size(), LLVMValueRef());
+		for i in 0u..function.raw_parameter_types.size() {
+			this.registers[i] = LLVMGetParam(llvm_func, i);
+		}
+
+		var blocks = function.regions.front().getBlocksOrderedByDataDependencies();
+		for block in blocks {
+			this.blocks.set(block, LLVMAppendBasicBlockInContext(this.llvm_ctx, llvm_func, ""));
+		}
+
+		const entry_block = this.blocks[function.regions.front().blocks.front().getRef()];
+		LLVMPositionBuilderAtEnd(this.builder, entry_block);
+		for variable in function.variables {
+			if !variable.is_parameter {
+				const type = this.convertType(variable.type);
+				this.local_variables[variable.getRef()] = LLVMBuildAlloca(this.builder, type, "");
+			}
+		}
+
+		for block in blocks {
+			LLVMPositionBuilderAtEnd(this.builder, this.blocks[block]);
+			for id in block.instructions {
+				this.registers[id] = this.convertInstruction(function.instructions[id]);
+			}
+		}
+
+		for block in blocks {
+			if block.instructions.isEmpty() {
+				continue;
+			}
+
+			const phi = &function.instructions[block.instructions.front()];
+			if phi.op != Phi {
+				continue;
+			}
+
+			var incoming_blocks: List!<LLVMBasicBlockRef>;
+			var incoming_values: List!<LLVMValueRef>;
+			for i in 0u..phi.operands.size() | 2u {
+				incoming_blocks.append(this.blocks[phi.operands[i].toBlock()]);
+				incoming_values.append(this.convertValue(phi.operands[i + 1]));
+			}
+			LLVMAddIncoming(this.registers[phi.id], incoming_values, incoming_blocks);
+		}
+	}
+
+	func convertValue(this: &&IRToLLVMConverter, value: &Value) => LLVMValueRef {
+		const type = this.convertType(value.type);
+		match value {
+			case Undefined -> {
+				if value.type.isNull() || value.type == this.ctx.void_type {
+					return LLVMValueRef();
+				} else {
+					return LLVMGetUndef(this.convertType(value.type));
+				}
+			}
+			case Void -> return LLVMValueRef();
+			case Register: index -> return this.registers[index];
+			case Bytes: bytes -> match value.type.body {
+				case Bool -> return LLVMConstInt(type, value.toBool() as int, false);
+				case Byte -> return LLVMConstInt(type, value.toPrimitive!<byte>() as int, false);
+				case Int: int_type -> return LLVMConstInt(type, value.toInt(), int_type.is_signed);
+				case Enum -> return LLVMConstInt(type, value.toInt(), value.type.id_type.isSigned());
+				default -> return LLVMValueRef();
+			}
+			case Variable: variable -> {
+				if variable.is_global {
+					return this.global_variables[variable];
+				} else {
+					return this.local_variables[variable];
+				}
+			}
+			case FuncRef: function -> return this.functions[function];
+			default -> return LLVMValueRef();
+		}
+	}
+
+	func convertValueList(this: &&IRToLLVMConverter, values: &List!<Value>) => List!<LLVMValueRef> {
+		var result: List!<LLVMValueRef>;
+		for v in values {
+			result.append(this.convertValue(v));
+		}
+		return result;
+	}
+
+	func convertInstruction(this: &&IRToLLVMConverter, instruction: &Instruction) => LLVMValueRef {
+		match instruction.op {
+			case None -> return LLVMValueRef();
+			case Branch -> return LLVMBuildBr(this.builder, this.blocks[instruction.operands[0u].toBlock()]);
+			case CondBranch -> return LLVMBuildCondBr(this.builder,
+				this.convertValue(instruction.operands[0u]),
+				this.blocks[instruction.operands[1u].toBlock()],
+				this.blocks[instruction.operands[2u].toBlock()]
+			);
+			// case Switch;
+			case Phi -> return LLVMBuildPhi(this.builder, this.convertType(instruction.result_type), "");
+			case Unreachable -> return LLVMBuildUnreachable(this.builder);
+			// case Scope;
+			// case Defer;
+			// case IfElse;
+			// case Match;
+			// case Yield;
+			// case LoopWhile;
+			// case LoopDoWhile;
+			// case LoopCount;
+			// case LoopRange;
+			// case Break;
+			// case Continue;
+			case Call -> {
+				var parameters: List!<LLVMValueRef>;
+				var parameter_types: List!<LLVMTypeRef>;
+				for i in 1u..instruction.operands.size() {
+					parameters.append(this.convertValue(instruction.operands[i]));
+					parameter_types.append(this.convertType(instruction.operands[i].type));
+				}
+				const return_type = this.convertType(instruction.result_type);
+				const function_type = LLVMFunctionType(return_type, parameter_types, false);
+				const function = this.convertValue(instruction.operands[0u]);
+				return LLVMBuildCall2(this.builder, function_type, function, parameters, "");
+			}
+			case Return -> {
+				if instruction.operands[0u] is Void || this.current_function.raw_return_type == this.ctx.void_type {
+					return LLVMBuildRetVoid(this.builder);
+				} else if instruction.operands[0u] is Undefined {
+					return LLVMBuildRet(this.builder, LLVMGetUndef(this.convertType(this.current_function.raw_return_type)));
+				} else {
+					return LLVMBuildRet(this.builder, this.convertValue(instruction.operands[0u]));
+				}
+			}
+			case Load -> return LLVMBuildLoad2(this.builder,
+				this.convertType(instruction.op_type),
+				this.convertValue(instruction.operands[0u]), ""
+			);
+			case Store -> return LLVMBuildStore(this.builder,
+				this.convertValue(instruction.operands[1u]),
+				this.convertValue(instruction.operands[0u])
+			);
+			// case StoreNull;
+			// case StoreRepeat;
+			// case Swap;
+			// case PtrAdd;
+			// case PtrDiff;
+			// case GetElement;
+			// case SetElement;
+			// case Select;
+			// case CastOp;
+			case IntOp -> return this.convertIntOp(instruction.mode as IntOp, this.convertType(instruction.op_type), this.convertValueList(instruction.operands));
+			case IntRMWOp -> {
+				var operands = this.convertValueList(instruction.operands);
+				const op_type = this.convertType(instruction.op_type);
+				const addr = operands[0u];
+				operands[0u] = LLVMBuildLoad2(this.builder, op_type, addr, "");
+				const result = this.convertIntOp(instruction.mode as IntOp, op_type, operands);
+				return LLVMBuildStore(this.builder, result, addr);
+			}
+			// case FloatOp;
+			// case FloatRMWOp;
+			case SCmp -> return this.convertSCmpOp(instruction.mode as ComparisonOp, this.convertValueList(instruction.operands));
+			// case UCmp;
+			// case FCmp;
+			// case RotL;
+			// case RotR;
+			// case BitReverse;
+			// case ByteReverse;
+			// case PopCount;
+			// case CountLeadingZeros;
+			// case CountTrailingZeros;
+			// case VectorFill;
+			// case VectorShuffle;
+			// case VectorIntEQ;
+			// case VectorIntNE;
+			// case VectorIntOp;
+			// case VectorIntRMWOp;
+			// case VectorScalarIntOp;
+			// case VectorScalarIntRMWOp;
+			// case VectorIntReduceOp;
+			// case VectorIntDot;
+			// case VectorFloatEQ;
+			// case VectorFloatNE;
+			// case VectorFloatOp;
+			// case VectorFloatRMWOp;
+			// case VectorScalarFloatOp;
+			// case VectorScalarFloatRMWOp;
+			// case VectorFloatReduceOp;
+			// case VectorFloatDot;
+			// case MatrixIdentity;
+			// case MatrixFromValues;
+			// case MatrixFromColumns;
+			// case MatrixFromRows;
+			// case MatrixTranspose;
+			// case MatrixMultiply;
+			// case SizeOf;
+			// case AlignmentOf;
+			// case ReferenceKindOf;
+			// case HasDefaultConstructor;
+			// case HasCopyConstructor;
+			// case HasAssignmentOperator;
+			// case HasEqualOperator;
+			// case HasCompareOperator;
+			// case VariantOpUnsafeAs;
+			// case VariantOpIs;
+			// case ArrayGetSize;
+			// case ArrayGetData;
+			// case RangeGetSize;
+			// case RangeGetData;
+			// case RangeGetIterator;
+			// case NumericTypeRangeOperator;
+			// case NumericRangeSetStep;
+			// case Abort;
+			// case Panic;
+			// case Assert;
+			// case AssertError;
+			default -> {
+				this.ctx.todo("finish instruction to llvm conversion (" + format(instruction.op) + ")", instruction.loc);
+				return LLVMValueRef();
+			}
+		}
+	}
+
+	func convertIntOp(this: &&IRToLLVMConverter, op: IntOp, op_type: LLVMTypeRef, operands: &List!<LLVMValueRef>) => LLVMValueRef {
+		match op {
+			case Add -> return LLVMBuildAdd(this.builder, operands[0u], operands[1u], "");
+			case Sub -> return LLVMBuildSub(this.builder, operands[0u], operands[1u], "");
+			case Neg -> return LLVMBuildNeg(this.builder, operands[0u], "");
+			case Mul -> return LLVMBuildMul(this.builder, operands[0u], operands[1u], "");
+			case Div -> return LLVMBuildSDiv(this.builder, operands[0u], operands[1u], "");
+			case Mod -> return LLVMBuildSRem(this.builder, operands[0u], operands[1u], "");
+			// case Abs -> return LLVMBuild(this.builder, operands[0u], operands[1u], "");
+			// case Sign -> return LLVMBuild(this.builder, operands[0u], operands[1u], "");
+			// case Min -> return LLVMBuild(this.builder, operands[0u], operands[1u], "");
+			// case Max -> return LLVMBuild(this.builder, operands[0u], operands[1u], "");
+			// case Clamp -> return LLVMBuild(this.builder, operands[0u], operands[1u], "");
+			// case Lerp -> return LLVMBuild(this.builder, operands[0u], operands[1u], "");
+			case Inc -> return LLVMBuildAdd(this.builder, operands[0u], LLVMConstInt(op_type, 1, false), "");
+			case Dec -> return LLVMBuildSub(this.builder, operands[0u], LLVMConstInt(op_type, 1, false), "");
+			case UDiv -> return LLVMBuildUDiv(this.builder, operands[0u], operands[1u], "");
+			case UMod -> return LLVMBuildURem(this.builder, operands[0u], operands[1u], "");
+			// case UMin -> return LLVMBuild(this.builder, operands[0u], operands[1u], "");
+			// case UMax -> return LLVMBuild(this.builder, operands[0u], operands[1u], "");
+			// case UClamp -> return LLVMBuild(this.builder, operands[0u], operands[1u], "");
+			case And -> return LLVMBuildAnd(this.builder, operands[0u], operands[1u], "");
+			case Or -> return LLVMBuildOr(this.builder, operands[0u], operands[1u], "");
+			case XOr -> return LLVMBuildXor(this.builder, operands[0u], operands[1u], "");
+			case Not -> return LLVMBuildNot(this.builder, operands[0u], "");
+			case ShL -> return LLVMBuildShl(this.builder, operands[0u], operands[1u], "");
+			case LShR -> return LLVMBuildLShr(this.builder, operands[0u], operands[1u], "");
+			case AShR -> return LLVMBuildAShr(this.builder, operands[0u], operands[1u], "");
+			default -> return LLVMValueRef();
+		}
+	}
+
+	func convertSCmpOp(this: &&IRToLLVMConverter, op: ComparisonOp, operands: &List!<LLVMValueRef>) => LLVMValueRef {
+		match op {
+			case EQ -> return LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntEQ, operands[0u], operands[1u], "");
+			case NE -> return LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntNE, operands[0u], operands[1u], "");
+			case LT -> return LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntSLT, operands[0u], operands[1u], "");
+			case LE -> return LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntSLE, operands[0u], operands[1u], "");
+			case GT -> return LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntSGT, operands[0u], operands[1u], "");
+			case GE -> return LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntSGE, operands[0u], operands[1u], "");
+			case Cmp -> return LLVMValueRef();
+		}
+	}
+}

@@ -1,0 +1,312 @@
+import std/core;
+import std/list;
+import std/map;
+import std/shared;
+import std/io;
+import std/string;
+
+import ir;
+import irinterpreter;
+
+struct Builder {
+	var ctx: SharedPtr!<Context>;
+	var interpreter: &&Interpreter;
+	var function: FuncRef;
+	var block: BlockRef;
+	var continue_targets: Map!<uint, BlockRef>;
+	var break_targets: Map!<uint, BlockRef>;
+
+	func constructor(this: &&Builder, ctx: SharedPtr!<Context>, interpreter: &&Interpreter, function: FuncRef) => void {
+		this.ctx := ctx;
+		this.interpreter := &&interpreter;
+		this.function := function;
+		this.block := ();
+
+		if !function.isNull() {
+			if function.regions.isEmpty() {
+				var entry_region = this.function.createRegion();
+				this.block = entry_region.createBlock();
+			} else {
+				this.block = this.function.regions.front().blocks.front().getRef();
+			}
+
+			if function.instructions.isEmpty() && !function.raw_parameter_types.isEmpty() {
+				for i in 0u..function.raw_parameter_types.size() {
+					const t = function.raw_parameter_types[i];
+					function.instructions.append(Instruction(OpCode::None, 0u32, t, List!<Value>(), this.block, i, TypeRef::null()));
+				}
+			}
+		}
+	}
+
+	func constructor(this: &&Builder, other: Builder) => void = default;
+	func destructor(this: &&Builder) => void = default;
+	func =(this: &&Builder, other: Builder) => void = default;
+	func ==(this: Builder, other: Builder) => void = default;
+
+	func setInsertPointToEnd(this: &&Builder, block: BlockRef) => void {
+		this.block = block;
+	}
+
+	func setInsertPointToEnd(this: &&Builder, region: RegionRef) => void {
+		if region.blocks.isEmpty() {
+			this.block = region.createBlock();
+		} else {
+			this.block = region.blocks.back();
+		}
+	}
+
+	func getInsertBlock(this: &Builder) => BlockRef {
+		return this.block;
+	}
+
+	func buildInstruction(this: &&Builder, op: OpCode, mode: u32, op_type: TypeRef, operands: List!<Value>, result_type: TypeRef) => Value {
+		assert(!this.function.isNull());
+		assert(!this.block.isNull());
+
+		if op.isPrimitive() && !(op is Call) {
+			var can_fold = true;
+			for operand in operands {
+				can_fold &= operand.isKnownAtComptime();
+			}
+
+			if can_fold {
+				this.interpreter.resolveOperands(&&operands);
+				return this.interpreter.interpretPrimitiveOp(op, mode, op_type, operands);
+			}
+		}
+
+		const id = this.function.instructions.size();
+		this.function.instructions.append(Instruction(op, mode, op_type, operands, this.block, id, result_type));
+		this.block.instructions.append(id);
+		return Value::Register(id, result_type);
+	}
+
+	template <N: uint>
+	func buildInstruction(this: &&Builder, op: OpCode, mode: u32, op_type: TypeRef, operands: &Array!<Value, N>, result_type: TypeRef) => Value {
+		return this.buildInstruction(op, mode, op_type, List!<Value>(operands.range()), result_type);
+	}
+
+	template <N: uint = 0>
+	func buildInstruction(this: &&Builder, op: OpCode, mode: u32, op_type: TypeRef, result_type: TypeRef) => Value {
+		return this.buildInstruction(op, mode, op_type, List!<Value>(), result_type);
+	}
+
+	func buildBranch(this: &&Builder, dst: BlockRef) => Value {
+		return this.buildInstruction!<1u>(OpCode::Branch, 0u32, TypeRef::null(), [Value::BlockRef(dst)], TypeRef::null());
+	}
+
+	func buildCondBranch(this: &&Builder, condition: &Value, true_block: BlockRef, false_block: BlockRef) => Value {
+		var operands: List!<Value>;
+		return this.buildInstruction!<3u>(OpCode::CondBranch, 0u32, TypeRef::null(), [condition, Value::BlockRef(true_block), Value::BlockRef(false_block)], TypeRef::null());
+	}
+
+	func buildSwitch(this: &&Builder, condition: &Value, default_block: BlockRef) => Value {
+		return this.buildInstruction!<2u>(OpCode::Switch, 0u32, TypeRef::null(), [condition, Value::BlockRef(default_block)], TypeRef::null());
+	}
+
+	func buildPhi(this: &&Builder, type: TypeRef) => Value {
+		return this.buildInstruction!<0u>(OpCode::Phi, 0u32, TypeRef::null(), type);
+	}
+
+	func buildUnreachable(this: &&Builder) => Value {
+		return this.buildInstruction!<0u>(OpCode::Unreachable, 0u32, TypeRef::null(), TypeRef::null());
+	}
+
+	func buildScope(this: &&Builder, region: RegionRef) => Value {
+		return this.buildInstruction!<1u>(OpCode::Scope, 0u32, TypeRef::null(), [Value::RegionRef(region)], TypeRef::null());
+	}
+
+	func buildScope(this: &&Builder, region: RegionRef, result_value: &Value) => Value {
+		return this.buildInstruction!<2u>(OpCode::Scope, 0u32, TypeRef::null(), [Value::RegionRef(region), result_value], result_value.type);
+	}
+
+	func buildDefer(this: &&Builder, region: RegionRef) => Value {
+		return this.buildInstruction!<1u>(OpCode::Defer, 0u32, TypeRef::null(), [Value::RegionRef(region)], TypeRef::null());
+	}
+
+	func buildIfElse(this: &&Builder, cond: Value, then_region: RegionRef, else_region: RegionRef) => Value {
+		return this.buildInstruction!<3u>(OpCode::IfElse, 0u32, TypeRef::null(), [cond, Value::RegionRef(then_region), Value::RegionRef(else_region)], TypeRef::null());
+	}
+
+	func buildMatch(this: &&Builder, value: &Value, type: TypeRef, default_block: BlockRef) => Value {
+		return this.buildInstruction!<2u>(OpCode::Match, 0u32, TypeRef::null(), [value, Value::BlockRef(default_block)], type);
+	}
+
+	func buildYield(this: &&Builder, value: &Value, match_instruction: Value) => Value {
+		return this.buildInstruction!<2u>(OpCode::Yield, 0u32, TypeRef::null(), [value, match_instruction], TypeRef::null());
+	}
+
+	func buildLoopWhile(this: &&Builder, cond: &Value, cond_region: RegionRef, body: RegionRef) => Value {
+		return this.buildInstruction!<3u>(OpCode::LoopWhile, 0u32, TypeRef::null(), [cond, Value::RegionRef(cond_region), Value::RegionRef(body)], TypeRef::null());
+	}
+
+	func buildLoopDoWhile(this: &&Builder, cond: &Value, cond_region: RegionRef, body: RegionRef) => Value {
+		return this.buildInstruction!<3u>(OpCode::LoopDoWhile, 0u32, TypeRef::null(), [cond, Value::RegionRef(cond_region), Value::RegionRef(body)], TypeRef::null());
+	}
+
+	func buildLoopCount(this: &&Builder, start: &Value, end: &Value, step: &Value) => Value {
+		assert(start.type == end.type);
+		assert(start.type == step.type);
+		return this.buildInstruction!<3u>(OpCode::LoopCount, 0u32, start.type, [start, end, step], start.type);
+	}
+
+	func buildLoopRange(this: &&Builder, start: &Value, element_type: TypeRef, end: &Value, body: BlockRef) => Value {
+		assert(start.type == end.type);
+		assert(start.type.reference_kind != None || start.type.isPointer());
+		return this.buildInstruction!<2u>(OpCode::LoopRange, 0u32, element_type, [start, end], element_type);
+	}
+
+	func buildBreak(this: &&Builder, loop: &Value) => Value {
+		return this.buildInstruction!<1u>(OpCode::Break, 0u32, TypeRef::null(), [loop], TypeRef::null());
+	}
+
+	func buildContinue(this: &&Builder, loop: &Value) => Value {
+		return this.buildInstruction!<1u>(OpCode::Continue, 0u32, TypeRef::null(), [loop], TypeRef::null());
+	}
+
+	func buildCall(this: &&Builder, callee: FuncRef, args: List!<Value>) => Value {
+		if callee.is_comptime {
+			this.interpreter.resolveOperands(&&args);
+			return this.interpreter.interpretCall(callee, args);
+		}
+
+		if callee.is_inline {
+			return this.buildInstruction(callee.inline_body.op, callee.inline_body.mode, callee.inline_body.op_type, args, callee.inline_body.result_type);
+		}
+
+		const parameter_types = callee.parameter_types;
+		assert(args.size() == parameter_types.size());
+		for i in 0u..parameter_types.size() {
+			assert(args[i].type == parameter_types[i]);
+		}
+
+		const operands = List!<Value>(1u, Value::FuncRef(callee, this.ctx.funcref_type)) + args;
+		return this.buildInstruction(OpCode::Call, 0u32, TypeRef::null(), operands, callee.return_type);
+	}
+
+	func buildReturn(this: &&Builder, value: &Value) => Value {
+		return this.buildInstruction!<1u>(OpCode::Return, 0u32, value.type, [value], TypeRef::null());
+	}
+
+	func buildLoad(this: &&Builder, type: TypeRef, addr: &Value) => Value {
+		assert(addr.type.reference_kind != None || addr.type.isPointer());
+		return this.buildInstruction!<1u>(OpCode::Load, 0u32, type, [addr], type);
+	}
+
+	func buildStore(this: &&Builder, addr: &Value, value: &Value) => Value {
+		assert(addr.type.reference_kind != None || addr.type.isPointer());
+		return this.buildInstruction!<2u>(OpCode::Store, 0u32, value.type, [addr, value], TypeRef::null());
+	}
+/*
+	func buildPtrAdd(this: &&Builder, addr: &Value, offset: &Value) => Value {
+		assert(addr.type.reference_kind != None || addr.type.isPointer());
+		assert(offset.type == this.ctx.int_type);
+		return this.buildInstruction(OpCode::PtrAdd, this.ctx.ptr_type, addr, offset);
+	}
+
+	func buildPtrDiff(this: &&Builder, lhs: &Value, rhs: &Value) => Value {
+		assert(lhs.type == rhs.type);
+		assert(lhs.type.reference_kind != None || lhs.type.isPointer());
+		return this.buildInstruction(OpCode::PtrDiff, this.ctx.int_type, lhs, rhs);
+	}
+
+	func buildGetElement(this: &&Builder, object: &Value, index: uint) => Value {
+		const offset = Value::fromPrimitive!<uint>(index, this.ctx.int_type);
+		const element_type = object.type.getMemberType(index);
+		return this.buildInstruction(OpCode::GetElement, element_type, object, offset);
+	}
+
+	func buildSetElement(this: &&Builder, object: &Value, index: uint, value: &Value) => Value {
+		const offset = Value::fromPrimitive!<uint>(index, this.ctx.int_type);
+		return this.buildInstruction(OpCode::SetElement, object.type, object, offset, value);
+	}
+
+	func buildShuffleVector(this: &&Builder, result_type: TypeRef, lhs: &Value, rhs: &Value, mask: &Value) => Value {
+		const mask_type = (lhs.type.body as Vector).value();
+		const input_vector_type = (lhs.type.body as Vector).value();
+		const result_vector_type = (result_type.body as Vector).value();
+
+		assert(lhs.type == rhs.type);
+		assert(mask_type.element_type == this.ctx.uint_type);
+		assert(result_vector_type.element_type == input_vector_type.element_type);
+		assert(result_vector_type.size == input_vector_type.size);
+		return this.buildInstruction(OpCode::VectorShuffle, result_type, lhs, rhs, mask);
+	}
+
+	func buildSelect(this: &&Builder, condition: &Value, true_value: &Value, false_value: &Value) => Value {
+		assert(condition.type == this.ctx.bool_type);
+		assert(true_value.type == false_value.type);
+		return this.buildInstruction(OpCode::Select, true_value.type, condition, true_value, false_value);
+	}
+*/
+	func matchAddCase(this: &&Builder, id: uint, value: &Value, body: RegionRef) => void {
+		var instruction = &&this.function.instructions[id];
+		assert(instruction.op == OpCode::Match);
+		assert(value.type == this.ctx.int_type);
+		instruction.operands.append(value);
+		instruction.operands.append(Value::RegionRef(body));
+	}
+
+	func switchAddCase(this: &&Builder, id: uint, value: &Value, block: BlockRef) => void {
+		var instruction = &&this.function.instructions[id];
+		assert(instruction.op == OpCode::Switch);
+		assert(value.type == this.ctx.int_type);
+		instruction.operands.append(value);
+		instruction.operands.append(Value::BlockRef(block));
+	}
+
+	func phiAddIncoming(this: &&Builder, id: uint, block: BlockRef, value: &Value) => void {
+		var instruction = &&this.function.instructions[id];
+		assert(instruction.op == OpCode::Phi);
+		assert(value.type == instruction.result_type);
+		instruction.operands.append(Value::BlockRef(block));
+		instruction.operands.append(value);
+	}
+
+	func replaceAllUsesWith(this: &&Builder, register: uint, value: &Value) => void {
+		for &&instruction in this.function.instructions {
+			for &&operand in instruction.operands {
+				match operand {
+					case Register: index -> {
+						if index == register {
+							operand = value;
+						}
+					}
+					default -> {}
+				}
+			}
+		}
+	}
+
+	func runConversionPasses(this: &&Builder, passes: Map!<OpCode, (&&Builder, Instruction) => void>) => void {
+		var index = 0u;
+		while index < this.function.instructions.size() {
+			while passes.contains(this.function.instructions[index].op) {
+				const instruction = this.function.instructions[index];
+				passes.get(instruction.op).value()(&&this, this.function.instructions[index]);
+				assert(instruction.op != this.function.instructions[index].op);
+			}
+			index++;
+		}
+	}
+
+	func insertRegionIntoBlock(this: &&Builder, block: BlockRef, index: uint, region: RegionRef) => void {
+		if region.blocks.isEmpty() {
+			return;
+		} else if region.blocks.size() == 1u {
+			block.insertInstructions(index, (&region.blocks.front().instructions).range());
+		} else {
+			const offset = block.region.getBlockOffset(block.getRef()) + 1;
+			var tail = block.split(index);
+
+			block.insertInstructions(index, (&region.blocks.front().instructions).range());
+			this.setInsertPointToEnd(region.blocks.back());
+			discard this.buildBranch(tail);
+
+			block.region.insertBlocks(offset, (&region.blocks)[1u..region.blocks.size()]);
+
+			// todo: update predecessors & successors
+		}
+	}
+}

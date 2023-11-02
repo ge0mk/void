@@ -1,0 +1,306 @@
+import std/core;
+import std/format;
+import std/list;
+import std/string;
+
+import ir;
+
+func formatIR(this: &Context) => String {
+	var result: String;
+
+	for function in this.functions {
+		if function.is_inline {
+			continue;
+		}
+
+		result.append(this.formatIR(function.getRef()) + "\n\n");
+	}
+
+	return result;
+}
+
+func formatIR(this: &Context, function: FuncRef) => String {
+	var result = "\e[31mfunc\e[0m \e[33m@'" + function.signature() + "'\e[0m";
+	if function.is_extern {
+		return result + " = \e[31mextern\e[0m";
+	}
+
+	result += " {\n";
+	for variable in function.variables {
+		if variable.is_parameter {
+			result += "    \e[36m%" + format(variable.id) + "\e[0m = \e[31mparam\e[0m";
+		} else {
+			result += "    \e[31mvar\e[0m";
+		}
+
+		result += " \e[33m" + variable.name + "\e[0m";
+		result += " : \e[35m" + variable.type.signature() + "\e[0m\n";
+	}
+
+	for block in function.regions.front().blocks {
+		result += this.formatIR(block.getRef(), "");
+	}
+
+	return result + "}";
+}
+
+func formatIR(this: &Context, region: RegionRef, indent: String) => String {
+	if region.blocks.isEmpty() {
+		return "{}";
+	} else {
+		var result = "{\n";
+		for block in region.blocks {
+			result += this.formatIR(block.getRef(), indent);
+		}
+		return result + indent + "}";
+	}
+}
+
+func formatIR(this: &Context, block: BlockRef, indent: String) => String {
+	var result = indent + "\e[1;32m#" + format(block.id) + "\e[0m:\n";
+	for id in block.instructions {
+		result += this.formatIR(block.function.instructions[id], indent + "    ");
+	}
+	return result;
+}
+
+func formatIR(this: &Context, instruction: &Instruction, indent: String) => String {
+	var result = indent;
+	if !instruction.result_type.isNull() && instruction.result_type != this.void_type && instruction.result_type != this.never_type {
+		result += "\e[36m%" + format(instruction.id) + "\e[0m = ";
+	}
+
+	result += "\e[34m" + format(instruction.op);
+	match instruction.op {
+		case CastOp -> {
+			result += "." + format(instruction.mode as CastOp);
+		}
+		case SCmp | UCmp | FCmp -> {
+			result += "." + format(instruction.mode as ComparisonOp);
+		}
+		case IntOp | IntRMWOp | VectorIntRMWOp | VectorScalarIntRMWOp -> {
+			result += "." + format(instruction.mode as IntOp);
+		}
+		case FloatOp | FloatRMWOp | VectorFloatRMWOp | VectorScalarFloatRMWOp -> {
+			result += "." + format(instruction.mode as FloatOp);
+		}
+		default -> {}
+	}
+	result += "\e[0m";
+	if !instruction.op_type.isNull() {
+		result += " " + instruction.op_type.signature()
+	}
+
+	for operand in instruction.operands {
+		match operand {
+			case RegionRef: region -> result += " " + this.formatIR(region, indent);
+			default -> result += " " + formatColored(operand);
+		}
+	}
+
+	return result + "\n";
+}
+
+func format(op: OpCode) => String {
+	match op {
+		case None -> return "";
+		case Branch -> return "br";
+		case CondBranch -> return "br.cond";
+		case Switch -> return "br.switch";
+		case Phi -> return "phi";
+		case Unreachable -> return "unreachable";
+		case Scope -> return "scope";
+		case Defer -> return "defer";
+		case IfElse -> return "ifelse";
+		case Match -> return "match";
+		case Yield -> return "yield";
+		case LoopWhile -> return "loop.while";
+		case LoopDoWhile -> return "loop.dowhile";
+		case LoopCount -> return "loop.count";
+		case LoopRange -> return "loop.range";
+		case Break -> return "loop.break";
+		case Continue -> return "loop.continue";
+		case Call -> return "call";
+		case Return -> return "return";
+		case Load -> return "load";
+		case Store -> return "store";
+		case StoreNull -> return "store.null";
+		case StoreRepeat -> return "store.repeat";
+		case Swap -> return "swap";
+		case PtrAdd -> return "ptradd";
+		case PtrDiff -> return "ptrdiff";
+		case GetElement -> return "getelement";
+		case SetElement -> return "setelement";
+		case Select -> return "select";
+		case CastOp -> return "cast";
+		case IntOp -> return "int";
+		case IntRMWOp -> return "int.rmw";
+		case FloatOp -> return "float";
+		case FloatRMWOp -> return "float.rmw";
+		case SCmp -> return "icmp";
+		case UCmp -> return "ucmp";
+		case FCmp -> return "fcmp";
+		case RotL -> return "int.rotl";
+		case RotR -> return "int.rotr";
+		case BitReverse -> return "int.bitreverse";
+		case ByteReverse -> return "int.bytereverse";
+		case PopCount -> return "int.popcnt";
+		case CountLeadingZeros -> return "int.clz";
+		case CountTrailingZeros -> return "int.ctz";
+		case VectorFill -> return "vector.fill";
+		case VectorShuffle -> return "vector.shuffle";
+		case VectorIntEQ -> return "vector.int.eq";
+		case VectorIntNE -> return "vector.int.ne";
+		case VectorIntOp -> return "vector.int";
+		case VectorIntRMWOp -> return "vector.int.rmw";
+		case VectorScalarIntOp -> return "vector.scalar.int";
+		case VectorScalarIntRMWOp -> return "vector.scalar.int.rmw";
+		case VectorIntReduceOp -> return "vector.int.reduce";
+		case VectorIntDot -> return "vector.int";
+		case VectorFloatEQ -> return "vector.float.eq";
+		case VectorFloatNE -> return "vector.float.ne";
+		case VectorFloatOp -> return "vector.float";
+		case VectorFloatRMWOp -> return "vector.float.rmw";
+		case VectorScalarFloatOp -> return "vector.scalar.float";
+		case VectorScalarFloatRMWOp -> return "vector.scalar.float.rmw";
+		case VectorFloatReduceOp -> return "vector.float.reduce";
+		case VectorFloatDot -> return "vector.float.dot";
+		case MatrixIdentity -> return "matrix.identity";
+		case MatrixFromValues -> return "matrix.from.values";
+		case MatrixFromColumns -> return "matrix.from.columns";
+		case MatrixFromRows -> return "matrix.from.rows";
+		case MatrixTranspose -> return "matrix.transpose";
+		case MatrixMultiply -> return "matrix.multiply";
+		case SizeOf -> return "reflection.size_of";
+		case AlignmentOf -> return "reflection.alignment_of";
+		case ReferenceKindOf -> return "reflection.reference_kind_of";
+		case HasDefaultConstructor -> return "reflection.has.default_constructor";
+		case HasCopyConstructor -> return "reflection.has.copy_constructor";
+		case HasAssignmentOperator -> return "reflection.has.op_assing";
+		case HasEqualOperator -> return "reflection.has.op_equal";
+		case HasCompareOperator -> return "reflection.has.op_cmp";
+		case VariantOpUnsafeAs -> return "variant.unsafe_as";
+		case VariantOpIs -> return "variant.is";
+		case ArrayGetSize -> return "array.size";
+		case ArrayGetData -> return "array.data";
+		case RangeGetSize -> return "range.size";
+		case RangeGetData -> return "range.data";
+		case RangeGetIterator -> return "range.iterator";
+		case NumericTypeRangeOperator -> return "numeric_range.create";
+		case NumericRangeSetStep -> return "numeric_range.set_step";
+		case Abort -> return "abort";
+		case Panic -> return "panic";
+		case Assert -> return "assert";
+		case AssertError -> return "assert.error";
+	}
+}
+
+func format(op: CastOp) => String {
+	match op {
+		case None -> return "";
+		case Trunc -> return "trunc";
+		case ZExt -> return "zext";
+		case SExt -> return "sext";
+		case FToUI -> return "ftoui";
+		case FToSI -> return "ftosi";
+		case UIToF -> return "uitof";
+		case SIToF -> return "sitof";
+		case FTrunc -> return "ftrunc";
+		case FExt -> return "fext";
+		case Bitcast -> return "bitcast";
+	}
+}
+
+func format(op: IntOp) => String {
+	match op {
+		case Add -> return "add";
+		case Sub -> return "sub";
+		case Neg -> return "neg";
+		case Mul -> return "mul";
+		case Div -> return "div";
+		case Mod -> return "mod";
+
+		case Abs -> return "abs";
+		case Sign -> return "sign";
+		case Min -> return "min";
+		case Max -> return "max";
+		case Clamp -> return "clamp";
+		case Lerp -> return "lerp";
+
+		case Inc -> return "inc";
+		case Dec -> return "dec";
+
+		case UDiv -> return "udiv";
+		case UMod -> return "umod";
+		case UMin -> return "umin";
+		case UMax -> return "umax";
+		case UClamp -> return "uclamp";
+
+		case And -> return "and";
+		case Or -> return "or";
+		case XOr -> return "xor";
+		case Not -> return "not";
+		case ShL -> return "shl";
+		case LShR -> return "lshr";
+		case AShR -> return "ashr";
+	}
+}
+
+func format(op: FloatOp) => String {
+	match op {
+		case Add -> return "add";
+		case Sub -> return "sub";
+		case Neg -> return "neg";
+		case Mul -> return "mul";
+		case Div -> return "div";
+		case Mod -> return "mod";
+		case Abs -> return "abs";
+		case Sign -> return "sign";
+		case Min -> return "min";
+		case Max -> return "max";
+		case Clamp -> return "clamp";
+		case Lerp -> return "lerp";
+		case Step -> return "step";
+		case SmoothStep -> return "smoothstep";
+		case Sqrt -> return "sqrt";
+		case ISqrt -> return "isqrt";
+		case Pow -> return "pow";
+		case Exp -> return "exp";
+		case Exp2 -> return "exp2";
+		case Exp10 -> return "exp10";
+		case Log -> return "log";
+		case Log2 -> return "log2";
+		case Log10 -> return "log10";
+		case Floor -> return "floor";
+		case Ceil -> return "ceil";
+		case Fract -> return "fract";
+		case Round -> return "round";
+		case RoundEven -> return "roundeven";
+		case Sin -> return "sin";
+		case Cos -> return "cos";
+		case Tan -> return "tan";
+		case ASin -> return "asin";
+		case ACos -> return "acos";
+		case ATan -> return "atan";
+		case SinH -> return "sinh";
+		case CosH -> return "cosh";
+		case TanH -> return "tanh";
+		case ASinH -> return "asinh";
+		case ACosH -> return "acosh";
+		case ATanH -> return "atanh";
+		case IsInf -> return "isinf";
+		case IsNan -> return "isnan";
+	}
+}
+
+func format(cmp: ComparisonOp) => String {
+	match cmp {
+		case EQ -> return "eq";
+		case NE -> return "ne";
+		case LT -> return "lt";
+		case LE -> return "le";
+		case GT -> return "gt";
+		case GE -> return "ge";
+		case Cmp -> return "cmp";
+	}
+}

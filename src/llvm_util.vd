@@ -31,7 +31,7 @@ func createJITCompilerForModule(module: LLVMModuleRef, optimization_level: uint)
 	return Ok(result);
 }
 
-func loadModuleFromFile(ctx: LLVMContextRef, path: String) => Optional!<LLVMModuleRef> {
+func loadModuleFromFile(ctx: LLVMContextRef, path: String) => Result!<LLVMModuleRef, String> {
 	var buffer: LLVMMemoryBufferRef;
 	var message: ptr!<byte, true>;
 
@@ -42,9 +42,9 @@ func loadModuleFromFile(ctx: LLVMContextRef, path: String) => Optional!<LLVMModu
 	);
 
 	if buffer_status != 0 {
-		eprint("couldn't load module " + path + ": ");
-		eprintln(String::fromCString(message as ptr!<byte, false>));
-		return None;
+		const error = String::fromCString(message as ptr!<byte, false>);
+		LLVMDisposeMessage(message);
+		throw error;
 	}
 	LLVMDisposeMessage(message);
 
@@ -56,13 +56,13 @@ func loadModuleFromFile(ctx: LLVMContextRef, path: String) => Optional!<LLVMModu
 	);
 
 	if module_status != 0 {
-		eprint("couldn't parse module " + path + ": ");
-		eprintln(String::fromCString(message as ptr!<byte, false>));
-		return None;
+		const error = String::fromCString(message as ptr!<byte, false>);
+		LLVMDisposeMessage(message);
+		throw error;
 	}
 	LLVMDisposeMessage(message);
 
-	return Some(module);
+	return Ok(module);
 }
 
 func printModuleToFile(module: LLVMModuleRef, path: String) => bool {

@@ -1,0 +1,145 @@
+import std/core;
+import std/list;
+
+import ir;
+import irbuilder;
+
+func inlineDeferOps(builder: &&Builder, region: RegionRef, scope_stack: &&List!<(op: OpCode, id: uint, defered_regions: List!<RegionRef>)>) => void {
+	// ...
+}
+
+func inlineDeferOps(builder: &&Builder) => void {
+	var scope_stack: List!<(op: OpCode, id: uint, defered_regions: List!<RegionRef>)>;
+	builder.inlineDeferOps(builder.function.regions.front().getRef(), &&scope_stack);
+}
+
+func inlineScopeOp(builder: &&Builder, instruction: Instruction) => void {
+	var parent = instruction.block;
+	const index = parent.getInstructionOffset(instruction.id);
+	parent.removeInstruction(index);
+	builder.insertRegionIntoBlock(parent, index, instruction.operands[0u].toRegion());
+	parent.function.instructions[instruction.id].op = None;
+	if instruction.operands.size() == 2 {
+		builder.replaceAllUsesWith(instruction.id, instruction.operands[1u]);
+	}
+}
+
+func convertIfElseToBranch(builder: &&Builder, instruction: Instruction) => void {
+	var parent = instruction.block;
+	const instruction_offset = parent.getInstructionOffset(instruction.id);
+	const block_offset = parent.region.getBlockOffset(parent);
+
+	var continue_block: BlockRef;
+	const then_region = instruction.operands[1u].toRegion();
+	const else_region = instruction.operands[2u].toRegion();
+	if !then_region.hasTerminator() || !else_region.hasTerminator() {
+		continue_block = parent.split(instruction_offset + 1);
+	}
+
+	if !then_region.hasTerminator() {
+		builder.setInsertPointToEnd(then_region);
+		discard builder.buildBranch(continue_block);
+	}
+
+	if !else_region.hasTerminator() {
+		builder.setInsertPointToEnd(else_region);
+		discard builder.buildBranch(continue_block);
+	}
+
+	parent.region.insertBlocks(block_offset + 1, (&then_region.blocks).range());
+	parent.region.insertBlocks(block_offset + 1 + then_region.blocks.size(), (&else_region.blocks).range());
+
+	instruction.op = CondBranch;
+	instruction.operands[1u] = Value::BlockRef(then_region.blocks.front());
+	instruction.operands[2u] = Value::BlockRef(else_region.blocks.isEmpty() ? continue_block : else_region.blocks.front());
+	parent.function.instructions[instruction.id] = instruction;
+}
+
+func convertWhileToBranch(builder: &&Builder, instruction: Instruction) => void {
+	const parent = instruction.block;
+	const tail = instruction.block.split(parent.getInstructionOffset(instruction.id) + 1);
+	const cond_region = instruction.operands[1u].toRegion();
+	const body_region = instruction.operands[2u].toRegion();
+	const entry_block = instruction.op == LoopDoWhile ? body_region.blocks.front() : cond_region.blocks.front();
+
+	builder.continue_targets.set(instruction.id, cond_region.blocks.front());
+	builder.break_targets.set(instruction.id, tail);
+
+	builder.setInsertPointToEnd(cond_region);
+	discard builder.buildCondBranch(instruction.operands[0u], body_region.blocks.front(), tail);
+
+	builder.setInsertPointToEnd(body_region);
+	discard builder.buildBranch(cond_region.blocks.front());
+
+	instruction.op = Branch;
+	instruction.operands = List!<Value>(1u, Value::BlockRef(entry_block));
+	parent.function.instructions[instruction.id] = instruction;
+
+	parent.region.insertBlocks(parent.region.getBlockOffset(tail), (&cond_region.blocks).range());
+	parent.region.insertBlocks(parent.region.getBlockOffset(tail), (&body_region.blocks).range());
+}
+
+func convertBreakOrContinueToBranch(builder: &&Builder, instruction: Instruction) => void {
+	const loop_id = (instruction.operands[0u] as Register).value();
+	const target = instruction.op == Break ? builder.break_targets.get(loop_id).value() : builder.continue_targets.get(loop_id).value();
+	instruction.op = Branch;
+	instruction.operands = List!<Value>(1u, Value::BlockRef(target));
+	instruction.block.function.instructions[instruction.id] = instruction;
+}
+
+func convertMatchToSwitch() => void {
+	//   <0>
+	//   %r = match %a [%b #b] [%c #c]
+	//   <1>
+	// #b:
+	//   <2>
+	//   yield %rb #match
+	// #c:
+	//   <3>
+	//   yield %rc #match
+	// =>
+	//   <0>
+	//   switch %a [%b #b] [%c #c]
+	// #b:
+	//   <2>
+	//   br #tail
+	// #c:
+	//   <3>
+	//   br #tail
+	// tail:
+	//   %r = phi [#b %rb] [#c %rc]
+	//   <1>
+}
+
+func getOrCreateAbortBlock(builder: &&Builder) => BlockRef {
+	if builder.function.assertion_failed_block.isNull() {
+		builder.function.assertion_failed_block = builder.function.regions.front().createBlock();
+		builder.setInsertPointToEnd(builder.function.assertion_failed_block);
+		const error = builder.buildPhi(builder.ctx.error_type);
+		discard builder.buildCall(builder.ctx.panic_function, List!<Value>(1u, error));
+		discard builder.buildUnreachable();
+	}
+
+	return builder.function.assertion_failed_block;
+}
+
+func convertAssertToCondBranch(builder: &&Builder, instruction: Instruction) => void {
+	var parent = instruction.block;
+	const instruction_offset = parent.getInstructionOffset(instruction.id);
+	const error_block = getOrCreateAbortBlock(&&builder);
+	const continue_block = parent.split(instruction_offset + 1);
+
+	const phi = error_block.instructions[0u];
+	if instruction.op == Assert {
+		builder.phiAddIncoming(phi, parent, Value::fromPrimitive!<Error>(Error::EASSERTFAILED, builder.ctx.error_type));
+	} else if instruction.op == AssertError {
+		builder.phiAddIncoming(phi, parent, instruction.operands[1u]);
+	}
+
+	instruction.op = CondBranch;
+	instruction.result_type = builder.ctx.never_type;
+	instruction.operands.fill(3u, Value::Undefined);
+	instruction.operands[1u] = Value::BlockRef(error_block);
+	instruction.operands[2u] = Value::BlockRef(continue_block);
+	builder.function.instructions[instruction.id] = instruction;
+}

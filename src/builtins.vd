@@ -1,884 +1,371 @@
 import std/core;
 import std/list;
 import std/io;
-import std/shared_list;
 import std/string;
 
-import program;
-import span;
+import ir;
+import irbuilder;
 
-func createPrimitiveCastTemplates(program: &&Program, dest_namespace: SharedHandle!<Namespace>) => void {
-	var cast_template_parameters = List!<TemplateParameterDecl>();
-	cast_template_parameters.append(TemplateParameterDecl("Source", program.any_concept, false));
-	cast_template_parameters.append(TemplateParameterDecl("Target", program.any_concept, false));
-
-	discard program.createFunction(dest_namespace, "intCast", cast_template_parameters, BuiltinFunction::IntCast(Type::unknown(), Type::unknown()));
-	discard program.createFunction(dest_namespace, "floatCast", cast_template_parameters, BuiltinFunction::FloatCast(Type::unknown(), Type::unknown()));
-	discard program.createFunction(dest_namespace, "intToFloat", cast_template_parameters, BuiltinFunction::IntToFloat(Type::unknown(), Type::unknown()));
-	discard program.createFunction(dest_namespace, "floatToInt", cast_template_parameters, BuiltinFunction::FloatToInt(Type::unknown(), Type::unknown()));
-	discard program.createFunction(dest_namespace, "bitCast", cast_template_parameters, BuiltinFunction::BitCast(Type::unknown(), Type::unknown()));
-	discard program.createFunction(dest_namespace, "pointerCast", cast_template_parameters, BuiltinFunction::PointerCast(Type::unknown()));
+func createTypeAlias(ctx: &&Context, ns: NamespaceRef, name: String, target: TypeRef) => void {
+	discard ctx.createType(ns, name, TypeBody::Alias(target));
 }
 
-func createPrimitiveCastInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, name: String, source: Type, target: Type) => SharedHandle!<FunctionDecl> {
+func createVoidType(ctx: &&Context, ns: NamespaceRef) => TypeRef {
+	return ctx.createType(ns, "void", TypeBody::Void);
+}
+
+func createNeverType(ctx: &&Context, ns: NamespaceRef) => TypeRef {
+	return ctx.createType(ns, "never", TypeBody::Void);
+}
+
+func createTypeRefType(ctx: &&Context, ns: NamespaceRef) => TypeRef {
+	var type = ctx.createType(ns, "typeref", TypeBody::TypeRef);
+	type.is_comptime = true;
+	ctx.createBasicFunctions(type);
+	ctx.createComparisonOperators(type, OpCode::UCmp);
+	return type;
+}
+
+func createFuncRefType(ctx: &&Context, ns: NamespaceRef) => TypeRef {
+	var type = ctx.createType(ns, "funcref", TypeBody::FuncRef);
+	type.is_comptime = true;
+	ctx.createBasicFunctions(type);
+	ctx.createComparisonOperators(type, OpCode::UCmp);
+	return type;
+}
+
+func createBoolType(ctx: &&Context, ns: NamespaceRef) => TypeRef {
+	var type = ctx.createType(ns, "bool", TypeBody::Bool);
+	ctx.createBasicFunctions(type);
+
+	type.op_equal = ctx.createInlineFunction!<2u>(type.linked_namespace, "==", [type, type], type, OpCode::UCmp, ComparisonOp::EQ as u32, type);
+	discard ctx.createInlineFunction!<2u>(type.linked_namespace, "!=", [type, type], type, OpCode::UCmp, ComparisonOp::NE as u32, type);
+
+	discard ctx.createInlineFunction!<2u>(type.linked_namespace, "&", [type, type], type, OpCode::IntOp, IntOp::And as u32, type);
+	discard ctx.createInlineFunction!<2u>(type.linked_namespace, "|", [type, type], type, OpCode::IntOp, IntOp::Or as u32, type);
+	discard ctx.createInlineFunction!<2u>(type.linked_namespace, "^", [type, type], type, OpCode::IntOp, IntOp::XOr as u32, type);
+	discard ctx.createInlineFunction!<1u>(type.linked_namespace, "!", [type], type, OpCode::IntOp, IntOp::Not as u32, type);
+	discard ctx.createInlineFunction!<1u>(type.linked_namespace, "~", [type], type, OpCode::IntOp, IntOp::Not as u32, type);
+
+	discard ctx.createInlineFunction!<2u>(type.linked_namespace, "&=", [type.varRef(), type], ctx.void_type, OpCode::IntRMWOp, IntOp::And as u32, type);
+	discard ctx.createInlineFunction!<2u>(type.linked_namespace, "|=", [type.varRef(), type], ctx.void_type, OpCode::IntRMWOp, IntOp::Or as u32, type);
+	discard ctx.createInlineFunction!<2u>(type.linked_namespace, "^=", [type.varRef(), type], ctx.void_type, OpCode::IntRMWOp, IntOp::XOr as u32, type);
+
+	return type;
+}
+
+func createByteType(ctx: &&Context, ns: NamespaceRef) => TypeRef {
+	var type = ctx.createType(ns, "byte", TypeBody::Byte);
+	ctx.createBasicFunctions(type);
+	ctx.createComparisonOperators(type, OpCode::UCmp);
+	ctx.createBitwiseOperators(type, false);
+	return type;
+}
+
+func createErrorType(ctx: &&Context, ns: NamespaceRef, id_type: TypeRef) => TypeRef {
+	var type = ctx.createType(ns, "Error", TypeBody::Enum);
+	type.id_type = id_type;
+	type.addContainedType(id_type);
+	ctx.createBasicFunctions(type);
+	return type;
+}
+
+func createIntTypeTemplate(ctx: &&Context, ns: NamespaceRef) => TypeRef {
+	var template_parameters: List!<TemplateParameterDecl>;
+	template_parameters.append(TemplateParameterDecl("Size", ctx.uint_concept, false));
+	template_parameters.append(TemplateParameterDecl("Signed", ctx.bool_concept, false));
+	return ctx.createType(ns, "int", template_parameters, TypeBody::Int((size: 0u, is_signed: false)));
+}
+
+func createIntType(ctx: &&Context, ns: NamespaceRef, size: uint, is_signed: bool) => TypeRef {
+	var template_parameters: List!<TemplateParameterDecl>;
+	template_parameters.append(TemplateParameterDecl("Size", ctx.uint_concept, false, Value::fromPrimitive!<int>(size as int, ctx.int_type)));
+	template_parameters.append(TemplateParameterDecl("Signed", ctx.bool_concept, false, Value::fromPrimitive!<bool>(is_signed, ctx.bool_type)));
+	var type = ctx.createType(ns, "int", template_parameters, TypeBody::Int((size: size, is_signed: is_signed)));
+
+	if ctx.int_type.isNull() && size == 0 && is_signed {
+		ctx.int_type = type;
+		type.template_parameters[0u].value.type = type;
+	}
+
+	ctx.createBasicFunctions(type);
+	ctx.createComparisonOperators(type, is_signed ? OpCode::SCmp : OpCode::UCmp);
+	ctx.createIntArithmeticOperators(type, is_signed);
+	ctx.createBitwiseOperators(type, is_signed);
+
+	return type;
+}
+
+func createFloatType(ctx: &&Context, ns: NamespaceRef, float_type: FloatType) => TypeRef {
+	var type = ctx.createType(ns, format(float_type), List!<TemplateParameterDecl>(), TypeBody::Float(float_type));
+
+	ctx.createBasicFunctions(type);
+	ctx.createComparisonOperators(type, OpCode::FCmp);
+	ctx.createFloatArithmeticOperators(type);
+
+	return type;
+}
+
+func createPtrTypeTemplate(ctx: &&Context, ns: NamespaceRef) => TypeRef {
+	var template_parameters: List!<TemplateParameterDecl>;
+	template_parameters.append(TemplateParameterDecl("Pointee", ctx.any_concept, false));
+	template_parameters.append(TemplateParameterDecl("Mutable", ctx.bool_concept, false));
+	return ctx.createType(ns, "ptr", template_parameters, TypeBody::Pointer((pointee_type: TypeRef::null(), is_mutable: false)));
+}
+
+func createPtrType(ctx: &&Context, ns: NamespaceRef, pointee_type: TypeRef, is_mutable: bool) => TypeRef {
+	var template_parameters: List!<TemplateParameterDecl>;
+	template_parameters.append(TemplateParameterDecl("Pointee", ctx.any_concept, false, Value::TypeRef(pointee_type, ctx.typeref_type)));
+	template_parameters.append(TemplateParameterDecl("Mutable", ctx.bool_concept, false, Value::fromPrimitive!<bool>(is_mutable, ctx.bool_type)));
+	var type = ctx.createType(ns, "ptr", template_parameters, TypeBody::Pointer((pointee_type: pointee_type, is_mutable: is_mutable)));
+
+	ctx.createBasicFunctions(type);
+	ctx.createComparisonOperators(type, OpCode::UCmp);
+
+	return type;
+}
+/*
+func createFunctionTypeTemplate() => TypeRef {}
+
+func createFunctionType() => TypeRef {}
+
+func createVectorTypeTemplate() => TypeRef {}
+
+func createVectorType() => TypeRef {}
+
+func createMatrixTypeTemplate() => TypeRef {}
+
+func createMatrixType() => TypeRef {}
+
+func createArrayTypeTemplate() => TypeRef {}
+
+func createArrayType() => TypeRef {}
+
+func createTupleTypeTemplate() => TypeRef {}
+
+func createTupleType() => TypeRef {}
+
+func createRangeTypeTemplate() => TypeRef {}
+
+func createRangeType() => TypeRef {}
+
+func createRangeIteratorTypeTemplate() => TypeRef {}
+
+func createRangeIteratorType() => TypeRef {}
+
+func createNumericRangeTypeTemplate() => TypeRef {}
+
+func createNumericRangeType() => TypeRef {}
+*/
+
+func createPrimitiveCastTemplates(ctx: &&Context, ns: NamespaceRef) => void {
 	var template_parameters = List!<TemplateParameterDecl>();
-	template_parameters.append(TemplateParameterDecl("Source", program.any_concept, false, TemplateParameter::Type(source)));
-	template_parameters.append(TemplateParameterDecl("Target", program.any_concept, false, TemplateParameter::Type(target)));
+	template_parameters.append(TemplateParameterDecl("From", ctx.any_concept, false));
+	template_parameters.append(TemplateParameterDecl("To", ctx.any_concept, false));
 
-	var parameter_types = List!<Type>();
-	parameter_types.append(source);
+	discard ctx.createInlineFunction(ns, "intCast", template_parameters, OpCode::CastOp, 0u32, TypeRef::null());
+	discard ctx.createInlineFunction(ns, "floatCast", template_parameters, OpCode::CastOp, 0u32, TypeRef::null());
+	discard ctx.createInlineFunction(ns, "intToFloat", template_parameters, OpCode::CastOp, 0u32, TypeRef::null());
+	discard ctx.createInlineFunction(ns, "floatToInt", template_parameters, OpCode::CastOp, 0u32, TypeRef::null());
+	discard ctx.createInlineFunction(ns, "bitCast", template_parameters, OpCode::CastOp, 0u32, TypeRef::null());
+	discard ctx.createInlineFunction(ns, "pointerCast", template_parameters, OpCode::CastOp, 0u32, TypeRef::null());
+}
 
-	var body = FunctionBody::Empty;
+func createPrimitiveCastInstance(ctx: &&Context, ns: NamespaceRef, name: String, from: TypeRef, to: TypeRef) => FuncRef {
+	var template_parameters = List!<TemplateParameterDecl>();
+	template_parameters.append(TemplateParameterDecl("From", ctx.any_concept, false, Value::TypeRef(from, ctx.typeref_type)));
+	template_parameters.append(TemplateParameterDecl("To", ctx.any_concept, false, Value::TypeRef(to, ctx.typeref_type)));
+	const parameter_types = List!<TypeRef>(1u, from);
+	var cast = CastOp::None;
+
 	if name == "intCast" {
-		body = FunctionBody::Builtin(BuiltinFunction::IntCast(target, source));
-	} else if name == "floatCast" {
-		body = FunctionBody::Builtin(BuiltinFunction::FloatCast(target, source));
-	} else if name == "intToFloat" {
-		body = FunctionBody::Builtin(BuiltinFunction::IntToFloat(target, source));
-	} else if name == "floatToInt" {
-		body = FunctionBody::Builtin(BuiltinFunction::FloatToInt(target, source));
-	} else if name == "bitCast" {
-		body = FunctionBody::Builtin(BuiltinFunction::BitCast(target, source));
-	} else if name == "pointerCast" {
-		body = FunctionBody::Builtin(BuiltinFunction::PointerCast(target));
-	} else {
-		panic("invalid numeric cast name: " + name);
-	}
-
-	return program.createFunction(dest_namespace, name, template_parameters, parameter_types, target, body);
-}
-
-func createCoreReflectionFunctionTemplates(program: &&Program, dest_namespace: SharedHandle!<Namespace>) => void {
-	var template_parameters = List!<TemplateParameterDecl>();
-	template_parameters.append(TemplateParameterDecl("Type", program.any_concept, false));
-
-	discard program.createFunction(dest_namespace, "sizeOf", template_parameters, BuiltinFunction::SizeOf(Type::unknown()));
-	discard program.createFunction(dest_namespace, "alignmentOf", template_parameters, BuiltinFunction::AlignmentOf(Type::unknown()));
-	discard program.createFunction(dest_namespace, "referenceKindOf", template_parameters, BuiltinFunction::ReferenceKindOf(Type::unknown()));
-	discard program.createFunction(dest_namespace, "hasDefaultConstructor", template_parameters, BuiltinFunction::HasDefaultConstructor(Type::unknown()));
-	discard program.createFunction(dest_namespace, "hasCopyConstructor", template_parameters, BuiltinFunction::HasCopyConstructor(Type::unknown()));
-}
-
-func createTypeRefTypeDecl(program: &&Program, dest_namespace: SharedHandle!<Namespace>) => void {
-	const type_decl = program.createType(dest_namespace, "typeref", TypeBody::Void);
-	const type_namespace = type_decl.linked_namespace;
-	const type = Type(type_decl);
-	program.typeref_type = type;
-
-	type_decl.is_comptime = true;
-
-	type_decl.copy_constructor = program.createBinaryFunction(type_namespace, "constructor", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
-	type_decl.destructor = program.createUnaryFunction(type_namespace, "destructor", type.varRef(), program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::NoOp, type));
-	type_decl.op_assign = program.createBinaryFunction(type_namespace, "=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
-	type_decl.op_equal = program.createBinaryFunction(type_namespace, "==", type, type, program.bool_type, BuiltinFunction::TypeRefOpEqual(type));
-}
-
-func createUnaryFunction(program: &&Program, type_namespace: SharedHandle!<Namespace>, name: String, obj: Type, return_type: Type, body: BuiltinFunction) => SharedHandle!<FunctionDecl> {
-	var parameter_types: List!<Type>;
-	parameter_types.append(obj);
-	return program.createFunction(type_namespace, name, parameter_types, return_type, body);
-}
-
-func createBinaryFunction(program: &&Program, type_namespace: SharedHandle!<Namespace>, name: String, lhs: Type, rhs: Type, return_type: Type, body: BuiltinFunction) => SharedHandle!<FunctionDecl> {
-	var parameter_types: List!<Type>;
-	parameter_types.append(lhs);
-	parameter_types.append(rhs);
-	return program.createFunction(type_namespace, name, parameter_types, return_type, body);
-}
-
-func createTernaryFunction(program: &&Program, type_namespace: SharedHandle!<Namespace>, name: String, first: Type, second: Type, third: Type, return_type: Type, body: BuiltinFunction) => SharedHandle!<FunctionDecl> {
-	var parameter_types: List!<Type>;
-	parameter_types.append(first);
-	parameter_types.append(second);
-	parameter_types.append(third);
-	return program.createFunction(type_namespace, name, parameter_types, return_type, body);
-}
-
-func createBasicFunctions(program: &&Program, type: Type, type_namespace: SharedHandle!<Namespace>) => void {
-	type.decl.default_constructor = program.createUnaryFunction(type_namespace, "constructor", type.varRef(), program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::ConstNull | Assign, type));
-	type.decl.copy_constructor = program.createBinaryFunction(type_namespace, "constructor", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
-	type.decl.destructor = program.createUnaryFunction(type_namespace, "destructor", type.varRef(), program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::NoOp, type));
-	type.decl.op_assign = program.createBinaryFunction(type_namespace, "=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
-}
-
-func createComparisonOperators(program: &&Program, type: Type, type_namespace: SharedHandle!<Namespace>, flags: PrimitiveOp) => void {
-	type.decl.op_equal = program.createBinaryFunction(type_namespace, "==", type, type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::EQ | flags, type));
-	discard program.createBinaryFunction(type_namespace, "!=", type, type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::NE | flags, type));
-	discard program.createBinaryFunction(type_namespace, "<", type, type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::LT | flags, type));
-	discard program.createBinaryFunction(type_namespace, "<=", type, type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::LE | flags, type));
-	discard program.createBinaryFunction(type_namespace, ">", type, type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::GT | flags, type));
-	discard program.createBinaryFunction(type_namespace, ">=", type, type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::GE | flags, type));
-	type.decl.op_compare = program.createBinaryFunction(type_namespace, "<=>", type, type, program.int_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Cmp | flags, type));
-}
-
-func createBitwiseOperators(program: &&Program, type: Type, type_namespace: SharedHandle!<Namespace>, sign_flag: PrimitiveOp) => void {
-	discard program.createBinaryFunction(type_namespace, "&", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::And, type));
-	discard program.createBinaryFunction(type_namespace, "|", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Or, type));
-	discard program.createBinaryFunction(type_namespace, "^", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::XOr, type));
-
-	discard program.createUnaryFunction(type_namespace, "~", type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Not, type));
-
-	discard program.createBinaryFunction(type_namespace, "<<", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Shl, type));
-	discard program.createBinaryFunction(type_namespace, ">>", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Shr | sign_flag, type));
-
-	discard program.createBinaryFunction(type_namespace, "rotl", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Rotl, type));
-	discard program.createBinaryFunction(type_namespace, "rotr", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Rotr, type));
-
-	discard program.createUnaryFunction(type_namespace, "popcnt", type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::PopCount, type));
-	discard program.createUnaryFunction(type_namespace, "cntlz", type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::CountLeadingZeros, type));
-	discard program.createUnaryFunction(type_namespace, "cnttz", type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::CountTrailingZeros, type));
-
-	discard program.createBinaryFunction(type_namespace, "&=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::And | Assign, type));
-	discard program.createBinaryFunction(type_namespace, "|=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Or | Assign, type));
-	discard program.createBinaryFunction(type_namespace, "^=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::XOr | Assign, type));
-
-	discard program.createBinaryFunction(type_namespace, "<<=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Shl | Assign, type));
-	discard program.createBinaryFunction(type_namespace, ">>=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Shr | Assign | sign_flag, type));
-}
-
-func createArithmeticOperators(program: &&Program, type: Type, type_namespace: SharedHandle!<Namespace>, flags: PrimitiveOp) => void {
-	discard program.createBinaryFunction(type_namespace, "+", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Add | flags, type));
-	discard program.createBinaryFunction(type_namespace, "-", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Sub | flags, type));
-	discard program.createBinaryFunction(type_namespace, "*", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Mul | flags, type));
-	discard program.createBinaryFunction(type_namespace, "/", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Div | flags, type));
-	discard program.createBinaryFunction(type_namespace, "%", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Mod | flags, type));
-
-	if (flags & Float) == Float {
-		discard program.createUnaryFunction(type_namespace, "-", type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Neg | Float, type));
-	} else {
-		if (flags & Signed) == Signed {
-			discard program.createUnaryFunction(type_namespace, "-", type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Neg, type));
-		}
-	}
-
-	discard program.createBinaryFunction(type_namespace, "+=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Add | Assign | flags, type));
-	discard program.createBinaryFunction(type_namespace, "-=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Sub | Assign | flags, type));
-	discard program.createBinaryFunction(type_namespace, "*=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Mul | Assign | flags, type));
-	discard program.createBinaryFunction(type_namespace, "/=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Div | Assign | flags, type));
-	discard program.createBinaryFunction(type_namespace, "%=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Mod | Assign | flags, type));
-}
-
-func createBoolType(program: &&Program, dest_namespace: SharedHandle!<Namespace>) => void {
-	const type = Type(program.createType(dest_namespace, "bool", TypeBody::Bool), ReferenceKind::None);
-	const type_namespace = type.decl.linked_namespace;
-
-	program.bool_type = type;
-
-	createBasicFunctions(&&program, type, type_namespace);
-
-	type.decl.op_equal = program.createBinaryFunction(type_namespace, "==", type, type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::EQ, type));
-	discard program.createBinaryFunction(type_namespace, "!=", type, type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::NE, type));
-
-	discard program.createBinaryFunction(type_namespace, "&", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::And, type));
-	discard program.createBinaryFunction(type_namespace, "|", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Or, type));
-	discard program.createBinaryFunction(type_namespace, "^", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::XOr, type));
-
-	discard program.createUnaryFunction(type_namespace, "!", type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Not, type));
-	discard program.createUnaryFunction(type_namespace, "~", type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Not, type));
-
-	discard program.createBinaryFunction(type_namespace, "&=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::And | Assign, type));
-	discard program.createBinaryFunction(type_namespace, "|=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Or | Assign, type));
-	discard program.createBinaryFunction(type_namespace, "^=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::XOr | Assign, type));
-}
-
-func createIntTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>, is_signed: bool) => SharedHandle!<Namespace> {
-	const name = is_signed ? "int" : "uint";
-	const body = is_signed ? TypeBody::Int(0u) : TypeBody::UInt(0u);
-
-	var template_parameters: List!<TemplateParameterDecl>;
-	template_parameters.append(TemplateParameterDecl("Size", program.uint_concept, false));
-
-	return program.createType(dest_namespace, name, template_parameters, body).linked_namespace;
-}
-
-func createIntTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, is_signed: bool, size: int) => Type {
-	const name = is_signed ? "int" : "uint";
-	const body = is_signed ? TypeBody::Int(size as uint) : TypeBody::UInt(size as uint);
-
-	var template_parameters: List!<TemplateParameterDecl>;
-	template_parameters.append(TemplateParameterDecl("Size", program.uint_concept, false, TemplateParameter::Integer(size)));
-
-	const type = Type(program.createType(dest_namespace, name, template_parameters, body), ReferenceKind::None);
-	const type_namespace = type.decl.linked_namespace;
-
-	if size == 0 {
-		if is_signed {
-			program.int_type = type;
+		if from.getSizeInBits() > to.getSizeInBits() {
+			cast = Trunc;
+		} else if from.getSizeInBits() == to.getSizeInBits() {
+			cast = None;
+		} else if from.isSigned() && to.isSigned() {
+			cast = SExt;
 		} else {
-			program.uint_type = type;
+			cast = ZExt;
+		}
+	} else if name == "floatCast" {
+		if from.getSizeInBits() > to.getSizeInBits() {
+			cast = FTrunc;
+		} else if from.getSizeInBits() == to.getSizeInBits() {
+			cast = None;
+		} else {
+			cast = FExt;
+		}
+	} else if name == "intToFloat" {
+		if from.isSigned() {
+			cast = SIToF;
+		} else {
+			cast = UIToF;
+		}
+	} else if name == "floatToInt" {
+		if to.isSigned() {
+			cast = FToSI;
+		} else {
+			cast = FToUI;
+		}
+	} else if name == "bitCast" {
+		cast = Bitcast;
+	} else if name == "pointerCast" {
+		cast = None;
+	} else {
+		panic("invalid primitive cast name: " + name);
+	}
+
+	return ctx.createInlineFunction(ns, name, template_parameters, parameter_types, to, OpCode::CastOp, cast as u32, from);
+}
+
+func createCoreReflectionFunctionTemplates(ctx: &&Context, ns: NamespaceRef) => void {
+	const template_parameters = List!<TemplateParameterDecl>(1u, TemplateParameterDecl("TypeRef", ctx.any_concept, false));
+	discard ctx.createInlineFunction(ns, "sizeOf", template_parameters, OpCode::SizeOf, 0u32, TypeRef::null());
+	discard ctx.createInlineFunction(ns, "alignmentOf", template_parameters, OpCode::AlignmentOf, 0u32, TypeRef::null());
+	discard ctx.createInlineFunction(ns, "referenceKindOf", template_parameters, OpCode::ReferenceKindOf, 0u32, TypeRef::null());
+	discard ctx.createInlineFunction(ns, "hasDefaultConstructor", template_parameters, OpCode::HasDefaultConstructor, 0u32, TypeRef::null());
+	discard ctx.createInlineFunction(ns, "hasCopyConstructor", template_parameters, OpCode::HasCopyConstructor, 0u32, TypeRef::null());
+	discard ctx.createInlineFunction(ns, "hasAssignmentOperator", template_parameters, OpCode::HasAssignmentOperator, 0u32, TypeRef::null());
+	discard ctx.createInlineFunction(ns, "hasEqualOperator", template_parameters, OpCode::HasEqualOperator, 0u32, TypeRef::null());
+	discard ctx.createInlineFunction(ns, "hasCompareOperator", template_parameters, OpCode::HasCompareOperator, 0u32, TypeRef::null());
+}
+
+func createBasicFunctions(ctx: &&Context, type: TypeRef) => void {
+	type.default_constructor = ctx.createInlineFunction!<1u>(type.linked_namespace, "constructor", [type.varRef()], ctx.void_type, OpCode::StoreNull, 0u32, type);
+	type.copy_constructor = ctx.createInlineFunction!<2u>(type.linked_namespace, "constructor", [type.varRef(), type], ctx.void_type, OpCode::Store, 0u32, type);
+	type.destructor = ctx.createInlineFunction!<1u>(type.linked_namespace, "destructor", [type.varRef()], ctx.void_type, OpCode::None, 0u32, type);
+	type.op_assign = ctx.createInlineFunction!<2u>(type.linked_namespace, "=", [type.varRef(), type], ctx.void_type, OpCode::Store, 0u32, type);
+}
+
+func createComparisonOperators(ctx: &&Context, type: TypeRef, op: OpCode) => void {
+	type.op_equal = ctx.createInlineFunction!<2u>(type.linked_namespace, "==", [type, type], ctx.bool_type, op, ComparisonOp::EQ as u32, type);
+	discard ctx.createInlineFunction!<2u>(type.linked_namespace, "!=", [type, type], ctx.bool_type, op, ComparisonOp::NE as u32, type);
+	discard ctx.createInlineFunction!<2u>(type.linked_namespace, "<", [type, type], ctx.bool_type, op, ComparisonOp::LT as u32, type);
+	discard ctx.createInlineFunction!<2u>(type.linked_namespace, "<=", [type, type], ctx.bool_type, op, ComparisonOp::LE as u32, type);
+	discard ctx.createInlineFunction!<2u>(type.linked_namespace, ">", [type, type], ctx.bool_type, op, ComparisonOp::GT as u32, type);
+	discard ctx.createInlineFunction!<2u>(type.linked_namespace, ">=", [type, type], ctx.bool_type, op, ComparisonOp::GE as u32, type);
+	type.op_compare = ctx.createInlineFunction!<2u>(type.linked_namespace, "<=>", [type, type], ctx.int_type, op, ComparisonOp::Cmp as u32, type);
+}
+
+func createIntArithmeticOperators(ctx: &&Context, type: TypeRef, signed: bool) => void {
+	if signed {
+		discard ctx.createInlineFunction!<1u>(type.linked_namespace, "-", [type], type, OpCode::IntOp, IntOp::Neg as u32, type);
+	}
+
+	discard ctx.createInlineFunction!<2u>(type.linked_namespace, "+", [type, type], type, OpCode::IntOp, IntOp::Add as u32, type);
+	discard ctx.createInlineFunction!<2u>(type.linked_namespace, "-", [type, type], type, OpCode::IntOp, IntOp::Sub as u32, type);
+	discard ctx.createInlineFunction!<2u>(type.linked_namespace, "*", [type, type], type, OpCode::IntOp, IntOp::Mul as u32, type);
+
+	if signed {
+		discard ctx.createInlineFunction!<2u>(type.linked_namespace, "/", [type, type], type, OpCode::IntOp, IntOp::Div as u32, type);
+		discard ctx.createInlineFunction!<2u>(type.linked_namespace, "%", [type, type], type, OpCode::IntOp, IntOp::Mod as u32, type);
+	} else {
+		discard ctx.createInlineFunction!<2u>(type.linked_namespace, "/", [type, type], type, OpCode::IntOp, IntOp::UDiv as u32, type);
+		discard ctx.createInlineFunction!<2u>(type.linked_namespace, "%", [type, type], type, OpCode::IntOp, IntOp::UMod as u32, type);
+	}
+
+	discard ctx.createInlineFunction!<2u>(type.linked_namespace, "+=", [type.varRef(), type], ctx.void_type, OpCode::IntRMWOp, IntOp::Add as u32, type);
+	discard ctx.createInlineFunction!<2u>(type.linked_namespace, "-=", [type.varRef(), type], ctx.void_type, OpCode::IntRMWOp, IntOp::Sub as u32, type);
+	discard ctx.createInlineFunction!<2u>(type.linked_namespace, "*=", [type.varRef(), type], ctx.void_type, OpCode::IntRMWOp, IntOp::Mul as u32, type);
+
+	if signed {
+		discard ctx.createInlineFunction!<2u>(type.linked_namespace, "/=", [type.varRef(), type], ctx.void_type, OpCode::IntRMWOp, IntOp::Div as u32, type);
+		discard ctx.createInlineFunction!<2u>(type.linked_namespace, "%=", [type.varRef(), type], ctx.void_type, OpCode::IntRMWOp, IntOp::Mod as u32, type);
+	} else {
+		discard ctx.createInlineFunction!<2u>(type.linked_namespace, "/=", [type.varRef(), type], ctx.void_type, OpCode::IntRMWOp, IntOp::UDiv as u32, type);
+		discard ctx.createInlineFunction!<2u>(type.linked_namespace, "%=", [type.varRef(), type], ctx.void_type, OpCode::IntRMWOp, IntOp::UMod as u32, type);
+	}
+
+	discard ctx.createInlineFunction!<1u>(type.linked_namespace, "++", [type.varRef()], ctx.void_type, OpCode::IntRMWOp, IntOp::Inc as u32, type);
+	discard ctx.createInlineFunction!<1u>(type.linked_namespace, "--", [type.varRef()], ctx.void_type, OpCode::IntRMWOp, IntOp::Dec as u32, type);
+}
+
+func createFloatArithmeticOperators(ctx: &&Context, type: TypeRef) => void {
+	discard ctx.createInlineFunction!<1u>(type.linked_namespace, "-", [type], type, OpCode::FloatOp, FloatOp::Neg as u32, type);
+	discard ctx.createInlineFunction!<2u>(type.linked_namespace, "+", [type, type], type, OpCode::FloatOp, FloatOp::Add as u32, type);
+	discard ctx.createInlineFunction!<2u>(type.linked_namespace, "-", [type, type], type, OpCode::FloatOp, FloatOp::Sub as u32, type);
+	discard ctx.createInlineFunction!<2u>(type.linked_namespace, "*", [type, type], type, OpCode::FloatOp, FloatOp::Mul as u32, type);
+	discard ctx.createInlineFunction!<2u>(type.linked_namespace, "/", [type, type], type, OpCode::FloatOp, FloatOp::Div as u32, type);
+	discard ctx.createInlineFunction!<2u>(type.linked_namespace, "%", [type, type], type, OpCode::FloatOp, FloatOp::Mod as u32, type);
+
+	discard ctx.createInlineFunction!<2u>(type.linked_namespace, "+=", [type.varRef(), type], ctx.void_type, OpCode::FloatRMWOp, FloatOp::Add as u32, type);
+	discard ctx.createInlineFunction!<2u>(type.linked_namespace, "-=", [type.varRef(), type], ctx.void_type, OpCode::FloatRMWOp, FloatOp::Sub as u32, type);
+	discard ctx.createInlineFunction!<2u>(type.linked_namespace, "*=", [type.varRef(), type], ctx.void_type, OpCode::FloatRMWOp, FloatOp::Mul as u32, type);
+	discard ctx.createInlineFunction!<2u>(type.linked_namespace, "/=", [type.varRef(), type], ctx.void_type, OpCode::FloatRMWOp, FloatOp::Div as u32, type);
+	discard ctx.createInlineFunction!<2u>(type.linked_namespace, "%=", [type.varRef(), type], ctx.void_type, OpCode::FloatRMWOp, FloatOp::Mod as u32, type);
+}
+
+func createBitwiseOperators(ctx: &&Context, type: TypeRef, signed: bool) => void {
+	discard ctx.createInlineFunction!<1u>(type.linked_namespace, "~", [type], type, OpCode::IntOp, IntOp::Not as u32, type);
+	discard ctx.createInlineFunction!<2u>(type.linked_namespace, "&", [type, type], type, OpCode::IntOp, IntOp::And as u32, type);
+	discard ctx.createInlineFunction!<2u>(type.linked_namespace, "|", [type, type], type, OpCode::IntOp, IntOp::Or as u32, type);
+	discard ctx.createInlineFunction!<2u>(type.linked_namespace, "^", [type, type], type, OpCode::IntOp, IntOp::XOr as u32, type);
+	discard ctx.createInlineFunction!<2u>(type.linked_namespace, "<<", [type, type], type, OpCode::IntOp, IntOp::ShL as u32, type);
+	discard ctx.createInlineFunction!<2u>(type.linked_namespace, ">>", [type, type], type, OpCode::IntOp, (signed ? IntOp::AShR : IntOp::LShR) as u32, type);
+
+	discard ctx.createInlineFunction!<2u>(type.linked_namespace, "&=", [type.varRef(), type], ctx.void_type, OpCode::IntRMWOp, IntOp::And as u32, type);
+	discard ctx.createInlineFunction!<2u>(type.linked_namespace, "|=", [type.varRef(), type], ctx.void_type, OpCode::IntRMWOp, IntOp::Or as u32, type);
+	discard ctx.createInlineFunction!<2u>(type.linked_namespace, "^=", [type.varRef(), type], ctx.void_type, OpCode::IntRMWOp, IntOp::XOr as u32, type);
+	discard ctx.createInlineFunction!<2u>(type.linked_namespace, "<<=", [type.varRef(), type], ctx.void_type, OpCode::IntRMWOp, IntOp::ShL as u32, type);
+	discard ctx.createInlineFunction!<2u>(type.linked_namespace, ">>=", [type.varRef(), type], ctx.void_type, OpCode::IntRMWOp, (signed ? IntOp::AShR : IntOp::LShR) as u32, type);
+}
+
+func createDefaultVariantFunctions(ctx: &&Context, type: TypeRef) => void {
+	var ns = type.linked_namespace;
+
+	type.copy_constructor = ctx.createBuiltinFunction!<2u>(ns, "constructor", [type.varRef(), type], ctx.void_type, BuiltinFunctionBody::VariantCopyConstructor);
+	type.destructor = ctx.createBuiltinFunction!<1u>(ns, "destructor", [type.varRef()], ctx.void_type, BuiltinFunctionBody::VariantDestructor);
+	type.op_assign = ctx.createBuiltinFunction!<2u>(ns, "=", [type.varRef(), type], ctx.void_type, BuiltinFunctionBody::VariantOpAssign);
+	type.op_equal = ctx.createBuiltinFunction!<2u>(ns, "==", [type, type], ctx.bool_type, BuiltinFunctionBody::VariantOpEqual);
+
+	ns.addUncheckedFunctionBody(type.copy_constructor);
+	ns.addUncheckedFunctionBody(type.destructor);
+	ns.addUncheckedFunctionBody(type.op_assign);
+	ns.addUncheckedFunctionBody(type.op_equal);
+
+	for c in type.case_decls {
+		ctx.createVariantCaseConstructor(type, c);
+		ctx.createVariantOpIs(type, c);
+
+		if c.type != ctx.void_type {
+			ctx.createVariantOpUnsafeAs(type, ReferenceKind::Const, c);
+			ctx.createVariantOpUnsafeAs(type, ReferenceKind::Var, c);
 		}
 	}
-
-	const flags = (is_signed ? PrimitiveOp::Signed : PrimitiveOp::Unsigned);
-	createBasicFunctions(&&program, type, type_namespace);
-	createComparisonOperators(&&program, type, type_namespace, flags);
-	createArithmeticOperators(&&program, type, type_namespace, flags);
-
-	discard program.createUnaryFunction(type_namespace, "++", type.varRef(), program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Inc | Assign, type));
-	discard program.createUnaryFunction(type_namespace, "--", type.varRef(), program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Dec | Assign, type));
-
-	createBitwiseOperators(&&program, type, type_namespace, flags);
-
-	return type;
 }
 
-func createByteType(program: &&Program, dest_namespace: SharedHandle!<Namespace>) => void {
-	const type = Type(program.createType(dest_namespace, "byte", TypeBody::Byte), ReferenceKind::None);
-	const type_namespace = type.decl.linked_namespace;
-	program.byte_type = type;
+func createVariantCaseConstructor(ctx: &&Context, type: TypeRef, c: CaseRef) => void {
+	var ns = type.linked_namespace;
+	const template_parameters = List!<TemplateParameterDecl>(1u, TemplateParameterDecl("Id", ctx.int_concept, false, Value::fromPrimitive!<int>(c.id, ctx.int_type)));
 
-	createBasicFunctions(&&program, type, type_namespace);
-	createComparisonOperators(&&program, type, type_namespace, PrimitiveOp::Unsigned);
-	createBitwiseOperators(&&program, type, type_namespace, PrimitiveOp::Unsigned);
-}
+	var parameter_types: List!<TypeRef>;
+	parameter_types.append(type.varRef());
 
-func createErrorType(program: &&Program, dest_namespace: SharedHandle!<Namespace>, i32_type: Type) => void {
-	var type_decl = program.createType(dest_namespace, "Error", TypeBody::Enum);
-	type_decl.id_type = i32_type;
-	type_decl.addContainedType(i32_type);
-
-	program.error_type = Type(type_decl);
-	program.createDefaultFunctions(Type(type_decl));
-}
-
-func createPtrTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>) => void {
-	const body = TypeBody::Pointer((pointee_type: Type::unknown(), is_mutable: false));
-
-	var template_parameters: List!<TemplateParameterDecl>;
-	template_parameters.append(TemplateParameterDecl("Pointee", program.any_concept, false));
-	template_parameters.append(TemplateParameterDecl("Mutable", program.bool_concept, false));
-
-	discard program.createType(dest_namespace, "ptr", template_parameters, body);
-}
-
-func createPtrTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, is_mutable: bool, pointee_type: Type) => Type {
-	const body = TypeBody::Pointer((pointee_type: pointee_type, is_mutable: is_mutable));
-
-	var template_parameters: List!<TemplateParameterDecl>;
-	template_parameters.append(TemplateParameterDecl("Pointee", program.any_concept, false, TemplateParameter::Type(pointee_type)));
-	template_parameters.append(TemplateParameterDecl("Mutable", program.bool_concept, false, TemplateParameter::Boolean(is_mutable)));
-
-	const type = Type(program.createType(dest_namespace, "ptr", template_parameters, body), ReferenceKind::None);
-	const type_namespace = type.decl.linked_namespace;
-
-	createBasicFunctions(&&program, type, type_namespace);
-	createComparisonOperators(&&program, type, type_namespace, PrimitiveOp::Unsigned);
-
-	const empty_parameter_types = List!<Type>();
-	discard program.createFunction(type_namespace, "null", empty_parameter_types, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::ConstNull, type));
-
-	if pointee_type != program.void_type && pointee_type != program.never_type {
-		const pointee_reference_type = is_mutable ? pointee_type.varRef() : pointee_type.constRef();
-
-		discard program.createUnaryFunction(type_namespace, "value", type, pointee_reference_type, BuiltinFunction::PointerToRef(type));
-		discard program.createUnaryFunction(type_namespace, "addressOf", pointee_reference_type, type, BuiltinFunction::RefToPointer(type));
-
-		discard program.createBinaryFunction(type_namespace, "-", type, type, program.int_type, BuiltinFunction::PointerDiff(type));
-
-		discard program.createBinaryFunction(type_namespace, "+", type, program.int_type, type, BuiltinFunction::PointerOffset(type));
-		discard program.createBinaryFunction(type_namespace, "+", type, program.uint_type, type, BuiltinFunction::PointerOffset(type));
-
-		discard program.createBinaryFunction(type_namespace, "[]", type, program.int_type, is_mutable ? pointee_type.varRef() : pointee_type.constRef(), BuiltinFunction::PointerOpIndex(type));
-		discard program.createBinaryFunction(type_namespace, "[]", type, program.uint_type, is_mutable ? pointee_type.varRef() : pointee_type.constRef(), BuiltinFunction::PointerOpIndex(type));
+	if c.type != ctx.void_type {
+		parameter_types.append(c.type);
 	}
 
-	return type;
-}
-
-func createFunctionTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>) => void {
-	var template_parameters: List!<TemplateParameterDecl>;
-	template_parameters.append(TemplateParameterDecl("ReturnType", program.any_concept, false));
-	template_parameters.append(TemplateParameterDecl("ParameterTypes", program.any_concept, true));
-	discard program.createType(dest_namespace, "function", template_parameters, TypeBody::Function((parameter_types: List!<Type>(), return_type: Type::unknown())));
-}
-
-func createFunctionTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, parameter_types: &List!<Type>, return_type: Type) => SharedHandle!<TypeDecl> {
-	var template_parameters: List!<TemplateParameterDecl>;
-	template_parameters.append(TemplateParameterDecl("ReturnType", program.any_concept, false, TemplateParameter::Type(return_type)));
-	for t in parameter_types {
-		template_parameters.append(TemplateParameterDecl("ParameterTypes", program.any_concept, false, TemplateParameter::Type(t)));
+	for p in type.properties {
+		parameter_types.append(p.type);
 	}
 
-	var type_decl = program.createType(dest_namespace, "function", template_parameters, TypeBody::Function((parameter_types: parameter_types, return_type: return_type)));
-	const type = Type(type_decl, ReferenceKind::None);
-
-	const type_namespace = type_decl.linked_namespace;
-
-	type.decl.copy_constructor = program.createBinaryFunction(type_namespace, "constructor", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
-	type.decl.destructor = program.createUnaryFunction(type_namespace, "destructor", type.varRef(), program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::NoOp, type));
-	type.decl.op_assign = program.createBinaryFunction(type_namespace, "=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
-	createComparisonOperators(&&program, type, type_namespace, PrimitiveOp::Unsigned);
-
-	var call_operator_parameter_types = parameter_types;
-	call_operator_parameter_types.insert(0u, type);
-	discard program.createFunction(type_namespace, "()", call_operator_parameter_types, return_type, BuiltinFunction::FunctionPointerCall(type));
-
-	return type_decl;
+	const f = ctx.createBuiltinFunction(ns, "constructor", template_parameters, parameter_types, ctx.void_type, BuiltinFunctionBody::VariantCaseConstructor);
+	ns.addUncheckedFunctionBody(f);
 }
 
-func createFloatType(program: &&Program, dest_namespace: SharedHandle!<Namespace>, float_type: FloatType) => Type {
-	const type = Type(program.createType(dest_namespace, format(float_type), List!<TemplateParameterDecl>(), TypeBody::Float(float_type)), ReferenceKind::None);
-	const type_namespace = type.decl.linked_namespace;
-
-	createBasicFunctions(&&program, type, type_namespace);
-	createComparisonOperators(&&program, type, type_namespace, PrimitiveOp::Float);
-	createArithmeticOperators(&&program, type, type_namespace, PrimitiveOp::Float);
-
-	return type;
+func createVariantOpIs(ctx: &&Context, type: TypeRef, c: CaseRef) => void {
+	const template_parameters = List!<TemplateParameterDecl>(1u, TemplateParameterDecl("Id", ctx.int_concept, false, Value::fromPrimitive!<int>(c.id, ctx.int_type)));
+	const parameter_types = List!<TypeRef>(1u, type);
+	discard ctx.createInlineFunction(type.linked_namespace, "is", template_parameters, parameter_types, ctx.bool_type, OpCode::VariantOpIs, 0u32, type);
 }
 
-func createVectorTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>) => void {
-	var template_parameters: List!<TemplateParameterDecl>;
-	template_parameters.append(TemplateParameterDecl("T", program.any_concept, false));
-	template_parameters.append(TemplateParameterDecl("Size", program.uint_concept, false));
-	discard program.createType(dest_namespace, "Vector", template_parameters, TypeBody::Vector((element_type: Type::unknown(), size: 0u)));
-}
-
-func createVectorTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, element_type: Type, size: uint) => SharedHandle!<TypeDecl> {
-	var template_parameters: List!<TemplateParameterDecl>;
-	template_parameters.append(TemplateParameterDecl("T", program.any_concept, false, TemplateParameter::Type(element_type)));
-	template_parameters.append(TemplateParameterDecl("Size", program.uint_concept, false, TemplateParameter::Integer(size as int)));
-	var type_decl = program.createType(dest_namespace, "Vector", template_parameters, TypeBody::Vector((element_type: element_type, size: size)));
-	const type = Type(type_decl, ReferenceKind::None);
-
-	type_decl.addContainedType(element_type);
-	const type_namespace = type_decl.linked_namespace;
-
-	const flags = match element_type.decl.body {
-		case Int -> yield PrimitiveOp::Signed;
-		case UInt -> yield PrimitiveOp::Unsigned;
-		case Float -> yield PrimitiveOp::Float;
-		default -> panic("invalid vector element type");
-	};
-
-	var value_constructor_parameter_types: List!<Type>;
-	value_constructor_parameter_types.append(type.varRef());
-	value_constructor_parameter_types.append(List!<Type>(size, element_type));
-	discard program.createFunction(type_namespace, "constructor", value_constructor_parameter_types, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | RHSToVector | Assign, type));
-	discard program.createBinaryFunction(type_namespace, "constructor", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | RHSToVector | Assign, type));
-	createBasicFunctions(&&program, type, type_namespace);
-
-	type.decl.op_equal = program.createBinaryFunction(type_namespace, "==", type, type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::VectorEQ, type));
-	discard program.createBinaryFunction(type_namespace, "!=", type, type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::VectorNE, type));
-
-	createArithmeticOperators(&&program, type, type_namespace, flags);
-
-	discard program.createBinaryFunction(type_namespace, "+", type, element_type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Add | RHSToVector | flags, type));
-	discard program.createBinaryFunction(type_namespace, "-", type, element_type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Sub | RHSToVector | flags, type));
-	discard program.createBinaryFunction(type_namespace, "*", type, element_type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Mul | RHSToVector | flags, type));
-	discard program.createBinaryFunction(type_namespace, "/", type, element_type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Div | RHSToVector | flags, type));
-	discard program.createBinaryFunction(type_namespace, "%", type, element_type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Mod | RHSToVector | flags, type));
-
-	discard program.createBinaryFunction(type_namespace, "+=", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Add | Assign | RHSToVector | flags, type));
-	discard program.createBinaryFunction(type_namespace, "-=", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Sub | Assign | RHSToVector | flags, type));
-	discard program.createBinaryFunction(type_namespace, "*=", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Mul | Assign | RHSToVector | flags, type));
-	discard program.createBinaryFunction(type_namespace, "/=", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Div | Assign | RHSToVector | flags, type));
-	discard program.createBinaryFunction(type_namespace, "%=", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Mod | Assign | RHSToVector | flags, type));
-
-	if element_type.isIntType(true) {
-		createBitwiseOperators(&&program, type, type_namespace, flags);
-
-		discard program.createBinaryFunction(type_namespace, "&", type, element_type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::And | RHSToVector, type));
-		discard program.createBinaryFunction(type_namespace, "|", type, element_type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Or | RHSToVector, type));
-		discard program.createBinaryFunction(type_namespace, "^", type, element_type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::XOr | RHSToVector, type));
-		discard program.createBinaryFunction(type_namespace, "<<", type, element_type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Shl | RHSToVector, type));
-		discard program.createBinaryFunction(type_namespace, ">>", type, element_type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Shr | RHSToVector | flags, type));
-
-		discard program.createBinaryFunction(type_namespace, "&=", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::And | Assign | RHSToVector, type));
-		discard program.createBinaryFunction(type_namespace, "|=", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Or | Assign | RHSToVector, type));
-		discard program.createBinaryFunction(type_namespace, "^=", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::XOr | Assign | RHSToVector, type));
-		discard program.createBinaryFunction(type_namespace, "<<=", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Shl | Assign | RHSToVector, type));
-		discard program.createBinaryFunction(type_namespace, ">>=", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Shr | Assign | RHSToVector | flags, type));
-	}
-
-	discard program.createBinaryFunction(type_namespace, "dot", type, type, element_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::VectorDotProduct | flags, type));
-	discard program.createUnaryFunction(type_namespace, "sum", type, element_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::VectorReduceAdd | flags, type));
-	discard program.createUnaryFunction(type_namespace, "min", type, element_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::VectorReduceMin | flags, type));
-	discard program.createUnaryFunction(type_namespace, "max", type, element_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::VectorReduceMax | flags, type));
-
-	return type_decl;
-}
-
-func createMatrixTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>) => void {
-	var template_parameters: List!<TemplateParameterDecl>;
-	template_parameters.append(TemplateParameterDecl("T", program.any_concept, false));
-	template_parameters.append(TemplateParameterDecl("Columns", program.uint_concept, false));
-	template_parameters.append(TemplateParameterDecl("Rows", program.uint_concept, false));
-	discard program.createType(dest_namespace, "Matrix", template_parameters, TypeBody::Matrix((element_type: Type::unknown(), columns: 0u, rows: 0u)));
-}
-
-func createMatrixTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, element_type: Type, columns: uint, rows: uint) => SharedHandle!<TypeDecl> {
-	var template_parameters: List!<TemplateParameterDecl>;
-	template_parameters.append(TemplateParameterDecl("T", program.any_concept, false, TemplateParameter::Type(element_type)));
-	template_parameters.append(TemplateParameterDecl("Columns", program.uint_concept, false, TemplateParameter::Integer(columns as int)));
-	template_parameters.append(TemplateParameterDecl("Rows", program.uint_concept, false, TemplateParameter::Integer(rows as int)));
-	var type_decl = program.createType(dest_namespace, "Matrix", template_parameters, TypeBody::Matrix((element_type: element_type, columns: columns, rows: rows)));
-	const type = Type(type_decl, ReferenceKind::None);
-
-	type_decl.addContainedType(element_type);
-	const type_namespace = type_decl.linked_namespace;
-
-	const flags = match element_type.decl.body {
-		case Int -> yield PrimitiveOp::Signed;
-		case UInt -> yield PrimitiveOp::Unsigned;
-		case Float -> yield PrimitiveOp::Float;
-		default -> panic("invalid matrix element type");
-	};
-
-	var value_constructor_parameter_types: List!<Type>;
-	value_constructor_parameter_types.append(type.varRef());
-	value_constructor_parameter_types.append(List!<Type>(columns * rows, element_type));
-	discard program.createFunction(type_namespace, "constructor", value_constructor_parameter_types, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::MatrixFromValues | Assign, type));
-
-	discard program.createBinaryFunction(type_namespace, "constructor", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | RHSToVector | Assign, type));
-	type_decl.default_constructor = program.createUnaryFunction(type_namespace, "constructor", type.varRef(), program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::MatrixIdentity | Assign | flags, type));
-	type_decl.copy_constructor = program.createBinaryFunction(type_namespace, "constructor", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
-	type_decl.destructor = program.createUnaryFunction(type_namespace, "destructor", type.varRef(), program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::NoOp, type));
-	type_decl.op_assign = program.createBinaryFunction(type_namespace, "=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
-
-	type.decl.op_equal = program.createBinaryFunction(type_namespace, "==", type, type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::VectorEQ, type));
-	discard program.createBinaryFunction(type_namespace, "!=", type, type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::VectorNE, type));
-
-	discard program.createBinaryFunction(type_namespace, "+", type, element_type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Add | RHSToVector | flags, type));
-	discard program.createBinaryFunction(type_namespace, "-", type, element_type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Sub | RHSToVector | flags, type));
-	discard program.createBinaryFunction(type_namespace, "*", type, element_type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Mul | RHSToVector | flags, type));
-	discard program.createBinaryFunction(type_namespace, "/", type, element_type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Div | RHSToVector | flags, type));
-
-	discard program.createBinaryFunction(type_namespace, "+=", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Add | Assign | RHSToVector | flags, type));
-	discard program.createBinaryFunction(type_namespace, "-=", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Sub | Assign | RHSToVector | flags, type));
-	discard program.createBinaryFunction(type_namespace, "*=", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Mul | Assign | RHSToVector | flags, type));
-	discard program.createBinaryFunction(type_namespace, "/=", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Div | Assign | RHSToVector | flags, type));
-
-	return type_decl;
-}
-
-func createArrayTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>) => void {
-	var template_parameters: List!<TemplateParameterDecl>;
-	template_parameters.append(TemplateParameterDecl("T", program.any_concept, false));
-	template_parameters.append(TemplateParameterDecl("Size", program.uint_concept, false));
-	discard program.createType(dest_namespace, "Array", template_parameters, TypeBody::Array((element_type: Type::unknown(), size: 0u)));
-}
-
-func createArrayTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, element_type: Type, size: uint) => SharedHandle!<TypeDecl> {
-	var template_parameters: List!<TemplateParameterDecl>;
-	template_parameters.append(TemplateParameterDecl("T", program.any_concept, false, TemplateParameter::Type(element_type)));
-	template_parameters.append(TemplateParameterDecl("Size", program.uint_concept, false, TemplateParameter::Integer(size as int)));
-	var type_decl = program.createType(dest_namespace, "Array", template_parameters, TypeBody::Array((element_type: element_type, size: size)));
-	const type = Type(type_decl, ReferenceKind::None);
-
-	type_decl.addContainedType(element_type);
-	const type_namespace = type_decl.linked_namespace;
-
-	if element_type.isPrimitive() {
-		createBasicFunctions(&&program, type, type_namespace);
-	} else {
-		type_decl.default_constructor = program.createUnaryFunction(type_namespace, "constructor", type.varRef(), program.void_type, BuiltinFunction::ArrayDefaultConstructor(type));
-		type_decl.copy_constructor = program.createBinaryFunction(type_namespace, "constructor", type.varRef(), type, program.void_type, BuiltinFunction::ArrayCopyConstructor(type));
-		type_decl.destructor = program.createUnaryFunction(type_namespace, "destructor", type.varRef(), program.void_type, BuiltinFunction::ArrayDestructor(type));
-		type_decl.op_assign = program.createBinaryFunction(type_namespace, "=", type.varRef(), type, program.void_type, BuiltinFunction::ArrayOpAssign(type));
-	}
-
-	type_decl.op_equal = program.createBinaryFunction(type_namespace, "==", type, type, program.bool_type, BuiltinFunction::ArrayOpEqual(type));
-	discard program.createUnaryFunction(type_namespace, "size", type.constRef(), program.uint_type, BuiltinFunction::ArrayGetSize(type));
-
-	return type_decl;
-}
-
-func createRangeTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>) => void {
-	var template_parameters: List!<TemplateParameterDecl>;
-	template_parameters.append(TemplateParameterDecl("Type", program.any_concept, false));
-	template_parameters.append(TemplateParameterDecl("Mutable", program.bool_concept, false));
-	discard program.createType(dest_namespace, "Range", template_parameters, TypeBody::Range((element_type: Type::unknown(), is_mutable: false)));
-}
-
-func createRangeTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, element_type: Type, is_mutable: bool, element_ptr_type: Type, iterator_type: Type, mutable_range_type: Type) => SharedHandle!<TypeDecl> {
-	var template_parameters: List!<TemplateParameterDecl>;
-	template_parameters.append(TemplateParameterDecl("Type", program.any_concept, false, TemplateParameter::Type(element_type)));
-	template_parameters.append(TemplateParameterDecl("Mutable", program.bool_concept, false, TemplateParameter::Boolean(is_mutable)));
-	var type_decl =  program.createType(dest_namespace, "Range", template_parameters, TypeBody::Range((element_type: element_type, is_mutable: is_mutable)));
-	const type = Type(type_decl, ReferenceKind::None);
-	const type_namespace = type_decl.linked_namespace;
-
-	type_decl.createMemberVariable(Span(), "data", element_ptr_type);
-	type_decl.createMemberVariable(Span(), "size", program.uint_type);
-
-	var value_constructor_parameter_types: List!<Type>;
-	value_constructor_parameter_types.append(type.varRef());
-	value_constructor_parameter_types.append(element_ptr_type);
-	value_constructor_parameter_types.append(program.uint_type);
-	discard program.createFunction(type_namespace, "constructor", value_constructor_parameter_types, program.void_type, BuiltinFunction::StructValueConstructor(type));
-
-	type.decl.copy_constructor = program.createBinaryFunction(type_namespace, "constructor", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
-
-	if !is_mutable {
-		discard program.createBinaryFunction(type_namespace, "constructor", type.varRef(), mutable_range_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
-	}
-
-	type.decl.destructor = program.createUnaryFunction(type_namespace, "destructor", type.varRef(), program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::NoOp, type));
-	type.decl.op_assign = program.createBinaryFunction(type_namespace, "=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
-	type_decl.op_equal = program.createBinaryFunction(type_namespace, "==", type, type, program.bool_type, BuiltinFunction::StructOpEqual(type));
-
-	discard program.createUnaryFunction(type_namespace, "data", type, element_ptr_type, BuiltinFunction::RangeGetData(type));
-	discard program.createUnaryFunction(type_namespace, "size", type, program.uint_type, BuiltinFunction::RangeGetSize(type));
-	discard program.createUnaryFunction(type_namespace, "iterator", type, iterator_type, BuiltinFunction::RangeGetIterator(iterator_type, type));
-
-	return type_decl;
-}
-
-func createRangeIteratorTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>) => void {
-	var template_parameters: List!<TemplateParameterDecl>;
-	template_parameters.append(TemplateParameterDecl("Type", program.any_concept, false));
-	template_parameters.append(TemplateParameterDecl("Mutable", program.bool_concept, false));
-	discard program.createType(dest_namespace, "RangeIterator", template_parameters, TypeBody::RangeIterator((element_type: Type::unknown(), is_mutable: false)));
-}
-
-func createRangeIteratorTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, element_type: Type, is_mutable: bool, element_ptr_type: Type) => SharedHandle!<TypeDecl> {
-	var template_parameters: List!<TemplateParameterDecl>;
-	template_parameters.append(TemplateParameterDecl("Type", program.any_concept, false, TemplateParameter::Type(element_type)));
-	template_parameters.append(TemplateParameterDecl("Mutable", program.bool_concept, false, TemplateParameter::Boolean(is_mutable)));
-	var type_decl = program.createType(dest_namespace, "RangeIterator", template_parameters, TypeBody::RangeIterator((element_type: element_type, is_mutable: is_mutable)));
-	const type = Type(type_decl, ReferenceKind::None);
-	const type_namespace = type_decl.linked_namespace;
-
-	type_decl.createMemberVariable(Span(), "current", element_ptr_type);
-	type_decl.createMemberVariable(Span(), "end", element_ptr_type);
-
-	var value_constructor_parameter_types: List!<Type>;
-	value_constructor_parameter_types.append(type.varRef());
-	value_constructor_parameter_types.append(element_ptr_type);
-	value_constructor_parameter_types.append(element_ptr_type);
-	discard program.createFunction(type_namespace, "constructor", value_constructor_parameter_types, program.void_type, BuiltinFunction::StructValueConstructor(type));
-
-	type.decl.copy_constructor = program.createBinaryFunction(type_namespace, "constructor", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
-	type.decl.destructor = program.createUnaryFunction(type_namespace, "destructor", type.varRef(), program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::NoOp, type));
-	type.decl.op_assign = program.createBinaryFunction(type_namespace, "=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
-	type_decl.op_equal = program.createBinaryFunction(type_namespace, "==", type, type, program.bool_type, BuiltinFunction::StructOpEqual(type));
-
-	discard program.createUnaryFunction(type_namespace, "hasNext", type, program.bool_type, BuiltinFunction::RangeIteratorHasNext(type));
-	discard program.createUnaryFunction(type_namespace, "getNext", type.varRef(), is_mutable ? element_type.varRef() : element_type.constRef(), BuiltinFunction::RangeIteratorGetNext(type));
-
-	return type_decl;
-}
-
-func createNumericRangeTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>) => void {
-	var template_parameters: List!<TemplateParameterDecl>;
-	template_parameters.append(TemplateParameterDecl("Type", program.any_concept, false));
-	discard program.createType(dest_namespace, "NumericRange", template_parameters, TypeBody::NumericRange(Type::unknown()));
-}
-
-func createNumericRangeTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, numeric_type: Type, iterator_type: Type) => SharedHandle!<TypeDecl> {
-	var template_parameters: List!<TemplateParameterDecl>;
-	template_parameters.append(TemplateParameterDecl("Type", program.any_concept, false, TemplateParameter::Type(numeric_type)));
-	var type_decl =  program.createType(dest_namespace, "NumericRange", template_parameters, TypeBody::NumericRange(numeric_type));
-	const type = Type(type_decl, ReferenceKind::None);
-	const type_namespace = type_decl.linked_namespace;
-
-	type_decl.createMemberVariable(Span(), "start", numeric_type);
-	type_decl.createMemberVariable(Span(), "end", numeric_type);
-	type_decl.createMemberVariable(Span(), "step", numeric_type);
-
-	var value_constructor_parameter_types = List!<Type>(3u, numeric_type);
-	value_constructor_parameter_types.insert(0u, type.varRef());
-	discard program.createFunction(type_namespace, "constructor", value_constructor_parameter_types, program.void_type, BuiltinFunction::StructValueConstructor(type));
-
-	type.decl.copy_constructor = program.createBinaryFunction(type_namespace, "constructor", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
-	type.decl.destructor = program.createUnaryFunction(type_namespace, "destructor", type.varRef(), program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::NoOp, type));
-	type.decl.op_assign = program.createBinaryFunction(type_namespace, "=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
-	type_decl.op_equal = program.createBinaryFunction(type_namespace, "==", type, type, program.bool_type, BuiltinFunction::StructOpEqual(type));
-
-	discard program.createBinaryFunction(type_namespace, "|", type, numeric_type, type, BuiltinFunction::NumericRangeSetStep(numeric_type, type));
-	discard program.createUnaryFunction(type_namespace, "iterator", type, iterator_type, BuiltinFunction::NumericRangeGetIterator(iterator_type, type));
-
-	return type_decl;
-}
-
-func createNumericIteratorTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>) => void {
-	var template_parameters: List!<TemplateParameterDecl>;
-	template_parameters.append(TemplateParameterDecl("Type", program.any_concept, false));
-	discard program.createType(dest_namespace, "NumericIterator", template_parameters, TypeBody::NumericIterator(Type::unknown()));
-}
-
-func createNumericIteratorTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, numeric_type: Type) => SharedHandle!<TypeDecl> {
-	var template_parameters: List!<TemplateParameterDecl>;
-	template_parameters.append(TemplateParameterDecl("Type", program.any_concept, false, TemplateParameter::Type(numeric_type)));
-	var type_decl = program.createType(dest_namespace, "NumericIterator", template_parameters, TypeBody::NumericIterator(numeric_type));
-	const type = Type(type_decl, ReferenceKind::None);
-	const type_namespace = type_decl.linked_namespace;
-
-	type_decl.createMemberVariable(Span(), "start", numeric_type);
-	type_decl.createMemberVariable(Span(), "end", numeric_type);
-	type_decl.createMemberVariable(Span(), "step", numeric_type);
-	type_decl.createMemberVariable(Span(), "is_ascending", program.bool_type);
-
-	var value_constructor_parameter_types = List!<Type>(3u, numeric_type);
-	value_constructor_parameter_types.append(program.bool_type);
-	value_constructor_parameter_types.insert(0u, type.varRef());
-	discard program.createFunction(type_namespace, "constructor", value_constructor_parameter_types, program.void_type, BuiltinFunction::StructValueConstructor(type));
-
-	type.decl.copy_constructor = program.createBinaryFunction(type_namespace, "constructor", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
-	type.decl.destructor = program.createUnaryFunction(type_namespace, "destructor", type.varRef(), program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::NoOp, type));
-	type.decl.op_assign = program.createBinaryFunction(type_namespace, "=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
-	type_decl.op_equal = program.createBinaryFunction(type_namespace, "==", type, type, program.bool_type, BuiltinFunction::StructOpEqual(type));
-
-	discard program.createUnaryFunction(type_namespace, "hasNext", type, program.bool_type, BuiltinFunction::NumericIteratorHasNext(numeric_type, type));
-	discard program.createUnaryFunction(type_namespace, "getNext", type.varRef(), numeric_type, BuiltinFunction::NumericIteratorGetNext(numeric_type, type));
-
-	return type_decl;
-}
-
-func createTupleTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>) => void {
-	var template_parameters: List!<TemplateParameterDecl>;
-	template_parameters.append(TemplateParameterDecl("Names", program.string_concept, false));
-	template_parameters.append(TemplateParameterDecl("Types", program.any_concept, true));
-	discard program.createType(dest_namespace, "Tuple", template_parameters, TypeBody::Tuple);
-}
-
-func createTupleTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, names: &List!<String>, types: &List!<Type>) => SharedHandle!<TypeDecl> {
-	var template_parameters: List!<TemplateParameterDecl>;
-	template_parameters.append(TemplateParameterDecl("Names", program.string_concept, false, TemplateParameter::String(",".join(names))));
-	for t in types {
-		template_parameters.append(TemplateParameterDecl("Types", program.any_concept, false, TemplateParameter::Type(t)));
-	}
-
-	var type_decl = program.createType(dest_namespace, "Tuple", template_parameters, TypeBody::Tuple);
-	const type = Type(type_decl, ReferenceKind::None);
-
-	for i in 0u..types.size() {
-		type_decl.createMemberVariable(Span(), names[i], types[i]);
-	}
-
-	const type_namespace = type_decl.linked_namespace;
-
-	var value_constructor_parameter_types = types;
-	value_constructor_parameter_types.insert(0u, type.varRef());
-	discard program.createFunction(type_namespace, "constructor", value_constructor_parameter_types, program.void_type, BuiltinFunction::StructValueConstructor(type));
-
-	type_decl.copy_constructor = program.createBinaryFunction(type_namespace, "constructor", type.varRef(), type, program.void_type, BuiltinFunction::StructCopyConstructor(type));
-	type_decl.destructor = program.createUnaryFunction(type_namespace, "destructor", type.varRef(), program.void_type, BuiltinFunction::StructDestructor(type));
-	type_decl.op_assign = program.createBinaryFunction(type_namespace, "=", type.varRef(), type, program.void_type, BuiltinFunction::StructOpAssign(type));
-	type_decl.op_equal = program.createBinaryFunction(type_namespace, "==", type, type, program.bool_type, BuiltinFunction::StructOpEqual(type));
-
-	return type_decl;
-}
-
-func createDefaultFunctions(program: &&Program, type: Type) => void {
-	var type_decl = type.decl;
-	var type_namespace = type_decl.linked_namespace;
-
-	if type_decl.body is Enum {
-		type_decl.copy_constructor = program.createBinaryFunction(type_namespace, "constructor", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
-		type_decl.destructor = program.createUnaryFunction(type_namespace, "destructor", type.varRef(), program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::NoOp, type));
-		type_decl.op_assign = program.createBinaryFunction(type_namespace, "=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
-		type_decl.op_equal = program.createBinaryFunction(type_namespace, "==", type, type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::EQ, type));
-		type_decl.op_compare = program.createBinaryFunction(type_namespace, "<=>", type, type, program.int_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Cmp, type));
-	} else if type_decl.body is Variant {
-		type_decl.copy_constructor = program.createBinaryFunction(type_namespace, "constructor", type.varRef(), type, program.void_type, BuiltinFunction::VariantCopyConstructor(type));
-		type_decl.destructor = program.createUnaryFunction(type_namespace, "destructor", type.varRef(), program.void_type, BuiltinFunction::VariantDestructor(type));
-		type_decl.op_assign = program.createBinaryFunction(type_namespace, "=", type.varRef(), type, program.void_type, BuiltinFunction::VariantOpAssign(type));
-		type_decl.op_equal = program.createBinaryFunction(type_namespace, "==", type, type, program.bool_type, BuiltinFunction::VariantOpEqual(type));
-	}
-}
-
-func createVariantCaseConstructor(program: &&Program, type: SharedHandle!<TypeDecl>, case_id: int, payload_type: Type) => void {
-	var template_parameters: List!<TemplateParameterDecl>;
-	template_parameters.append(TemplateParameterDecl("Id", program.int_concept, false, TemplateParameter::Integer(case_id)));
-
-	var parameter_types: List!<Type>;
-	parameter_types.append(Type(type, ReferenceKind::Var));
-
-	if payload_type != program.void_type {
-		parameter_types.append(payload_type);
-	}
-
-	for member_variable in type.member_variables {
-		parameter_types.append(member_variable.type);
-	}
-
-	const function = program.createFunction(
-		type.linked_namespace,
-		"constructor",
-		template_parameters,
-		parameter_types,
-		program.void_type,
-		BuiltinFunction::VariantCaseConstructor(case_id, Type(type))
-	);
-}
-
-func createVariantOpIs(program: &&Program, type: SharedHandle!<TypeDecl>, case_id: int) => void {
-	var template_parameters: List!<TemplateParameterDecl>;
-	template_parameters.append(TemplateParameterDecl("Id", program.int_concept, false, TemplateParameter::Integer(case_id)));
-
-	var parameter_types: List!<Type>;
-	parameter_types.append(Type(type));
-
-	discard program.createFunction(
-		type.linked_namespace,
-		"is",
-		template_parameters,
-		parameter_types,
-		program.bool_type,
-		BuiltinFunction::VariantOpIs(case_id, Type(type))
-	);
-}
-
-func createVariantOpUnsafeAs(program: &&Program, type: SharedHandle!<TypeDecl>, reference_kind: ReferenceKind, case_id: int) => void {
-	var template_parameters: List!<TemplateParameterDecl>;
-	template_parameters.append(TemplateParameterDecl("Id", program.int_concept, false, TemplateParameter::Integer(case_id)));
-
-	var parameter_types: List!<Type>;
-	parameter_types.append(Type(type, reference_kind));
-
-	var case_decl = type.getVariantCase(case_id).value();
-	var result_type = case_decl.type;
+func createVariantOpUnsafeAs(ctx: &&Context, type: TypeRef, reference_kind: ReferenceKind, c: CaseRef) => void {
+	const template_parameters = List!<TemplateParameterDecl>(1u, TemplateParameterDecl("Id", ctx.int_concept, false, Value::fromPrimitive!<int>(c.id, ctx.int_type)));
+	const parameter_types = List!<TypeRef>(1u, type.withReferenceKind(reference_kind));
+	var result_type = c.type;
 	if result_type.reference_kind == None {
 		result_type.reference_kind = reference_kind;
 	}
-
-	discard program.createFunction(
-		type.linked_namespace,
-		"unsafeAs",
-		template_parameters,
-		parameter_types,
-		result_type,
-		BuiltinFunction::VariantOpUnsafeAs(case_id, Type(type))
-	);
-}
-
-func getDefaultFunctionBody(this: &FunctionDecl) => BuiltinFunction {
-	if this.parent_namespace.linked_type.isEmpty() {
-		return BuiltinFunction::Empty(Type::unknown());
-	}
-
-	const parent_type = Type(this.parent_namespace.linked_type, ReferenceKind::None);
-	const type_body = parent_type.decl.body;
-
-	if this.name == "constructor" && this.parameter_types.size() == 1 {
-		if this.parameter_types[0u] == parent_type.varRef() {
-			match type_body {
-				case Struct -> return BuiltinFunction::StructDefaultConstructor(parent_type);
-				default -> {}
-			}
-		}
-	} else if this.name == "constructor" && this.parameter_types.size() == 2 {
-		if this.parameter_types[0u] == parent_type.varRef() && this.parameter_types[1u] == parent_type {
-			match type_body {
-				case Struct -> return BuiltinFunction::StructCopyConstructor(parent_type);
-				case Enum -> return BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, parent_type);
-				case Variant -> return BuiltinFunction::VariantCopyConstructor(parent_type);
-				default -> {}
-			}
-		}
-	} else if this.name == "destructor" && this.parameter_types.size() == 1 {
-		if this.parameter_types[0u] == parent_type.varRef() {
-			match type_body {
-				case Struct -> return BuiltinFunction::StructDestructor(parent_type);
-				case Enum -> return BuiltinFunction::PrimitiveOp(PrimitiveOp::NoOp, parent_type);
-				case Variant -> return BuiltinFunction::VariantDestructor(parent_type);
-				default -> {}
-			}
-		}
-	} else if this.name == "=" && this.parameter_types.size() == 2 {
-		if this.parameter_types[0u] == parent_type.varRef() && this.parameter_types[1u] == parent_type {
-			match type_body {
-				case Struct -> return BuiltinFunction::StructOpAssign(parent_type);
-				case Enum -> return BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, parent_type);
-				case Variant -> return BuiltinFunction::VariantOpAssign(parent_type);
-				default -> {}
-			}
-		}
-	} else if this.name == "==" && this.parameter_types.size() == 2 {
-		if this.parameter_types[0u] == parent_type && this.parameter_types[1u] == parent_type {
-			match type_body {
-				case Struct -> return BuiltinFunction::StructOpEqual(parent_type);
-				case Enum -> return BuiltinFunction::PrimitiveOp(PrimitiveOp::EQ, parent_type);
-				case Variant -> return BuiltinFunction::VariantOpEqual(parent_type);
-				default -> {}
-			}
-		}
-	} else if this.name == "<=>" && this.parameter_types.size() == 2 {
-		if this.parameter_types[0u] == parent_type && this.parameter_types[1u] == parent_type {
-			match type_body {
-				case Struct -> return BuiltinFunction::StructOpCmp(parent_type);
-				case Enum -> return BuiltinFunction::PrimitiveOp(PrimitiveOp::Cmp, parent_type);
-				default -> {}
-			}
-		}
-	} else if this.name == "&" && this.parameter_types.size() == 2 {
-		if this.parameter_types[0u] == parent_type && this.parameter_types[1u] == parent_type {
-			match type_body {
-				case Enum -> return BuiltinFunction::PrimitiveOp(PrimitiveOp::And, parent_type);
-				default -> {}
-			}
-		}
-	} else if this.name == "|" && this.parameter_types.size() == 2 {
-		if this.parameter_types[0u] == parent_type && this.parameter_types[1u] == parent_type {
-			match type_body {
-				case Enum -> return BuiltinFunction::PrimitiveOp(PrimitiveOp::Or, parent_type);
-				default -> {}
-			}
-		}
-	} else if this.name == "&=" && this.parameter_types.size() == 2 {
-		if this.parameter_types[0u] == parent_type.varRef() && this.parameter_types[1u] == parent_type {
-			match type_body {
-				case Enum -> return BuiltinFunction::PrimitiveOp(PrimitiveOp::And | Assign, parent_type);
-				default -> {}
-			}
-		}
-	} else if this.name == "|=" && this.parameter_types.size() == 2 {
-		if this.parameter_types[0u] == parent_type.varRef() && this.parameter_types[1u] == parent_type {
-			match type_body {
-				case Enum -> return BuiltinFunction::PrimitiveOp(PrimitiveOp::Or | Assign, parent_type);
-				default -> {}
-			}
-		}
-	}
-
-	return BuiltinFunction::Empty(Type::unknown());
-}
-
-func getPrimitiveOpParameterTypes(program: &Program, op: PrimitiveOp, base_type: Type) => List!<Type> {
-	match op.getOp() {
-		case NoOp | ConstNull -> return List!<Type>();
-		case Swap -> return List!<Type>(2u, base_type.varRef());
-		case Copy | Neg | Inc | Dec | Abs | Sign
-		| BitwiseReverse | BytewiseReverse
-		| PopCount | CountLeadingZeros | CountTrailingZeros
-		| Sqrt | ISqrt | Exp | Exp2 | Exp10 | Log | Log2 | Log10
-		| Floor | Ceil | Fract | Round | RoundEven
-		| Sin | Cos | Tan | ASin | ACos | ATan
-		| SinH | CosH | TanH | ASinH | ACosH | ATanH
-		| IsInf | IsNan -> return List!<Type>(1u, base_type);
-		case And | Or | XOr | Not | Shl | Shr | Rotl | Rotr
-		| Add | Sub | Mul | Div | Mod
-		| EQ | NE | LT | LE | GT | GE | Cmp
-		| Min | Max | Pow | Step -> return List!<Type>(2u, base_type);
-		case Clamp | Lerp | SmoothStep -> return List!<Type>(3u, base_type);
-		default -> panic("invalid primitive op");
-	}
-}
-
-func getPrimitiveOpReturnType(program: &Program, op: PrimitiveOp, base_type: Type) => Type {
-	if op.isAssignment() {
-		return program.void_type;
-	}
-
-	match op.getOp() {
-		case NoOp | Swap -> return program.void_type;
-		case ConstNull | Copy
-		| And | Or | XOr | Not | Shl | Shr | Rotl | Rotr
-		| Add | Sub | Mul | Div | Mod | Neg | Inc | Dec
-		| Abs | Sign
-		| Min | Max | Clamp | Lerp
-		| BitwiseReverse | BytewiseReverse
-		| PopCount | CountLeadingZeros | CountTrailingZeros
-		| Step | SmoothStep
-		| Sqrt | ISqrt | Pow | Exp | Exp2 | Exp10 | Log | Log2 | Log10
-		| Floor | Ceil | Fract | Round | RoundEven
-		| Sin | Cos | Tan | ASin | ACos | ATan
-		| SinH | CosH | TanH | ASinH | ACosH | ATanH -> return base_type;
-		case EQ | NE | LT | LE | GT | GE
-		| IsInf | IsNan -> return program.bool_type;
-		case Cmp -> return program.int_type;
-		default -> panic("invalid primitive op");
-	}
+	discard ctx.createInlineFunction(type.linked_namespace, "unsafeAs", template_parameters, parameter_types, result_type, OpCode::VariantOpUnsafeAs, 0u32, type);
 }

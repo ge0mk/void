@@ -42,9 +42,7 @@ struct ImportedModule {
 struct CompilerOptions {
 	var mode: Mode;
 
-	var dump_tokens: bool;
-	var dump_ast: bool;
-	var dump_program: bool;
+	var dump_ir: bool;
 
 	var hide_errors: bool;
 
@@ -115,7 +113,11 @@ struct CompilerOptions {
 		return result;
 	}
 
-	func getOutputCodePath(this: &CompilerOptions, file_ending: String) => String {
+	func getOutputCodePath(this: &CompilerOptions) => String {
+		const file_ending = match this.output_type {
+			case LLVMAssembly -> yield ".ll";
+			case LLVMBitcode -> yield ".bc";
+		}
 		return this.build_dir + "/" + this.program_name + file_ending;
 	}
 

@@ -1,0 +1,349 @@
+import std/core;
+import std/io;
+import std/list;
+import std/map;
+import std/math;
+import std/string;
+import std/shared;
+
+import ir;
+import irformatter;
+
+struct CallFrame {
+	var function: FuncRef;
+	var registers: List!<Value>;
+	var variables: Map!<VariableRef, Value>;
+
+	func constructor(this: &&CallFrame, function: FuncRef) => void {
+		this.function := function;
+		this.registers := List!<Value>(function.instructions.size(), Value::Undefined);
+		this.variables := ();
+	}
+
+	func constructor(this: &&CallFrame) => void = default;
+	func constructor(this: &&CallFrame, other: CallFrame) => void = default;
+	func destructor(this: &&CallFrame) => void = default;
+
+	func =(this: &&CallFrame, other: CallFrame) => void = default;
+	func ==(lhs: CallFrame, rhs: CallFrame) => bool = default;
+}
+
+struct Interpreter {
+	var ctx: SharedPtr!<Context>;
+	var call_frame: CallFrame;
+	var stack: List!<CallFrame>;
+
+	func constructor(this: &&Interpreter, ctx: SharedPtr!<Context>) => void {
+		this.ctx := ctx;
+	}
+
+	func destructor(this: &&Interpreter) => void = default;
+
+	func resolveOperands(this: &&Interpreter, operands: &&List!<Value>) => void {}
+
+	func interpret(this: &&Interpreter, instruction: Instruction) => ControlFlowAction {
+		this.resolveOperands(&&instruction.operands);
+
+		if instruction.op.isPrimitive() {
+			const result = this.interpretPrimitiveOp(instruction.op, instruction.mode, instruction.op_type, instruction.operands);
+			if !(result is Undefined) && instruction.id < this.call_frame.registers.size() {
+				this.call_frame.registers[instruction.id] = result;
+			}
+			return None;
+		}
+
+		match instruction.op {
+			case Branch -> return Branch((instruction.operands[0u] as BlockRef).value());
+			case CondBranch -> {
+				if instruction.operands[0u].toBool() {
+					return Branch((instruction.operands[1u] as BlockRef).value());
+				} else {
+					return Branch((instruction.operands[2u] as BlockRef).value());
+				}
+			}
+			case Unreachable -> panic("reached unreachable instruction");
+			case Switch -> {
+				this.ctx.todo("interpret switch instruction", Location());
+				return None;
+			};
+			case Phi -> {
+				this.ctx.todo("interpret switch instruction", Location());
+				return None;
+			};
+			case Return -> return Return(instruction.operands[0u]);
+			case Match
+			| Yield
+			| LoopWhile
+			| LoopDoWhile
+			| LoopCount
+			| LoopRange
+			| Break
+			| Continue -> panic("high-level control flow instructions must be lowered before interpretation");
+			default -> panic("invalid instruction");
+		}
+	}
+
+	func interpretCall(this: &&Interpreter, function: FuncRef, args: List!<Value>) => Value {
+		this.stack.append(this.call_frame);
+		defer {
+			this.call_frame = this.stack[this.stack.size() - 1];
+			this.stack.removeLast();
+		}
+
+		this.call_frame = CallFrame(function);
+		var block = function.regions.front().blocks.front().getRef();
+		while !block.isNull() {
+			for id in block.instructions {
+				match this.interpret(function.instructions[id]) {
+					case None -> {}
+					case Branch: target -> {
+						block = target;
+						break;
+					}
+					case Return: value -> return value;
+					default -> panic("invalid control flow action at function level");
+				}
+			}
+		}
+
+		return Undefined;
+	}
+
+	func interpretPrimitiveOp(this: &&Interpreter, op: OpCode, mode: u32, type: TypeRef, operands: List!<Value>) => Value {
+		if !op.isPrimitive() {
+			panic("not a primitive op");
+		}
+
+		match op {
+			case None -> {
+				if operands.isEmpty() {
+					return Value::Undefined;
+				} else {
+					return operands[0u];
+				}
+			}
+			case Call -> {
+				const callee = operands.front().toFunc();
+				operands.removeFirst();
+				return this.interpretCall(callee, operands);
+			}
+			// case Load;
+			// case Store;
+			// case StoreNull;
+			// case FillMemory;
+			// case Swap;
+			case PtrAdd -> return Value::fromPrimitive!<ptr!<byte, true>>(
+				operands[0u].toPtr() + operands[1u].toUInt(),
+				type
+			);
+			case PtrDiff -> return Value::fromPrimitive!<int>(
+				(operands[0u].toPtr() - operands[1u].toPtr()) / type.getSize() as int,
+				this.ctx.int_type
+			);
+			// case GetElement;
+			// case SetElement;
+			case Select -> return operands[0u].toBool() ? operands[1u] : operands[2u];
+			// case CastOp;
+			case IntOp -> {
+				var int_operands = List!<int>(3u, 0);
+				for i in 0u..operands.size() {
+					int_operands[i] = operands[i].toInt();
+				}
+				const result = interpretIntOp(mode as IntOp, int_operands[0u], int_operands[1u], int_operands[2u]);
+				return Value::fromPrimitive!<int>(result, type);
+			}
+			// case IntRMWOp;
+			case FloatOp -> {
+				var float_operands = List!<f64>(3u, 0.0);
+				for i in 0u..operands.size() {
+					float_operands[i] = operands[i].toFloat();
+				}
+				const result = interpretFloatOp(mode as FloatOp, float_operands[0u], float_operands[1u], float_operands[2u]);
+				return Value::fromPrimitive!<f64>(result, type);
+			}
+			// case FloatRMWOp;
+			case SCmp -> {
+				const result = interpretComparison!<int>(mode as ComparisonOp, operands[0u].toInt(), operands[1u].toInt());
+				return Value::fromPrimitive!<int>(result, type);
+			}
+			case UCmp -> {
+				var result = 0;
+				if operands[0u].type == this.ctx.typeref_type {
+					result = interpretComparison!<TypeRef>(mode as ComparisonOp, operands[0u].toType(), operands[1u].toType());
+				} else if operands[0u].type == this.ctx.typeref_type {
+					result = interpretComparison!<FuncRef>(mode as ComparisonOp, operands[0u].toFunc(), operands[1u].toFunc());
+				} else if operands[0u].type.body is Pointer {
+					result = interpretComparison!<ptr!<byte, true>>(mode as ComparisonOp, operands[0u].toPtr(), operands[1u].toPtr());
+				} else {
+					result = interpretComparison!<uint>(mode as ComparisonOp, operands[0u].toUInt(), operands[1u].toUInt());
+				}
+				return Value::fromPrimitive!<int>(result, type);
+			}
+			case FCmp -> {
+				const result = interpretComparison!<f64>(mode as ComparisonOp, operands[0u].toFloat(), operands[1u].toFloat());
+				return Value::fromPrimitive!<int>(result, type);
+			}
+			case RotL -> return Value::fromPrimitive!<int>(operands[0u].toInt().rotl(operands[1u].toInt()), type);
+			case RotR -> return Value::fromPrimitive!<int>(operands[0u].toInt().rotr(operands[1u].toInt()), type);
+			case ByteReverse -> {
+				var bytes = (operands[0u] as Bytes).value();
+				var result = List!<byte>(bytes.size(), '\0'b);
+				for i in 0u..bytes.size() {
+					if op == BitReverse {
+						// bytes[i] = bytes[i].bitreverse();
+					}
+					result[result.size() - i - 1u] = bytes[i];
+				}
+				return Value::Bytes(result, type);
+			}
+			// case PopCount;
+			// case CountLeadingZeros;
+			// case CountTrailingZeros;
+			// case FillVector;
+			// case ShuffleVector;
+			// case IntVectorEQ;
+			// case IntVectorNE;
+			// case IntVectorOp;
+			// case IntVectorRMWOp;
+			// case IntVectorScalarOp;
+			// case IntVectorScalarRMWOp;
+			// case IntVectorReduceOp;
+			// case IntVectorDot;
+			// case FloatVectorEQ;
+			// case FloatVectorNE;
+			// case FloatVectorOp;
+			// case FloatVectorRMWOp;
+			// case FloatVectorScalarRMWOp;
+			// case FloatVectorScalarOp;
+			// case FloatVectorReduceOp;
+			// case FloatVectorDot;
+			// case VectorSwizzleGet;
+			// case VectorSwizzleSet;
+			// case MatrixIdentity;
+			// case MatrixFromValues;
+			// case MatrixFromColumns;
+			// case MatrixFromRows;
+			// case MatrixTranspose;
+			// case MatrixMultiply;
+			case SizeOf -> return Value::fromPrimitive!<uint>(operands[0u].toType().getSize(), type);
+			case AlignmentOf -> return Value::fromPrimitive!<uint>(operands[0u].toType().getAlignment(), type);
+			case ReferenceKindOf -> return Value::fromPrimitive!<uint>(operands[0u].toType().reference_kind as uint, type);
+			case HasDefaultConstructor -> return Value::fromPrimitive!<bool>(
+				!operands[0u].toType().default_constructor.isNull(), type
+			);
+			case HasCopyConstructor -> return Value::fromPrimitive!<bool>(
+				!operands[0u].toType().copy_constructor.isNull(), type
+			);
+			case HasAssignmentOperator -> return Value::fromPrimitive!<bool>(
+				!operands[0u].toType().op_assign.isNull(), type
+			);
+			case HasEqualOperator -> return Value::fromPrimitive!<bool>(
+				!operands[0u].toType().op_equal.isNull(), type
+			);
+			case HasCompareOperator -> return Value::fromPrimitive!<bool>(
+				!operands[0u].toType().op_compare.isNull(), type
+			);
+			// case VariantOpUnsafeAs;
+			// case VariantOpIs;
+			case ArrayGetSize -> return Value::fromPrimitive!<uint>((operands[0u].type.body as Array).value().size, type);
+			// case ArrayGetData;
+			// case RangeGetSize;
+			// case RangeGetData;
+			// case RangeGetIterator;
+			// case NumericTypeRangeOperator;
+			// case NumericRangeSetStep;
+			default -> panic("todo: finish interpretation of primitive ops (" + format(op) + ")");
+		}
+	}
+
+	func interpretIntOp(op: IntOp, a: int, b: int, c: int) => int {
+		match op {
+			case Add -> return a + b;
+			case Sub -> return a - b;
+			case Neg -> return -a;
+			case Mul -> return a * b;
+			case Div -> return a / b;
+			case Mod -> return a % b;
+			case Abs -> return abs!<int>(a);
+			case Sign -> return sign!<int>(a);
+			case Min -> return min!<int>(a, b);
+			case Max -> return max!<int>(a, b);
+			case Clamp -> return clamp!<int>(a, b, c);
+			case Lerp -> return lerp!<int>(a, b, c);
+			case Inc -> return a + 1;
+			case Dec -> return a - 1;
+			case UDiv -> return ((a as uint) / (b as uint)) as int;
+			case UMod -> return ((a as uint) % (b as uint)) as int;
+			case UMin -> return min!<uint>(a as uint, b as uint) as int;
+			case UMax -> return max!<uint>(a as uint, b as uint) as int;
+			case UClamp -> return clamp!<uint>(a as uint, b as uint, c as uint) as int;
+			case And -> return a & b;
+			case Or -> return a | b;
+			case XOr -> return a ^ b;
+			case Not -> return ~a;
+			case ShL -> return a << b;
+			case LShR -> return ((a as uint) >> (b as uint)) as int;
+			case AShR -> return a >> b;
+		}
+	}
+
+	func interpretFloatOp(op: FloatOp, a: f64, b: f64, c: f64) => f64 {
+		match op {
+			// TODO: implement remaining float ops
+			case Add -> return a + b;
+			case Sub -> return a - b;
+			case Neg -> return -a;
+			case Mul -> return a * b;
+			case Div -> return a / b;
+			case Mod -> return a % b;
+			case Abs -> return abs!<f64>(a);
+			case Sign -> return sign!<f64>(a) as f64;
+			case Min -> return min!<f64>(a, b);
+			case Max -> return max!<f64>(a, b);
+			case Clamp -> return clamp!<f64>(a, b, c);
+			case Lerp -> return lerp!<f64>(a, b, c);
+			case Sqrt -> return sqrt!<f64>(a);
+			case ISqrt -> return isqrt!<f64>(a);
+			case Pow -> return pow!<f64>(a, b);
+			case Exp -> return exp!<f64>(a);
+			case Exp2 -> return exp2!<f64>(a);
+			// case Exp10 -> return exp10!<f64>(a);
+			case Log -> return log!<f64>(a);
+			case Log2 -> return log2!<f64>(a);
+			case Log10 -> return log10!<f64>(a);
+			case Floor -> return floor!<f64>(a);
+			case Ceil -> return ceil!<f64>(a);
+			case Fract -> return fract!<f64>(a);
+			case Round -> return round!<f64>(a);
+			case RoundEven -> return roundEven!<f64>(a);
+			case Sin -> return sin!<f64>(a);
+			case Cos -> return cos!<f64>(a);
+			// case Tan -> return tan!<f64>(a);
+			// case ASin -> return asin!<f64>(a);
+			// case ACos -> return acos!<f64>(a);
+			// case ATan -> return atan!<f64>(a);
+			// case SinH -> return sinh!<f64>(a);
+			// case CosH -> return cosh!<f64>(a);
+			// case TanH -> return tanh!<f64>(a);
+			// case ASinH -> return asinh!<f64>(a);
+			// case ACosH -> return acosh!<f64>(a);
+			// case ATanH -> return atanh!<f64>(a);
+			// case IsInf -> return isinf!<f64>(a);
+			// case IsNan -> return isnan!<f64>(a);
+			default -> panic("invalid float op");
+		}
+	}
+
+	template <T: type>
+	func interpretComparison(op: ComparisonOp, lhs: T, rhs: T) => int {
+		match op {
+			case EQ -> return (lhs == rhs) as int;
+			case NE -> return (lhs != rhs) as int;
+			case LT -> return (lhs < rhs) as int;
+			case LE -> return (lhs <= rhs) as int;
+			case GT -> return (lhs > rhs) as int;
+			case GE -> return (lhs >= rhs) as int;
+			case Cmp -> return lhs <=> rhs;
+		}
+	}
+}

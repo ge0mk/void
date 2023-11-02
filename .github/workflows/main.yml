@@ -13,11 +13,14 @@ jobs:
     steps:
       - name: install dependencies
         run: |
-          sudo apt-get install libllvm18 llvm-18 llvm-18-dev llvm-18-runtime clang-18
+          sudo apt-get install libllvm18 llvm-18 llvm-18-dev llvm-18-runtime clang-18 libtree-sitter-dev
           sudo ln -sf /usr/bin/llvm-config-18 /usr/bin/llvm-config
           sudo ln -sf /usr/bin/clang-18 /usr/bin/clang
+          sudo pip3 install tree-sitter --break-system-packages
 
       - uses: actions/checkout@v4
+        with:
+          submodules: true
 
       - name: stage0
         run: make test-stage0

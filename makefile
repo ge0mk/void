@@ -17,6 +17,12 @@ clean-but-keep-stage0:
 	-@rm -f rt.ll
 	-@rm -f llvm/llvm_c.vd
 
+build/ts_void.o: tree-sitter-void/src/parser.c
+	clang tree-sitter-void/src/parser.c -c -o build/ts_void.o -g
+
+src/tree_sitter.vd: tree-sitter-void/src/parser.c src/tree_sitter.h
+	python3 generate_tree_sitter_bindings.py
+
 stage0: build/stage0
 
 build/stage0: build/stage0.bc
@@ -27,8 +33,8 @@ test-stage0: build/stage0 rt.ll
 
 stage1: build/stage1
 
-build/stage1: build/stage1.ll
-	clang build/stage1.ll -o build/stage1 -lc -lm $(LLVM_LIBS)
+build/stage1: build/stage1.ll build/ts_void.o
+	clang build/stage1.ll build/ts_void.o -o build/stage1 -lc -lm $(LLVM_LIBS) -ltree-sitter
 
 build/stage1.ll: build/stage0 rt.ll std/*.vd src/*.vd src/llvm_c.vd
 	build/stage0 src/main.vd -o stage1 -c -g -M

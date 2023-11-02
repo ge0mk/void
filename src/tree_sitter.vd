@@ -1,0 +1,478 @@
+import std/core;
+
+struct TSLanguage {}
+
+func tree_sitter_void() => ptr!<TSLanguage, false> = extern;
+
+alias TSStateId = u16;
+alias TSSymbol = u16;
+alias TSFieldId = u16;
+
+struct TSParser {}
+
+struct TSTree {}
+
+struct TSQuery {}
+
+struct TSQueryCursor {}
+
+struct TSLookaheadIterator {}
+
+enum TSInputEncoding {
+	case TSInputEncodingUTF8;
+	case TSInputEncodingUTF16;
+}
+
+enum TSSymbolType {
+	case TSSymbolTypeRegular;
+	case TSSymbolTypeAnonymous;
+	case TSSymbolTypeAuxiliary;
+}
+
+struct TSPoint {
+	var row: u32;
+	var column: u32;
+
+	func constructor(this: &&TSPoint, other: TSPoint) => void = default;
+	func destructor(this: &&TSPoint) => void = default;
+	func =(this: &&TSPoint, other: TSPoint) => void = default;
+	func ==(this: TSPoint, other: TSPoint) => bool = default;
+}
+
+struct TSRange {
+	var start_point: TSPoint;
+	var end_point: TSPoint;
+	var start_byte: u32;
+	var end_byte: u32;
+
+	func constructor(this: &&TSRange, other: TSRange) => void = default;
+	func destructor(this: &&TSRange) => void = default;
+	func =(this: &&TSRange, other: TSRange) => void = default;
+	func ==(this: TSRange, other: TSRange) => bool = default;
+}
+
+struct TSInput {
+	var payload: ptr!<byte, true>;
+	var read: (ptr!<byte, true>, u32, TSPoint, ptr!<u32, true>) => ptr!<byte, false>;
+	var encoding: TSInputEncoding;
+
+	func constructor(this: &&TSInput, other: TSInput) => void = default;
+	func destructor(this: &&TSInput) => void = default;
+	func =(this: &&TSInput, other: TSInput) => void = default;
+	func ==(this: TSInput, other: TSInput) => bool = default;
+}
+
+enum TSLogType {
+	case TSLogTypeParse;
+	case TSLogTypeLex;
+}
+
+struct TSLogger {
+	var payload: ptr!<byte, true>;
+	var log: (ptr!<byte, true>, TSLogType, ptr!<byte, false>) => void;
+
+	func constructor(this: &&TSLogger, other: TSLogger) => void = default;
+	func destructor(this: &&TSLogger) => void = default;
+	func =(this: &&TSLogger, other: TSLogger) => void = default;
+	func ==(this: TSLogger, other: TSLogger) => bool = default;
+}
+
+struct TSInputEdit {
+	var start_byte: u32;
+	var old_end_byte: u32;
+	var new_end_byte: u32;
+	var start_point: TSPoint;
+	var old_end_point: TSPoint;
+	var new_end_point: TSPoint;
+
+	func constructor(this: &&TSInputEdit, other: TSInputEdit) => void = default;
+	func destructor(this: &&TSInputEdit) => void = default;
+	func =(this: &&TSInputEdit, other: TSInputEdit) => void = default;
+	func ==(this: TSInputEdit, other: TSInputEdit) => bool = default;
+}
+
+struct TSNode {
+	var context: Array!<u32, 4>;
+	var id: ptr!<byte, false>;
+	var tree: ptr!<TSTree, false>;
+
+	func constructor(this: &&TSNode) => void = default;
+	func constructor(this: &&TSNode, other: TSNode) => void = default;
+	func destructor(this: &&TSNode) => void = default;
+	func =(this: &&TSNode, other: TSNode) => void = default;
+	func ==(this: TSNode, other: TSNode) => bool = default;
+}
+
+struct TSTreeCursor {
+	var tree: ptr!<byte, false>;
+	var id: ptr!<byte, false>;
+	var context: Array!<u32, 3>;
+
+	func constructor(this: &&TSTreeCursor, other: TSTreeCursor) => void = default;
+	func destructor(this: &&TSTreeCursor) => void = default;
+	func =(this: &&TSTreeCursor, other: TSTreeCursor) => void = default;
+	func ==(this: TSTreeCursor, other: TSTreeCursor) => bool = default;
+}
+
+struct TSQueryCapture {
+	var node: TSNode;
+	var index: u32;
+
+	func constructor(this: &&TSQueryCapture, other: TSQueryCapture) => void = default;
+	func destructor(this: &&TSQueryCapture) => void = default;
+	func =(this: &&TSQueryCapture, other: TSQueryCapture) => void = default;
+	func ==(this: TSQueryCapture, other: TSQueryCapture) => bool = default;
+}
+
+enum TSQuantifier {
+	case TSQuantifierZero = 0;
+	case TSQuantifierZeroOrOne;
+	case TSQuantifierZeroOrMore;
+	case TSQuantifierOne;
+	case TSQuantifierOneOrMore;
+}
+
+struct TSQueryMatch {
+	var id: u32;
+	var pattern_index: u16;
+	var capture_count: u16;
+	var captures: ptr!<TSQueryCapture, false>;
+
+	func constructor(this: &&TSQueryMatch, other: TSQueryMatch) => void = default;
+	func destructor(this: &&TSQueryMatch) => void = default;
+	func =(this: &&TSQueryMatch, other: TSQueryMatch) => void = default;
+	func ==(this: TSQueryMatch, other: TSQueryMatch) => bool = default;
+}
+
+enum TSQueryPredicateStepType {
+	case TSQueryPredicateStepTypeDone;
+	case TSQueryPredicateStepTypeCapture;
+	case TSQueryPredicateStepTypeString;
+}
+
+struct TSQueryPredicateStep {
+	var type: TSQueryPredicateStepType;
+	var value_id: u32;
+
+	func constructor(this: &&TSQueryPredicateStep, other: TSQueryPredicateStep) => void = default;
+	func destructor(this: &&TSQueryPredicateStep) => void = default;
+	func =(this: &&TSQueryPredicateStep, other: TSQueryPredicateStep) => void = default;
+	func ==(this: TSQueryPredicateStep, other: TSQueryPredicateStep) => bool = default;
+}
+
+enum TSQueryError {
+	case TSQueryErrorNone = 0;
+	case TSQueryErrorSyntax;
+	case TSQueryErrorNodeType;
+	case TSQueryErrorField;
+	case TSQueryErrorCapture;
+	case TSQueryErrorStructure;
+	case TSQueryErrorLanguage;
+}
+
+func ts_parser_new() => ptr!<TSParser, true> = extern;
+func ts_parser_delete(self: ptr!<TSParser, true>) => void = extern;
+func ts_parser_language(self: ptr!<TSParser, false>) => ptr!<TSLanguage, false> = extern;
+func ts_parser_set_language(self: ptr!<TSParser, true>, language: ptr!<TSLanguage, false>) => bool = extern;
+func ts_parser_set_included_ranges(self: ptr!<TSParser, true>, ranges: ptr!<TSRange, false>, count: u32) => bool = extern;
+func ts_parser_included_ranges(self: ptr!<TSParser, false>, count: ptr!<u32, true>) => ptr!<TSRange, false> = extern;
+func ts_parser_parse(self: ptr!<TSParser, true>, old_tree: ptr!<TSTree, false>, input: TSInput) => ptr!<TSTree, true> = extern;
+func ts_parser_parse_string(self: ptr!<TSParser, true>, old_tree: ptr!<TSTree, false>, string: ptr!<byte, false>, length: u32) => ptr!<TSTree, true> = extern;
+func ts_parser_parse_string_encoding(self: ptr!<TSParser, true>, old_tree: ptr!<TSTree, false>, string: ptr!<byte, false>, length: u32, encoding: TSInputEncoding) => ptr!<TSTree, true> = extern;
+func ts_parser_reset(self: ptr!<TSParser, true>) => void = extern;
+func ts_parser_set_timeout_micros(self: ptr!<TSParser, true>, timeout_micros: u64) => void = extern;
+func ts_parser_timeout_micros(self: ptr!<TSParser, false>) => u64 = extern;
+func ts_parser_set_cancellation_flag(self: ptr!<TSParser, true>, flag: ptr!<uint, false>) => void = extern;
+func ts_parser_cancellation_flag(self: ptr!<TSParser, false>) => ptr!<uint, false> = extern;
+func ts_parser_set_logger(self: ptr!<TSParser, true>, logger: TSLogger) => void = extern;
+func ts_parser_logger(self: ptr!<TSParser, false>) => TSLogger = extern;
+func ts_parser_print_dot_graphs(self: ptr!<TSParser, true>, fd: i32) => void = extern;
+func ts_tree_copy(self: ptr!<TSTree, false>) => ptr!<TSTree, true> = extern;
+func ts_tree_delete(self: ptr!<TSTree, true>) => void = extern;
+func ts_tree_root_node(self: ptr!<TSTree, false>) => TSNode = extern;
+func ts_tree_root_node_with_offset(self: ptr!<TSTree, false>, offset_bytes: u32, offset_extent: TSPoint) => TSNode = extern;
+func ts_tree_language(self: ptr!<TSTree, false>) => ptr!<TSLanguage, false> = extern;
+func ts_tree_included_ranges(self: ptr!<TSTree, false>, length: ptr!<u32, true>) => ptr!<TSRange, true> = extern;
+func ts_tree_edit(self: ptr!<TSTree, true>, edit: ptr!<TSInputEdit, false>) => void = extern;
+func ts_tree_get_changed_ranges(old_tree: ptr!<TSTree, false>, new_tree: ptr!<TSTree, false>, length: ptr!<u32, true>) => ptr!<TSRange, true> = extern;
+func ts_tree_print_dot_graph(self: ptr!<TSTree, false>, file_descriptor: i32) => void = extern;
+func ts_node_type(self: TSNode) => ptr!<byte, false> = extern;
+func ts_node_symbol(self: TSNode) => TSSymbol = extern;
+func ts_node_language(self: TSNode) => ptr!<TSLanguage, false> = extern;
+func ts_node_grammar_type(self: TSNode) => ptr!<byte, false> = extern;
+func ts_node_grammar_symbol(self: TSNode) => TSSymbol = extern;
+func ts_node_start_byte(self: TSNode) => u32 = extern;
+func ts_node_start_point(self: TSNode) => TSPoint = extern;
+func ts_node_end_byte(self: TSNode) => u32 = extern;
+func ts_node_end_point(self: TSNode) => TSPoint = extern;
+func ts_node_string(self: TSNode) => ptr!<byte, true> = extern;
+func ts_node_is_null(self: TSNode) => bool = extern;
+func ts_node_is_named(self: TSNode) => bool = extern;
+func ts_node_is_missing(self: TSNode) => bool = extern;
+func ts_node_is_extra(self: TSNode) => bool = extern;
+func ts_node_has_changes(self: TSNode) => bool = extern;
+func ts_node_has_error(self: TSNode) => bool = extern;
+func ts_node_is_error(self: TSNode) => bool = extern;
+func ts_node_parse_state(self: TSNode) => TSStateId = extern;
+func ts_node_next_parse_state(self: TSNode) => TSStateId = extern;
+func ts_node_parent(self: TSNode) => TSNode = extern;
+func ts_node_child_containing_descendant(self: TSNode, descendant: TSNode) => TSNode = extern;
+func ts_node_child(self: TSNode, child_index: u32) => TSNode = extern;
+func ts_node_field_name_for_child(self: TSNode, child_index: u32) => ptr!<byte, false> = extern;
+func ts_node_child_count(self: TSNode) => u32 = extern;
+func ts_node_named_child(self: TSNode, child_index: u32) => TSNode = extern;
+func ts_node_named_child_count(self: TSNode) => u32 = extern;
+func ts_node_child_by_field_name(self: TSNode, name: ptr!<byte, false>, name_length: u32) => TSNode = extern;
+func ts_node_child_by_field_id(self: TSNode, field_id: TSFieldId) => TSNode = extern;
+func ts_node_next_sibling(self: TSNode) => TSNode = extern;
+func ts_node_prev_sibling(self: TSNode) => TSNode = extern;
+func ts_node_next_named_sibling(self: TSNode) => TSNode = extern;
+func ts_node_prev_named_sibling(self: TSNode) => TSNode = extern;
+func ts_node_first_child_for_byte(self: TSNode, byte: u32) => TSNode = extern;
+func ts_node_first_named_child_for_byte(self: TSNode, byte: u32) => TSNode = extern;
+func ts_node_descendant_count(self: TSNode) => u32 = extern;
+func ts_node_descendant_for_byte_range(self: TSNode, start: u32, end: u32) => TSNode = extern;
+func ts_node_descendant_for_point_range(self: TSNode, start: TSPoint, end: TSPoint) => TSNode = extern;
+func ts_node_named_descendant_for_byte_range(self: TSNode, start: u32, end: u32) => TSNode = extern;
+func ts_node_named_descendant_for_point_range(self: TSNode, start: TSPoint, end: TSPoint) => TSNode = extern;
+func ts_node_edit(self: ptr!<TSNode, true>, edit: ptr!<TSInputEdit, false>) => void = extern;
+func ts_node_eq(self: TSNode, other: TSNode) => bool = extern;
+func ts_tree_cursor_new(node: TSNode) => TSTreeCursor = extern;
+func ts_tree_cursor_delete(self: ptr!<TSTreeCursor, true>) => void = extern;
+func ts_tree_cursor_reset(self: ptr!<TSTreeCursor, true>, node: TSNode) => void = extern;
+func ts_tree_cursor_reset_to(dst: ptr!<TSTreeCursor, true>, src: ptr!<TSTreeCursor, false>) => void = extern;
+func ts_tree_cursor_current_node(self: ptr!<TSTreeCursor, false>) => TSNode = extern;
+func ts_tree_cursor_current_field_name(self: ptr!<TSTreeCursor, false>) => ptr!<byte, false> = extern;
+func ts_tree_cursor_current_field_id(self: ptr!<TSTreeCursor, false>) => TSFieldId = extern;
+func ts_tree_cursor_goto_parent(self: ptr!<TSTreeCursor, true>) => bool = extern;
+func ts_tree_cursor_goto_next_sibling(self: ptr!<TSTreeCursor, true>) => bool = extern;
+func ts_tree_cursor_goto_previous_sibling(self: ptr!<TSTreeCursor, true>) => bool = extern;
+func ts_tree_cursor_goto_first_child(self: ptr!<TSTreeCursor, true>) => bool = extern;
+func ts_tree_cursor_goto_last_child(self: ptr!<TSTreeCursor, true>) => bool = extern;
+func ts_tree_cursor_goto_descendant(self: ptr!<TSTreeCursor, true>, goal_descendant_index: u32) => void = extern;
+func ts_tree_cursor_current_descendant_index(self: ptr!<TSTreeCursor, false>) => u32 = extern;
+func ts_tree_cursor_current_depth(self: ptr!<TSTreeCursor, false>) => u32 = extern;
+func ts_tree_cursor_goto_first_child_for_byte(self: ptr!<TSTreeCursor, true>, goal_byte: u32) => i64 = extern;
+func ts_tree_cursor_goto_first_child_for_point(self: ptr!<TSTreeCursor, true>, goal_point: TSPoint) => i64 = extern;
+func ts_tree_cursor_copy(cursor: ptr!<TSTreeCursor, false>) => TSTreeCursor = extern;
+func ts_query_new(language: ptr!<TSLanguage, false>, source: ptr!<byte, false>, source_len: u32, error_offset: ptr!<u32, true>, error_type: ptr!<TSQueryError, true>) => ptr!<TSQuery, true> = extern;
+func ts_query_delete(self: ptr!<TSQuery, true>) => void = extern;
+func ts_query_pattern_count(self: ptr!<TSQuery, false>) => u32 = extern;
+func ts_query_capture_count(self: ptr!<TSQuery, false>) => u32 = extern;
+func ts_query_string_count(self: ptr!<TSQuery, false>) => u32 = extern;
+func ts_query_start_byte_for_pattern(self: ptr!<TSQuery, false>, pattern_index: u32) => u32 = extern;
+func ts_query_predicates_for_pattern(self: ptr!<TSQuery, false>, pattern_index: u32, step_count: ptr!<u32, true>) => ptr!<TSQueryPredicateStep, false> = extern;
+func ts_query_is_pattern_rooted(self: ptr!<TSQuery, false>, pattern_index: u32) => bool = extern;
+func ts_query_is_pattern_non_local(self: ptr!<TSQuery, false>, pattern_index: u32) => bool = extern;
+func ts_query_is_pattern_guaranteed_at_step(self: ptr!<TSQuery, false>, byte_offset: u32) => bool = extern;
+func ts_query_capture_name_for_id(self: ptr!<TSQuery, false>, index: u32, length: ptr!<u32, true>) => ptr!<byte, false> = extern;
+func ts_query_capture_quantifier_for_id(self: ptr!<TSQuery, false>, pattern_index: u32, capture_index: u32) => TSQuantifier = extern;
+func ts_query_string_value_for_id(self: ptr!<TSQuery, false>, index: u32, length: ptr!<u32, true>) => ptr!<byte, false> = extern;
+func ts_query_disable_capture(self: ptr!<TSQuery, true>, name: ptr!<byte, false>, length: u32) => void = extern;
+func ts_query_disable_pattern(self: ptr!<TSQuery, true>, pattern_index: u32) => void = extern;
+func ts_query_cursor_new() => ptr!<TSQueryCursor, true> = extern;
+func ts_query_cursor_delete(self: ptr!<TSQueryCursor, true>) => void = extern;
+func ts_query_cursor_exec(self: ptr!<TSQueryCursor, true>, query: ptr!<TSQuery, false>, node: TSNode) => void = extern;
+func ts_query_cursor_did_exceed_match_limit(self: ptr!<TSQueryCursor, false>) => bool = extern;
+func ts_query_cursor_match_limit(self: ptr!<TSQueryCursor, false>) => u32 = extern;
+func ts_query_cursor_set_match_limit(self: ptr!<TSQueryCursor, true>, limit: u32) => void = extern;
+func ts_query_cursor_set_byte_range(self: ptr!<TSQueryCursor, true>, start_byte: u32, end_byte: u32) => void = extern;
+func ts_query_cursor_set_point_range(self: ptr!<TSQueryCursor, true>, start_point: TSPoint, end_point: TSPoint) => void = extern;
+func ts_query_cursor_next_match(self: ptr!<TSQueryCursor, true>, m: ptr!<TSQueryMatch, true>) => bool = extern;
+func ts_query_cursor_remove_match(self: ptr!<TSQueryCursor, true>, match_id: u32) => void = extern;
+func ts_query_cursor_next_capture(self: ptr!<TSQueryCursor, true>, m: ptr!<TSQueryMatch, true>, capture_index: ptr!<u32, true>) => bool = extern;
+func ts_query_cursor_set_max_start_depth(self: ptr!<TSQueryCursor, true>, max_start_depth: u32) => void = extern;
+func ts_language_copy(self: ptr!<TSLanguage, false>) => ptr!<TSLanguage, false> = extern;
+func ts_language_delete(self: ptr!<TSLanguage, false>) => void = extern;
+func ts_language_symbol_count(self: ptr!<TSLanguage, false>) => u32 = extern;
+func ts_language_state_count(self: ptr!<TSLanguage, false>) => u32 = extern;
+func ts_language_symbol_name(self: ptr!<TSLanguage, false>, symbol: TSSymbol) => ptr!<byte, false> = extern;
+func ts_language_symbol_for_name(self: ptr!<TSLanguage, false>, string: ptr!<byte, false>, length: u32, is_named: bool) => TSSymbol = extern;
+func ts_language_field_count(self: ptr!<TSLanguage, false>) => u32 = extern;
+func ts_language_field_name_for_id(self: ptr!<TSLanguage, false>, id: TSFieldId) => ptr!<byte, false> = extern;
+func ts_language_field_id_for_name(self: ptr!<TSLanguage, false>, name: ptr!<byte, false>, name_length: u32) => TSFieldId = extern;
+func ts_language_symbol_type(self: ptr!<TSLanguage, false>, symbol: TSSymbol) => TSSymbolType = extern;
+func ts_language_version(self: ptr!<TSLanguage, false>) => u32 = extern;
+func ts_language_next_state(self: ptr!<TSLanguage, false>, state: TSStateId, symbol: TSSymbol) => TSStateId = extern;
+func ts_lookahead_iterator_new(self: ptr!<TSLanguage, false>, state: TSStateId) => ptr!<TSLookaheadIterator, true> = extern;
+func ts_lookahead_iterator_delete(self: ptr!<TSLookaheadIterator, true>) => void = extern;
+func ts_lookahead_iterator_reset_state(self: ptr!<TSLookaheadIterator, true>, state: TSStateId) => bool = extern;
+func ts_lookahead_iterator_reset(self: ptr!<TSLookaheadIterator, true>, language: ptr!<TSLanguage, false>, state: TSStateId) => bool = extern;
+func ts_lookahead_iterator_language(self: ptr!<TSLookaheadIterator, false>) => ptr!<TSLanguage, false> = extern;
+func ts_lookahead_iterator_next(self: ptr!<TSLookaheadIterator, true>) => bool = extern;
+func ts_lookahead_iterator_current_symbol(self: ptr!<TSLookaheadIterator, false>) => TSSymbol = extern;
+func ts_lookahead_iterator_current_symbol_name(self: ptr!<TSLookaheadIterator, false>) => ptr!<byte, false> = extern;
+
+struct TSWasmEngine {}
+
+struct TSWasmStore {}
+
+enum TSWasmErrorKind {
+	case TSWasmErrorKindNone = 0;
+	case TSWasmErrorKindParse;
+	case TSWasmErrorKindCompile;
+	case TSWasmErrorKindInstantiate;
+	case TSWasmErrorKindAllocate;
+}
+
+struct TSWasmError {
+	var kind: TSWasmErrorKind;
+	var message: ptr!<byte, true>;
+
+	func constructor(this: &&TSWasmError, other: TSWasmError) => void = default;
+	func destructor(this: &&TSWasmError) => void = default;
+	func =(this: &&TSWasmError, other: TSWasmError) => void = default;
+	func ==(this: TSWasmError, other: TSWasmError) => bool = default;
+}
+
+func ts_wasm_store_new(engine: ptr!<TSWasmEngine, true>, error: ptr!<TSWasmError, true>) => ptr!<TSWasmStore, true> = extern;
+func ts_wasm_store_delete(_: ptr!<TSWasmStore, true>) => void = extern;
+func ts_wasm_store_load_language(_: ptr!<TSWasmStore, true>, name: ptr!<byte, false>, wasm: ptr!<byte, false>, wasm_len: u32, error: ptr!<TSWasmError, true>) => ptr!<TSLanguage, false> = extern;
+func ts_wasm_store_language_count(_: ptr!<TSWasmStore, false>) => uint = extern;
+func ts_language_is_wasm(_: ptr!<TSLanguage, false>) => bool = extern;
+func ts_parser_set_wasm_store(_: ptr!<TSParser, true>, _: ptr!<TSWasmStore, true>) => void = extern;
+func ts_parser_take_wasm_store(_: ptr!<TSParser, true>) => ptr!<TSWasmStore, true> = extern;
+func ts_set_allocator(new_malloc: (uint) => ptr!<byte, true>, new_calloc: (uint, uint) => ptr!<byte, true>, new_realloc: (ptr!<byte, true>, uint) => ptr!<byte, true>, new_free: (ptr!<byte, true>) => void) => void = extern;
+
+enum TSVoidSymbol : u16 {
+	case KeywordEnd = 0;
+	case Identifier = 1;
+	case KeywordImport = 2;
+	case KeywordPragma = 5;
+	case KeywordComptime = 8;
+	case KeywordIf = 9;
+	case KeywordElse = 10;
+	case KeywordConst = 11;
+	case KeywordVar = 12;
+	case KeywordWhile = 17;
+	case KeywordDo = 18;
+	case KeywordFor = 19;
+	case KeywordIn = 20;
+	case KeywordBreak = 21;
+	case KeywordContinue = 22;
+	case KeywordYield = 23;
+	case KeywordReturn = 24;
+	case KeywordThrow = 25;
+	case KeywordDefer = 26;
+	case KeywordDiscard = 27;
+	case KeywordPrivate = 28;
+	case KeywordStruct = 29;
+	case KeywordEnum = 30;
+	case KeywordVariant = 31;
+	case KeywordNamespace = 32;
+	case KeywordAlias = 33;
+	case KeywordFunc = 34;
+	case KeywordDefault = 35;
+	case KeywordExtern = 36;
+	case KeywordCase = 41;
+	case KeywordTemplate = 45;
+	case KeywordOperator = 49;
+	case KeywordIs = 55;
+	case KeywordAs = 56;
+	case KeywordMatch = 73;
+	case KeywordTry = 89;
+	case KeywordMust = 90;
+	case KeywordTrue = 92;
+	case KeywordFalse = 93;
+	case EscapeSequence = 102;
+	case Comment = 103;
+	case SourceFile = 104;
+	case Import = 105;
+	case Pragma = 106;
+	case CompoundStmt = 107;
+	case IfStmt = 108;
+	case IfVarStmt = 109;
+	case VarElseStmt = 110;
+	case WhileStmt = 111;
+	case DoWhileStmt = 112;
+	case ForStmt = 113;
+	case BreakStmt = 114;
+	case ContinueStmt = 115;
+	case YieldStmt = 116;
+	case ReturnStmt = 117;
+	case ThrowStmt = 118;
+	case DeferStmt = 119;
+	case ExprStmt = 120;
+	case Decl = 121;
+	case StructDecl = 122;
+	case EnumDecl = 123;
+	case VariantDecl = 124;
+	case NamespaceDecl = 125;
+	case TypeAlias = 126;
+	case FunctionDecl = 127;
+	case VarDecl = 128;
+	case DefaultFunctionBody = 129;
+	case ExternFunctionBody = 130;
+	case FunctionSignature = 131;
+	case ParameterDecl = 132;
+	case VariantCaseDecl = 133;
+	case Attributes = 134;
+	case Attribute = 135;
+	case TemplateParameterDecl = 136;
+	case TemplateParameter = 137;
+	case Name = 138;
+	case NamespaceExpr = 139;
+	case MemberAccessExpr = 140;
+	case CallExpr = 141;
+	case IndexExpr = 142;
+	case PostfixExpr = 143;
+	case PrefixExpr = 144;
+	case BinaryExpr = 145;
+	case InlineIfExpr = 146;
+	case NamedTupleExpr = 147;
+	case NamedTupleElement = 148;
+	case TupleExpr = 149;
+	case ArrayExpr = 150;
+	case DictExpr = 151;
+	case DictElement = 152;
+	case MatchExpr = 153;
+	case MatchCaseDecl = 154;
+	case MatchDefaultCase = 155;
+	case AnonymousFunctionExpr = 156;
+	case FunctionReferenceExpr = 157;
+	case FunctionType = 158;
+	case OperatorName = 159;
+	case Literal = 160;
+	case BoolLiteral = 161;
+	case NumberLiteral = 162;
+	case CharLiteral = 163;
+	case StringLiteral = 164;
+}
+
+enum TSVoidField : u16 {
+	case Attributes = 1;
+	case BaseType = 2;
+	case Body = 3;
+	case Callee = 4;
+	case Capture = 5;
+	case CaptureKind = 6;
+	case Comptime = 7;
+	case Concept = 8;
+	case Cond = 9;
+	case Default = 10;
+	case Discard = 11;
+	case Else = 12;
+	case Expr = 13;
+	case Id = 14;
+	case Initializer = 15;
+	case IsVariadic = 16;
+	case Key = 17;
+	case Kind = 18;
+	case Lhs = 19;
+	case Name = 20;
+	case Object = 21;
+	case Op = 22;
+	case Operand = 23;
+	case ParameterTypes = 24;
+	case Parameters = 25;
+	case Postfix = 26;
+	case Private = 27;
+	case Range = 28;
+	case ReturnType = 29;
+	case Rhs = 30;
+	case Signature = 31;
+	case TemplateParameters = 32;
+	case Then = 33;
+	case Type = 34;
+	case Value = 35;
+}

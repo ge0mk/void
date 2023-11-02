@@ -1,0 +1,2449 @@
+import std/core;
+import std/format;
+import std/io;
+import std/list;
+import std/libc/stdlib;
+import std/libc/string;
+import std/map;
+import std/math;
+import std/set;
+import std/shared;
+import std/string;
+
+import options;
+import tree_sitter;
+
+func createContext() => SharedPtr!<Context> {
+	return SharedPtr!<Context>::new();
+}
+
+struct Context {
+	var has_errors: bool;
+	var hide_errors: bool;
+
+	var modules: List!<SharedPtr!<Module>>;
+
+	// namespaces
+	var namespaces: List!<SharedPtr!<NamespaceDecl>>;
+	var modules_by_path: Map!<String, NamespaceRef>;
+	var top_level_namespaces: List!<NamespaceRef>;
+
+	var root_namespace: NamespaceRef;
+	var core_namespace: NamespaceRef;
+
+	// concepts
+	var concepts: List!<SharedPtr!<ConceptDecl>>;
+	var concepts_by_name: Map!<String, ConceptRef>;
+
+	var any_concept: ConceptRef;
+	var bool_concept: ConceptRef;
+	var int_concept: ConceptRef;
+	var uint_concept: ConceptRef;
+	var string_concept: ConceptRef;
+
+	// types
+	var types: List!<SharedPtr!<TypeDecl>>;
+
+	var void_type: TypeRef;
+	var never_type: TypeRef;
+	var bool_type: TypeRef;
+	var byte_type: TypeRef;
+	var int_type: TypeRef;
+	var uint_type: TypeRef;
+	var ptr_type: TypeRef;
+	var i32_type: TypeRef;
+	var error_type: TypeRef;
+	var typeref_type: TypeRef;
+	var funcref_type: TypeRef;
+	var f64_type: TypeRef;
+	var str_type: TypeRef;
+
+	// functions
+	var functions: List!<SharedPtr!<FunctionDecl>>;
+
+	var exit_function: FuncRef;
+	var abort_function: FuncRef;
+	var panic_function: FuncRef;
+	var assert_function: FuncRef;
+	var assert_error_function: FuncRef;
+	var main_function: FuncRef;
+
+	var variables: List!<SharedPtr!<VariableDecl>>;
+
+	var case_decls: List!<SharedPtr!<CaseDecl>>;
+
+	func constructor(this: &&Context) => void = default;
+	func destructor(this: &&Context) => void = default;
+
+	func getRef(this: &&Context) => ContextRef {
+		return ContextRef(ptr!<Context, true>::addressOf(&&this));
+	}
+
+	func printError(this: &&Context, msg: String, type: ErrorType, loc: Location) => void {
+		if type == Error {
+			this.has_errors = true;
+		}
+
+		if this.hide_errors {
+			return;
+		}
+
+		const module = loc.module;
+		println(formatColored(type) + ": \e[1;37m" + msg + "\e[0m (" + formatColored(loc) + ")");
+
+		if loc.module.isNull() || loc.start == loc.end {
+			return;
+		}
+
+		var first_row = max!<int>(loc.row as int - 1, 0) as uint;
+		var last_row = loc.row as uint + 1;
+		while loc.end > module.lines[last_row - 1].end && last_row < module.lines.size() {
+			last_row++;
+		}
+		last_row = min!<uint>(last_row + 1, module.lines.size());
+		const max_line_number_width = format(last_row).size();
+
+		var lines: List!<String>;
+		var min_indent = ~0u;
+		for row in first_row..last_row {
+			const line = module.lines[row];
+			const error_start = clamp!<uint>(loc.start, line.start, line.end);
+			const error_end = clamp!<uint>(loc.end, line.start, line.end);
+			const prefix = module.source.substring(line.start..error_start);
+			const infix = module.source.substring(error_start..error_end);
+			const postfix = module.source.substring(error_end..line.end);
+			var full_line: String;
+			if infix.isEmpty() {
+				full_line = prefix + postfix + "\n";
+			} else {
+				full_line = prefix + "\e[31m" + infix + "\e[0m" + postfix + "\n";
+			}
+
+			full_line.replace('\t'b, "    ");
+			lines.append(full_line);
+
+			var line_indentation = 0u;
+			while full_line[line_indentation] == ' 'b {
+				line_indentation++;
+			}
+
+			if line_indentation < min_indent {
+				min_indent = line_indentation;
+			}
+		}
+
+		for i in 0u..lines.size() {
+			const line_number_str = format(first_row + i + 1);
+			const line_number_indent = String(max_line_number_width - line_number_str.size() + 1, ' 'b);
+			print(line_number_indent + "\e[90m" + line_number_str + " │\e[0m  ");
+			print(lines[i].substring(min_indent..lines[i].size()));
+		}
+	}
+
+	func error(this: &&Context, msg: String, loc: Location) => void {
+		this.printError(msg, ErrorType::Error, loc);
+	}
+
+	func warn(this: &&Context, msg: String, loc: Location) => void {
+		this.printError(msg, ErrorType::Warn, loc);
+	}
+
+	func info(this: &&Context, msg: String, loc: Location) => void {
+		this.printError(msg, ErrorType::Info, loc);
+	}
+
+	func hint(this: &&Context, msg: String, loc: Location) => void {
+		this.printError(msg, ErrorType::Hint, loc);
+	}
+
+	func todo(this: &&Context, msg: String, loc: Location) => void {
+		this.printError(msg, ErrorType::Todo, loc);
+	}
+
+	func createModule(this: &&Context, group: uint, name: String, path: String) => ModuleRef {
+		var module = SharedPtr!<Module>::new();
+		module.id = this.modules.size();
+		module.group = group;
+		module.name = name;
+		module.path = path;
+
+		this.modules.append(module);
+		return module.getRef();
+	}
+
+	func createConcept(this: &&Context, concept: ConceptDecl) => ConceptRef {
+		var instance = SharedPtr!<ConceptDecl>::new(concept);
+		instance.ctx = this.getRef();
+		this.concepts.append(instance);
+		this.concepts_by_name[concept.name] = instance.getRef();
+		return instance.getRef();
+	}
+
+	func getConcept(this: &Context, name: String) => ConceptRef {
+		return this.concepts_by_name.get(name) ?? ConceptRef::null();
+	}
+
+	func createNamespace(this: &&Context, name: String, template_parameters: &List!<TemplateParameterDecl>, parent: NamespaceRef, module: ModuleRef) => NamespaceRef {
+		var ns = SharedPtr!<NamespaceDecl>::new();
+		ns.ctx = this.getRef();
+		ns.name = name;
+		ns.template_parameters = template_parameters;
+		ns.parent = parent;
+		ns.module = module;
+
+		for p in template_parameters {
+			if p.value is Undefined {
+				ns.is_incomplete_template = true;
+				break;
+			}
+		}
+
+		var template_parameter_values: List!<Value>;
+		for p in template_parameters {
+			template_parameter_values.append(p.value);
+			if p.value is Undefined {
+				ns.state = IncompleteTemplate;
+			}
+		}
+
+		if parent.isNull() {
+			ns.full_name = Name(name, template_parameter_values);
+		} else {
+			ns.full_name = parent.full_name + NameSegment(name, template_parameter_values);
+		}
+
+		this.namespaces.append(ns);
+		return ns.getRef();
+	}
+
+	func createTopLevelNamespace(this: &&Context, name: String) => void {
+		const ns = this.createNamespace(name, List!<TemplateParameterDecl>(), this.root_namespace, ModuleRef());
+		this.top_level_namespaces.append(ns);
+	}
+
+	func getOrCreateChildNamespace(this: &&Context, name: String, template_parameters: &List!<TemplateParameterDecl>, parent: NamespaceRef, module: ModuleRef) => NamespaceRef {
+		for child in parent.children {
+			if child.name != name {
+				continue;
+			}
+
+			if child.template_parameters != template_parameters {
+				continue;
+			}
+
+			return child;
+		}
+
+		var child = this.createNamespace(name, template_parameters, parent, module);
+		for &parameter in template_parameters {
+			if const type = parameter.value as TypeRef {
+				child.imported_namespaces.add(type.linked_namespace);
+			}
+		}
+
+		// add child to parent namespace
+		parent.children.append(child);
+		parent.children_by_name[name].append(child);
+		parent.updateMinState(NamespaceState::Unchecked);
+
+		// initialize visible namespaces
+		child.visible_namespaces.add(child);
+		if module == parent.module {
+			child.visible_namespaces.add(parent.visible_namespaces);
+		}
+
+		return child;
+	}
+
+	func createModuleNamespace(this: &&Context, module: ModuleRef) => NamespaceRef {
+		const namespaces = module.name.split("/");
+
+		var ns = this.top_level_namespaces[module.group];
+		for i in 0u..(namespaces.size() - 1) {
+			ns = this.getOrCreateChildNamespace(namespaces[i], List!<TemplateParameterDecl>(), ns, ModuleRef());
+		}
+		ns = this.getOrCreateChildNamespace(namespaces[namespaces.size() - 1], List!<TemplateParameterDecl>(), ns, module);
+		this.modules_by_path.set(module.path, ns);
+		return ns;
+	}
+
+	func getModuleNamespace(this: &&Context, path: String) => NamespaceRef {
+		return this.modules_by_path.get(path) ?? NamespaceRef::null();
+	}
+
+	func createType(this: &&Context, parent_namespace: NamespaceRef, name: String, template_parameters: &List!<TemplateParameterDecl>, body: TypeBody) => TypeRef {
+		var linked_namespace = this.getOrCreateChildNamespace(name, template_parameters, parent_namespace, parent_namespace.module);
+		var decl = SharedPtr!<TypeDecl>::new();
+		this.types.append(decl);
+
+		decl.ctx = this.getRef();
+		decl.name = name;
+		decl.template_parameters = template_parameters;
+		decl.body = body;
+		decl.parent_namespace = linked_namespace.parent;
+		decl.linked_namespace = linked_namespace;
+
+		for p in template_parameters {
+			if p.value is Undefined {
+				decl.is_incomplete_template = true;
+				break;
+			}
+		}
+
+		linked_namespace.linked_type = decl.getRef();
+
+		parent_namespace.types.append(decl.getRef());
+		parent_namespace.types_by_name[name].append(decl.getRef());
+
+		return decl.getRef();
+	}
+
+	func createType(this: &&Context, parent_namespace: NamespaceRef, name: String, body: TypeBody) => TypeRef {
+		return this.createType(parent_namespace, name, List!<TemplateParameterDecl>(), body);
+	}
+
+	func createFunction(this: &&Context, ns: NamespaceRef, name: String, template_parameters: &List!<TemplateParameterDecl>, parameter_types: &List!<TypeRef>, return_type: TypeRef) => FuncRef {
+		var decl = SharedPtr!<FunctionDecl>::new();
+		this.functions.append(decl);
+
+		decl.ctx = this.getRef();
+		decl.name = name;
+		decl.template_parameters = template_parameters;
+		decl.parent_namespace = ns;
+
+		for p in template_parameters {
+			if p.value is Undefined {
+				decl.is_incomplete_template = true;
+				break;
+			}
+		}
+
+		if !return_type.isNull() {
+			decl.setReturnType(return_type);
+		}
+
+		if !parameter_types.isEmpty() {
+			decl.setParameterTypes(parameter_types);
+		}
+
+		if !ns.linked_type.isNull() {
+			decl.is_comptime |= ns.linked_type.is_comptime;
+		}
+
+		ns.functions.append(decl.getRef());
+		ns.functions_by_name[name].append(decl.getRef());
+
+		return decl.getRef();
+	}
+
+	func createFunction(this: &&Context, ns: NamespaceRef, name: String, template_parameters: &List!<TemplateParameterDecl>) => FuncRef {
+		return this.createFunction(ns, name, template_parameters, List!<TypeRef>(), TypeRef::null());
+	}
+
+	func createBuiltinFunction(this: &&Context, ns: NamespaceRef, name: String, template_parameters: &List!<TemplateParameterDecl>, parameter_types: &List!<TypeRef>, return_type: TypeRef, body: BuiltinFunctionBody) => FuncRef {
+		var f = this.createFunction(ns, name, template_parameters, parameter_types, return_type);
+		f.setBody(body);
+		return f;
+	}
+
+	func createBuiltinFunction(this: &&Context, ns: NamespaceRef, name: String, template_parameters: &List!<TemplateParameterDecl>, body: BuiltinFunctionBody) => FuncRef {
+		return this.createBuiltinFunction(ns, name, template_parameters, List!<TypeRef>(), TypeRef::null(), body);
+	}
+
+	func createBuiltinFunction(this: &&Context, ns: NamespaceRef, name: String, parameter_types: &List!<TypeRef>, return_type: TypeRef, body: BuiltinFunctionBody) => FuncRef {
+		return this.createBuiltinFunction(ns, name, List!<TemplateParameterDecl>(), parameter_types, return_type, body);
+	}
+
+	template <P: uint>
+	func createBuiltinFunction(this: &&Context, ns: NamespaceRef, name: String, parameter_types: &Array!<TypeRef, P>, return_type: TypeRef, body: BuiltinFunctionBody) => FuncRef {
+		return this.createBuiltinFunction(ns, name, List!<TemplateParameterDecl>(), List!<TypeRef>(parameter_types.range()), return_type, body);
+	}
+
+	func createInlineFunction(this: &&Context, ns: NamespaceRef, name: String, template_parameters: &List!<TemplateParameterDecl>, parameter_types: &List!<TypeRef>, return_type: TypeRef, op: OpCode, modifier: u32, op_type: TypeRef) => FuncRef {
+		var f = this.createFunction(ns, name, template_parameters, parameter_types, return_type);
+		f.setBody(op, modifier, op_type);
+		return f;
+	}
+
+	func createInlineFunction(this: &&Context, ns: NamespaceRef, name: String, template_parameters: &List!<TemplateParameterDecl>, op: OpCode, modifier: u32, op_type: TypeRef) => FuncRef {
+		return this.createInlineFunction(ns, name, template_parameters, List!<TypeRef>(), TypeRef::null(), op, modifier, op_type);
+	}
+
+	func createInlineFunction(this: &&Context, ns: NamespaceRef, name: String, parameter_types: &List!<TypeRef>, return_type: TypeRef, op: OpCode, modifier: u32, op_type: TypeRef) => FuncRef {
+		return this.createInlineFunction(ns, name, List!<TemplateParameterDecl>(), parameter_types, return_type, op, modifier, op_type);
+	}
+
+	template <P: uint>
+	func createInlineFunction(this: &&Context, ns: NamespaceRef, name: String, parameter_types: &Array!<TypeRef, P>, return_type: TypeRef, op: OpCode, modifier: u32, op_type: TypeRef) => FuncRef {
+		return this.createInlineFunction(ns, name, List!<TemplateParameterDecl>(), List!<TypeRef>(parameter_types.range()), return_type, op, modifier, op_type);
+	}
+
+	func createExternFunction(this: &&Context, ns: NamespaceRef, name: String, template_parameters: &List!<TemplateParameterDecl>, parameter_types: &List!<TypeRef>, return_type: TypeRef, extern_name: String) => FuncRef {
+		var f = this.createFunction(ns, name, template_parameters, parameter_types, return_type);
+		f.is_extern = true;
+		f.attributes.set(Attribute::ExternName, Value::fromString(extern_name, TypeRef::null()));
+		return f;
+	}
+
+	func createExternFunction(this: &&Context, ns: NamespaceRef, name: String, template_parameters: &List!<TemplateParameterDecl>, extern_name: String) => FuncRef {
+		return this.createExternFunction(ns, name, template_parameters, List!<TypeRef>(), TypeRef::null(), extern_name);
+	}
+
+	func createExternFunction(this: &&Context, ns: NamespaceRef, name: String, parameter_types: &List!<TypeRef>, return_type: TypeRef, extern_name: String) => FuncRef {
+		return this.createExternFunction(ns, name, List!<TemplateParameterDecl>(), parameter_types, return_type, extern_name);
+	}
+
+	template <P: uint>
+	func createExternFunction(this: &&Context, ns: NamespaceRef, name: String, parameter_types: &Array!<TypeRef, P>, return_type: TypeRef, extern_name: String) => FuncRef {
+		return this.createExternFunction(ns, name, List!<TemplateParameterDecl>(), List!<TypeRef>(parameter_types.range()), return_type, extern_name);
+	}
+
+	func createVariable(this: &&Context, name: String, type: TypeRef, is_const: bool, is_comptime: bool, loc: Location) => VariableRef {
+		var decl = SharedPtr!<VariableDecl>::new();
+		decl.ctx = this.getRef();
+		decl.name = name;
+		decl.type = type;
+		decl.loc = loc;
+		decl.is_const = is_const;
+		decl.is_comptime = is_comptime;
+		this.variables.append(decl);
+		return decl.getRef();
+	}
+
+	func createGlobalVariable(this: &&Context, ns: NamespaceRef, name: String, type: TypeRef, initializer: Value, is_const: bool, is_comptime: bool, loc: Location) => VariableRef {
+		var decl = this.createVariable(name, type, is_const, is_comptime, loc);
+		decl.value = initializer;
+		decl.parent_namespace = ns;
+
+		ns.variables.append(decl.getRef());
+		ns.variables_by_name.set(name, decl.getRef());
+
+		return decl.getRef();
+	}
+
+	func createParameterVariable(this: &&Context, function: FuncRef, name: String, type: TypeRef, raw_index: uint, loc: Location) => VariableRef {
+		var decl = this.createVariable(name, type, type.reference_kind != Var, false, loc);
+		decl.parent_function = function;
+		decl.is_parameter = true;
+		decl.raw_index = raw_index;
+
+		function.variables.append(decl.getRef());
+		function.parameters.append(decl.getRef());
+
+		return decl.getRef();
+	}
+
+	func createLocalVariable(this: &&Context, function: FuncRef, name: String, type: TypeRef, is_const: bool, is_comptime: bool, loc: Location) => VariableRef {
+		var decl = this.createVariable(name, type, is_const, is_comptime, loc);
+		decl.parent_function = function;
+
+		function.variables.append(decl.getRef());
+
+		return decl.getRef();
+	}
+
+	func createProperty(this: &&Context, parent_type: TypeRef, name: String, type: TypeRef, loc: Location) => VariableRef {
+		var decl = this.createVariable(name, type, false, false, loc);
+		decl.parent_type = parent_type;
+
+		parent_type.properties.append(decl.getRef());
+		parent_type.properties_by_name.set(name, decl.getRef());
+
+		return decl.getRef();
+	}
+
+	func createCase(this: &&Context, parent_type: TypeRef, name: String, id: int, type: TypeRef, loc: Location) => CaseRef {
+		var decl = SharedPtr!<CaseDecl>::new();
+		this.case_decls.append(decl);
+
+		decl.loc = loc;
+		decl.name = name;
+		decl.id = id;
+		decl.type = type;
+		decl.parent_type = parent_type;
+
+		parent_type.case_decls.append(decl.getRef());
+		parent_type.cases_by_name.set(name, decl.getRef());
+		parent_type.cases_by_id.set(id, decl.getRef());
+
+		return decl.getRef();
+	}
+}
+
+enum ErrorType {
+	case Error;	// invalid code
+	case Warn;	// not an error, but 'could' cause bugs
+	case Hint;	// non critical issue like code formatting
+	case Info;	// additional info for previous error/warning/hint
+	case Todo;	// reached a not yet implemented part of the compiler
+}
+
+struct Location {
+	var module: ModuleRef;
+	var start: uint;
+	var end: uint;
+	var row: u32;
+	var col: u32;
+
+	func constructor(this: &&Location, module: ModuleRef, start: uint, end: uint, row: u32, col: u32) => void {
+		this.module := module;
+		this.start := start;
+		this.end := end;
+		this.row := row;
+		this.col := col;
+	}
+
+	func constructor(this: &&Location) => void = default;
+	func constructor(this: &&Location, other: Location) => void = default;
+	func destructor(this: &&Location) => void = default;
+
+	func =(this: &&Location, other: Location) => void = default;
+	func ==(this: Location, other: Location) => bool = default;
+
+	func ..(this: Location, other: Location) => Location {
+		assert(this.module == other.module);
+		return Location(this.module, this.start, other.end, this.row, this.col);
+	}
+}
+
+struct Module {
+	var ctx: ContextRef;
+
+	var id: uint;
+	var group: uint;
+	var name: String;
+	var path: String;
+	var source: String;
+	var lines: List!<Location>;
+	var ast: ptr!<TSTree, true>;
+
+	func constructor(this: &&Module) => void = default;
+
+	func destructor(this: &&Module) => void {
+		if this.ast != ptr!<TSTree, true>::null() {
+			ts_tree_delete(this.ast);
+		}
+	}
+
+	func getRef(this: &&Module) => ModuleRef {
+		return ModuleRef(ptr!<Module, true>::addressOf(&&this));
+	}
+}
+
+variant ConceptDecl {
+	var ctx: ContextRef;
+
+	var name: String;
+
+	case Any;
+	case Boolean;
+	case Integer: bool;
+	case String;
+
+	func getRef(this: &&ConceptDecl) => ConceptRef {
+		return ConceptRef(ptr!<ConceptDecl, true>::addressOf(&&this));
+	}
+}
+
+struct NamespaceDecl {
+	var ctx: ContextRef;
+
+	var loc: Location;
+	var name_span: Location;
+	var has_errors: bool;
+	var module: ModuleRef;
+
+	var name: String;
+	var full_name: Name;
+	var template_parameters: List!<TemplateParameterDecl>;
+
+	var attributes: Map!<Attribute, Value>;
+
+	var is_private: bool;
+	var is_incomplete_template: bool;
+
+	var parent: NamespaceRef;
+	var children: List!<NamespaceRef>;
+	var children_by_name: Map!<String, List!<NamespaceRef>>;
+	var imported_namespaces: Set!<NamespaceRef>;
+	var visible_namespaces: Set!<NamespaceRef>;
+	var template_instances: List!<NamespaceRef>;
+
+	var linked_type: TypeRef;
+
+	var types: List!<TypeRef>;
+	var types_by_name: Map!<String, List!<TypeRef>>;
+
+	var functions: List!<FuncRef>;
+	var functions_by_name: Map!<String, List!<FuncRef>>;
+
+	var variables: List!<VariableRef>;
+	var variables_by_name: Map!<String, VariableRef>;
+
+	var state: NamespaceState;
+	var unchecked_children: List!<TSNode>;
+	var unchecked_types: List!<TypeRef>;
+	var unchecked_functions: List!<FuncRef>;
+	var unchecked_function_bodies: List!<FuncRef>;
+
+	func constructor(this: &&NamespaceDecl) => void = default;
+	func destructor(this: &&NamespaceDecl) => void = default;
+
+	func getRef(this: &&NamespaceDecl) => NamespaceRef {
+		return NamespaceRef(ptr!<NamespaceDecl, true>::addressOf(&&this));
+	}
+
+	func signature(this: &NamespaceDecl) => String {
+		if !this.parent.isNull() {
+			var result = this.parent.signature();
+			result += "::";
+			result += this.name;
+			result += format(this.template_parameters);
+			return result;
+		}
+
+		return this.name + format(this.template_parameters);
+	}
+
+	func updateState(this: &&NamespaceDecl, new_state: NamespaceState) => void {
+		if this.state == IncompleteTemplate {
+			return;
+		}
+
+		this.state = new_state;
+
+		if !this.parent.isNull() {
+			this.parent.updateMinState(new_state);
+		}
+	}
+
+	func updateMinState(this: &&NamespaceDecl, min_state: NamespaceState) => void {
+		if this.state == IncompleteTemplate {
+			return;
+		}
+
+		if this.state <= min_state {
+			return;
+		}
+
+		this.state = min_state;
+
+		if !this.parent.isNull() {
+			this.parent.updateMinState(min_state);
+		}
+	}
+
+	func addImportedNamespace(this: &&NamespaceDecl, other: NamespaceRef) => void {
+		this.imported_namespaces.add(other);
+		this.addVisibleNamespace(other);
+	}
+
+	func addVisibleNamespace(this: &&NamespaceDecl, other: NamespaceRef) => void {
+		this.visible_namespaces.add(other);
+		for c in this.children {
+			c.addVisibleNamespace(other);
+		}
+	}
+
+	func addUncheckedChildren(this: &&NamespaceDecl, children: &List!<TSNode>) => void {
+		this.unchecked_children.append(children);
+		this.updateMinState(NamespaceState::Unchecked);
+
+		for instance in this.template_instances {
+			instance.addUncheckedChildren(children);
+		}
+	}
+
+	func addUncheckedType(this: &&NamespaceDecl, type: TypeRef) => void {
+		this.unchecked_types.append(type);
+		this.updateMinState(NamespaceState::UncheckedTypeBodies);
+	}
+
+	func addUncheckedFunction(this: &&NamespaceDecl, function: FuncRef) => void {
+		this.unchecked_functions.append(function);
+		this.updateMinState(NamespaceState::UncheckedFunctionSignatures);
+	}
+
+	func addUncheckedFunctionBody(this: &&NamespaceDecl, function: FuncRef) => void {
+		this.unchecked_function_bodies.append(function);
+		this.updateMinState(NamespaceState::UncheckedFunctionBodies);
+	}
+}
+
+struct TypeDecl {
+	var ctx: ContextRef;
+
+	var loc: Location;
+	var name_span: Location;
+
+	var name: String;
+	var template_parameters: List!<TemplateParameterDecl>;
+
+	var parent_namespace: NamespaceRef;
+	var linked_namespace: NamespaceRef;
+
+	var attributes: Map!<Attribute, Value>;
+	var parsed_body: TSNode;
+	var body: TypeBody;
+
+	var is_comptime: bool;
+	var is_incomplete_template: bool;
+
+	var unwrapped_type: TypeRef;
+
+	var default_constructor: FuncRef;
+	var copy_constructor: FuncRef;
+	var destructor: FuncRef;
+	var op_assign: FuncRef;
+	var op_equal: FuncRef;
+	var op_compare: FuncRef;
+
+	var contained_types: Set!<TypeRef>;
+
+	// struct & variant
+	var properties: List!<VariableRef>;
+	var properties_by_name: Map!<String, VariableRef>;
+
+	// enum & variant
+	var parsed_id_type: TSNode;
+	var id_type: TypeRef;
+
+	var case_decls: List!<CaseRef>;
+	var cases_by_id: Map!<int, CaseRef>;
+	var cases_by_name: Map!<String, CaseRef>;
+	var default_case: CaseRef;
+
+	func constructor(this: &&TypeDecl) => void = default;
+	func destructor(this: &&TypeDecl) => void = default;
+
+	func getRef(this: &&TypeDecl) => TypeRef {
+		return TypeRef(ptr!<TypeDecl, true>::addressOf(&&this));
+	}
+
+	func signature(this: &TypeDecl) => String {
+		return this.linked_namespace.signature();
+	}
+
+	func addContainedType(this: &&TypeDecl, type: TypeRef) => void {
+		if type.isNull() || type.reference_kind != None {
+			return;
+		}
+
+		this.contained_types.add(type);
+	}
+
+	func getContainedTypes(this: &TypeDecl) => Set!<TypeRef> {
+		match this.body {
+			case Alias: alias_type -> return alias_type.getContainedTypes();
+			default -> return this.contained_types;
+		}
+	}
+
+	func getProperty(this: &TypeDecl, name: String) => VariableRef {
+		return this.properties_by_name.get(name) ?? VariableRef();
+	}
+
+	func getNextCaseId(this: &TypeDecl) => int {
+		if const prev_case = this.case_decls.last() {
+			return prev_case.id + 1;
+		}
+		return 0;
+	}
+
+	func getCaseDecl(this: &TypeDecl, name: String) => CaseRef {
+		return this.cases_by_name.get(name) ?? CaseRef();
+	}
+
+	func getCaseDecl(this: &TypeDecl, id: int) => CaseRef {
+		return this.cases_by_id.get(id) ?? CaseRef();
+	}
+}
+
+struct FunctionDecl {
+	var ctx: ContextRef;
+
+	var loc: Location;
+	var signature_span: Location;
+
+	var name: String;
+	var template_parameters: List!<TemplateParameterDecl>;
+
+	// high-level for type checking
+	var parameter_types: List!<TypeRef>;
+	var return_type: TypeRef;
+
+	// low-level for codegen
+	// (big types get passed / returned by pointer or split accross multiple parameters)
+	var raw_parameter_types: List!<TypeRef>;
+	var raw_return_type: TypeRef;
+
+	var parent_namespace: NamespaceRef;
+
+	var attributes: Map!<Attribute, Value>;
+	var parsed_signature: TSNode;
+	var parsed_body: TSNode;
+	var inline_body: Instruction;
+	var builtin_body: BuiltinFunctionBody;
+
+	var has_errors: bool;
+	var is_comptime: bool;
+	var is_incomplete_template: bool;
+	var is_private: bool;
+	var is_extern: bool;
+	var is_inline: bool;
+	var is_builtin: bool;
+	var is_copy_constructor: bool;
+
+	var variables: List!<VariableRef>;
+	var parameters: List!<VariableRef>;
+
+	// body
+	var regions: List!<SharedPtr!<Region>>;
+	var blocks: List!<SharedPtr!<Block>>;
+	var instructions: List!<Instruction>;
+	var next_block_id: uint;
+	var result_addr: Value;
+	var assertion_failed_block: BlockRef;
+
+	func constructor(this: &&FunctionDecl) => void = default;
+	func destructor(this: &&FunctionDecl) => void = default;
+
+	func getRef(this: &&FunctionDecl) => FuncRef {
+		return FuncRef(ptr!<FunctionDecl, true>::addressOf(&&this));
+	}
+
+	func signature(this: &FunctionDecl) => String {
+		var result = this.parent_namespace.signature();
+
+		result += "::";
+		result += this.name;
+		result += format(this.template_parameters);
+		result += "(";
+
+		for i in 0u..this.parameter_types.size() {
+			if i != 0 {
+				result += ", ";
+			}
+			result += this.parameter_types[i].signature();
+		}
+
+		result += ") => ";
+		result += this.return_type.signature();
+		return result;
+	}
+
+	func setReturnType(this: &&FunctionDecl, type: TypeRef) => void {
+		this.return_type = type;
+		if type.isReturnedByValue() {
+			this.raw_return_type = type;
+		} else {
+			this.raw_parameter_types.append(type.varRef());
+			this.raw_return_type = this.ctx.void_type;
+		}
+	}
+
+	func setParameterTypes(this: &&FunctionDecl, types: &List!<TypeRef>) => void {
+		for type in types {
+			discard this.appendParameterType(type);
+		}
+	}
+
+	func appendParameterType(this: &&FunctionDecl, type: TypeRef) => uint {
+		const index = this.raw_parameter_types.size();
+		this.parameter_types.append(type);
+		if type.isPassedByValue(index) {
+			if type.getSize() <= sizeOf!<ptr!<byte, true>>() {
+				this.raw_parameter_types.append(type);
+			} else {
+				var size = 0u;
+				while size < type.getSize() {
+					this.raw_parameter_types.append(this.ctx.int_type);
+					size += this.ctx.int_type.getSize();
+				}
+			}
+		} else {
+			this.raw_parameter_types.append(this.ctx.ptr_type);
+		}
+		return index;
+	}
+
+	func setBody(this: &&FunctionDecl, body: BuiltinFunctionBody) => void {
+		this.builtin_body = body;
+		this.is_builtin = true;
+	}
+
+	func setBody(this: &&FunctionDecl, op: OpCode, modifier: u32, op_type: TypeRef) => void {
+		this.inline_body = Instruction(op, modifier, op_type, List!<Value>(), BlockRef(), 0u, this.return_type);
+		this.is_inline = true;
+	}
+
+	func createRegion(this: &&FunctionDecl) => RegionRef {
+		var region = SharedPtr!<Region>::new();
+		region.function = this.getRef();
+		this.regions.append(region);
+		return region.getRef();
+	}
+}
+
+struct VariableDecl {
+	var ctx: ContextRef;
+
+	var loc: Location;
+
+	var id: uint;
+	var name: String;
+	var type: TypeRef;
+
+	var attributes: Map!<Attribute, Value>;
+
+	var parent_namespace: NamespaceRef;
+	var parent_function: FuncRef;
+	var parent_type: TypeRef;
+
+	var is_const: bool;
+	var is_extern_initialized: bool;
+	var is_global: bool;
+	var is_property: bool;
+	var is_parameter: bool;
+	var is_comptime: bool;
+	var is_unused: bool;
+
+	// comptime only
+	var value: Value;
+
+	// parameters only
+	var raw_index: uint;
+	var is_shallow_parameter: bool;
+
+	// properties only
+	var initializer: TSNode;
+
+	func constructor(this: &&VariableDecl) => void = default;
+	func destructor(this: &&VariableDecl) => void = default;
+
+	func getRef(this: &&VariableDecl) => VariableRef {
+		return VariableRef(ptr!<VariableDecl, true>::addressOf(&&this));
+	}
+
+	func signature(this: &VariableDecl) => String {
+		return (this.is_const ? "const " : "var ") + (this.is_parameter ? "#" : "") + this.name + ": " + this.type.signature();
+	}
+}
+
+struct CaseDecl {
+	var ctx: ContextRef;
+
+	var loc: Location;
+	var id: int;
+	var name: String;
+	var type: TypeRef;
+
+	var parent_type: TypeRef;
+
+	func constructor(this: &&CaseDecl) => void = default;
+	func destructor(this: &&CaseDecl) => void = default;
+
+	func getRef(this: &&CaseDecl) => CaseRef {
+		return CaseRef(ptr!<CaseDecl, true>::addressOf(&&this));
+	}
+}
+
+template <T: type>
+struct ObjectRef {
+	var decl: ptr!<T, true>;
+	comptime if T == TypeDecl {
+		var reference_kind: ReferenceKind;
+	}
+
+	func constructor(this: &&ObjectRef!<T>, decl: ptr!<T, true>) => void {
+		this.decl := decl;
+		comptime if T == TypeDecl {
+			this.reference_kind := None;
+		}
+	}
+
+	comptime if T == TypeDecl {
+		func constructor(this: &&ObjectRef!<T>, decl: ptr!<T, true>, reference_kind: ReferenceKind) => void {
+			this.decl := decl;
+			this.reference_kind := reference_kind;
+		}
+	}
+
+	func constructor(this: &&ObjectRef!<T>) => void = default;
+	func constructor(this: &&ObjectRef!<T>, other: ObjectRef!<T>) => void = default;
+	func destructor(this: &&ObjectRef!<T>) => void = default;
+	func =(this: &&ObjectRef!<T>, other: ObjectRef!<T>) => void = default;
+
+	func ==(lhs: ObjectRef!<T>, rhs: ObjectRef!<T>) => bool = default;
+	func <=>(lhs: ObjectRef!<T>, rhs: ObjectRef!<T>) => int = default;
+
+	func null() => ObjectRef!<T> {
+		return ObjectRef!<T>();
+	}
+
+	func isNull(this: &ObjectRef!<T>) => bool {
+		return this.decl == ptr!<T, true>::null();
+	}
+
+	func unwrap(this: &ObjectRef!<T>) => &&T {
+		assert(!this.isNull());
+		return &&this.decl[0u];
+	}
+
+	comptime if T == TypeDecl {
+		func signature(this: &TypeRef) => String {
+			if this.isNull() {
+				return "unknown";
+			} else {
+				return format(this.reference_kind) + this.decl[0u].signature();
+			}
+		}
+
+		func base(this: &TypeRef) => TypeRef {
+			return TypeRef(this.decl, ReferenceKind::None);
+		}
+
+		func constRef(this: &TypeRef) => TypeRef {
+			return TypeRef(this.decl, ReferenceKind::Const);
+		}
+
+		func varRef(this: &TypeRef) => TypeRef {
+			return TypeRef(this.decl, ReferenceKind::Var);
+		}
+
+		func withReferenceKind(this: &TypeRef, reference_kind: ReferenceKind) => TypeRef {
+			return TypeRef(this.decl, reference_kind);
+		}
+
+		func isInt(this: &TypeRef) => bool {
+			if this.isNull() {
+				return false;
+			}
+
+			match this.body {
+				case Bool | Byte | Int | Enum -> return true;
+				case Alias: alias_type -> return alias_type.isInt();
+				default -> return false;
+			}
+		}
+
+		func isSigned(this: &TypeRef) => bool {
+			if this.isNull() {
+				return false;
+			}
+
+			match this.body {
+				case Int: int_type -> return int_type.is_signed;
+				case Float -> return true;
+				case Enum -> return this.id_type.isSigned();
+				case Alias: alias_type -> return alias_type.isSigned();
+				default -> return false;
+			}
+		}
+
+		func isFloat(this: &TypeRef) => bool {
+			if this.isNull() {
+				return false;
+			}
+
+			match this.body {
+				case Float -> return true;
+				case Alias: alias_type -> return alias_type.isFloat();
+				default -> return false;
+			}
+		}
+
+		func isPointer(this: &TypeRef) => bool {
+			if this.isNull() {
+				return false;
+			}
+
+			match this.body {
+				case Pointer -> return true;
+				case Alias: alias_type -> return alias_type.isPointer();
+				default -> return false;
+			}
+		}
+
+		func isVector(this: &TypeRef) => bool {
+			if this.isNull() {
+				return false;
+			}
+
+			match this.body {
+				case Vector -> return true;
+				case Alias: alias_type -> return alias_type.isVector();
+				default -> return false;
+			}
+		}
+
+		func isMatrix(this: &TypeRef) => bool {
+			if this.isNull() {
+				return false;
+			}
+
+			match this.body {
+				case Matrix -> return true;
+				case Alias: alias_type -> return alias_type.isMatrix();
+				default -> return false;
+			}
+		}
+
+		func isPrimitive(this: &TypeRef) => bool {
+			if this.isNull() {
+				return false;
+			}
+
+			if this.reference_kind != None {
+				return true; // reference types are always primitive
+			}
+
+			match this.body {
+				case Void
+				| Bool
+				| Byte
+				| Int
+				| Float
+				| Pointer
+				| Function
+				| Vector
+				| Matrix
+				| Enum -> return true;
+				case Array: array_type -> return array_type.element_type.isPrimitive();
+				case Alias: alias_type -> return alias_type.isPrimitive();
+				default -> return false;
+			}
+		}
+
+		func isEnum(this: &TypeRef) => bool {
+			if this.isNull() {
+				return false;
+			}
+
+			match this.body {
+				case Enum -> return true;
+				case Alias: alias_type -> return alias_type.isEnum();
+				default -> return false;
+			}
+		}
+
+		func isVariant(this: &TypeRef) => bool {
+			if this.isNull() {
+				return false;
+			}
+
+			match this.body {
+				case Variant -> return true;
+				case Alias: alias_type -> return alias_type.isVariant();
+				default -> return false;
+			}
+		}
+
+		func isStruct(this: &TypeRef) => bool {
+			if this.isNull() {
+				return false;
+			}
+
+			match this.body {
+				case Struct | Tuple -> return true;
+				case Alias: alias_type -> return alias_type.isStruct();
+				default -> return false;
+			}
+		}
+
+		func isTuple(this: &TypeRef) => bool {
+			if this.isNull() {
+				return false;
+			}
+
+			match this.body {
+				case Tuple -> return true;
+				case Alias: alias_type -> return alias_type.isTuple();
+				default -> return false;
+			}
+		}
+
+		func getNearestPowerOf2(n: uint, min: uint) => uint {
+			var r = min;
+			while r < n {
+				r *= 2;
+			}
+			return r;
+		}
+
+		func getSize(this: &TypeRef) => uint {
+			if this.isNull() {
+				return 0;
+			}
+
+			if this.reference_kind != None {
+				return sizeOf!<ptr!<byte, false>>();
+			}
+
+			match this.body {
+				case Empty | Void -> return 0u;
+				case TypeRef -> return sizeOf!<TypeRef>();
+				case FuncRef -> return sizeOf!<FuncRef>();
+				case Bool | Byte -> return 1u;
+				case Int: int_type -> {
+					if int_type.size == 0 {
+						return sizeOf!<ptr!<byte, false>>();
+					}
+
+					return getNearestPowerOf2(int_type.size, 8u) / 8;
+				}
+				case Float: f -> return getNearestPowerOf2(f.getSizeInBits(), 8u) / 8;
+				case Pointer | Function -> return sizeOf!<ptr!<byte, false>>();
+				case Array: array -> return array.element_type.getSize() * array.size;
+				case Vector: vector -> return vector.element_type.getSize() * vector.size;
+				case Matrix: matrix -> return matrix.element_type.getSize() * matrix.columns * matrix.rows;
+				case Range -> return sizeOf!<ptr!<byte, false>>() * 2;
+				case NumericRange: type -> return type.getSize() * 3;
+				case Enum -> return this.id_type.getSize();
+				case Tuple | Struct | Variant -> {
+					var size = 0u;
+					var max_alignment = 1u;
+
+					if this.body is Variant {
+						size = this.id_type.getSize();
+						max_alignment = this.id_type.getAlignment();
+
+						var payload_size = 0u;
+						var payload_alignment = 1u;
+						for c in this.case_decls {
+							payload_size = max!<uint>(payload_size, c.type.getSize());
+							payload_alignment = max!<uint>(payload_alignment, c.type.getAlignment());
+						}
+
+						// add padding so that the payload is properly aligned
+						if size % payload_alignment != 0 {
+							size += payload_alignment - size % payload_alignment;
+						}
+						size += payload_size;
+
+						max_alignment = max!<uint>(max_alignment, payload_alignment);
+					}
+
+					for p in this.properties {
+						const current_size = p.type.getSize();
+						const current_alignment = p.type.getAlignment();
+						// add padding so that the current element is properly aligned
+						if size % current_alignment != 0 {
+							size += current_alignment - size % current_alignment;
+						}
+
+						max_alignment = max!<uint>(max_alignment, current_alignment);
+						size += current_size;
+					}
+
+					// add padding so that the next element in an array of this type is properly aligned
+					if size % max_alignment != 0 {
+						size += max_alignment - size % max_alignment;
+					}
+
+					return size;
+				}
+				case Alias: alias_type -> return alias_type.getSize();
+			}
+		}
+
+		func getSizeInBits(this: &TypeRef) => uint {
+			if this.isNull() {
+				return 0;
+			}
+
+			if this.reference_kind != None {
+				return sizeOf!<ptr!<byte, false>>() * 8;
+			}
+
+			match this.body {
+				case Empty | Void -> return 0u;
+				case Bool -> return 1u;
+				case Byte -> return 8u;
+				case Int: int_type -> {
+					if int_type.size == 0 {
+						return sizeOf!<ptr!<byte, false>>() * 8;
+					}
+					return int_type.size;
+				}
+				case Float: f -> return f.getSizeInBits();
+				case Pointer | Function -> return sizeOf!<ptr!<byte, false>>() * 8;
+				case Enum -> return this.id_type.getSizeInBits();
+				default -> return this.getSize() * 8;
+			}
+		}
+
+		func getAlignment(this: &TypeRef) => uint {
+			if this.isNull() {
+				return 0;
+			}
+
+			if this.reference_kind != None {
+				return alignmentOf!<ptr!<byte, false>>();
+			}
+
+			match this.body {
+				case Empty | Void -> return 0u;
+				case TypeRef -> return alignmentOf!<TypeRef>();
+				case FuncRef -> return alignmentOf!<FuncRef>();
+				case Bool | Byte -> return 1u;
+				case Int: int_type -> return getNearestPowerOf2(int_type.size, 8u) / 8;
+				case Float: f -> return getNearestPowerOf2(f.getSizeInBits(), 8u) / 8;
+				case Pointer | Function -> return alignmentOf!<ptr!<byte, false>>();
+				case Array: array -> return array.element_type.getAlignment();
+				case Vector: vector -> return vector.element_type.getAlignment();
+				case Matrix: matrix -> return matrix.element_type.getAlignment();
+				case Range -> return alignmentOf!<ptr!<byte, false>>();
+				case NumericRange: type -> return type.getAlignment();
+				case Enum -> return this.id_type.getAlignment();
+				case Tuple | Struct | Variant -> {
+					var max_alignment = 1u;
+					if this.body is Variant {
+						max_alignment = max!<uint>(max_alignment, this.id_type.getAlignment());
+						for c in this.case_decls {
+							max_alignment = max!<uint>(max_alignment, c.type.getAlignment());
+						}
+					}
+
+					for member_variable in this.properties {
+						max_alignment = max!<uint>(max_alignment, member_variable.type.getAlignment());
+					}
+					return max_alignment;
+				}
+				case Alias: alias_type -> return alias_type.getAlignment();
+			}
+		}
+
+		func getMemberOffset(this: &TypeRef, index: uint) => uint {
+			if this.isNull() {
+				return 0;
+			}
+
+			match this.body {
+				case Array: array -> return array.element_type.getSize() * index;
+				case Vector: vector -> return vector.element_type.getSize() * index;
+				case Struct | Tuple | Variant -> {
+					var offset = 0u;
+					if this.body is Variant {
+						offset += this.id_type.getSize();
+					}
+
+					for i in 0u..index {
+						const current_type = this.properties[i].type;
+						const current_size = current_type.getSize();
+						const current_alignment = current_type.getAlignment();
+						// add padding so that current element is properly aligned
+						if offset % current_alignment != 0 {
+							offset += current_alignment - offset % current_alignment;
+						}
+
+						offset += current_size;
+					}
+
+					const current_type = this.properties[index].type;
+					const current_alignment = current_type.getAlignment();
+					// add padding so that current element is properly aligned
+					if offset % current_alignment != 0 {
+						offset += current_alignment - offset % current_alignment;
+					}
+
+					return offset;
+				}
+				case Alias: alias_type -> return alias_type.getMemberOffset(index);
+				default -> return 0u;
+			}
+		}
+
+		func getMemberType(this: &TypeRef, index: uint) => TypeRef {
+			if this.isNull() {
+				return TypeRef::null();
+			}
+
+			match this.body {
+				case Struct -> return this.properties[index].type;
+				case Array: array_type -> return array_type.element_type;
+				case Vector: vector_type -> return vector_type.element_type;
+				case Alias: alias_type -> return alias_type.getMemberType(index);
+				default -> return TypeRef::null();
+			}
+		}
+
+		template<T: type>
+		func getBitMask(this: &TypeRef) => T {
+			if this.isNull() {
+				return 0 as T;
+			}
+
+			match this.decl.body {
+				case Int: int_type -> return ((-1) as T) >> ((sizeOf!<uint>() * 8 - int_type.size) as T);
+				case Enum -> return this.decl.id_type.getBitMask();
+				case Alias: alias_type -> return alias_type.getBitMask();
+				default -> return ~0 as T;
+			}
+		}
+
+		func isPassedByValue(this: TypeRef, parameter_index: uint) => bool {
+			if this.getSize() <= sizeOf!<ptr!<byte, true>>() {
+				return true;
+			} else if this.getSize() <= sizeOf!<ptr!<byte, true>>() * 2 {
+				return parameter_index <= 4;
+			} else {
+				return false;
+			}
+		}
+
+		func isReturnedByValue(this: TypeRef) => bool {
+			return this.getSize() <= sizeOf!<ptr!<byte, true>>() * 2;
+		}
+	}
+}
+
+struct TemplateParameterDecl {
+	var name: String;
+
+	var concept: ConceptRef;
+	var is_variadic: bool;
+
+	var value: Value;
+
+	func constructor(this: &&TemplateParameterDecl) => void {
+		this.value := Undefined;
+	}
+
+	func constructor(this: &&TemplateParameterDecl, name: String, concept: ConceptRef, is_variadic: bool) => void {
+		this.name := name;
+		this.concept := concept;
+		this.is_variadic := is_variadic;
+		this.value := Undefined;
+	}
+
+	func constructor(this: &&TemplateParameterDecl, name: String, concept: ConceptRef, is_variadic: bool, value: Value) => void {
+		this.name := name;
+		this.concept := concept;
+		this.is_variadic := is_variadic;
+		this.value := value;
+	}
+
+	func constructor(this: &&TemplateParameterDecl, other: TemplateParameterDecl) => void = default;
+	func destructor(this: &&TemplateParameterDecl) => void = default;
+
+	func =(this: &&TemplateParameterDecl, other: TemplateParameterDecl) => void = default;
+
+	func ==(this: TemplateParameterDecl, other: TemplateParameterDecl) => bool = default;
+
+	func signature(this: &TemplateParameterDecl) => String {
+		var result = this.name + ": ";
+		result += (this.is_variadic ? "..." : "");
+		result += this.concept.name;
+
+		if !(this.value is Undefined) {
+			result += " = ";
+			result += format(this.value);
+		}
+
+		return result;
+	}
+}
+
+enum NamespaceState {
+	case IncompleteTemplate;
+	case Unchecked;
+	case UncheckedTypeBodies;
+	case UncheckedFunctionSignatures;
+	case UncheckedFunctionBodies;
+	case Done;
+
+	func constructor(this: &&NamespaceState) => void {
+		this.constructor(NamespaceState::Unchecked);
+	}
+
+	func +(this: NamespaceState, delta: uint) => NamespaceState {
+		return (this as uint + delta) as NamespaceState;
+	}
+}
+
+variant TypeBody {
+	case Empty;
+
+	case Void;
+	case Bool;
+	case Byte;
+
+	case Int: (size: uint, is_signed: bool);
+	case Float: FloatType;
+
+	case Pointer: (pointee_type: TypeRef, is_mutable: bool);
+	case Function: (parameter_types: List!<TypeRef>, return_type: TypeRef);
+
+	case Array: (element_type: TypeRef, size: uint);
+	case Vector: (element_type: TypeRef, size: uint);
+	case Matrix: (element_type: TypeRef, columns: uint, rows: uint);
+
+	case Range: (element_type: TypeRef, is_mutable: bool);
+	case NumericRange: TypeRef;
+
+	case Enum;
+	case Tuple;
+	case Struct;
+	case Variant;
+
+	case Alias: TypeRef;
+
+	case TypeRef;
+	case FuncRef;
+
+	func constructor(this: &&TypeBody) => void {
+		this.constructor!<0u>();
+	}
+}
+
+enum FloatType {
+	case None;
+	case F16;
+	case Bf16;
+	case F32;
+	case F64;
+	case F128;
+
+	func getSizeInBits(float_type: FloatType) => uint {
+		match float_type {
+			case None -> return 0;
+			case F16 -> return 16;
+			case Bf16 -> return 16;
+			case F32 -> return 32;
+			case F64 -> return 64;
+			case F128 -> return 128;
+		}
+	}
+}
+
+enum BuiltinFunctionBody {
+	case None;
+
+	case StructValueConstructor;
+	case StructDefaultConstructor;
+	case StructCopyConstructor;
+	case StructDestructor;
+	case StructOpAssign;
+	case StructOpEqual;
+	case StructOpCmp;
+
+	case VariantDefaultConstructor;
+	case VariantCaseConstructor;
+	case VariantCopyConstructor;
+	case VariantDestructor;
+	case VariantOpAssign;
+	case VariantOpEqual;
+
+	case ArrayDefaultConstructor;
+	case ArrayCopyConstructor;
+	case ArrayDestructor;
+	case ArrayOpAssign;
+	case ArrayOpEqual;
+
+	func constructor(this: &&BuiltinFunctionBody) => void {
+		this.constructor(BuiltinFunctionBody::None);
+	}
+}
+
+variant Value {
+	var type: TypeRef;
+	var is_implicitly_dereferenced: bool;
+
+	case Undefined;
+	case Void;
+	case Register: uint;
+	case Bytes: List!<byte>;
+	case Variable: VariableRef;
+	case BlockRef: BlockRef;
+	case RegionRef: RegionRef;
+	case TypeRef: TypeRef;
+	case FuncRef: FuncRef;
+	case Location: Location;
+
+	template <Id: uint = 0u>
+	func constructor(this: &&Value) => void {
+		this.constructor!<Id>(TypeRef::null(), false);
+	}
+
+	template <Id: uint = 1u>
+	func constructor(this: &&Value, type: TypeRef) => void {
+		this.constructor!<Id>(type, false);
+	}
+
+	template <Id: uint = 2u>
+	func constructor(this: &&Value, register: uint, type: TypeRef) => void {
+		this.constructor!<Id>(register, type, false);
+	}
+
+	template <Id: uint = 3u>
+	func constructor(this: &&Value, bytes: &List!<byte>, type: TypeRef) => void {
+		this.constructor!<Id>(bytes, type, false);
+	}
+
+	template <Id: uint = 4u>
+	func constructor(this: &&Value, variable: VariableRef, type: TypeRef) => void {
+		this.constructor!<Id>(variable, type, false);
+	}
+
+	template <Id: uint = 5u>
+	func constructor(this: &&Value, block: BlockRef) => void {
+		this.constructor!<Id>(block, TypeRef::null(), false);
+	}
+
+	template <Id: uint = 6u>
+	func constructor(this: &&Value, region: RegionRef) => void {
+		this.constructor!<Id>(region, TypeRef::null(), false);
+	}
+
+	template <Id: uint = 7u>
+	func constructor(this: &&Value, value: TypeRef, type: TypeRef) => void {
+		this.constructor!<Id>(value, type, false);
+	}
+
+	template <Id: uint = 8u>
+	func constructor(this: &&Value, value: FuncRef, type: TypeRef) => void {
+		this.constructor!<Id>(value, type, false);
+	}
+
+	func constructor(this: &&Value) => void {
+		this.constructor!<0u>(TypeRef::null(), false);
+	}
+
+	func constructor(this: &&Value, variable: VariableRef) => void {
+		if variable.is_parameter {
+			this.constructor(Value::Register(variable.id, variable.type));
+		} else {
+			const type = variable.is_const ? variable.type.constRef() : variable.type.varRef();
+			this.constructor(Value::Variable(variable, type));
+		}
+	}
+
+	template <T: type>
+	func fromPrimitive(value: T, type: TypeRef) => Value {
+		if type.isNull() {
+			return Undefined;
+		}
+
+		var buffer = List!<byte>(type.getSize(), '\0'b);
+		memcpy!<byte>(
+			buffer.data(),
+			ptr!<T, false>::addressOf(&value) as ptr!<byte, false>,
+			min!<uint>(sizeOf!<T>(), type.getSize())
+		);
+		return Bytes(buffer, type);
+	}
+
+	func fromString(value: String, type: TypeRef) => Value {
+		return Bytes(List!<byte>(value.bytes()), type);
+	}
+
+	template <T: type>
+	func toPrimitive(this: &Value) => T {
+		const bytes = (this as Bytes).value();
+		var result: T;
+		memcpy!<byte>(ptr!<T, true>::addressOf(&&result) as ptr!<byte, true>, bytes.data(), min!<uint>(bytes.size(), sizeOf!<T>()));
+		return result;
+	}
+
+	func toBool(this: &Value) => bool {
+		return this.toPrimitive!<bool>();
+	}
+
+	func toInt(this: &Value) => int {
+		return this.toPrimitive!<int>();
+	}
+
+	func toUInt(this: &Value) => uint {
+		return this.toPrimitive!<uint>();
+	}
+
+	func toFloat(this: &Value) => f64 {
+		return this.toPrimitive!<f64>();
+	}
+
+	func toPtr(this: &Value) => ptr!<byte, true> {
+		return this.toPrimitive!<ptr!<byte, true>>();
+	}
+
+	func toType(this: &Value) => TypeRef {
+		return this as TypeRef ?? TypeRef::null();
+	}
+
+	func toFunc(this: &Value) => FuncRef {
+		return this as FuncRef ?? FuncRef::null();
+	}
+
+	func toBlock(this: &Value) => BlockRef {
+		return this as BlockRef ?? BlockRef::null();
+	}
+
+	func toRegion(this: &Value) => RegionRef {
+		return this as RegionRef ?? RegionRef::null();
+	}
+
+	func toString(this: &Value) => String {
+		match this {
+			case Bytes: bytes -> return String(bytes.range());
+			default -> return "";
+		}
+	}
+
+	func isKnownAtComptime(this: &Value) => bool {
+		match this {
+			case Void | Bytes | BlockRef | TypeRef | FuncRef -> return true;
+			case Variable: v -> return v.is_comptime;
+			default -> return false;
+		}
+	}
+
+	func implicitlyDereferencedType(this: &Value) => TypeRef {
+		if this.is_implicitly_dereferenced {
+			return this.type.base();
+		} else {
+			return this.type;
+		}
+	}
+
+	func addImplicitDereference(this: Value) => Value {
+		this.is_implicitly_dereferenced = true;
+		return this;
+	}
+}
+
+enum Attribute {
+	case None;
+	case Packed;
+	case Shallow;
+	case ExternName;
+	case ByVal;
+	case SRet;
+
+	func constructor(this: &&Attribute) => void {
+		this.constructor(Attribute::None);
+	}
+}
+
+struct NameSegment {
+	var name: String;
+	var template_parameters: List!<Value>;
+
+	func constructor(this: &&NameSegment, name: String, template_parameters: &List!<Value>) => void {
+		this.name := name;
+		this.template_parameters := template_parameters;
+	}
+
+	func constructor(this: &&NameSegment) => void = default;
+	func constructor(this: &&NameSegment, other: NameSegment) => void = default;
+	func destructor(this: &&NameSegment) => void = default;
+
+	func =(this: &&NameSegment, other: NameSegment) => void = default;
+	func ==(lhs: NameSegment, rhs: NameSegment) => bool = default;
+}
+
+struct Name {
+	var loc: Location;
+	var segments: List!<NameSegment>;
+
+	func constructor(this: &&Name) => void = default;
+
+	func constructor(this: &&Name, loc: Location) => void {
+		this.loc := loc;
+	}
+
+	func constructor(this: &&Name, name: String) => void {
+		this.segments := (1u, NameSegment(name, List!<Value>()));
+	}
+
+	func constructor(this: &&Name, loc: Location, name: String, template_parameters: &List!<Value>) => void {
+		this.loc := loc;
+		this.segments := (1u, NameSegment(name, template_parameters));
+	}
+
+	func constructor(this: &&Name, name: String, template_parameters: &List!<Value>) => void {
+		this.segments := (1u, NameSegment(name, template_parameters));
+	}
+
+	func constructor(this: &&Name, loc: Location, segments: List!<NameSegment>) => void {
+		this.loc := loc;
+		this.segments := segments;
+	}
+
+	func constructor(this: &&Name, other: Name) => void = default;
+	func destructor(this: &&Name) => void = default;
+
+	func =(this: &&Name, other: Name) => void = default;
+	func ==(@[shallow] this: Name, @[shallow] other: Name) => bool = default;
+
+	func +(@[shallow] this: Name, @[shallow] segment: NameSegment) => Name {
+		var result = this;
+		result.segments.append(segment);
+		return result;
+	}
+
+	func ..(@[shallow] lhs: Name, @[shallow] rhs: Name) => Name {
+		return Name(lhs.loc..rhs.loc, lhs.segments + rhs.segments);
+	}
+
+	func isEmpty(this: &Name) => bool {
+		return this.segments.isEmpty();
+	}
+
+	func intersection(this: &Name, segments: &List!<NameSegment>) => uint {
+		for offset in 0u..this.segments.size() {
+			if segments.startsWith(this.segments[offset..this.segments.size()]) {
+				return this.segments.size() - offset;
+			}
+		}
+
+		return 0u;
+	}
+}
+
+struct Region {
+	var function: FuncRef;
+	var blocks: List!<BlockRef>;
+	var should_be_deleted: bool;
+
+	func constructor(this: &&Region) => void = default;
+	func constructor(this: &&Region, other: Region) => void = default;
+	func destructor(this: &&Region) => void = default;
+	func =(this: &&Region, other: Region) => void = default;
+
+	func getRef(this: &&Region) => RegionRef {
+		return RegionRef(ptr!<Region, true>::addressOf(&&this));
+	}
+
+	func createBlock(this: &&Region) => BlockRef {
+		return this.createBlockAt(this.blocks.size());
+	}
+
+	func createBlockAt(this: &&Region, index: uint) => BlockRef {
+		var block = SharedPtr!<Block>::new();
+		this.function.blocks.append(block);
+		block.id = this.function.next_block_id;
+		block.region = this.getRef();
+		block.function = this.function;
+		this.function.next_block_id++;
+		this.blocks.insert(index, block.getRef());
+		return block.getRef();
+	}
+
+	func insertBlocks(this: &&Region, index: uint, blocks: Range!<BlockRef, false>) => void {
+		this.blocks.insert(index, blocks);
+		for block in blocks {
+			block.region = this.getRef();
+		}
+	}
+
+	func clone(this: &&Region) => RegionRef {
+		var result = this.function.createRegion();
+		return result;
+	}
+
+	func getBlockOffset(this: &&Region, block: BlockRef) => uint {
+		for i in 0u..this.blocks.size() {
+			if this.blocks[i].getRef() == block {
+				return i;
+			}
+		}
+		panic(Error::EINVAL);
+	}
+
+	func getBlocksOrderedByDataDependencies(this: &&Region) => List!<BlockRef> {
+		var result: List!<BlockRef>;
+		for block in this.blocks {
+			block.computeDataDependencies();
+			result.append(block.getRef());
+		}
+
+		result.qsort(func (lhs: BlockRef, rhs: BlockRef) => int {
+			if rhs.dependsOn(lhs) {
+				return 1;
+			} else if lhs.dependsOn(rhs) {
+				return -1;
+			} else {
+				return 0;
+			}
+		});
+
+		return result;
+	}
+
+	func hasTerminator(this: &Region) => bool {
+		if this.blocks.isEmpty() {
+			return false;
+		}
+
+		return this.blocks.back().hasTerminator();
+	}
+}
+
+struct Block {
+	var id: uint;
+	var function: FuncRef;
+	var region: RegionRef;
+	var instructions: List!<uint>;
+	var attributes: Map!<Attribute, Value>;
+
+	var dependencies: Set!<BlockRef>;
+	var predecessors: Set!<BlockRef>;
+	var successors: Set!<BlockRef>;
+
+	var should_be_deleted: bool;
+
+	func constructor(this: &&Block) => void = default;
+	func constructor(this: &&Block, other: Block) => void = default;
+	func destructor(this: &&Block) => void = default;
+	func =(this: &&Block, other: Block) => void = default;
+
+	func getRef(this: &&Block) => BlockRef {
+		return BlockRef(ptr!<Block, true>::addressOf(&&this));
+	}
+
+	func hasTerminator(this: &Block) => bool {
+		if this.instructions.isEmpty() {
+			return false;
+		}
+
+		const last_instruction = &this.function.instructions[this.instructions.back()];
+		match last_instruction.op {
+			case Branch | CondBranch | Switch | Unreachable
+			| Yield | Break | Continue | Return -> return true;
+			case IfElse -> {
+				const then_branch = last_instruction.operands[1u].toRegion();
+				const else_branch = last_instruction.operands[2u].toRegion();
+				return then_branch.hasTerminator() && else_branch.hasTerminator();
+			}
+			default -> return last_instruction.result_type == this.function.ctx.never_type;
+		}
+	}
+
+	func getInstructionOffset(this: &Block, id: uint) => uint {
+		return this.instructions.find(id).value();
+	}
+
+	func removeInstruction(this: &&Block, index: uint) => void {
+		this.instructions.remove(index);
+	}
+
+	func insertInstruction(this: &&Block, index: uint, id: uint) => void {
+		this.instructions.insert(index, id);
+	}
+
+	func insertInstructions(this: &&Block, offset: uint, instruction_ids: Range!<uint, false>) => void {
+		this.instructions.insert(offset, instruction_ids);
+		for id in instruction_ids {
+			this.function.instructions[id].block = this.getRef();
+		}
+	}
+
+	func split(this: &&Block, index: uint) => BlockRef {
+		var new_block = this.region.createBlockAt(this.region.getBlockOffset(this.getRef()) + 1);
+		new_block.insertInstructions(0u, (&this.instructions)[index..this.instructions.size()]);
+		this.instructions.remove(index..this.instructions.size());
+		for id in new_block.instructions {
+			this.function.instructions[id].block = new_block;
+		}
+
+		// todo: update predecessors & successors
+
+		return new_block.getRef();
+	}
+
+	func computeDataDependencies(this: &&Block) => void {
+		for id in this.instructions {
+			const instruction = &this.function.instructions[id];
+			if instruction.op == Phi {
+				continue;
+			}
+
+			for operand in instruction.operands {
+				if const other = operand as Register {
+					if this.function.instructions[other].block != this.getRef() {
+						this.dependencies.add(this.function.instructions[other].block);
+					}
+				}
+			}
+		}
+	}
+
+	func dependsOn(this: &Block, other: BlockRef) => bool {
+		if this.dependencies.contains(other) {
+			return true;
+		}
+
+		for tmp in this.dependencies {
+			if tmp.dependencies.contains(other) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	func computeSuccessors(this: &&Block) => void {
+		if this.instructions.isEmpty() {
+			return;
+		}
+
+		const instruction = this.function.instructions[this.instructions.back()];
+		match instruction.op {
+			case Branch | CondBranch | Switch -> {
+				for operand in instruction.operands {
+					if const successor = operand as BlockRef {
+						this.successors.add(successor);
+						successor.predecessors.add(this.getRef());
+					}
+				}
+			}
+			default -> {}
+		}
+	}
+}
+
+struct Instruction {
+	var loc: Location;
+
+	var op: OpCode;
+	var mode: u32;
+	var op_type: TypeRef;
+	var result_type: TypeRef;
+	var operands: List!<Value>;
+	var block: BlockRef;
+	var id: uint;
+
+	var attributes: List!<Map!<Attribute, Value>>;
+
+	func constructor(this: &&Instruction) => void {
+		this.op := OpCode::None;
+	}
+
+	func constructor(this: &&Instruction, op: OpCode, mode: u32, op_type: TypeRef, operands: &List!<Value>, block: BlockRef, id: uint, result_type: TypeRef) => void {
+		this.op := op;
+		this.mode := mode;
+		this.op_type := op_type;
+		this.result_type := result_type;
+		this.operands := operands;
+		this.block := block;
+		this.id := id;
+	}
+
+	func constructor(this: &&Instruction, other: Instruction) => void = default;
+	func destructor(this: &&Instruction) => void = default;
+	func =(this: &&Instruction, other: Instruction) => void = default;
+	func ==(this: Instruction, other: Instruction) => bool = default;
+}
+
+enum OpCode : u32 {
+	case None;
+
+	// branching - low level
+	case Branch;
+	case CondBranch;
+	case Switch;
+	case Phi;
+	case Unreachable;
+
+	// branching - high level
+	case Scope; // compound stmt
+	case Defer;
+	case IfElse;
+	case Match;
+	case Yield;
+	case LoopWhile;		// loop.while #head %cond #body
+	case LoopDoWhile;	// loop.dowhile #body #head %cond
+	case LoopCount;		// loop.count $type %counter %begin %end %step #body
+	case LoopRange;		// loop.range $type %iterator %begin %end #body
+	case Break;
+	case Continue;
+
+	// function calling
+	case Call;
+	case Return;
+
+	// memory access
+	case Load;
+	case Store;
+	case StoreNull;
+	case StoreRepeat;
+	case Swap;
+	case PtrAdd;
+	case PtrDiff;
+	case GetElement;
+	case SetElement;
+
+	case Select;
+	case CastOp;
+	case IntOp;
+	case IntRMWOp;
+	case FloatOp;
+	case FloatRMWOp;
+	case SCmp;
+	case UCmp;
+	case FCmp;
+
+	case RotL;
+	case RotR;
+	case BitReverse;
+	case ByteReverse;
+	case PopCount;
+	case CountLeadingZeros;
+	case CountTrailingZeros;
+
+	// vector functions
+	case VectorFill;
+	case VectorShuffle;
+
+	case VectorIntEQ;
+	case VectorIntNE;
+	case VectorIntOp;
+	case VectorIntRMWOp;
+	case VectorScalarIntOp;
+	case VectorScalarIntRMWOp;
+	case VectorIntReduceOp;
+	case VectorIntDot;
+
+	case VectorFloatEQ;
+	case VectorFloatNE;
+	case VectorFloatOp;
+	case VectorFloatRMWOp;
+	case VectorScalarFloatOp;
+	case VectorScalarFloatRMWOp;
+	case VectorFloatReduceOp;
+	case VectorFloatDot;
+
+	// matrix functions
+	case MatrixIdentity;
+	case MatrixFromValues;
+	case MatrixFromColumns;
+	case MatrixFromRows;
+	case MatrixTranspose;
+	case MatrixMultiply;
+
+	// reflection functions
+	case SizeOf;
+	case AlignmentOf;
+	case ReferenceKindOf;
+
+	case HasDefaultConstructor;
+	case HasCopyConstructor;
+	case HasAssignmentOperator;
+	case HasEqualOperator;
+	case HasCompareOperator;
+
+	// builtin functions
+	case VariantOpUnsafeAs;
+	case VariantOpIs;
+
+	case ArrayGetSize;
+	case ArrayGetData;
+
+	case RangeGetSize;
+	case RangeGetData;
+	case RangeGetIterator;
+
+	case NumericTypeRangeOperator;
+	case NumericRangeSetStep;
+
+	case Abort;
+	case Panic;
+	case Assert;
+	case AssertError;
+
+	func isPrimitive(this: OpCode) => bool {
+		match this {
+			case Branch | CondBranch | Switch | Phi | Unreachable
+			| Scope | Defer
+			| IfElse | Match | Yield
+			| LoopWhile | LoopDoWhile | LoopCount | LoopRange
+			| Break | Continue | Return
+			| Abort | Panic | Assert | AssertError -> return false;
+			default -> return true;
+		}
+	}
+}
+
+enum CastOp : u32 {
+	case None;
+	case Trunc;
+	case ZExt;
+	case SExt;
+	case FToUI;
+	case FToSI;
+	case UIToF;
+	case SIToF;
+	case FTrunc;
+	case FExt;
+	case Bitcast;
+}
+
+enum IntOp : u32 {
+	case Add = 1;
+	case Sub = 2;
+	case Neg = 3;
+	case Mul = 4;
+	case Div = 5;
+	case Mod = 6;
+
+	case Abs = 7;
+	case Sign = 8;
+	case Min = 9;
+	case Max = 10;
+	case Clamp = 11;	// clamp(x, l, h) == min(max(x, l), h);
+	case Lerp = 12;		// lerp(x, y, a) == x * (1 - a) + y * a == x + (y - x) * a
+
+	case Inc;
+	case Dec;
+
+	case UDiv;
+	case UMod;
+	case UMin;
+	case UMax;
+	case UClamp;
+
+	case And;
+	case Or;
+	case XOr;
+	case Not;
+	case ShL;
+	case LShR;
+	case AShR;
+}
+
+enum FloatOp : u32 {
+	case Add = 1;
+	case Sub = 2;
+	case Neg = 3;
+	case Mul = 4;
+	case Div = 5;
+	case Mod = 6;
+
+	case Abs = 7;
+	case Sign = 8;
+	case Min = 9;
+	case Max = 10;
+	case Clamp = 11;
+	case Lerp = 12;
+
+	// builtin float functions
+	case Step;
+	case SmoothStep;
+
+	case Sqrt;
+	case ISqrt;
+	case Pow;
+	case Exp;
+	case Exp2;
+	case Exp10;
+	case Log;
+	case Log2;
+	case Log10;
+
+	case Floor;
+	case Ceil;
+	case Fract;
+	case Round;
+	case RoundEven;
+
+	case Sin;
+	case Cos;
+	case Tan;
+	case ASin;
+	case ACos;
+	case ATan;
+	case SinH;
+	case CosH;
+	case TanH;
+	case ASinH;
+	case ACosH;
+	case ATanH;
+
+	case IsInf;
+	case IsNan;
+}
+
+enum ComparisonOp : u32 {
+	case EQ;
+	case NE;
+	case LT;
+	case LE;
+	case GT;
+	case GE;
+	case Cmp;
+}
+
+variant ControlFlowAction {
+	case None;
+	case Branch: BlockRef;
+	case Break;
+	case Continue;
+	case Yield: Value;
+	case Return: Value;
+	case Abort;
+}
+
+func format(float_type: FloatType) => String {
+	match float_type {
+		case None -> return "none";
+		case F16 -> return "f16";
+		case Bf16 -> return "bf16";
+		case F32 -> return "f32";
+		case F64 -> return "f64";
+		case F128 -> return "f128";
+	}
+}
+
+func format(template_parameters: &List!<TemplateParameterDecl>) => String {
+	if template_parameters.isEmpty() {
+		return "";
+	}
+
+	var result = "!<";
+	for i in 0u..template_parameters.size() {
+		if i != 0 {
+			result += ", ";
+		}
+
+		result += template_parameters[i].signature();
+	}
+
+	return result + ">";
+}
+
+func format(this: &Name) => String {
+	var result = "";
+	var first = true;
+	for i in 0u..this.segments.size() {
+		if i != 0 {
+			result += "::";
+		}
+		result += this.segments[i].name;
+
+		const template_parameters = this.segments[i].template_parameters;
+		if !template_parameters.isEmpty() {
+			result += "!<";
+			for i in 0u..template_parameters.size() {
+				if i != 0 {
+					result += ", ";
+				}
+
+				result += format(template_parameters[i]);
+			}
+			result += ">";
+		}
+	}
+
+	return result;
+}
+
+func format(this: ReferenceKind) => String {
+	match this {
+		case None -> return "";
+		case Const -> return "&";
+		case Var -> return "&&";
+	}
+}
+
+func formatColored(this: ErrorType) => String {
+	match this {
+		case Error -> return "\e[4;31mError\e[0m";
+		case Warn -> return "\e[4;33mWarning\e[0m";
+		case Hint -> return "\e[4;32mHint\e[0m";
+		case Info -> return "\e[4;34mInfo\e[0m";
+		case Todo -> return "\e[4;91mTodo\e[0m";
+	}
+}
+
+func format(this: &Location) => String {
+	if this.module.isNull() {
+		return "";
+	}
+
+	const module = this.module.path.isEmpty() ? this.module.name : this.module.path;
+	return module + ":" + format(this.row as int + 1) + ":" + format(this.col as int + 1)
+	+ " [" + format(this.start as int) + ".." + format(this.end as int) + "]";
+}
+
+func formatColored(this: &Location) => String {
+	if this.module.isNull() {
+		return "";
+	}
+
+	const module = this.module.path.isEmpty() ? this.module.name : this.module.path;
+	return "\e[33m" + module + ":" + format(this.row as int + 1) + ":" + format(this.col as int + 1) + "\e[0m"
+	+ " \e[90m[" + format(this.start as int) + ".." + format(this.end as int) + "]\e[0m";
+}
+
+func format(this: &Value) => String {
+	match this {
+		case Undefined -> return "!undefined";
+		case Void -> return "!void";
+		case Register: id -> return "%" + format(id);
+		case Bytes: bytes -> {
+			match this.type.body {
+				case Void -> return "!void";
+				case Bool -> return "!" + format(this.toBool());
+				case Int: int_type -> {
+					var result = "!";
+					if int_type.is_signed {
+						result += format(this.toInt()) + "i";
+					} else {
+						result += format(this.toUInt()) + "u";
+					}
+
+					if int_type.size != 0 {
+						result += format(int_type.size);
+					}
+
+					return result;
+				}
+				case Enum -> {
+					return "!" + this.type.signature() + "::"
+						+ this.type.cases_by_id[this.toInt()].name
+						+ "(" + format(this.toInt()) + ")";
+				}
+				default -> {
+					var result = "!" + this.type.signature() + "[";
+					for i in 0u..bytes.size() {
+						if i > 0 {
+							result += ", ";
+						}
+						result += format(bytes[i]);
+					}
+					return result + "]";
+				}
+			}
+		}
+		case Variable: variable -> return "@" + variable.name;
+		case BlockRef: block -> return "#" + format(block.id);
+		case RegionRef: region -> return "#{}";
+		case TypeRef: type -> return "@\'" + type.signature() + "\'";
+		case FuncRef: function -> return "@\'" + function.signature() + "\'";
+		case Location: loc -> return format(loc);
+	}
+}
+
+func formatColored(this: &Value) => String {
+	match this {
+		case Undefined | Void | Bytes -> return "\e[35m" + format(this) + "\e[0m";
+		case Register: id -> return "\e[36m%" + format(id) + "\e[0m";
+		case Variable: variable -> return "\e[33m@" + variable.name + "\e[0m";
+		case BlockRef: block -> return "\e[32m#" + format(block.id) + "\e[0m";
+		case RegionRef: region -> return "\e[32m#{}\e[0m";
+		case TypeRef: type -> return "\e[33m@\'" + type.signature() + "\'\e[0m";
+		case FuncRef: function -> return "\e[33m@\'" + function.signature() + "\'\e[0m";
+		case Location: loc -> return formatColored(loc);
+	}
+}
+
+alias ContextRef = ObjectRef!<Context>;
+alias ModuleRef = ObjectRef!<Module>;
+alias ConceptRef = ObjectRef!<ConceptDecl>;
+alias NamespaceRef = ObjectRef!<NamespaceDecl>;
+alias TypeRef = ObjectRef!<TypeDecl>;
+alias FuncRef = ObjectRef!<FunctionDecl>;
+alias VariableRef = ObjectRef!<VariableDecl>;
+alias CaseRef = ObjectRef!<CaseDecl>;
+alias BlockRef = ObjectRef!<Block>;
+alias RegionRef = ObjectRef!<Region>;

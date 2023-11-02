@@ -3,17 +3,14 @@ import std/io;
 import std/list;
 import std/libc/stdlib;
 import std/path;
-import std/shared_list;
 import std/string;
 
 import args;
 import builtins;
+import compiler;
+import ir;
 import llvm_c;
-import llvm_util;
 import options;
-import program;
-import span;
-import typechecker;
 
 func parseArguments(arguments: Range!<String, false>) => Optional!<CompilerOptions> {
 	var args_parser = ArgsParser(arguments, "");
@@ -26,13 +23,11 @@ func parseArguments(arguments: Range!<String, false>) => Optional!<CompilerOptio
 
 	options.mode = (args_parser.subcommand(Range!<String, false>(subcommands.range())) ?? 0u) as Mode;
 
-	options.dump_tokens = args_parser.flag("t", "dump-tokens", "dump tokens") ?? false;
-	options.dump_ast = args_parser.flag("a", "dump-ast", "dump ast") ?? false;
-	options.dump_program = args_parser.flag("p", "dump-program", "dump program") ?? false;
+	options.dump_ir = args_parser.flag("d", "dump-ir", "dump ir") ?? false;
 
 	options.hide_errors = args_parser.flag("q", "hide_errors", "do not display error messages") ?? false;
 
-	options.program_name = args_parser.value("o", "program-name", "program name & output file name") ?? "";
+	options.program_name = args_parser.value("o", "ctx-name", "ctx name & output file name") ?? "";
 	options.build_dir = args_parser.value("B", "build-dir", "build dir & output file location") ?? "build";
 
 	// TODO: replace default values with host platform specific ones
@@ -123,6 +118,8 @@ func parseArguments(arguments: Range!<String, false>) => Optional!<CompilerOptio
 }
 
 func main(args: Range!<String, false>) => int {
+	defer LLVMShutdown();
+
 	const options = parseArguments(args) else {
 		return 1;
 	}
@@ -132,241 +129,160 @@ func main(args: Range!<String, false>) => int {
 		discard system(mkdir_cmd.data());
 	}
 
-	var program: Program = (options);
-	var typechecker: TCContext = (&&program);
-	typechecker.registerPragma("generate_std_core_builtins", func (this: &&TCContext, program: &&Program, ns: SharedHandle!<Namespace>, span: Span) => void {
-		program.core_namespace = ns;
+	var compiler: Compiler = (options);
 
-		program.any_concept = program.createConcept(Concept::Any("type"));
-		program.bool_concept = program.createConcept(Concept::Boolean("bool"));
-		program.int_concept = program.createConcept(Concept::Integer(true, "int"));
-		program.uint_concept = program.createConcept(Concept::Integer(false, "uint"));
-		program.string_concept = program.createConcept(Concept::String("String"));
+	compiler.registerPragma("generate_std_core_builtins", func (this: &&Compiler, ctx: &&Context, ns: NamespaceRef, loc: Location) => void {
+		ctx.core_namespace = ns;
 
-		program.void_type = Type(program.createType(ns, "void", TypeBody::Void));
-		program.never_type = Type(program.createType(ns, "never", TypeBody::Void));
-		program.createBoolType(ns);
-		program.createTypeRefTypeDecl(ns);
+		ctx.any_concept = ctx.createConcept(ConceptDecl::Any(ctx.getRef(), "type"));
+		ctx.bool_concept = ctx.createConcept(ConceptDecl::Boolean(ctx.getRef(), "bool"));
+		ctx.int_concept = ctx.createConcept(ConceptDecl::Integer(true, ctx.getRef(), "int"));
+		ctx.uint_concept = ctx.createConcept(ConceptDecl::Integer(false, ctx.getRef(), "uint"));
+		ctx.string_concept = ctx.createConcept(ConceptDecl::String(ctx.getRef(), "str"));
 
-		program.createPrimitiveCastTemplates(ns);
-		program.createCoreReflectionFunctionTemplates(ns);
+		ctx.createPrimitiveCastTemplates(ns);
+		ctx.createCoreReflectionFunctionTemplates(ns);
+		const int_template = ctx.createIntTypeTemplate(ns);
+		const ptr_template = ctx.createPtrTypeTemplate(ns);
+/*
+		discard ctx.createFunctionTypeTemplate(ns);
+		discard ctx.createArrayTypeTemplate(ns);
+		discard ctx.createTupleTypeTemplate(ns);
+		discard ctx.createRangeTypeTemplate(ns);
+		discard ctx.createRangeIteratorTypeTemplate(ns);
+		discard ctx.createNumericRangeTypeTemplate(ns);
+*/
+		ctx.void_type = ctx.createVoidType(ns);
+		ctx.never_type = ctx.createNeverType(ns);
 
-		const int_template = program.createIntTypeTemplate(ns, true);
-		const uint_template = program.createIntTypeTemplate(ns, false);
+		ctx.bool_type = ctx.createBoolType(ns);
 
-		program.createPtrTypeTemplate(ns);
+		ctx.int_type = this.createTypeTemplateInstance!<2u>(int_template, [
+			Value::Undefined,
+			Value::fromPrimitive!<bool>(true, ctx.bool_type)
+		], loc);
+		ctx.createTypeAlias(ns, "int", ctx.int_type);
 
-		program.createFunctionTypeTemplate(ns);
+		ctx.uint_type = this.createTypeTemplateInstance!<2u>(int_template, [
+			Value::Undefined,
+			Value::fromPrimitive!<bool>(false, ctx.bool_type)
+		], loc);
+		ctx.createTypeAlias(ns, "uint", ctx.uint_type);
 
-		program.createRangeTypeTemplate(ns);
-		program.createRangeIteratorTypeTemplate(ns);
-		program.createNumericRangeTypeTemplate(ns);
-		program.createNumericIteratorTypeTemplate(ns);
+		ctx.byte_type = ctx.createByteType(ns);
 
-		program.createTupleTypeTemplate(ns);
+		ctx.typeref_type = ctx.createTypeRefType(ns);
+		ctx.funcref_type = ctx.createFuncRefType(ns);
 
-		discard this.createTemplateInstance(int_template, List!<TemplateParameter>(1u, TemplateParameter::Integer(0)), span);
-		discard this.createTemplateInstance(uint_template, List!<TemplateParameter>(1u, TemplateParameter::Integer(0)), span);
+		ctx.i32_type = this.createTypeTemplateInstance!<2u>(int_template, [
+			Value::fromPrimitive!<int>(32, ctx.int_type),
+			Value::fromPrimitive!<bool>(true, ctx.bool_type)
+		], loc);
 
-		ns.aliases["int"] = program.int_type.decl.linked_namespace;
-		ns.aliases["uint"] = program.uint_type.decl.linked_namespace;
+		ctx.error_type = ctx.createErrorType(ns, ctx.i32_type);
 
-		program.createByteType(ns);
+		ctx.ptr_type = this.createTypeTemplateInstance!<2u>(ptr_template, [
+			Value::TypeRef(ctx.void_type, ctx.typeref_type),
+			Value::fromPrimitive!<bool>(true, ctx.bool_type)
+		], loc);
 
-		const i32_type = Type(this.createTemplateInstance(int_template, List!<TemplateParameter>(1u, TemplateParameter::Integer(32)), span).linked_type);
-		program.createErrorType(ns, i32_type);
+		ctx.exit_function = ctx.createExternFunction!<1u>(ns, "exit", [ctx.int_type], ctx.never_type, "exit");
+		ctx.abort_function = ctx.createExternFunction(ns, "abort", List!<TypeRef>(), ctx.never_type, "abort");
+		ctx.panic_function = ctx.createExternFunction!<1u>(ns, "panic", [ctx.error_type], ctx.never_type, "panic");
+		ctx.assert_function = ctx.createInlineFunction!<1u>(ns, "assert", [ctx.bool_type], ctx.void_type, OpCode::Assert, 0u32, TypeRef::null());
+		ctx.assert_error_function = ctx.createInlineFunction!<2u>(ns, "assert", [ctx.bool_type, ctx.error_type], ctx.void_type, OpCode::AssertError, 0u32, TypeRef::null());
 
-		program.exit_function = program.createFunction(ns, "exit", List!<Type>(1u, program.int_type), program.never_type, FunctionBody::Extern);
-		program.exit_function.extern_name = "exit";
-		program.abort_function = program.createFunction(ns, "abort", List!<Type>(), program.never_type, FunctionBody::Extern);
-		program.abort_function.extern_name = "abort";
-		program.panic_function = program.createFunction(ns, "panic", List!<Type>(1u, program.error_type), program.never_type, FunctionBody::Extern);
-		program.panic_function.extern_name = "panic";
-		program.assert_function = program.createFunction(ns, "assert", List!<Type>(1u, program.bool_type), program.void_type, BuiltinFunction::Assert(Type::unknown()));
-		program.assert_error_function = program.createFunction(ns, "assert", List!<Type>() + program.bool_type + program.error_type, program.void_type, BuiltinFunction::AssertError(Type::unknown()));
+		discard ctx.createInlineFunction(ns, "swap", List!<TemplateParameterDecl>(1u, TemplateParameterDecl("Type", ctx.any_concept, false)), OpCode::Swap, 0u32, TypeRef::null());
 
-		discard program.createFunction(ns, "swap", List!<TemplateParameterDecl>(1u, TemplateParameterDecl("Type", program.any_concept, false)), BuiltinFunction::PrimitiveOp(PrimitiveOp::Swap, Type::unknown()));
-
-		program.createArrayTypeTemplate(ns);
-
-		discard program.createFloatType(ns, FloatType::F16);
-		discard program.createFloatType(ns, FloatType::Bf16);
-		discard program.createFloatType(ns, FloatType::F32);
-		discard program.createFloatType(ns, FloatType::F64);
-		discard program.createFloatType(ns, FloatType::F128);
+		discard ctx.createFloatType(ns, FloatType::F16);
+		discard ctx.createFloatType(ns, FloatType::Bf16);
+		discard ctx.createFloatType(ns, FloatType::F32);
+		ctx.f64_type = ctx.createFloatType(ns, FloatType::F64);
+		discard ctx.createFloatType(ns, FloatType::F128);
 	});
 
-	typechecker.registerPragma("generate_std_math_builtins", func (this: &&TCContext, program: &&Program, ns: SharedHandle!<Namespace>, span: Span) => void {
-		const one_type_template_parameters = List!<TemplateParameterDecl>(1u, TemplateParameterDecl("Type", program.any_concept, false));
+	compiler.registerPragma("generate_std_math_builtins", func (this: &&Compiler, ctx: &&Context, ns: NamespaceRef, loc: Location) => void {
+/*
+		const one_type_template_parameters = List!<TemplateParameterDecl>(1u, TemplateParameterDecl("Type", ctx.any_concept, false));
 
-		discard program.createFunction(ns, "abs", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Abs, Type::unknown()));
-		discard program.createFunction(ns, "sign", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Sign, Type::unknown()));
+		discard ctx.createFunction(ns, "abs", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Abs, Type::unknown()));
+		discard ctx.createFunction(ns, "sign", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Sign, Type::unknown()));
 
-		discard program.createFunction(ns, "min", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Min, Type::unknown()));
-		discard program.createFunction(ns, "max", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Max, Type::unknown()));
-		discard program.createFunction(ns, "clamp", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Clamp, Type::unknown()));
-		discard program.createFunction(ns, "lerp", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Lerp, Type::unknown()));
+		discard ctx.createFunction(ns, "min", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Min, Type::unknown()));
+		discard ctx.createFunction(ns, "max", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Max, Type::unknown()));
+		discard ctx.createFunction(ns, "clamp", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Clamp, Type::unknown()));
+		discard ctx.createFunction(ns, "lerp", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Lerp, Type::unknown()));
 
-		discard program.createFunction(ns, "sqrt", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Sqrt, Type::unknown()));
-		discard program.createFunction(ns, "isqrt", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::ISqrt, Type::unknown()));
-		discard program.createFunction(ns, "pow", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Pow, Type::unknown()));
-		discard program.createFunction(ns, "exp", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Exp, Type::unknown()));
-		discard program.createFunction(ns, "exp2", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Exp2, Type::unknown()));
-		discard program.createFunction(ns, "exp10", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Exp10, Type::unknown()));
-		discard program.createFunction(ns, "log", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Log, Type::unknown()));
-		discard program.createFunction(ns, "log2", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Log2, Type::unknown()));
-		discard program.createFunction(ns, "log10", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Log10, Type::unknown()));
+		discard ctx.createFunction(ns, "sqrt", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Sqrt, Type::unknown()));
+		discard ctx.createFunction(ns, "isqrt", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::ISqrt, Type::unknown()));
+		discard ctx.createFunction(ns, "pow", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Pow, Type::unknown()));
+		discard ctx.createFunction(ns, "exp", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Exp, Type::unknown()));
+		discard ctx.createFunction(ns, "exp2", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Exp2, Type::unknown()));
+		discard ctx.createFunction(ns, "exp10", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Exp10, Type::unknown()));
+		discard ctx.createFunction(ns, "log", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Log, Type::unknown()));
+		discard ctx.createFunction(ns, "log2", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Log2, Type::unknown()));
+		discard ctx.createFunction(ns, "log10", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Log10, Type::unknown()));
 
-		discard program.createFunction(ns, "floor", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Floor, Type::unknown()));
-		discard program.createFunction(ns, "ceil", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Ceil, Type::unknown()));
-		discard program.createFunction(ns, "fract", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Fract, Type::unknown()));
-		discard program.createFunction(ns, "round", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Round, Type::unknown()));
-		discard program.createFunction(ns, "roundEven", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::RoundEven, Type::unknown()));
+		discard ctx.createFunction(ns, "floor", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Floor, Type::unknown()));
+		discard ctx.createFunction(ns, "ceil", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Ceil, Type::unknown()));
+		discard ctx.createFunction(ns, "fract", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Fract, Type::unknown()));
+		discard ctx.createFunction(ns, "round", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Round, Type::unknown()));
+		discard ctx.createFunction(ns, "roundEven", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::RoundEven, Type::unknown()));
 
-		discard program.createFunction(ns, "sin", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Sin, Type::unknown()));
-		discard program.createFunction(ns, "cos", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Cos, Type::unknown()));
-		discard program.createFunction(ns, "tan", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Tan, Type::unknown()));
-		discard program.createFunction(ns, "sinh", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::SinH, Type::unknown()));
-		discard program.createFunction(ns, "cosh", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::CosH, Type::unknown()));
-		discard program.createFunction(ns, "tanh", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::TanH, Type::unknown()));
-		discard program.createFunction(ns, "asin", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::ASin, Type::unknown()));
-		discard program.createFunction(ns, "acos", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::ACos, Type::unknown()));
-		discard program.createFunction(ns, "atan", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::ATan, Type::unknown()));
-		discard program.createFunction(ns, "asinh", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::ASinH, Type::unknown()));
-		discard program.createFunction(ns, "acosh", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::ACosH, Type::unknown()));
-		discard program.createFunction(ns, "atanh", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::ATanH, Type::unknown()));
+		discard ctx.createFunction(ns, "sin", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Sin, Type::unknown()));
+		discard ctx.createFunction(ns, "cos", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Cos, Type::unknown()));
+		discard ctx.createFunction(ns, "tan", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Tan, Type::unknown()));
+		discard ctx.createFunction(ns, "sinh", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::SinH, Type::unknown()));
+		discard ctx.createFunction(ns, "cosh", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::CosH, Type::unknown()));
+		discard ctx.createFunction(ns, "tanh", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::TanH, Type::unknown()));
+		discard ctx.createFunction(ns, "asin", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::ASin, Type::unknown()));
+		discard ctx.createFunction(ns, "acos", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::ACos, Type::unknown()));
+		discard ctx.createFunction(ns, "atan", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::ATan, Type::unknown()));
+		discard ctx.createFunction(ns, "asinh", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::ASinH, Type::unknown()));
+		discard ctx.createFunction(ns, "acosh", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::ACosH, Type::unknown()));
+		discard ctx.createFunction(ns, "atanh", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::ATanH, Type::unknown()));
 
-		program.createVectorTypeTemplate(ns);
-		program.createMatrixTypeTemplate(ns);
+		ctx.createVectorTypeTemplate(ns);
+		ctx.createMatrixTypeTemplate(ns);
 
 		var matmul_template_parameters: List!<TemplateParameterDecl>;
-		matmul_template_parameters.append(TemplateParameterDecl("Type", program.any_concept, false));
-		matmul_template_parameters.append(TemplateParameterDecl("AColumns", program.uint_concept, false));
-		matmul_template_parameters.append(TemplateParameterDecl("ARows", program.uint_concept, false));
-		matmul_template_parameters.append(TemplateParameterDecl("BColumns", program.uint_concept, false));
-		discard program.createFunction(ns, "matmul", matmul_template_parameters, BuiltinFunction::MatrixMultiply((a_columns: 0u, a_rows: 0u, b_columns: 0u), Type::unknown()));
+		matmul_template_parameters.append(TemplateParameterDecl("Type", ctx.any_concept, false));
+		matmul_template_parameters.append(TemplateParameterDecl("AColumns", ctx.uint_concept, false));
+		matmul_template_parameters.append(TemplateParameterDecl("ARows", ctx.uint_concept, false));
+		matmul_template_parameters.append(TemplateParameterDecl("BColumns", ctx.uint_concept, false));
+		discard ctx.createFunction(ns, "matmul", matmul_template_parameters, BuiltinFunction::MatrixMultiply((a_columns: 0u, a_rows: 0u, b_columns: 0u), Type::unknown()));
+*/
 	});
 
-	typechecker.registerPragma("finalize_std_core_array_instance", func (this: &&TCContext, program: &&Program, ns: SharedHandle!<Namespace>, span: Span) => void {
+	compiler.registerPragma("finalize_std_core_array_instance", func (this: &&Compiler, ctx: &&Context, ns: NamespaceRef, loc: Location) => void {
+/*
 		const type = Type(ns.linked_type);
 		const element_type = (ns.linked_type.body as Array).value().element_type;
 
 		const element_ptr_type_template_parameters = List!<TemplateParameter>(1u, TemplateParameter::Type(element_type));
 
-		const element_cptr_type = this.getType(Name("ptr", element_ptr_type_template_parameters + TemplateParameter::Boolean(false)), Span(), false);
-		const element_vptr_type = this.getType(Name("ptr", element_ptr_type_template_parameters + TemplateParameter::Boolean(true)), Span(), false);
+		const element_cptr_type = this.getType(Name("ptr", element_ptr_type_template_parameters + TemplateParameter::Boolean(false)), Location(), false);
+		const element_vptr_type = this.getType(Name("ptr", element_ptr_type_template_parameters + TemplateParameter::Boolean(true)), Location(), false);
 
-		discard program.createUnaryFunction(ns, "data", type.constRef(), element_cptr_type, BuiltinFunction::ArrayGetDataPointer(type));
-		discard program.createUnaryFunction(ns, "data", type.varRef(), element_vptr_type, BuiltinFunction::ArrayGetDataPointer(type));
+		discard ctx.createUnaryFunction(ns, "data", type.constRef(), element_cptr_type, BuiltinFunction::ArrayGetDataPointer(type));
+		discard ctx.createUnaryFunction(ns, "data", type.varRef(), element_vptr_type, BuiltinFunction::ArrayGetDataPointer(type));
+*/
 	});
 
-	typechecker.registerPragma("finalize_std_math_matrix_instance", func (this: &&TCContext, program: &&Program, ns: SharedHandle!<Namespace>, span: Span) => void {
+	compiler.registerPragma("finalize_std_math_matrix_instance", func (this: &&Compiler, ctx: &&Context, ns: NamespaceRef, loc: Location) => void {
+/*
 		const type = Type(ns.linked_type);
 		const matrix_type = (ns.linked_type.body as Matrix).value();
-		const transposed_type = this.getMatrixType(matrix_type.element_type, matrix_type.rows, matrix_type.columns, span);
-		const column_vector_type = this.getVectorType(matrix_type.element_type, matrix_type.rows, span);
-		const row_vector_type = this.getVectorType(matrix_type.element_type, matrix_type.columns, span);
+		const transposed_type = this.getMatrixType(matrix_type.element_type, matrix_type.rows, matrix_type.columns, loc);
+		const column_vector_type = this.getVectorType(matrix_type.element_type, matrix_type.rows, loc);
+		const row_vector_type = this.getVectorType(matrix_type.element_type, matrix_type.columns, loc);
 
-		discard program.createFunction(ns, "fromColumns", List!<Type>(matrix_type.columns, column_vector_type), type, BuiltinFunction::PrimitiveOp(PrimitiveOp::MatrixFromColumns, type));
-		discard program.createFunction(ns, "fromRows", List!<Type>(matrix_type.rows, row_vector_type), type, BuiltinFunction::PrimitiveOp(PrimitiveOp::MatrixFromRows, type));
+		discard ctx.createFunction(ns, "fromColumns", List!<Type>(matrix_type.columns, column_vector_type), type, BuiltinFunction::PrimitiveOp(PrimitiveOp::MatrixFromColumns, type));
+		discard ctx.createFunction(ns, "fromRows", List!<Type>(matrix_type.rows, row_vector_type), type, BuiltinFunction::PrimitiveOp(PrimitiveOp::MatrixFromRows, type));
 
-		discard program.createFunction(ns, "transpose", List!<Type>(1u, type), transposed_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::MatrixTranspose, type));
+		discard ctx.createFunction(ns, "transpose", List!<Type>(1u, type), transposed_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::MatrixTranspose, type));
+*/
 	});
 
-	const root_module_desc = ImportedModule(1u, program.options.root_module_path, program.options.program_name);
-	const module = typechecker.loadModule(root_module_desc) else: error {
-		typechecker.error("couldn't load module " + root_module_desc.path + ": " + String::fromErrorCode(error), Span());
-		return 1;
-	}
-
-	typechecker.checkTopLevelStatements(module);
-	var changes = false;
-	do {
-		changes = false;
-		for ns in program.top_level_namespaces {
-			changes |= typechecker.check(ns, NamespaceState::Done);
-		}
-	} while changes;
-
-	if options.dump_program {
-		print(program.dump());
-	}
-
-	if program.options.mode == Check || program.has_errors {
-		return program.has_errors as int;
-	}
-
-	if program.main_function.isEmpty() {
-		typechecker.error("no main function specified", Span());
-		return 1;
-	}
-
-	if program.options.codegen_lazy {
-		typechecker.cg_context.codegenFunctionDecl(program.main_function);
-		typechecker.cg_context.codegenFunctionBody(program.main_function);
-	}
-
-	match program.llvm_context.loadModuleFromFile(program.options.install_path + "/rt.ll") {
-		case Some: rt_module -> discard LLVMLinkModules2(program.llvm_module, rt_module);
-		default -> program.has_errors = true;
-	}
-
-	program.finalizeDI();
-
-	if const error = verifyModule(program.llvm_module, LLVMVerifierFailureAction::LLVMReturnStatusAction) as Error {
-		eprintln(error);
-		program.has_errors = true;
-	}
-
-	if options.mode == Run {
-		if program.has_errors {
-			return 1;
-		}
-
-		var main_args: List!<String>;
-		var main_env: List!<String>;
-
-		main_args.append(options.program_name);
-		main_args.append(options.secondary_args);
-
-		return program.runMainFunction(main_args, main_env);
-	} else {
-		const assembly_path = match options.output_type {
-			case LLVMAssembly -> yield program.printLLVMIRToFile();
-			case LLVMBitcode -> yield program.writeLLVMBitcodeToFile();
-		}
-
-		if program.has_errors || assembly_path is None {
-			return 1;
-		}
-
-		if options.codegen_only {
-			return 0;
-		}
-
-		var clang_command = "clang " + assembly_path.value();
-		clang_command += " -o " + options.getOutputBinaryPath();
-		clang_command += " -lc -lm";
-
-		for lib in options.link_libraries {
-			clang_command += " -l" + lib;
-		}
-
-		if options.symbol_type == None {
-			clang_command += " -s";
-		}
-
-		if options.generate_debug_info {
-			clang_command += " -g";
-		}
-
-		clang_command += " " + options.getOptimizationLevelAsClangArg();
-
-		if !options.secondary_args.isEmpty() {
-			clang_command += " " + " ".join(options.secondary_args);
-		}
-
-		clang_command += "\0";
-		return system(clang_command.data()) as int;
-	}
+	return compiler.run();
 }
