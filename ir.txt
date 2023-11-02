@@ -1,0 +1,63 @@
+// types
+type error = i64
+type tuple = (i32, error)
+type array = [i32, 4]
+type vector = <f32, 4>
+
+// global variables
+[y: i64, ...]
+
+func f() -> i64 {
+	// local variables
+	[x: i64, ...]
+
+	store (
+		call (i64, i64) -> i64 (
+			func g,
+			const i64 2,
+			const i64 3
+		),
+		var x
+	)
+
+	ret (
+		load i64 (var x)
+	)
+}
+
+func g(a: i64, b: i64) -> i64 {
+	ret (
+		add i64 (
+			param a,
+			param b
+		)
+	)
+}
+
+func h(a: i64) -> i64 {
+	[x: i64]
+	store (const i64 0, var x)
+
+	loop (slt (load i64 (var x), const i64 3), {
+		store (
+			add (
+				load i64 (var x),
+				const i64 1,
+			),
+			var x
+		)
+	})
+
+	ret branch i64 (
+		param a,
+		const i64 1, {
+			yield const i64 3
+		},
+		const i64 2, {
+			yield const i64 4
+		},
+		{
+			yield param a
+		}
+	)
+}

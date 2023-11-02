@@ -1,0 +1,876 @@
+import std/core;
+import std/map;
+import std/libc/stdlib;
+import std/libc/string;
+import std/list;
+import std/string;
+
+struct Program {
+	var types: List!<Type>;
+	var known_types: Map!<Type, uint>;
+
+	var void_type: uint;
+	var never_type: uint;
+	var pointer_type: uint;
+	var bool_type: uint;
+	var byte_type: uint;
+	var int_type: uint;
+
+	var functions: List!<Function>;
+	var deleted_functions: List!<uint>;
+	var globals: List!<String>;
+
+	func constructor(this: &&Program) -> void {
+		this.types := ();
+		this.known_types := ();
+
+		this.void_type := this.getVoidType();
+		this.never_type := this.getNeverType();
+		this.pointer_type := this.getPointerType();
+		this.bool_type := this.getIntType(1u);
+		this.byte_type := this.getIntType(8u);
+		this.int_type := this.getIntType(sizeOf!<ptr!<false>>() * 8);
+
+		this.functions := ();
+	}
+
+	func constructor(this: &&Program, other: Program) -> void = default;
+	func destructor(this: &&Program) -> void = default;
+
+	func createFunction(this: &&Program, name: String, parameter_types: List!<uint>, return_type: uint) -> uint {
+		if const id = this.deleted_functions.last() {
+			this.deleted_functions.removeLast();
+			this.functions[id] = Function(name, parameter_types, return_type);
+			return id;
+		}
+
+		const id = this.functions.size();
+		this.functions.append(Function(name, parameter_types, return_type));
+		return id;
+	}
+
+	func deleteFunction(this: &&Program, id: uint) -> void {
+		this.deleted_functions.append(id);
+		this.functions[id] = Function("", List!<uint>(), this.void_type);
+	}
+
+	func getOrCreateType(this: &&Program, type: &Type) -> uint {
+		if const id = this.known_types.get(type) {
+			return id;
+		}
+
+		const id = this.types.size();
+		this.types.append(type);
+		this.known_types[this.types[id]] = id;
+		return id;
+	}
+
+	func getVoidType(this: &&Program) -> uint {
+		return this.getOrCreateType(Type::Void());
+	}
+
+	func getNeverType(this: &&Program) -> uint {
+		return this.getOrCreateType(Type::Never());
+	}
+
+	func getPointerType(this: &&Program) -> uint {
+		return this.getOrCreateType(Type::Pointer());
+	}
+
+	func getIntType(this: &&Program, bits: uint) -> uint {
+		return this.getOrCreateType(Type::Int(bits));
+	}
+
+	func getFloatType(this: &&Program, bits: uint) -> uint {
+		return this.getOrCreateType(Type::Float(bits));
+	}
+
+	func getArrayType(this: &&Program, element_type: uint, size: uint) -> uint {
+		return this.getOrCreateType(Type::Array((element_type: element_type, size: size)));
+	}
+
+	func getStructType(this: &&Program, struct_type: uint, elements: List!<uint>) -> uint {
+		return this.getOrCreateType(Type::Struct(elements));
+	}
+
+	func getSizeOfType(this: &Program, type: uint) -> uint {
+		match this.types[type] {
+			case Void -> return 0u;
+			case Never -> return 0u;
+			case Pointer -> return alignmentOf!<ptr!<false>>();
+			case Int: bits -> return getNearestPowerOf2(bits, 8u) / 8;
+			case Float: bits -> return getNearestPowerOf2(bits, 8u) / 8;
+			case Array: array -> return this.getSizeOfType(array.element_type) * array.size;
+			case Struct: elements -> {
+				var size = 0u;
+				var max_alignment = 1u;
+
+				for e in elements {
+					const current_size = this.getSizeOfType(e);
+					const current_alignment = this.getAlignmentOfType(e);
+					// add padding so that current element is properly aligned
+					if size % current_alignment != 0 {
+						size += current_alignment - size % current_alignment;
+					}
+
+					if current_alignment > max_alignment {
+						max_alignment = current_alignment;
+					}
+
+					size += current_size;
+				}
+
+				// add padding so that next element in an array of this type is properly aligned
+				if size % max_alignment != 0 {
+					size += max_alignment - size % max_alignment;
+				}
+
+				return size;
+			}
+		}
+	}
+
+	func getAlignmentOfType(this: &Program, type: uint) -> uint {
+		match this.types[type] {
+			case Void -> return 0u;
+			case Never -> return 0u;
+			case Pointer -> return alignmentOf!<ptr!<false>>();
+			case Int: bits -> return getNearestPowerOf2(bits, 8u) / 8;
+			case Float: bits -> return getNearestPowerOf2(bits, 8u) / 8;
+			case Array: array -> return this.getAlignmentOfType(array.element_type);
+			case Struct: elements -> {
+				var max = 1u;
+				for e in elements {
+					const current = this.getAlignmentOfType(e);
+					if current > max {
+						max = current;
+					}
+				}
+				return max;
+			}
+		}
+	}
+
+	func getMemberOffset(this: &Program, type: uint, index: uint) -> uint {
+		match this.types[type] {
+			case Array: array -> return this.getSizeOfType(array.element_type) * index;
+			case Struct: elements -> {
+				var offset = 0u;
+				for i in 0u..index {
+					const current_size = this.getSizeOfType(elements[i]);
+					const current_alignment = this.getAlignmentOfType(elements[i]);
+					// add padding so that current element is properly aligned
+					if offset % current_alignment != 0 {
+						offset += current_alignment - offset % current_alignment;
+					}
+
+					offset += current_size;
+				}
+
+				const current_alignment = this.getAlignmentOfType(elements[index]);
+				// add padding so that current element is properly aligned
+				if offset % current_alignment != 0 {
+					offset += current_alignment - offset % current_alignment;
+				}
+
+				return offset;
+			}
+			else -> return 0u;
+		}
+	}
+
+	func getMemberType(this: &Program, type: uint, index: uint) -> uint {
+		match this.types[type] {
+			case Struct: elements -> return elements[index];
+			case Array: array_type -> return array_type.element_type;
+			else -> return this.void_type;
+		}
+	}
+
+	func getIntTypeBits(this: &Program, type: uint) -> int {
+		match this.types[type] {
+			case Int: bits -> return bits as int;
+			else -> return -1;
+		}
+	}
+
+	func getBitMask(this: &Program, type: uint) -> int {
+		match this.types[type] {
+			case Int: bits -> return -1 >> (sizeOf!<uint>() * 8 - bits) as int;
+			else -> return 0;
+		}
+	}
+
+	func createGlobal(this: &&Program, value: String) -> uint {
+		this.globals.append(value);
+		return this.globals.size() - 1;
+	}
+
+	func getGlobal(this: &Program, index: uint) -> Value {
+		assert(index < this.globals.size());
+		return Value::Pointer(this.globals.data[index].vdata(), this.pointer_type);
+	}
+}
+
+variant Type {
+	case Void;
+	case Never; // result of a terminator instruction
+	case Pointer;
+	case Int: uint;
+	case Float: uint;
+
+	case Array: (element_type: uint, size: uint);
+	case Struct: List!<uint>;
+
+	operator <=>(this: Type, other: Type) -> int {
+		match this {
+			case Void -> match other {
+				case Void -> return 0;
+				else -> return -1;
+			}
+			case Never -> match other {
+				case Void -> return 1;
+				case Never -> return 0;
+				else -> return -1;
+			}
+			case Pointer -> match other {
+				case Void | Never -> return 1;
+				case Pointer -> return 0;
+				else -> return -1;
+			}
+			case Int: bits -> match other {
+				case Void | Never | Pointer -> return 1;
+				case Int: bits2 -> return bits <=> bits2;
+				else -> return -1;
+			}
+			case Float: bits -> match other {
+				case Float: bits2 -> return bits <=> bits2;
+				case Struct | Array -> return -1;
+				else -> return 1;
+			}
+			case Array: a1 -> match other {
+				case Array: a2 -> if a1.element_type == a2.element_type {
+					return a1.size <=> a2.size;
+				} else {
+					return a1.element_type <=> a2.element_type;
+				}
+				case Struct -> return -1;
+				else -> return 1;
+			}
+			case Struct: s1 -> match other {
+				case Struct: s2 -> {
+					for i in 0u..uint::min(s1.size(), s2.size()) {
+						if s1[i] != s2[i] {
+							return s1[i] <=> s2[i];
+						}
+					}
+					return s1.size() <=> s2.size();
+				}
+				else -> return 1;
+			}
+		}
+	}
+}
+
+struct Function {
+	var name: String;
+
+	var parameter_types: List!<uint>;
+	var return_type: uint;
+
+	var variable_types: List!<uint>;
+
+	var basic_blocks: List!<BasicBlock>;
+	var entry_block: uint;
+
+	var instructions: List!<Instruction>;
+
+	func constructor(this: &&Function, name: String, parameter_types: List!<uint>, return_type: uint) -> void {
+		this.name := name;
+		this.parameter_types := parameter_types;
+		this.return_type := return_type;
+		this.basic_blocks := ();
+		this.entry_block := this.appendBasicBlock();
+	}
+
+	func constructor(this: &&Function, other: Function) -> void = default;
+	func destructor(this: &&Function) -> void = default;
+
+	operator =(this: &&Function, other: Function) -> void = default;
+	operator ==(this: Function, other: Function) -> bool = default;
+
+	func appendBasicBlock(this: &&Function) -> uint {
+		this.basic_blocks.append(BasicBlock());
+		return this.basic_blocks.size() - 1;
+	}
+}
+
+struct BasicBlock {
+	var instructions: List!<uint>;
+	var has_terminator: bool;
+
+	func constructor(this: &&BasicBlock) -> void = default;
+	func constructor(this: &&BasicBlock, other: BasicBlock) -> void = default;
+	func destructor(this: &&BasicBlock) -> void = default;
+
+	operator =(this: &&BasicBlock, other: BasicBlock) -> void = default;
+	operator ==(this: BasicBlock, other: BasicBlock) -> bool = default;
+
+	func appendInstruction(this: &&BasicBlock, instruction: uint, is_terminator: bool) -> void {
+		assert(!this.has_terminator);
+		this.instructions.append(instruction);
+		this.has_terminator = is_terminator;
+	}
+}
+
+struct Builder {
+	var program: &&Program;
+	var function: &&Function;
+	var insert_block: uint;
+
+	func constructor(this: &&Builder, program: &&Program, function: uint) -> void {
+		this.program := &&program;
+		this.function := &&this.program.functions[function];
+		this.insert_block := this.function.basic_blocks.size() - 1;
+	}
+
+	func constructor(this: &&Builder, other: Builder) -> void = default;
+	func destructor(this: &&Builder) -> void = default;
+
+	func setInsertBlock(this: &&Builder, insert_block: uint) -> void {
+		this.insert_block = insert_block;
+	}
+
+	func createInstruction(this: &&Builder, instr: Instruction, type: uint) -> Value {
+		const id = this.function.instructions.size();
+		this.function.instructions.append(instr);
+		this.function.basic_blocks[this.insert_block].appendInstruction(id, type == this.program.never_type);
+		return Value::Instruction(id, type);
+	}
+
+	func getParameter(this: &&Builder, parameter_id: uint) -> Value {
+		return Value::Parameter(parameter_id, this.function.parameter_types[parameter_id]);
+	}
+
+	func getVariable(this: &&Builder, variable_id: uint) -> Value {
+		return Value::Variable(variable_id, this.function.variable_types[variable_id]);
+	}
+
+	func createLoad(this: &&Builder, addr: Value, type: uint) -> Value {
+		assert(addr.type == this.program.pointer_type);
+		return this.createInstruction(Instruction::Load((addr: addr, type: type)), type);
+	}
+
+	func createStore(this: &&Builder, value: Value, addr: Value) -> void {
+		assert(addr.type == this.program.pointer_type);
+		discard this.createInstruction(Instruction::Store((value: value, addr: addr)), this.program.void_type);
+	}
+
+	func createIntOp(this: &&Builder, op: IntOp, lhs: Value, rhs: Value, result_type: uint) -> Value {
+		assert(lhs.type == rhs.type);
+		return this.createInstruction(Instruction::IntOp((op: op, lhs: lhs, rhs: rhs, result_type: result_type)), result_type);
+	}
+
+	func createFloatOp(this: &&Builder, op: FloatOp, lhs: Value, rhs: Value, result_type: uint) -> Value {
+		assert(lhs.type == rhs.type);
+		return this.createInstruction(Instruction::FloatOp((op: op, lhs: lhs, rhs: rhs, result_type: result_type)), result_type);
+	}
+
+	func createCastOp(this: &&Builder, kind: CastKind, value: Value, target_type: uint) -> Value {
+		return this.createInstruction(Instruction::Cast((kind: kind, value: value, target_type: target_type)), target_type);
+	}
+
+	func createPointerAdd(this: &&Builder, base: Value, offset: Value) -> Value {
+		assert(base.type == this.program.pointer_type);
+		assert(offset.type == this.program.int_type);
+		return this.createInstruction(Instruction::PointerAdd((base: base, offset: offset)), this.program.pointer_type);
+	}
+
+	func createStructGEP(this: &&Builder, struct_type: uint, base: Value, member: uint) -> Value {
+		return this.createPointerAdd(base, Value::Int(this.program.getMemberOffset(struct_type, member) as int, this.program.int_type));
+	}
+
+	func createArrayGEP(this: &&Builder, element_type: uint, base: Value, index: Value) -> Value {
+		const element_size = Value::Int(this.program.getSizeOfType(element_type) as int, this.program.int_type);
+		return this.createPointerAdd(base, this.createIntOp(IntOp::Mul, index, element_size, this.program.int_type));
+	}
+
+	func createPointerDiff(this: &&Builder, pointee_type: uint, lhs: Value, rhs: Value) -> Value {
+		assert(lhs.type == this.program.pointer_type);
+		assert(rhs.type == this.program.pointer_type);
+		return this.createInstruction(Instruction::PointerDiff((pointee_type: pointee_type, lhs: lhs, rhs: rhs)), this.program.int_type);
+	}
+
+	func createGetElement(this: &&Builder, object: Value, index: uint, value: Value) -> Value {
+		return this.createInstruction(Instruction::GetElement((object: object, index: index)), this.program.getMemberType(object.type, index));
+	}
+
+	func createSetElement(this: &&Builder, object: Value, index: uint, value: Value) -> Value {
+		const member_type = match this.program.types[object.type] {
+			case Struct: elements -> yield elements[index];
+			case Array: array_type -> yield array_type.element_type;
+			else -> abort();
+		}
+
+		assert(value.type == member_type);
+		return this.createInstruction(Instruction::SetElement((object: object, index: index, value: value)), object.type);
+	}
+
+	func createCall(this: &&Builder, function: Value, parameters: List!<Value>, return_type: uint) -> Value {
+		return this.createInstruction(Instruction::Call((function: function, parameters: parameters, return_type: return_type)), return_type);
+	}
+
+	func createReturn(this: &&Builder, value: Value) -> void {
+		discard this.createInstruction(Instruction::Return(value), this.program.never_type);
+	}
+
+	func createJump(this: &&Builder, target: uint) -> void {
+		discard this.createInstruction(Instruction::Jump(target), this.program.never_type);
+	}
+
+	func createCondJump(this: &&Builder, condition: Value, then_block: uint, else_block: uint) -> void {
+		discard this.createInstruction(Instruction::CondJump((condition: condition, then_block: then_block, else_block: else_block)), this.program.never_type);
+	}
+
+	func createSwitch(this: &&Builder, value: Value, cases: List!<(pattern: uint, target_block: uint)>) -> void {
+		discard this.createInstruction(Instruction::Switch((value: value, cases: cases)), this.program.never_type);
+	}
+
+	func createUnreachable(this: &&Builder) -> void {
+		discard this.createInstruction(Instruction::Unreachable(), this.program.never_type);
+	}
+}
+
+enum IntOp {
+	case And;
+	case Or;
+	case XOr;
+	case Not;
+	case Shl;
+	case AShr;
+	case LShr;
+
+	case Add;
+	case Sub;
+	case Neg;
+	case Mul;
+	case SDiv;
+	case UDiv;
+	case SMod;
+	case UMod;
+
+	case EQ;
+	case NE;
+
+	case SLT;
+	case SLE;
+	case SGT;
+	case SGE;
+	case SCmp;
+
+	case ULT;
+	case ULE;
+	case UGT;
+	case UGE;
+	case UCmp;
+}
+
+enum FloatOp {
+	case FAdd;
+	case FSub;
+	case FNeg;
+	case FMul;
+	case FDiv;
+	case FMod;
+
+	case FEQ;
+	case FNE;
+	case FLT;
+	case FLE;
+	case FGT;
+	case FGE;
+	case FCmp;
+}
+
+enum CastKind {
+	case Trunc;
+	case ZExt;
+	case SExt;
+	case FPToUI;
+	case FPToSI;
+	case UIToFP;
+	case SIToFP;
+	case FPTrunc;
+	case FPExt;
+}
+
+variant Instruction {
+	case Load: (addr: Value, type: uint);
+	case Store: (value: Value, addr: Value);
+
+	case IntOp: (op: IntOp, lhs: Value, rhs: Value, result_type: uint);
+	case FloatOp: (op: FloatOp, lhs: Value, rhs: Value, result_type: uint);
+	case Cast: (kind: CastKind, value: Value, target_type: uint);
+
+	case PointerAdd: (base: Value, offset: Value);
+	case PointerDiff: (pointee_type: uint, lhs: Value, rhs: Value);
+
+	case GetElement: (object: Value, index: uint);
+	case SetElement: (object: Value, index: uint, value: Value);
+
+	case Call: (function: Value, parameters: List!<Value>, return_type: uint);
+	case Return: Value;
+
+	case Jump: uint;
+	case CondJump: (condition: Value, then_block: uint, else_block: uint);
+	case Switch: (value: Value, cases: List!<(pattern: uint, target_block: uint)>);
+
+	case Unreachable;
+}
+
+variant Value {
+	var type: uint;
+
+	case Null;
+	case Int: int;
+	case Float: f64;
+	case Pointer: ptr!<byte, true>;
+	case Any: String;
+
+	case Parameter: uint;
+	case Variable: uint;
+	case Instruction: uint;
+	case Global: uint;
+
+	func toInt(this: &Value) -> int {
+		match this {
+			case Null -> return 0;
+			case Int: value -> return value;
+			else -> abort();
+		}
+	}
+
+	func toFloat(this: &Value) -> f64 {
+		match this {
+			case Null -> return 0;
+			case Float: value -> return value;
+			else -> abort();
+		}
+	}
+
+	func toPointer(this: &Value) -> ptr!<byte, true> {
+		match this {
+			case Null -> return ptr!<byte, true>::null();
+			case Pointer: value -> return value;
+			else -> abort();
+		}
+	}
+}
+
+func getNearestPowerOf2(n: uint, min: uint) -> uint {
+	var r = min;
+	while r < n {
+		r *= 2;
+	}
+	return r;
+}
+
+struct CallFrame {
+	var program: &Program;
+	var function: &Function;
+
+	var parameters: List!<Value>;
+	var variables: List!<ptr!<byte, true>>;
+	var temporaries: List!<Value>;
+
+	var variable_data: ptr!<byte, true>;
+
+	var current_block: uint;
+	var return_value: Value;
+
+	func constructor(this: &&CallFrame, program: &Program, function: uint, parameters: List!<Value>) -> void {
+		this.program := &program;
+		this.function := &program.functions[function];
+
+		this.parameters := parameters;
+		this.variables := ();
+		for t in this.function.variable_types {
+			this.variables.append(malloc!<byte>(this.program.getSizeOfType(t)));
+		}
+		this.temporaries := (this.function.instructions.size(), Value::Null(program.void_type));
+
+		this.current_block := this.function.entry_block;
+		this.return_value := Value::Null(this.function.return_type);
+	}
+
+	func destructor(this: &&CallFrame) -> void {
+		for v in this.variables {
+			free!<byte>(v);
+		}
+	}
+
+	func run(this: &&CallFrame) -> Value {
+		while this.current_block < this.function.basic_blocks.size() {
+			for i in this.function.basic_blocks[this.current_block].instructions {
+				this.runInstruction(i);
+			}
+		}
+
+		return this.return_value;
+	}
+
+	func getValue(this: &CallFrame, value: Value) -> Value {
+		match value {
+			case Parameter: index -> return this.parameters[index];
+			case Variable: index -> return Value::Pointer(this.variables[index], this.program.pointer_type);
+			case Instruction: index -> return this.temporaries[index];
+			case Global: index -> return this.program.getGlobal(index);
+			else -> return value;
+		}
+	}
+
+	func load(this: &&CallFrame, addr: ptr!<byte, false>, type: uint) -> Value {
+		const size = this.program.getSizeOfType(type);
+		match this.program.types[type] {
+			case Int -> {
+				var value = 0;
+				memcpy!<byte>(ptr!<int, true>::addressOf(&&value) as ptr!<byte, true>, addr, size);
+				return Value::Int(value, type);
+			}
+			case Float: bits -> match bits {
+				case 32 -> {
+					var value: f32;
+					memcpy!<byte>(ptr!<f32, true>::addressOf(&&value) as ptr!<byte, true>, addr, size);
+					return Value::Float(value as f64, type);
+				}
+				case 64 -> {
+					var value: f64;
+					memcpy!<byte>(ptr!<f64, true>::addressOf(&&value) as ptr!<byte, true>, addr, size);
+					return Value::Float(value, type);
+				}
+				else -> abort();
+			}
+			case Pointer -> {
+				var value = ptr!<byte, true>::null();
+				memcpy!<byte>(ptr!<ptr!<byte, true>, true>::addressOf(&&value) as ptr!<byte, true>, addr, size);
+				return Value::Pointer(value, type);
+			}
+			else -> {
+				var result = String(size, '\0'b);
+				memcpy!<byte>(result.vdata(), addr, size);
+				return Value::Any(result, type);
+			}
+		}
+	}
+
+	func store(this: &&CallFrame, addr: ptr!<byte, true>, value: Value) -> void {
+		const size = this.program.getSizeOfType(value.type);
+		match this.getValue(value) {
+			case Null -> memset!<byte>(addr, '\0'b, size);
+			case Int: int_val -> memcpy!<byte>(addr, ptr!<int, false>::addressOf(&int_val) as ptr!<byte, false>, size);
+			case Float: float_val -> match size {
+				case 4 -> {
+					const tmp = float_val as f32;
+					memcpy!<byte>(addr, ptr!<f32, false>::addressOf(&tmp) as ptr!<byte, false>, size);
+				}
+				case 8 -> memcpy!<byte>(addr, ptr!<f64, false>::addressOf(&float_val) as ptr!<byte, false>, size);
+				else -> abort();
+			}
+			case Pointer: ptr -> memcpy!<byte>(addr, ptr!<ptr!<byte, true>, false>::addressOf(&ptr) as ptr!<byte, false>, size);
+			case Any: bytes -> memcpy!<byte>(addr, bytes.data(), size);
+			else -> abort();
+		}
+	}
+
+	func runInstruction(this: &&CallFrame, i: uint) -> void {
+		match this.function.instructions[i] {
+			case Load: data -> {
+				const src = this.getValue(data.addr).toPointer() as ptr!<byte, false>;
+				this.temporaries[i] = this.load(src, data.type);
+			}
+			case Store: data -> {
+				const dst = this.getValue(data.addr).toPointer();
+				this.store(dst, data.value);
+			}
+			case IntOp: data -> {
+				const arg_bitmask = this.program.getBitMask(data.lhs.type);
+				const lhs = this.getValue(data.lhs).toInt() & arg_bitmask;
+				const rhs = this.getValue(data.rhs).toInt() & arg_bitmask;
+				const result_bitmask = this.program.getBitMask(data.result_type);
+				const result = this.runIntOp(data.op, lhs, rhs) & result_bitmask;
+				this.temporaries[i] = Value::Int(result, data.result_type);
+			}
+			case FloatOp: data -> {
+				const lhs = this.getValue(data.lhs).toFloat();
+				const rhs = this.getValue(data.rhs).toFloat();
+				this.temporaries[i] = match data.op {
+					case FAdd -> yield Value::Float(lhs + rhs, data.result_type);
+					case FSub -> yield Value::Float(lhs - rhs, data.result_type);
+					case FNeg -> yield Value::Float(-lhs, data.result_type);
+					case FMul -> yield Value::Float(lhs * rhs, data.result_type);
+					case FDiv -> yield Value::Float(lhs / rhs, data.result_type);
+					case FMod -> yield Value::Float(lhs % rhs, data.result_type);
+					case FEQ -> yield Value::Int((lhs == rhs) as int, data.result_type);
+					case FNE -> yield Value::Int((lhs != rhs) as int, data.result_type);
+					case FLT -> yield Value::Int((lhs < rhs) as int, data.result_type);
+					case FLE -> yield Value::Int((lhs <= rhs) as int, data.result_type);
+					case FGT -> yield Value::Int((lhs > rhs) as int, data.result_type);
+					case FGE -> yield Value::Int((lhs >= rhs) as int, data.result_type);
+					case FCmp -> yield Value::Int(lhs <=> rhs, data.result_type);
+				};
+			}
+			case Cast: data -> {
+				const value = this.getValue(data.value);
+				const result_bitmask = this.program.getBitMask(data.target_type);
+
+				this.temporaries[i] = match data.kind {
+					case Trunc -> yield Value::Int(value.toInt() & result_bitmask, data.target_type);
+					case ZExt -> yield Value::Int(value.toInt(), data.target_type);
+					case SExt -> {
+						var int_val = value.toInt();
+						const sign_bit = (int_val >> (this.program.getIntTypeBits(value.type) - 1)) & 1;
+						if sign_bit == 1 {
+							int_val |= result_bitmask & ~this.program.getBitMask(value.type);
+						}
+						yield Value::Int(int_val, data.target_type);
+					}
+
+					case FPToUI -> yield Value::Int((value.toFloat() as uint) as int, data.target_type);
+					case FPToSI -> yield Value::Int(value.toFloat() as int, data.target_type);
+					case UIToFP -> yield Value::Float(value.toInt() as uint as f64, data.target_type);
+					case SIToFP -> yield Value::Float(value.toInt() as f64, data.target_type);
+
+					// is handled in load/store
+					case FPTrunc -> yield Value::Float(value.toFloat(), data.target_type);
+					case FPExt -> yield Value::Float(value.toFloat(), data.target_type);
+				}
+			}
+			case PointerAdd: data -> {
+				const base = this.getValue(data.base).toPointer();
+				const offset = this.getValue(data.offset).toInt();
+				this.temporaries[i] = Value::Pointer(base + offset, this.program.pointer_type);
+			}
+			case PointerDiff: data -> {
+				const lhs = this.getValue(data.lhs).toPointer();
+				const rhs = this.getValue(data.rhs).toPointer();
+				const element_size = this.program.getSizeOfType(data.pointee_type) as int;
+				this.temporaries[i] = Value::Int((lhs - rhs) / element_size, this.program.int_type);
+			}
+			case GetElement: data -> {
+				var object: String;
+				match this.getValue(data.object) {
+					case Null -> object = String(this.program.getSizeOfType(data.object.type), '\0'b);
+					case Any: bytes -> object = bytes;
+					else -> abort();
+				}
+
+				const offset = this.program.getMemberOffset(data.object.type, data.index);
+				const element_type = this.program.getMemberType(data.object.type, data.index);
+				this.temporaries[i] = this.load(object.data() + offset, element_type);
+			}
+			case SetElement: data -> {
+				var result: String;
+				match this.getValue(data.object) {
+					case Null -> result = String(this.program.getSizeOfType(data.object.type), '\0'b);
+					case Any: bytes -> result = bytes;
+					else -> abort();
+				}
+
+				const offset = this.program.getMemberOffset(data.object.type, data.index);
+				this.store(result.vdata() + offset, data.value);
+				this.temporaries[i] = Value::Any(result, data.object.type);
+			}
+			case Call: data -> {
+				var parameters = data.parameters;
+				for &&p in parameters {
+					p = this.getValue(p);
+				}
+
+				match this.getValue(data.function) {
+					case Int: function -> {
+						var callframe: CallFrame = (&this.program, function as uint, parameters);
+						this.temporaries[i] = callframe.run();
+					}
+					case Pointer: function -> {
+						// native call
+						abort();
+					}
+					else -> abort();
+				}
+			}
+			case Return: value -> {
+				this.return_value = this.getValue(value);
+				this.current_block = this.function.basic_blocks.size();
+			}
+			case Jump: target -> this.current_block = target;
+			case CondJump: data -> if this.getValue(data.condition).toInt() != 0 {
+				this.current_block = data.then_block;
+			} else {
+				this.current_block = data.else_block;
+			}
+			case Switch: data -> {}
+			case Unreachable -> abort();
+		}
+	}
+
+	func runIntOp(this: &CallFrame, op: IntOp, lhs: int, rhs: int) -> int {
+		match op {
+			case And -> return lhs & rhs;
+			case Or -> return lhs | rhs;
+			case XOr -> return lhs ^ rhs;
+			case Not -> return ~lhs;
+			case Shl -> return lhs << rhs;
+			case AShr -> return lhs >> rhs;
+			case LShr -> return ((lhs as uint) >> (rhs as uint)) as int;
+			case Add -> return lhs + rhs;
+			case Sub -> return lhs - rhs;
+			case Neg -> return -lhs;
+			case Mul -> return lhs * rhs;
+			case SDiv -> return lhs / rhs;
+			case UDiv -> return ((lhs as uint) / (rhs as uint)) as int;
+			case SMod -> return lhs % rhs;
+			case UMod -> return ((lhs as uint) % (rhs as uint)) as int;
+			case EQ -> return (lhs == rhs) as int;
+			case NE -> return (lhs != rhs) as int;
+			case SLT -> return (lhs < rhs) as int;
+			case SLE -> return (lhs <= rhs) as int;
+			case SGT -> return (lhs > rhs) as int;
+			case SGE -> return (lhs >= rhs) as int;
+			case SCmp -> return lhs <=> rhs;
+			case ULT -> return ((lhs as uint) < (rhs as uint)) as int;
+			case ULE -> return ((lhs as uint) <= (rhs as uint)) as int;
+			case UGT -> return ((lhs as uint) > (rhs as uint)) as int;
+			case UGE -> return ((lhs as uint) >= (rhs as uint)) as int;
+			case UCmp -> return (lhs as uint) <=> (rhs as uint);
+		}
+	}
+}
+
+func main() -> void {
+	var program: Program;
+	var foo = program.createFunction("foo", List!<uint>(), program.getIntType(64u));
+	program.functions[foo].variable_types.append(program.getIntType(64u));
+
+	var builder = Builder(&&program, foo);
+	builder.createStore(
+		Value::Int(5, program.getIntType(8u)),
+		Value::Variable(0u, program.getPointerType())
+	);
+
+	const tmp = builder.createLoad(
+		Value::Variable(0u, program.getPointerType()),
+		program.getIntType(8u)
+	);
+
+	builder.createReturn(
+		builder.createIntOp(
+			IntOp::Add,
+			tmp,
+			Value::Int(7, program.getIntType(8u)),
+			program.getIntType(8u)
+		)
+	);
+
+	var callframe: CallFrame = (&program, foo, List!<Value>());
+	assert(callframe.run() as Int ?? 0 == 12);
+}

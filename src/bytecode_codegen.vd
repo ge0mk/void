@@ -1,0 +1,40 @@
+import std/core;
+import std/format;
+import std/list;
+import std/io;
+import std/map;
+import std/shared_list;
+import std/string;
+
+import bytecode;
+import error;
+import program;
+import span;
+
+struct CGContext {
+	var program: &&program::Program;
+
+	func constructor(this: &&CGContext, program: &&program::Program) -> void {
+		this.program := &&program;
+	}
+
+	func destructor(this: &&CGContext) -> void = default;
+
+	func error(this: &CGContext, message: String, span: Span) -> void {
+		this.program.printError(CompilationError(message, ErrorType::Error, ErrorStage::CodeGenerator, span));
+	}
+
+	func info(this: &CGContext, message: String, span: Span) -> void {
+		this.program.printError(CompilationError(message, ErrorType::Info, ErrorStage::CodeGenerator, span));
+	}
+
+	func todo(this: &CGContext, message: String, span: Span) -> void {
+		this.program.printError(CompilationError(message, ErrorType::Todo, ErrorStage::CodeGenerator, span));
+	}
+
+	func codegenTypeDI(this: &&CGContext, type: SharedHandle!<TypeDecl>) -> void {}
+
+	func codegenFunctionDecl(this: &&CGContext, function: SharedHandle!<FunctionDecl>) -> void {}
+
+	func codegenFunctionBody(this: &&CGContext, function: SharedHandle!<FunctionDecl>) -> void {}
+}

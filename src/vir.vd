@@ -1,0 +1,655 @@
+import std/core;
+import std/format;
+import std/libc/string;
+import std/list;
+import std/math;
+import std/string;
+import std/io;
+
+struct Program {
+	var types: List!<Type>;
+	var variables: List!<Variable>;
+	var functions: List!<Function>;
+
+	var void_type: uint;
+	var bool_type: uint;
+	var byte_type: uint;
+	var int_type: uint;
+	var ptr_type: uint;
+
+	func constructor(this: &&Program) -> void {
+		this.types := ();
+		this.variables := ();
+		this.functions := ();
+
+		this.void_type := this.createType(Type::Void);
+		this.bool_type := this.createType(Type::Int(1u));
+		this.byte_type := this.createType(Type::Int(sizeOf!<byte>()));
+		this.int_type := this.createType(Type::Int(sizeOf!<int>()));
+		this.ptr_type := this.createType(Type::Pointer);
+	}
+
+	func constructor(this: &&Program, other: Program) -> void = default;
+	func destructor(this: &&Program) -> void = default;
+
+	operator =(this: &&Program, other: Program) -> void = default;
+
+	func createType(this: &&Program, type: &Type) -> uint {
+		const id = this.types.size();
+		this.types.append(type);
+		return id;
+	}
+
+	func createVariable(this: &&Program, name: &String, type: uint, is_extern: bool, initializer: List!<byte>) -> uint {
+		const id = this.variables.size();
+		this.variables.append(Variable(name, type, is_extern, initializer));
+		return id;
+	}
+
+	func createFunction(this: &&Program, function: &Function) -> uint {
+		const id = this.functions.size();
+		this.functions.append(function);
+		return id;
+	}
+
+	func createBuilder(this: &&Program, function: uint) -> Builder {
+		return Builder(&&this, function);
+	}
+
+	func getNearestPowerOf2(n: uint, min: uint) -> uint {
+		var r = min;
+		while r < n {
+			r *= 2;
+		}
+		return r;
+	}
+
+	func getSizeOfType(this: &Program, type: uint) -> uint {
+		match this.types[type] {
+			case Void -> return 0u;
+			case Never -> return 0u;
+			case Pointer | Function -> return sizeOf!<ptr!<byte, false>>();
+			case Int: bits -> return getNearestPowerOf2(bits, 8u) / 8;
+			case Float: bits -> return getNearestPowerOf2(bits, 8u) / 8;
+			case Array: array -> return this.getSizeOfType(array.element_type) * array.size;
+			case Vector: vector -> return this.getSizeOfType(vector.element_type) * vector.size;
+			case Struct: struct_type -> {
+				var size = 0u;
+				var max_alignment = 1u;
+
+				for e in struct_type.elements {
+					const current_size = this.getSizeOfType(e);
+					const current_alignment = this.getAlignmentOfType(e);
+					// add padding so that current element is properly aligned
+					if size % current_alignment != 0 {
+						size += current_alignment - size % current_alignment;
+					}
+
+					if current_alignment > max_alignment {
+						max_alignment = current_alignment;
+					}
+
+					size += current_size;
+				}
+
+				// add padding so that next element in an array of this type is properly aligned
+				if size % max_alignment != 0 {
+					size += max_alignment - size % max_alignment;
+				}
+
+				return size;
+			}
+		}
+	}
+
+	func getAlignmentOfType(this: &Program, type: uint) -> uint {
+		match this.types[type] {
+			case Void -> return 0u;
+			case Never -> return 0u;
+			case Pointer | Function -> return alignmentOf!<ptr!<byte, false>>();
+			case Int: bits -> return getNearestPowerOf2(bits, 8u) / 8;
+			case Float: bits -> return getNearestPowerOf2(bits, 8u) / 8;
+			case Array: array -> return this.getAlignmentOfType(array.element_type);
+			case Vector: vector -> return this.getAlignmentOfType(vector.element_type);
+			case Struct: struct_type -> {
+				var max = 1u;
+				for e in struct_type.elements {
+					const current = this.getAlignmentOfType(e);
+					if current > max {
+						max = current;
+					}
+				}
+				return max;
+			}
+		}
+	}
+
+	func getMemberOffset(this: &Program, type: uint, index: uint) -> uint {
+		match this.types[type] {
+			case Array: array -> return this.getSizeOfType(array.element_type) * index;
+			case Vector: vector -> return this.getSizeOfType(vector.element_type) * index;
+			case Struct: struct_type -> {
+				var offset = 0u;
+				for i in 0u..index {
+					const current_size = this.getSizeOfType(struct_type.elements[i]);
+					const current_alignment = this.getAlignmentOfType(struct_type.elements[i]);
+					// add padding so that current element is properly aligned
+					if offset % current_alignment != 0 {
+						offset += current_alignment - offset % current_alignment;
+					}
+
+					offset += current_size;
+				}
+
+				const current_alignment = this.getAlignmentOfType(struct_type.elements[index]);
+				// add padding so that current element is properly aligned
+				if offset % current_alignment != 0 {
+					offset += current_alignment - offset % current_alignment;
+				}
+
+				return offset;
+			}
+			else -> return 0u;
+		}
+	}
+
+	func getMemberType(this: &Program, type: uint, index: uint) -> uint {
+		match this.types[type] {
+			case Struct: struct_type -> return struct_type.elements[index];
+			case Array: array_type -> return array_type.element_type;
+			else -> return 0u;
+		}
+	}
+
+	func getIntTypeBits(this: &Program, type: uint) -> int {
+		match this.types[type] {
+			case Int: bits -> return bits as int;
+			else -> return -1;
+		}
+	}
+
+	template<T: type>
+	func getBitMask(this: &Program, type: uint) -> T {
+		match this.types[type] {
+			case Int: bits -> return ((-1) as T) >> ((sizeOf!<uint>() * 8 - bits) as T);
+			else -> return 0 as T;
+		}
+	}
+
+	template <T: type>
+	func createValue(this: &Program, value: T, type: uint) -> Value {
+		const size = min!<uint>(this.getSizeOfType(type), sizeOf!<T>());
+		var buffer = List!<byte>(size, '\0'b);
+		memcpy!<byte>(buffer.data(), ptr!<T, false>::addressOf(&value) as ptr!<byte, false>, buffer.size());
+		return Value(type, buffer);
+	}
+
+	template<T: type>
+	func valueToPrimitive(this: &Program, value: &Value) -> T {
+		const size = min!<uint>(this.getSizeOfType(value.type), sizeOf!<T>());
+		var result: T;
+		memcpy!<T>(ptr!<T, true>::addressOf(&&result), value.data.data() as ptr!<T, false>, size);
+		return result;
+	}
+
+	func valueToBool(this: &Program, value: &Value) -> bool {
+		return (this.valueToPrimitive!<byte>(value) & 1) != 0;
+	}
+
+	func valueToInt(this: &Program, value: &Value) -> int {
+		return this.valueToPrimitive!<int>(value) & this.getBitMask!<int>(value.type);
+	}
+
+	func valueToUInt(this: &Program, value: &Value) -> uint {
+		return this.valueToPrimitive!<uint>(value) & this.getBitMask!<uint>(value.type);
+	}
+
+	func valueToPointer(this: &Program, value: &Value) -> ptr!<byte, true> {
+		assert(value.type == this.ptr_type);
+		return this.valueToPrimitive!<ptr!<byte, true>>(value);
+	}
+
+	enum ControlFlow {
+		case Break;
+		case Continue;
+		case Return;
+		case Yield;
+	}
+
+	alias CallFrame = (
+		function: uint,
+		parameters: List!<Value>,
+		variables: List!<Value>,
+		return_value: Value,
+		yield_value: Value
+	);
+
+	func interpret(this: &&Program, function: uint, parameters: &List!<Value>) -> Value {
+		if (this.functions[function].is_extern) {
+			panic("todo: implement extern function calls");
+		} else {
+			var call_frame = CallFrame(
+				function,
+				parameters,
+				List!<Value>(this.functions[function].variables.size(), Value()),
+				Value(),
+				Value()
+			);
+
+			if const control_flow = this.interpret(&&call_frame, this.functions[function].entry) as Error {
+				if control_flow is Return {
+					return call_frame.return_value;
+				}
+			}
+
+			panic("end of function reached but no return");
+		}
+	}
+
+	func interpret(this: &&Program, call_frame: &&CallFrame, i: uint) -> Result!<Value, ControlFlow> {
+		const instruction = this.functions[call_frame.function].nodes[i];
+
+		match instruction.op {
+			case NoOp -> return Ok(Value());
+			case Block -> {
+				for c in instruction.children {
+					discard try this.interpret(&&call_frame, c);
+				}
+
+				return Ok(Value());
+			}
+			case ConstNull -> return Ok(Value(instruction.type, List!<byte>(this.getSizeOfType(instruction.type), '\0'b)));
+			case ConstValue -> {
+				var bytes = List!<byte>(this.getSizeOfType(instruction.type), '\0'b);
+				memcpy!<byte>(bytes.data(), instruction.children.data() as ptr!<byte, false>, bytes.size());
+				return Ok(Value(instruction.type, bytes));
+			}
+			case Parameter -> return Ok(call_frame.parameters[instruction.children[0u]]);
+			case GlobalVar -> return Ok(this.createValue!<ptr!<byte, true>>(this.variables[instruction.children[0u]].value.data(), instruction.type));
+			case LocalVar -> return Ok(this.createValue!<ptr!<byte, true>>(call_frame.variables[instruction.children[0u]].data.data(), instruction.type));
+			case Break -> throw ControlFlow::Break;
+			case Continue -> throw ControlFlow::Continue;
+			case Return -> {
+				if (instruction.children.size() == 1) {
+					call_frame.return_value = try this.interpret(&&call_frame, instruction.children[0u]);
+				}
+
+				throw ControlFlow::Return;
+			}
+			case Yield -> {
+				if (instruction.children.size() == 1) {
+					call_frame.yield_value = try this.interpret(&&call_frame, instruction.children[0u]);
+				}
+
+				throw ControlFlow::Yield;
+			}
+			case Unreachable -> panic("reached unreachable instruction");
+			case Call -> {
+				const callee = try this.interpret(&&call_frame, instruction.children[0u]);
+
+				var parameters: List!<Value>;
+				for i in 1u..instruction.children.size() {
+					parameters.append(try this.interpret(&&call_frame, instruction.children[i]));
+				}
+
+				return Ok(this.interpret(this.valueToUInt(callee), parameters));
+			}
+			case Branch -> {
+				const value = try this.interpret(&&call_frame, instruction.children[0u]);
+				var branch = instruction.children[instruction.children.size() - 1];
+				for i in 1u..(instruction.children.size() - 1) | 2u {
+					const pattern = try this.interpret(&&call_frame, instruction.children[i]);
+					if this.valueToInt(value) == this.valueToInt(pattern) {
+						branch = instruction.children[i + 1];
+						break;
+					}
+				}
+
+				if const control_flow = this.interpret(&&call_frame, branch) as Error {
+					if control_flow == Yield {
+						return Ok(call_frame.yield_value);
+					} else {
+						throw control_flow;
+					}
+				}
+
+				return Ok(Value());
+			}
+			case LoopWhile -> {
+				while this.valueToBool(try this.interpret(&&call_frame, instruction.children[0u])) {
+					if const control_flow = this.interpret(&&call_frame, instruction.children[1u]) as Error {
+						match control_flow {
+							case Break -> break;
+							case Continue -> continue;
+							else -> throw control_flow;
+						}
+					}
+				}
+
+				return Ok(Value());
+			}
+			// case LoopRange -> {}
+			// case LoopCount -> {}
+			case Load -> {
+				const src = this.valueToPointer(try this.interpret(&&call_frame, instruction.children[0u]));
+				var buffer = List!<byte>(this.getSizeOfType(instruction.type), '\0'b);
+				memcpy!<byte>(buffer.data(), src as ptr!<byte, false>, this.getSizeOfType(instruction.type));
+				return Ok(Value(instruction.type, buffer));
+			}
+			case Store -> {
+				const val = try this.interpret(&&call_frame, instruction.children[0u]);
+				const dst = this.valueToPointer(try this.interpret(&&call_frame, instruction.children[1u]));
+				memcpy!<byte>(dst, val.data.data(), this.getSizeOfType(val.type));
+				return Ok(Value());
+			}
+			case PtrAdd -> {
+				const base = this.valueToPointer(try this.interpret(&&call_frame, instruction.children[0u]));
+				const offset = this.valueToInt(try this.interpret(&&call_frame, instruction.children[1u]));
+				return Ok(this.createValue!<ptr!<byte, true>>(base + offset, this.ptr_type));
+			}
+			case PtrDiff -> {
+				const lhs = this.valueToPointer(try this.interpret(&&call_frame, instruction.children[0u]));
+				const rhs = this.valueToPointer(try this.interpret(&&call_frame, instruction.children[1u]));
+				const diff = (lhs - rhs) / this.getSizeOfType(instruction.type) as int;
+				return Ok(this.createValue!<int>(diff, this.int_type));
+			}
+			case GetElement -> {
+				const object = try this.interpret(&&call_frame, instruction.children[0u]);
+				const index = this.valueToInt(try this.interpret(&&call_frame, instruction.children[1u]));
+				const offset = this.getMemberOffset(object.type, index as uint);
+				const element_type = this.getMemberType(object.type, index as uint);
+				const size = this.getSizeOfType(element_type);
+				return Ok(Value(element_type, List!<byte>(object.data[offset..(offset + size)])));
+			}
+			// case SetElement -> {}
+			// case ShuffleVector -> {}
+			else -> panic("not yet implemented");
+		}
+	}
+}
+
+struct Builder {
+	var program: &&Program;
+	var function: uint;
+
+	func constructor(this: &&Builder, program: &&Program, function: uint) -> void {
+		this.program := &&program;
+		this.function := function;
+	}
+
+	func constructor(this: &&Builder, other: Builder) -> void = default;
+	func destructor(this: &&Builder) -> void = default;
+
+	operator =(this: &&Builder, other: Builder) -> void = default;
+
+	template <N: uint>
+	func createInstruction(this: &&Builder, op: Opcode, type: uint, children: &Array!<uint, N>) -> uint {
+		return this.createInstruction(op, type, List!<uint>(children.range()));
+	}
+
+	func createInstruction(this: &&Builder, op: Opcode, type: uint, children: &List!<uint>) -> uint {
+		const id = this.program.functions[this.function].nodes.size();
+		this.program.functions[this.function].nodes.append(Node(op, type, children));
+		return id;
+	}
+
+	func createConstant(this: &&Builder, value: &Value) -> uint {
+		var buffer = List!<uint>(value.data.size() / 8 + (value.data.size() % 8 != 0) as uint, 0u);
+		memcpy!<byte>(buffer.data() as ptr!<byte, true>, value.data.data(), value.data.size());
+		return this.createInstruction(Opcode::ConstValue, value.type, buffer);
+	}
+}
+
+variant Type {
+	case Void;
+	case Never;
+	case Pointer;
+	case Int: uint;
+	case Float: uint;
+	case Array: (element_type: uint, size: uint);
+	case Vector: (element_type: uint, size: uint);
+	case Struct: (elements: List!<uint>, is_packed: bool);
+	case Function: (parameter_types: List!<uint>, return_type: uint);
+}
+
+struct Value {
+	var type: uint;
+	var data: List!<byte>;
+
+	func constructor(this: &&Value, type: uint, data: &List!<byte>) -> void {
+		this.type := type;
+		this.data := data;
+	}
+	func constructor(this: &&Value) -> void = default;
+	func constructor(this: &&Value, other: Value) -> void = default;
+	func destructor(this: &&Value) -> void = default;
+
+	operator =(this: &&Value, other: Value) -> void = default;
+	operator ==(this: Value, other: Value) -> bool = default;
+}
+
+struct Variable {
+	var type: uint;
+	var name: String;
+
+	// only for global variables
+	var is_extern: bool;
+	var value: List!<byte>;
+
+	func constructor(this: &&Variable, name: &String, type: uint) -> void {
+		this.name := name;
+		this.type := type;
+	}
+
+	func constructor(this: &&Variable, name: &String, type: uint, is_extern: bool, initializer: List!<byte>) -> void {
+		this.name := name;
+		this.type := type;
+		this.is_extern := is_extern;
+		this.value := initializer;
+	}
+
+	func constructor(this: &&Variable, other: Variable) -> void = default;
+	func destructor(this: &&Variable) -> void = default;
+
+	operator =(this: &&Variable, other: Variable) -> void = default;
+
+	operator ==(this: Variable, other: Variable) -> bool = default;
+}
+
+struct Function {
+	var name: String;
+	var parameter_types: List!<uint>;
+	var return_type: uint;
+
+	var variables: List!<Variable>;
+	var nodes: List!<Node>;
+	var entry: uint;
+
+	var is_extern: bool;
+	var extern_func: ptr!<void, false>;
+
+	func constructor(this: &&Function, name: &String, parameter_types: &List!<uint>, return_type: uint) -> void {
+		this.name := name;
+		this.parameter_types := parameter_types;
+		this.return_type := return_type;
+	}
+
+	func constructor(this: &&Function, other: Function) -> void = default;
+	func destructor(this: &&Function) -> void = default;
+
+	operator =(this: &&Function, other: Function) -> void = default;
+
+	operator ==(this: Function, other: Function) -> bool = default;
+}
+
+struct Node {
+	var op: Opcode;
+	var type: uint;
+	var children: List!<uint>;
+
+	func constructor(this: &&Node, op: Opcode, type: uint, children: &List!<uint>) -> void {
+		this.op := op;
+		this.type := type;
+		this.children := children;
+	}
+
+	func constructor(this: &&Node, other: Node) -> void = default;
+	func destructor(this: &&Node) -> void = default;
+
+	operator =(this: &&Node, other: Node) -> void = default;
+
+	operator ==(this: Node, other: Node) -> bool = default;
+}
+
+enum Opcode {
+	case NoOp;
+	case Block;
+
+	// values
+	case ConstNull;
+	case ConstValue;
+	case Parameter;
+	case GlobalVar;
+	case LocalVar;
+
+	// terminators
+	case Break;
+	case Continue;
+	case Return;
+	case Yield;
+	case Unreachable;
+
+	// call
+	case Call;
+
+	// branching
+	case Branch;
+	case LoopWhile;
+	case LoopRange;
+	case LoopCount;
+
+	// memory access
+	case Load;
+	case Store;
+	case PtrAdd;
+	case PtrDiff;
+	case GetElement;
+	case SetElement;
+	case ShuffleVector;
+
+	// casts
+	case Trunc;
+	case ZExt;
+	case SExt;
+	case FPToUI;
+	case FPToSI;
+	case UIToFP;
+	case SIToFP;
+	case FPTrunc;
+	case FPExt;
+	case Bitcast;
+
+	// arithmetic operations
+	case And;
+	case Or;
+	case XOr;
+	case Not;
+	case ShL;
+	case AShR;
+	case LShR;
+	case RotL;
+	case RotR;
+	case BitReverse;
+	case ByteReverse;
+	case PopCount;
+	case CountLeadingZeros;
+	case CountTrailingZeros;
+
+	case Add;
+	case Sub;
+	case Neg;
+	case Mul;
+	case Div;
+	case Mod;
+
+	case Abs;
+	case Sign;
+	case Min;
+	case Max;
+	case Clamp;	// clamp(x, l, h) == min(max(x, l), h);
+	case Lerp;	// lerp(x, y, a) == x * (1 - a) + y * a == x + (y - x) * a
+
+	// comparisons
+	case EQ;
+	case NE;
+
+	case LT;
+	case LE;
+	case GT;
+	case GE;
+	case Cmp;
+
+	// builtin float functions
+	case Step;
+	case SmoothStep;
+
+	case Sqrt;
+	case ISqrt;
+	case Pow;
+	case Exp;
+	case Exp2;
+	case Exp10;
+	case Log;
+	case Log2;
+	case Log10;
+
+	case Floor;
+	case Ceil;
+	case Fract;
+	case Round;
+	case RoundEven;
+
+	case Sin;
+	case Cos;
+	case Tan;
+	case ASin;
+	case ACos;
+	case ATan;
+	case SinH;
+	case CosH;
+	case TanH;
+	case ASinH;
+	case ACosH;
+	case ATanH;
+
+	case IsInf;
+	case IsNan;
+
+	// vector reduce functions
+	case VectorReduceAnd;
+	case VectorReduceOr;
+	case VectorReduceXOr;
+	case VectorReduceAdd;
+	case VectorReduceMul;
+	case VectorReduceMin;
+	case VectorReduceMax;
+
+	// flags
+	case Signed = 1024;
+	case Float = 2048;
+
+	operator |(lhs: Opcode, rhs: Opcode) -> Opcode = default;
+	operator &(lhs: Opcode, rhs: Opcode) -> Opcode = default;
+
+	func getOp(this: Opcode) -> Opcode {
+		return this & (1023 as Opcode);
+	}
+
+	func isSignedOp(this: Opcode) -> bool {
+		return (this & Signed) == Signed;
+	}
+
+	func isFloatOp(this: Opcode) -> bool {
+		return (this & Float) == Float;
+	}
+}
