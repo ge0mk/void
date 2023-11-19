@@ -1,7 +1,6 @@
 import std/core;
 import std/list;
 import std/io;
-import std/shared;
 import std/shared_list;
 import std/string;
 

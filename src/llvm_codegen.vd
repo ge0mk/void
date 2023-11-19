@@ -3,15 +3,12 @@ import std/format;
 import std/list;
 import std/io;
 import std/map;
-import std/range;
-import std/set;
 import std/shared_list;
 import std/string;
 
 import error;
 import llvm_c;
 import llvm_util;
-import options;
 import program;
 import span;
 

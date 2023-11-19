@@ -9,7 +9,6 @@ import std/string;
 import args;
 import options;
 import program;
-import span;
 import typechecker;
 
 func parseArguments(arguments: Range!<String, false>) -> Optional!<CompilerOptions> {

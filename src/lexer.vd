@@ -1,5 +1,4 @@
 import std/core;
-import std/format;
 import std/io;
 import std/list;
 import std/map;
