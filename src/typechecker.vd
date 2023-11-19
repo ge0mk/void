@@ -86,6 +86,7 @@ struct Scope {
 	var kind: ScopeKind;
 	var variables: List!<SharedHandle!<VarDecl>>;
 	var variables_by_name: Map!<String, SharedHandle!<VarDecl>>;
+	var cleanup: List!<Stmt>;
 
 	func constructor(this: &&Scope, kind: ScopeKind) -> void {
 		this.kind := kind;
@@ -237,6 +238,7 @@ struct TCContext {
 
 	func addVariableToCurrentScope(this: &&TCContext, variable: SharedHandle!<VarDecl>) -> void {
 		this.scope_stack[this.scope_stack.size() - 1].variables.append(variable);
+		this.scope_stack[this.scope_stack.size() - 1].cleanup.insert(0u, Stmt::LifeTimeEnd(variable, Span()));
 
 		if variable.name != ""{
 			this.scope_stack[this.scope_stack.size() - 1].variables_by_name[variable.name] = variable;
@@ -278,13 +280,7 @@ struct TCContext {
 		var result: List!<Stmt>;
 
 		for i in 0u..this.scope_stack.size() {
-			const variables = this.scope_stack[this.scope_stack.size() - i - 1].variables;
-
-			for k in 0u..variables.size() {
-				const variable = variables[variables.size() - k - 1];
-				result.append(Stmt::LifeTimeEnd(variable, Span()));
-			}
-
+			result.append(this.scope_stack[this.scope_stack.size() - i - 1].cleanup);
 			if this.scope_stack[this.scope_stack.size() - i - 1].kind == until {
 				break;
 			}
@@ -294,17 +290,7 @@ struct TCContext {
 	}
 
 	func collectCleanupCallsForCurrentScope(this: &&TCContext) -> List!<Stmt> {
-		var result: List!<Stmt>;
-
-		const variables = this.scope_stack[this.scope_stack.size() - 1].variables;
-		for i in 0u..variables.size() {
-			const variable = variables[variables.size() - i - 1];
-			if variable.type.reference_kind == None {
-				result.append(Stmt::LifeTimeEnd(variable, Span()));
-			}
-		}
-
-		return result;
+		return this.scope_stack[this.scope_stack.size() - 1].cleanup;
 	}
 
 	func loadFile(this: &&TCContext, imported_module: ImportedModule) -> Result!<uint> {
@@ -1330,13 +1316,16 @@ struct TCContext {
 		var variable: SharedHandle!<VarDecl>;
 		if this.current_function.isAlive() {
 			variable = this.current_function.createVariable(span, name, type, is_const, is_comptime);
-			this.addVariableToCurrentScope(variable);
 		} else {
 			variable = this.current_namespace.createComptimeVariable(span, name, type, is_const);
 		}
 
 		this.createConstructorCall(variable, initializer);
 		this.createDestructorCall(variable);
+
+		if this.current_function.isAlive() {
+			this.addVariableToCurrentScope(variable);
+		}
 
 		var result: List!<Stmt>;
 
@@ -1751,10 +1740,10 @@ struct TCContext {
 		initializer.append(next_value);
 		const variable = this.current_function.createVariable(parsed_stmt.capture_span, parsed_stmt.capture_name, next_value.type, next_value.type.reference_kind == Const, is_comptime);
 
-		this.addVariableToCurrentScope(variable);
-
 		this.createConstructorCall(variable, initializer);
 		this.createDestructorCall(variable);
+
+		this.addVariableToCurrentScope(variable);
 
 		body.children.append(Stmt::LifeTimeStart(variable, parsed_stmt.capture_span));
 
@@ -1887,12 +1876,12 @@ struct TCContext {
 
 			const variable = this.current_function.createVariable(span, parsed_stmt.capture_name, capture_type, capture_type.reference_kind != Var, false);
 
-			this.addVariableToCurrentScope(variable);
-
 			var initializer: List!<Expr>;
 			initializer.append(capture_init);
 			this.createConstructorCall(variable, initializer);
 			this.createDestructorCall(variable);
+
+			this.addVariableToCurrentScope(variable);
 
 			compound_stmt.children.append(Stmt::LifeTimeStart(variable, span));
 
