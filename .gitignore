@@ -1,4 +1,5 @@
-build
+build/*
+!build/stage0.bc
 bootstrap*
 *.sublime-project
 *.sublime-workspace

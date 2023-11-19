@@ -18,12 +18,8 @@ clean-but-keep-stage0:
 
 stage0: build/stage0
 
-build/stage0: build/stage0.ll
-	clang build/stage0.ll -o build/stage0 -lc -lm -lLLVM -ltcmalloc -O3 -march=native -flto
-
-build/stage0.ll:
-	-@mkdir build -p
-	wget -O build/stage0.ll https://github.com/ge0mk/void/releases/latest/download/bootstrap.ll
+build/stage0: build/stage0.bc
+	clang build/stage0.bc -o build/stage0 -lc -lm -lLLVM -ltcmalloc -O3 -march=native -flto
 
 test-stage0: build/stage0
 	python3 test.py build/stage0 -q -- -M -b -s
@@ -65,12 +61,15 @@ generate-bootstrap-files: build/stage2
 	-@mkdir bootstrap -p
 	-@cp -f build/bootstrap* bootstrap/
 
-update-stage0.ll: build/stage2
-	build/stage2 src/main.vd -o stage0 -c -M -O3
+update-stage0.bc: build/stage2
+	build/stage2 src/main.vd -o stage0 -c -M -O3 -b
 
 update-stage0:
-	-@$(MAKE) --no-print-directory update-stage0.ll
+	-@$(MAKE) --no-print-directory update-stage0.bc
 	-@$(MAKE) --no-print-directory stage0
+
+download-release-stage0:
+	wget -O build/stage0.bc https://github.com/ge0mk/void/releases/latest/download/bootstrap.bc
 
 install: stage0 rt.ll std/*.vd
 	-@mkdir $(INSTALL_DIR)/bin -p
@@ -85,7 +84,8 @@ install: stage0 rt.ll std/*.vd
 	stage1 test-stage1 \
 	stage2 test-stage2 \
 	generate-bootstrap-files \
-	update-stage0.ll update-stage0 \
+	update-stage0.bc update-stage0 \
+	download-release-stage0 \
 	install
 
 # llvm libraries:
