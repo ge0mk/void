@@ -75,6 +75,8 @@ variant ParsedStmt {
 	case Case: Box!<ParsedCaseStmt>;
 	case ElseCase: Box!<ParsedStmt>;
 
+	case Defer: Box!<ParsedStmt>;
+
 	case Break;
 	case Continue;
 	case Throw: ParsedExpr;
@@ -610,6 +612,12 @@ func dump(this: &ParsedStmt, out: &&TreeFormatter, is_last: bool) -> void {
 		}
 		case ElseCase: body -> {
 			out.push("ElseCase", is_last);
+			out.span(this.span);
+			body.dump(&&out, true);
+			out.pop();
+		}
+		case Defer: body -> {
+			out.push("Defer", is_last);
 			out.span(this.span);
 			body.dump(&&out, true);
 			out.pop();

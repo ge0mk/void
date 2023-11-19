@@ -63,7 +63,7 @@ contexts:
     - match: \b(if|else)\b
       scope: keyword.control.conditional
 
-    - match: \b(comptime|do|while|for|in|continue|break|discard|return|throw|yield)\b
+    - match: \b(comptime|do|while|for|in|defer|continue|break|discard|return|throw|yield)\b
       scope: keyword.control
 
     - match: \{

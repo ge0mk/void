@@ -226,6 +226,12 @@ struct Parser {
 				this.next();
 				return ParsedStmt::Garbage(this.previousSpan(), false);
 			}
+			case KeywordDefer -> {
+				const start = this.currentSpan();
+				this.next();
+				const body = this.parseStmt();
+				return ParsedStmt::Defer(Box!<ParsedStmt>(body), start..body.span, false);
+			}
 			case KeywordComptime -> match this.peek() {
 				case KeywordFunc
 				| KeywordOperator -> return this.parseDecl();

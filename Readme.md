@@ -62,7 +62,6 @@ planned features (wip / near future)
 - typechecker: match strings
 - typechecker: unsafe functions, which can only be called in unsafe blocks
 - typechecker: pick const / non-const functions depending on the usage of the result value
-- typechecker: defer statements
 - typechecker: better error messages for const / non-const conflicts:
 	"no matching function found" -> "can't call mutating function on const object"
 - typechecker: arithmetic expressions as template parameters

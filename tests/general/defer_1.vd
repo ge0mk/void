@@ -1,0 +1,12 @@
+import std/core;
+
+func foo(x: &&int) -> void {
+	defer x = 0;
+	x = 5;
+}
+
+func main() -> void {
+	var x = 3;
+	foo(&&x);
+	assert(x == 0);
+}

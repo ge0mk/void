@@ -83,6 +83,7 @@ enum TokenType: u8 {
 	case KeywordConst;
 	case KeywordContinue;
 	case KeywordDefault;
+	case KeywordDefer;
 	case KeywordDiscard;
 	case KeywordDo;
 	case KeywordElse;
@@ -184,6 +185,7 @@ enum TokenType: u8 {
 			case KeywordConst -> return "<keyword> const";
 			case KeywordContinue -> return "<keyword> continue";
 			case KeywordDefault -> return "<keyword> default";
+			case KeywordDefer -> return "<keyword> defer";
 			case KeywordDiscard -> return "<keyword> discard";
 			case KeywordDo -> return "<keyword> do";
 			case KeywordElse -> return "<keyword> else";
@@ -297,6 +299,7 @@ struct Lexer {
 		this.keywords["const"] = TokenType::KeywordConst;
 		this.keywords["continue"] = TokenType::KeywordContinue;
 		this.keywords["default"] = TokenType::KeywordDefault;
+		this.keywords["defer"] = TokenType::KeywordDefer;
 		this.keywords["discard"] = TokenType::KeywordDiscard;
 		this.keywords["do"] = TokenType::KeywordDo;
 		this.keywords["else"] = TokenType::KeywordElse;
