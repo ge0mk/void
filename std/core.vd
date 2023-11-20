@@ -3,20 +3,6 @@ pragma generate_std_core_builtins;
 alias int = int!<0>;
 alias uint = uint!<0>;
 
-template <Size: uint>
-namespace int {
-	operator ..(start: int!<Size>, end: int!<Size>) -> NumericRange!<int!<Size>> {
-		return NumericRange!<int!<Size>>(start, end, 1 as int!<Size>);
-	}
-}
-
-template <Size: uint>
-namespace uint {
-	operator ..(start: uint!<Size>, end: uint!<Size>) -> NumericRange!<uint!<Size>> {
-		return NumericRange!<uint!<Size>>(start, end, 1 as uint!<Size>);
-	}
-}
-
 @[extern_name: "exit"]
 func exit(value: int) -> never = extern;
 

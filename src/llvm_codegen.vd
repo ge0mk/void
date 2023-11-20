@@ -1402,6 +1402,18 @@ struct CGContext {
 			case AlignmentOf -> return LLVMConstInt(this.int_type, LLVMPreferredAlignmentOfType(this.data_layout, this.getType(function.base_type)) as int, false);
 			case ReferenceKindOf -> return LLVMConstInt(this.int_type, function.base_type.reference_kind as int, false);
 
+			case NumericTypeRangeOperator: range_type -> {
+				var value = LLVMConstNull(this.getType(range_type));
+				value = LLVMBuildInsertValue(this.builder, value, parameters[0u], 0u, "");
+				value = LLVMBuildInsertValue(this.builder, value, parameters[1u], 1u, "");
+				if function.base_type.isIntType() {
+					value = LLVMBuildInsertValue(this.builder, value, LLVMConstInt(this.getType(function.base_type), 1, false), 2u, "");
+				} else {
+					value = LLVMBuildInsertValue(this.builder, value, LLVMConstReal(this.getType(function.base_type), 1.0), 2u, "");
+				}
+				return value;
+			}
+
 			case NumericRangeConstructor -> {
 				var value = LLVMConstNull(this.getType(function.base_type));
 				value = LLVMBuildInsertValue(this.builder, value, parameters[1u], 0u, "");

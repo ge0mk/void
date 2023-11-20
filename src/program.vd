@@ -1508,6 +1508,9 @@ variant BuiltinFunction {
 	case AlignmentOf;
 	case ReferenceKindOf;
 
+	// attached type is range type
+	case NumericTypeRangeOperator: Type;
+
 	// attached type is numeric type
 	case NumericRangeConstructor: Type;
 	case NumericRangeSetStep: Type;
@@ -1563,6 +1566,7 @@ variant BuiltinFunction {
 			| SizeOf
 			| AlignmentOf
 			| ReferenceKindOf
+			| NumericTypeRangeOperator
 			| NumericRangeConstructor
 			| NumericRangeSetStep
 			| NumericRangeGetIterator

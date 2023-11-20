@@ -1135,23 +1135,14 @@ struct TCContext {
 
 						this.program.void_type = Type(this.program.createType(this.current_namespace, "void", TypeBody::Void));
 						this.program.never_type = Type(this.program.createType(this.current_namespace, "never", TypeBody::Void));
+						this.program.createBoolType(this.current_namespace);
 
 						this.program.createPrimitiveCastTemplates(this.current_namespace);
 						this.program.createCoreReflectionFunctionTemplates(this.current_namespace);
 
-						this.program.createBoolType(this.current_namespace);
-
 						const int_template = this.program.createIntTypeTemplate(this.current_namespace, true);
-						discard this.createTemplateInstance(int_template, List!<TemplateParameter>(1u, TemplateParameter::Integer(0)), parsed_stmt.span);
-
 						const uint_template = this.program.createIntTypeTemplate(this.current_namespace, false);
-						discard this.createTemplateInstance(uint_template, List!<TemplateParameter>(1u, TemplateParameter::Integer(0)), parsed_stmt.span);
 
-						// requires ptr-sized signed int type for <=> operator
-						this.program.createByteType(this.current_namespace);
-
-						this.program.createOpaquePtrType(this.current_namespace, false);
-						this.program.createOpaquePtrType(this.current_namespace, true);
 						this.program.createPtrTypeTemplate(this.current_namespace);
 
 						this.program.createFunctionTypeTemplate(this.current_namespace);
@@ -1162,6 +1153,15 @@ struct TCContext {
 						this.program.createNumericIteratorTypeTemplate(this.current_namespace);
 
 						this.program.createTupleTypeTemplate(this.current_namespace);
+
+						discard this.createTemplateInstance(int_template, List!<TemplateParameter>(1u, TemplateParameter::Integer(0)), parsed_stmt.span);
+						discard this.createTemplateInstance(uint_template, List!<TemplateParameter>(1u, TemplateParameter::Integer(0)), parsed_stmt.span);
+
+						// requires ptr-sized signed int type for <=> operator
+						this.program.createByteType(this.current_namespace);
+
+						this.program.createOpaquePtrType(this.current_namespace, false);
+						this.program.createOpaquePtrType(this.current_namespace, true);
 					} else if value == "generate_std_array_builtins" {
 						this.program.createArrayTypeTemplate(this.current_namespace);
 					} else {
@@ -3620,6 +3620,10 @@ struct TCContext {
 						case Float -> type_instance = this.program.createFloatTypeInstance(base.parent, bits).decl;
 						else -> panic("unreachable");
 					}
+
+					const type = Type(type_instance);
+					const range_type = this.getType(Name("NumericRange", List!<TemplateParameter>(1u, TemplateParameter::Type(type))), error_span);
+					discard this.program.createBinaryFunction(type_instance.linked_namespace, "operator ..", type, type, range_type, BuiltinFunction::NumericTypeRangeOperator(range_type, type));
 				}
 				case Pointer: pointer_type -> {
 					const pointee_type = (template_parameters[0u] as Type).value();
