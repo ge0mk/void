@@ -424,6 +424,10 @@ func LLVMBuildCall2(builder: LLVMBuilderRef, type: LLVMTypeRef, function: LLVMVa
 	return LLVMBuildCall2(builder, type, function, args.data, args.size() as u32, (name + '\0'b).data());
 }
 
+func LLVMBuildSelect(builder: LLVMBuilderRef, condition: LLVMValueRef, then_value: LLVMValueRef, else_value: LLVMValueRef, name: String) -> LLVMValueRef {
+	return LLVMBuildSelect(builder, condition, then_value, else_value, (name + '\0'b).data());
+}
+
 func LLVMBuildExtractValue(builder: LLVMBuilderRef, object: LLVMValueRef, index: uint, name: String) -> LLVMValueRef {
 	return LLVMBuildExtractValue(builder, object, index as u32, (name + '\0'b).data());
 }

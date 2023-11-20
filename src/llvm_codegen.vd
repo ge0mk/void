@@ -172,7 +172,7 @@ struct CGContext {
 			}
 			case Pointer | Function -> type.llvm_type = this.ptr_type;
 			case Array: array_type -> type.llvm_type = LLVMArrayType(this.getType(array_type.element_type), array_type.size);
-			case Tuple | Struct -> {
+			case Range | RangeIterator | NumericRange | NumericIterator | Tuple | Struct -> {
 				type.llvm_type = LLVMStructCreateNamed(this.llvm_context, name);
 
 				var element_types: List!<LLVMTypeRef>;
@@ -290,7 +290,8 @@ struct CGContext {
 				LLVMMetadataReplaceAllUsesWith(type.llvm_di, di_type);
 				type.llvm_di = di_type;
 			}
-			case Tuple | Struct | Variant -> {
+			case Range | RangeIterator | NumericRange | NumericIterator
+			| Tuple | Struct | Variant -> {
 				type.llvm_di = LLVMDIBuilderCreateReplaceableCompositeType(this.di_builder, DWARFTag::Tag_unspecified_type, di_name, parent_namespace, di_file, line, 0u32, size_in_bits, alignment_in_bits, LLVMDIFlags::LLVMDIFlagZero, type.signature());
 
 				var members: List!<LLVMMetadataRef>;
@@ -1400,6 +1401,61 @@ struct CGContext {
 			}
 			case AlignmentOf -> return LLVMConstInt(this.int_type, LLVMPreferredAlignmentOfType(this.data_layout, this.getType(function.base_type)) as int, false);
 			case ReferenceKindOf -> return LLVMConstInt(this.int_type, function.base_type.reference_kind as int, false);
+
+			case NumericRangeConstructor -> {
+				var value = LLVMConstNull(this.getType(function.base_type));
+				value = LLVMBuildInsertValue(this.builder, value, parameters[1u], 0u, "");
+				value = LLVMBuildInsertValue(this.builder, value, parameters[2u], 1u, "");
+				value = LLVMBuildInsertValue(this.builder, value, parameters[3u], 2u, "");
+				discard LLVMBuildStore(this.builder, value, parameters[0u]);
+				return LLVMValueRef();
+			}
+			case NumericRangeSetStep -> return LLVMBuildInsertValue(this.builder, parameters[0u], parameters[1u], 2u, "");
+			case NumericRangeGetIterator: iterator_type -> {
+				const numeric_type = function.base_type.decl.member_variables[0u].type;
+				const start = LLVMBuildExtractValue(this.builder, parameters[0u], 0u, "");
+				const end = LLVMBuildExtractValue(this.builder, parameters[0u], 1u, "");
+
+				const comparison_kind = LLVMIntPredicate::LLVMIntSLT if numeric_type.isSigned() else LLVMIntPredicate::LLVMIntULT;
+				const is_ascending = LLVMBuildICmp(this.builder, comparison_kind, start, end, "");
+				var step = LLVMBuildExtractValue(this.builder, parameters[0u], 2u, "");
+				step = LLVMBuildSelect(this.builder, is_ascending, step, LLVMBuildNeg(this.builder, step, ""), "");
+
+				var iterator = LLVMConstNull(this.getType(iterator_type));
+				iterator = LLVMBuildInsertValue(this.builder, iterator, start, 0u, "");
+				iterator = LLVMBuildInsertValue(this.builder, iterator, end, 1u, "");
+				iterator = LLVMBuildInsertValue(this.builder, iterator, step, 2u, "");
+				iterator = LLVMBuildInsertValue(this.builder, iterator, is_ascending, 3u, "");
+				return iterator;
+			}
+			case NumericIteratorHasNext: numeric_type -> {
+				const current = LLVMBuildExtractValue(this.builder, parameters[0u], 0u, "");
+				const end = LLVMBuildExtractValue(this.builder, parameters[0u], 1u, "");
+				const is_ascending = LLVMBuildExtractValue(this.builder, parameters[0u], 3u, "");
+
+				const lt = LLVMBuildICmp(
+					this.builder,
+					LLVMIntPredicate::LLVMIntSLT if numeric_type.isSigned() else LLVMIntPredicate::LLVMIntULT,
+					current, end, ""
+				);
+
+				const gt = LLVMBuildICmp(
+					this.builder,
+					LLVMIntPredicate::LLVMIntSGT if numeric_type.isSigned() else LLVMIntPredicate::LLVMIntUGT,
+					current, end, ""
+				);
+
+				return LLVMBuildSelect(this.builder, is_ascending, lt, gt, "");
+			}
+			case NumericIteratorGetNext: numeric_type -> {
+				const current_ptr = LLVMBuildStructGEP2(this.builder, this.getType(function.base_type), parameters[0u], 0u, "");
+				const current = LLVMBuildLoad2(this.builder, this.getType(numeric_type), current_ptr, "");
+				const step_ptr = LLVMBuildStructGEP2(this.builder, this.getType(function.base_type), parameters[0u], 2u, "");
+				const step = LLVMBuildLoad2(this.builder, this.getType(numeric_type), step_ptr, "");
+				const next = LLVMBuildAdd(this.builder, current, step, "");
+				discard LLVMBuildStore(this.builder, next, current_ptr);
+				return current;
+			}
 
 			case VariantOpUnsafeAs: id -> {
 				const case_decl = function.base_type.decl.getVariantCase(id).value();

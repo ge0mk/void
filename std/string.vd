@@ -281,7 +281,7 @@ struct String {
 		assert(range.end <= this.size(), Error::EBOUNDS);
 		assert(range.start <= range.end && range.step == 1u, Error::EINVAL);
 
-		const difference = with.size() as int - range.size() as int;
+		const difference = with.size() as int - (range.end - range.start) as int;
 		const count = (difference if difference >= 0 else -difference) as uint;
 		if difference > 0 {
 			this.grow(this.size() + count);

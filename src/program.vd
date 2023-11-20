@@ -844,6 +844,24 @@ struct TypeDecl {
 			}
 			case Array: array_type -> {
 				out.push("ArrayTypeDecl", is_last);
+				out.value(array_type.element_type.signature());
+				out.value(format(array_type.size));
+			}
+			case Range: type -> {
+				out.push("Range", is_last);
+				out.value(type.signature());
+			}
+			case RangeIterator: type -> {
+				out.push("RangeIterator", is_last);
+				out.value(type.signature());
+			}
+			case NumericRange: type -> {
+				out.push("NumericRange", is_last);
+				out.value(type.signature());
+			}
+			case NumericIterator: type -> {
+				out.push("NumericIterator", is_last);
+				out.value(type.signature());
 			}
 			case Enum -> {
 				out.push("EnumTypeDecl", is_last);
@@ -1295,6 +1313,12 @@ variant TypeBody {
 
 	case Array: (element_type: Type, size: uint);
 
+	case Range: Type;
+	case RangeIterator: Type;
+
+	case NumericRange: Type;
+	case NumericIterator: Type;
+
 	case Struct;
 	case Enum;
 	case Variant;
@@ -1483,6 +1507,17 @@ variant BuiltinFunction {
 	case AlignmentOf;
 	case ReferenceKindOf;
 
+	// attached type is numeric type
+	case NumericRangeConstructor: Type;
+	case NumericRangeSetStep: Type;
+
+	// attached type is iterator type
+	case NumericRangeGetIterator: Type;
+
+	// attached type is numeric type
+	case NumericIteratorHasNext: Type;
+	case NumericIteratorGetNext: Type;
+
 	// attached value is id of target case
 	case VariantOpUnsafeAs: int;
 	case VariantOpIs: int;
@@ -1527,6 +1562,11 @@ variant BuiltinFunction {
 			| SizeOf
 			| AlignmentOf
 			| ReferenceKindOf
+			| NumericRangeConstructor
+			| NumericRangeSetStep
+			| NumericRangeGetIterator
+			| NumericIteratorHasNext
+			| NumericIteratorGetNext
 			| VariantOpUnsafeAs
 			| VariantOpIs
 			| ArrayGetSize

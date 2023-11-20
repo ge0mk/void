@@ -3640,6 +3640,27 @@ struct TCContext {
 
 					type_instance = this.program.createTupleTypeInstance(base.parent, names, elements);
 				}
+				case NumericRange -> {
+					const numeric_type = (template_parameters[0u] as Type).value();
+					if !numeric_type.isIntType() && !numeric_type.isFloatType() {
+						this.error("expected numeric type", error_span);
+						this.todo("this should be filtered out using concepts", error_span);
+						return SharedHandle!<Namespace>();
+					}
+
+					const iterator_type = this.getType(Name("NumericIterator", template_parameters), error_span);
+					type_instance = this.program.createNumericRangeTypeInstance(base.parent, numeric_type, iterator_type);
+				}
+				case NumericIterator -> {
+					const numeric_type = (template_parameters[0u] as Type).value();
+					if !numeric_type.isIntType() && !numeric_type.isFloatType() {
+						this.error("expected numeric type", error_span);
+						this.todo("this should be filtered out using concepts", error_span);
+						return SharedHandle!<Namespace>();
+					}
+
+					type_instance = this.program.createNumericIteratorTypeInstance(base.parent, numeric_type);
+				}
 				case Struct | Enum | Variant -> {
 					type_instance = this.checkTypeDecl(
 						base.name,

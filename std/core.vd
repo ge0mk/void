@@ -64,62 +64,6 @@ namespace uint {
 	}
 }
 
-template <T: type>
-struct NumericRange {
-	var start: T;
-	var end: T;
-	var step: T;
-
-	func constructor(this: &&NumericRange!<T>, start: T, end: T, step: T) -> void {
-		this.start := start;
-		this.end := end;
-		this.step := step;
-	}
-
-	func constructor(this: &&NumericRange!<T>, other: NumericRange!<T>) -> void = default;
-	func destructor(this: &&NumericRange!<T>) -> void = default;
-
-	operator =(this: &&NumericRange!<T>, other: NumericRange!<T>) -> void = default;
-
-	operator | (this: NumericRange!<T>, step: T) -> NumericRange!<T> {
-		return NumericRange!<T>(this.start, this.end, step);
-	}
-
-	func iterator(this: NumericRange!<T>) -> NumericIterator!<T> {
-		return NumericIterator!<T>(this.start, this.end, this.step);
-	}
-
-	func size(this: NumericRange!<T>) -> T {
-		return (this.end - this.start) / this.step;
-	}
-}
-
-template <T: type>
-struct NumericIterator {
-	var value: T;
-	var end: T;
-	var step: T;
-
-	func constructor(this: &&NumericIterator!<T>, start: T, end: T, step: T) -> void {
-		this.value := start;
-		this.end := end;
-		this.step := step;
-	}
-
-	func constructor(this: &&NumericIterator!<T>, other: NumericIterator!<T>) -> void = default;
-	func destructor(this: &&NumericIterator!<T>) -> void = default;
-
-	func hasNext(this: &NumericIterator!<T>) -> bool {
-		return this.value < this.end;
-	}
-
-	func getNext(this: &&NumericIterator!<T>) -> T {
-		const result = this.value;
-		this.value += this.step;
-		return result;
-	}
-}
-
 enum ReferenceKind {
 	case None;
 	case Const;

@@ -43,6 +43,9 @@ func createCoreDecls(program: &&Program, dest_namespace: SharedHandle!<Namespace
 
 	createFloatTypeTemplate(&&program, dest_namespace);
 
+	createNumericRangeTypeTemplate(&&program, dest_namespace);
+	createNumericIteratorTypeTemplate(&&program, dest_namespace);
+
 	createTupleTypeTemplate(&&program, dest_namespace);
 }
 
@@ -436,6 +439,72 @@ func createArrayTypeInstance(program: &&Program, dest_namespace: SharedHandle!<N
 	discard program.createUnaryFunction(type_namespace, "data", type.constRef(), element_cptr_type, BuiltinFunction::ArrayGetDataPointer(type));
 	discard program.createUnaryFunction(type_namespace, "data", type.varRef(), element_vptr_type, BuiltinFunction::ArrayGetDataPointer(type));
 	discard program.createUnaryFunction(type_namespace, "size", type.constRef(), program.uint_type, BuiltinFunction::ArrayGetSize(type));
+
+	return type_decl;
+}
+
+func createNumericRangeTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>) -> void {
+	var template_parameters: List!<TemplateParameterDecl>;
+	template_parameters.append(TemplateParameterDecl("Type", program.any_concept, false));
+	discard program.createType(dest_namespace, "NumericRange", template_parameters, TypeBody::NumericRange(Type::unknown()));
+}
+
+func createNumericRangeTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, numeric_type: Type, iterator_type: Type) -> SharedHandle!<TypeDecl> {
+	var template_parameters: List!<TemplateParameterDecl>;
+	template_parameters.append(TemplateParameterDecl("Type", program.any_concept, false, TemplateParameter::Type(numeric_type)));
+	var type_decl =  program.createType(dest_namespace, "NumericRange", template_parameters, TypeBody::NumericRange(numeric_type));
+	const type = Type(type_decl, ReferenceKind::None);
+	const type_namespace = type_decl.linked_namespace;
+
+	type_decl.createMemberVariable(Span(), "start", numeric_type, Expr::Undefined(Span(), Type::unknown()));
+	type_decl.createMemberVariable(Span(), "end", numeric_type, Expr::Undefined(Span(), Type::unknown()));
+	type_decl.createMemberVariable(Span(), "step", numeric_type, Expr::Undefined(Span(), Type::unknown()));
+
+	var value_constructor_parameter_types = List!<Type>(3u, numeric_type);
+	value_constructor_parameter_types.insert(0u, type.varRef());
+	discard program.createFunction(type_namespace, "constructor", value_constructor_parameter_types, program.void_type, BuiltinFunction::StructValueConstructor(type));
+
+	type.decl.copy_constructor = program.createBinaryFunction(type_namespace, "constructor", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
+	type.decl.destructor = program.createUnaryFunction(type_namespace, "destructor", type.varRef(), program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::NoOp, type));
+	type.decl.op_assign = program.createBinaryFunction(type_namespace, "operator =", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
+	type_decl.op_equal = program.createBinaryFunction(type_namespace, "operator ==", type, type, program.bool_type, BuiltinFunction::StructOpEqual(type));
+
+	discard program.createBinaryFunction(type_namespace, "operator |", type, numeric_type, type, BuiltinFunction::NumericRangeSetStep(numeric_type, type));
+	discard program.createUnaryFunction(type_namespace, "iterator", type, iterator_type, BuiltinFunction::NumericRangeGetIterator(iterator_type, type));
+
+	return type_decl;
+}
+
+func createNumericIteratorTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>) -> void {
+	var template_parameters: List!<TemplateParameterDecl>;
+	template_parameters.append(TemplateParameterDecl("Type", program.any_concept, false));
+	discard program.createType(dest_namespace, "NumericIterator", template_parameters, TypeBody::NumericIterator(Type::unknown()));
+}
+
+func createNumericIteratorTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, numeric_type: Type) -> SharedHandle!<TypeDecl> {
+	var template_parameters: List!<TemplateParameterDecl>;
+	template_parameters.append(TemplateParameterDecl("Type", program.any_concept, false, TemplateParameter::Type(numeric_type)));
+	var type_decl = program.createType(dest_namespace, "NumericIterator", template_parameters, TypeBody::NumericIterator(numeric_type));
+	const type = Type(type_decl, ReferenceKind::None);
+	const type_namespace = type_decl.linked_namespace;
+
+	type_decl.createMemberVariable(Span(), "start", numeric_type, Expr::Undefined(Span(), Type::unknown()));
+	type_decl.createMemberVariable(Span(), "end", numeric_type, Expr::Undefined(Span(), Type::unknown()));
+	type_decl.createMemberVariable(Span(), "step", numeric_type, Expr::Undefined(Span(), Type::unknown()));
+	type_decl.createMemberVariable(Span(), "is_ascending", program.bool_type, Expr::Undefined(Span(), Type::unknown()));
+
+	var value_constructor_parameter_types = List!<Type>(3u, numeric_type);
+	value_constructor_parameter_types.append(program.bool_type);
+	value_constructor_parameter_types.insert(0u, type.varRef());
+	discard program.createFunction(type_namespace, "constructor", value_constructor_parameter_types, program.void_type, BuiltinFunction::StructValueConstructor(type));
+
+	type.decl.copy_constructor = program.createBinaryFunction(type_namespace, "constructor", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
+	type.decl.destructor = program.createUnaryFunction(type_namespace, "destructor", type.varRef(), program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::NoOp, type));
+	type.decl.op_assign = program.createBinaryFunction(type_namespace, "operator =", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
+	type_decl.op_equal = program.createBinaryFunction(type_namespace, "operator ==", type, type, program.bool_type, BuiltinFunction::StructOpEqual(type));
+
+	discard program.createUnaryFunction(type_namespace, "hasNext", type, program.bool_type, BuiltinFunction::NumericIteratorHasNext(numeric_type, type));
+	discard program.createUnaryFunction(type_namespace, "getNext", type.varRef(), numeric_type, BuiltinFunction::NumericIteratorGetNext(numeric_type, type));
 
 	return type_decl;
 }
