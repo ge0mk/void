@@ -1,9 +1,10 @@
 import std/core;
+import std/math;
 
 func main() -> void {
-	assert(int::min(1, 2) == 1);
-	assert(int::min(2, 1) == 1);
+	assert(min!<int>(1, 2) == 1);
+	assert(min!<int>(2, 1) == 1);
 
-	assert(int::max(1, 2) == 2);
-	assert(int::max(2, 1) == 2);
+	assert(max!<int>(1, 2) == 2);
+	assert(max!<int>(2, 1) == 2);
 }

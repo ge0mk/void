@@ -1,6 +1,7 @@
 import std/core;
-import std/range;
 import std/list;
+import std/math;
+import std/range;
 
 import std/libc/math;
 import std/libc/stdlib;
@@ -396,7 +397,7 @@ struct String {
 	}
 
 	operator <=>(this: String, @[shallow] other: String) -> int {
-		const r = this._cmp(0u, other.data(), uint::min(this.size(), other.size()));
+		const r = this._cmp(0u, other.data(), min!<uint>(this.size(), other.size()));
 		if r == 0 {
 			return this.size() <=> other.size();
 		} else {

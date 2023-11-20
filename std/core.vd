@@ -8,28 +8,12 @@ namespace int {
 	operator ..(start: int!<Size>, end: int!<Size>) -> NumericRange!<int!<Size>> {
 		return NumericRange!<int!<Size>>(start, end, 1 as int!<Size>);
 	}
-
-	func min(a: int!<Size>, b: int!<Size>) -> int!<Size> {
-		return a if a < b else b;
-	}
-
-	func max(a: int!<Size>, b: int!<Size>) -> int!<Size> {
-		return a if a > b else b;
-	}
 }
 
 template <Size: uint>
 namespace uint {
 	operator ..(start: uint!<Size>, end: uint!<Size>) -> NumericRange!<uint!<Size>> {
 		return NumericRange!<uint!<Size>>(start, end, 1 as uint!<Size>);
-	}
-
-	func min(a: uint!<Size>, b: uint!<Size>) -> uint!<Size> {
-		return a if a < b else b;
-	}
-
-	func max(a: uint!<Size>, b: uint!<Size>) -> uint!<Size> {
-		return a if a > b else b;
 	}
 }
 

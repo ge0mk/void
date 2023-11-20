@@ -1,0 +1,16 @@
+import std/core;
+
+template <T: type>
+func min(a: T, b: T) -> T {
+	return a if a < b else b;
+}
+
+template <T: type>
+func max(a: T, b: T) -> T {
+	return a if a > b else b;
+}
+
+template <T: type>
+func clamp(value: T, min: T, max: T) -> T {
+	return min!<T>(max!<T>(value, min), max);
+}

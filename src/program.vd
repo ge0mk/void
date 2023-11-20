@@ -4,6 +4,7 @@ import std/format;
 import std/io;
 import std/list;
 import std/map;
+import std/math;
 import std/set;
 import std/shared;
 import std/shared_list;
@@ -207,12 +208,12 @@ struct Program {
 			return;
 		}
 
-		var first_line = int::max(span.line as int - 1, 0) as uint;
+		var first_line = max!<int>(span.line as int - 1, 0) as uint;
 		var last_line = span.line as uint + 1;
 		while span.end > file.line_spans[last_line - 1].end && last_line < file.line_spans.size() {
 			last_line++;
 		}
-		last_line = uint::min(last_line + 1, file.line_spans.size());
+		last_line = min!<uint>(last_line + 1, file.line_spans.size());
 
 		const last_line_number = format(last_line);
 		const max_line_number_width = last_line_number.size();
@@ -223,8 +224,8 @@ struct Program {
 			const line_number_str = format(line + 1);
 			print(String(max_line_number_width - line_number_str.size() + 1, ' 'b) + line_number_str + " | ");
 
-			const error_start = uint::max(line_span.start, uint::min(span.start, line_span.end));
-			const error_end = uint::max(line_span.start, uint::min(span.end, line_span.end));
+			const error_start = clamp!<uint>(span.start, line_span.start, line_span.end);
+			const error_end = clamp!<uint>(span.end, line_span.start, line_span.end);
 
 			print(file.source.substring(line_span.start..error_start));
 			print("\e[31m");

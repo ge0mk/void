@@ -1,9 +1,10 @@
 import std/core;
+import std/math;
 
 func main() -> void {
-	assert(1u32.min(2u32) == 1u32);
-	assert(2u32.min(1u32) == 1u32);
+	assert(min!<u32>(1u32, 2u32) == 1u32);
+	assert(min!<u32>(2u32, 1u32) == 1u32);
 
-	assert(1u32.max(2u32) == 2u32);
-	assert(2u32.max(1u32) == 2u32);
+	assert(max!<u32>(1u32, 2u32) == 2u32);
+	assert(max!<u32>(2u32, 1u32) == 2u32);
 }

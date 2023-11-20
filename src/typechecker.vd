@@ -1,11 +1,12 @@
 import std/core;
-import std/libc/math;
 import std/box;
 import std/file;
 import std/format;
 import std/io;
+import std/libc/math;
 import std/list;
 import std/map;
+import std/math;
 import std/set;
 import std/shared;
 import std/shared_list;
@@ -3543,7 +3544,7 @@ struct TCContext {
 
 		var count = 0;
 		for i in 0u..template_parameters.size() {
-			const template_parameter_decl = &template_decls[uint::min(i, template_decls.size() - 1)];
+			const template_parameter_decl = &template_decls[min!<uint>(i, template_decls.size() - 1)];
 			if !this.doesConceptAcceptTemplateParameter(template_parameter_decl.concept, template_parameters[i]) {
 				return -1;
 			}
