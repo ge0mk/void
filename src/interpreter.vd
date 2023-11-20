@@ -127,6 +127,10 @@ struct Interpreter {
 
 				return Ok;
 			}
+			case For: for_stmt -> {
+				this.todo("implement interpretation of for loops", stmt.span);
+				return Ok;
+			}
 			case Case | ElseCase -> panic("case stmts should be handled by interpret(Expr)");
 			case Break -> throw ControlFlow::Break;
 			case Continue -> throw ControlFlow::Continue;

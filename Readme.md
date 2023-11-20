@@ -32,7 +32,6 @@ planned features (wip / near future)
 	- function attributes (especially for allocators)
 - codegen: better debug info
 - typechecker: high-level optimizations:
-	- for x in NumericRange -> builtin count-for-loop
 	- function inlining
 - compiler: performance optimizations
 	- do less unneccessary stuff

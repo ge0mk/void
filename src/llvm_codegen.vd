@@ -1509,6 +1509,7 @@ struct CGContext {
 			}
 			case If: &if_stmt -> this.codegenIfStmt(if_stmt, stmt.span);
 			case While: &while_stmt -> this.codegenWhileStmt(while_stmt, stmt.span);
+			case For: &for_stmt -> this.codegenForStmt(for_stmt, stmt.span);
 			case Break -> {
 				this.setCurrentDebugLocation(stmt.span);
 				discard LLVMBuildBr(this.builder, this.break_target);
@@ -1562,7 +1563,7 @@ struct CGContext {
 
 		const then_block = LLVMAppendBasicBlockInContext(this.llvm_context, this.current_function, "then");
 		const else_block = LLVMAppendBasicBlockInContext(this.llvm_context, this.current_function, "else");
-		const cont_block = LLVMAppendBasicBlockInContext(this.llvm_context, this.current_function, "cont");
+		const exit_block = LLVMAppendBasicBlockInContext(this.llvm_context, this.current_function, "exit");
 
 		var then_branch_terminates = false;
 		var else_branch_terminates = false;
@@ -1573,7 +1574,7 @@ struct CGContext {
 		LLVMPositionBuilderAtEnd(this.builder, then_block);
 		this.codegenStmt(if_stmt.then_branch);
 		if !LLVMHasBasicBlockTerminator(LLVMGetInsertBlock(this.builder)) {
-			discard LLVMBuildBr(this.builder, cont_block);
+			discard LLVMBuildBr(this.builder, exit_block);
 		} else {
 			then_branch_terminates = true;
 		}
@@ -1581,12 +1582,12 @@ struct CGContext {
 		LLVMPositionBuilderAtEnd(this.builder, else_block);
 		this.codegenStmt(if_stmt.else_branch);
 		if !LLVMHasBasicBlockTerminator(LLVMGetInsertBlock(this.builder)) {
-			discard LLVMBuildBr(this.builder, cont_block);
+			discard LLVMBuildBr(this.builder, exit_block);
 		} else {
 			else_branch_terminates = true;
 		}
 
-		LLVMPositionBuilderAtEnd(this.builder, cont_block);
+		LLVMPositionBuilderAtEnd(this.builder, exit_block);
 
 		if then_branch_terminates && else_branch_terminates {
 			discard LLVMBuildUnreachable(this.builder);
@@ -1594,46 +1595,120 @@ struct CGContext {
 	}
 
 	func codegenWhileStmt(this: &&CGContext, while_stmt: &WhileStmt, span: Span) -> void {
-		const cond_block = LLVMAppendBasicBlockInContext(this.llvm_context, this.current_function, "cond");
-		const loop_block = LLVMAppendBasicBlockInContext(this.llvm_context, this.current_function, "loop");
-		const cont_block = LLVMAppendBasicBlockInContext(this.llvm_context, this.current_function, "cont");
+		const header_block = LLVMAppendBasicBlockInContext(this.llvm_context, this.current_function, "header");
+		const body_block = LLVMAppendBasicBlockInContext(this.llvm_context, this.current_function, "body");
+		const exit_block = LLVMAppendBasicBlockInContext(this.llvm_context, this.current_function, "exit");
 
 		const prev_continue_target = this.continue_target;
 		const prev_break_target = this.break_target;
 
-		this.continue_target = cond_block;
-		this.break_target = cont_block;
+		this.continue_target = header_block;
+		this.break_target = exit_block;
 
 		this.setCurrentDebugLocation(span);
 
 		if while_stmt.kind == While {
-			discard LLVMBuildBr(this.builder, cond_block);
+			discard LLVMBuildBr(this.builder, header_block);
 		} else {
-			discard LLVMBuildBr(this.builder, loop_block);
+			discard LLVMBuildBr(this.builder, body_block);
 		}
 
-		LLVMPositionBuilderAtEnd(this.builder, cond_block);
+		LLVMPositionBuilderAtEnd(this.builder, header_block);
 		const condition = this.codegenExpr(while_stmt.condition);
 		for stmt in while_stmt.condition_cleanup {
 			discard this.codegenStmt(stmt);
 		}
-		discard LLVMBuildCondBr(this.builder, condition, loop_block, cont_block);
+		discard LLVMBuildCondBr(this.builder, condition, body_block, exit_block);
 
 		var body_terminates = false;
 
-		LLVMPositionBuilderAtEnd(this.builder, loop_block);
+		LLVMPositionBuilderAtEnd(this.builder, body_block);
 		this.codegenStmt(while_stmt.body);
 
 		if !LLVMHasBasicBlockTerminator(LLVMGetInsertBlock(this.builder)) {
-			discard LLVMBuildBr(this.builder, cond_block);
+			discard LLVMBuildBr(this.builder, header_block);
 		} else {
 			body_terminates = true;
 		}
 
-		LLVMPositionBuilderAtEnd(this.builder, cont_block);
+		LLVMPositionBuilderAtEnd(this.builder, exit_block);
 		if body_terminates && while_stmt.kind == DoWhile {
 			discard LLVMBuildUnreachable(this.builder);
 		}
+
+		this.continue_target = prev_continue_target;
+		this.break_target = prev_break_target;
+	}
+
+	func codegenForStmt(this: &&CGContext, for_stmt: &ForStmt, span: Span) -> void {
+		const header_block = LLVMAppendBasicBlockInContext(this.llvm_context, this.current_function, "header");
+		const body_block = LLVMAppendBasicBlockInContext(this.llvm_context, this.current_function, "body");
+		const latch_block = LLVMAppendBasicBlockInContext(this.llvm_context, this.current_function, "latch");
+		const exit_block = LLVMAppendBasicBlockInContext(this.llvm_context, this.current_function, "exit");
+
+		const prev_continue_target = this.continue_target;
+		const prev_break_target = this.break_target;
+
+		this.continue_target = latch_block;
+		this.break_target = exit_block;
+
+		const enumerator_type = (for_stmt.range.type.decl.template_parameters[0u].value as Type).value();
+
+		const range = this.codegenExpr(for_stmt.range);
+		const start = LLVMBuildExtractValue(this.builder, range, 0u, "");
+		const end = LLVMBuildExtractValue(this.builder, range, 1u, "");
+
+		const lt_predicate = LLVMIntPredicate::LLVMIntSLT if enumerator_type.isSigned() else LLVMIntPredicate::LLVMIntULT;
+		const gt_predicate = LLVMIntPredicate::LLVMIntSGT if enumerator_type.isSigned() else LLVMIntPredicate::LLVMIntUGT;
+		const is_ascending = LLVMBuildICmp(this.builder, lt_predicate, start, end, "");
+
+		var step = LLVMBuildExtractValue(this.builder, range, 2u, "");
+		step = LLVMBuildSelect(this.builder, is_ascending, step, LLVMBuildNeg(this.builder, step, ""), "");
+
+		discard LLVMBuildBr(this.builder, header_block);
+
+		const pre_header = LLVMGetInsertBlock(this.builder);
+		LLVMPositionBuilderAtEnd(this.builder, header_block);
+		this.setCurrentDebugLocation(span);
+		const phi = LLVMBuildPhi(this.builder, this.getType(enumerator_type), "");
+
+		const lt = LLVMBuildICmp(this.builder, lt_predicate, phi, end, "");
+		const gt = LLVMBuildICmp(this.builder, gt_predicate, phi, end, "");
+		const condition = LLVMBuildSelect(this.builder, is_ascending, lt, gt, "");
+
+		discard LLVMBuildCondBr(this.builder, condition, body_block, exit_block);
+
+		LLVMPositionBuilderAtEnd(this.builder, body_block);
+		this.codegenLifeTimeStart(this.getVariable(for_stmt.enumerator_variable));
+
+		var parameters: List!<LLVMValueRef>;
+		parameters.append(this.getVariable(for_stmt.enumerator_variable));
+		parameters.append(phi);
+		discard this.codegenCall(enumerator_type.decl.copy_constructor, parameters, ReturnKind::None, for_stmt.enumerator_variable.span);
+
+		this.codegenStmt(for_stmt.body);
+
+		if !LLVMHasBasicBlockTerminator(LLVMGetInsertBlock(this.builder)) {
+			discard LLVMBuildBr(this.builder, latch_block);
+		}
+
+		LLVMPositionBuilderAtEnd(this.builder, latch_block);
+
+		const next = LLVMBuildAdd(this.builder, phi, step, "");
+
+		var incoming_blocks: List!<LLVMBasicBlockRef>;
+		incoming_blocks.append(pre_header);
+		incoming_blocks.append(latch_block);
+
+		var incoming_values: List!<LLVMValueRef>;
+		incoming_values.append(start);
+		incoming_values.append(next);
+
+		LLVMAddIncoming(phi, incoming_values, incoming_blocks);
+
+		discard LLVMBuildBr(this.builder, header_block);
+
+		LLVMPositionBuilderAtEnd(this.builder, exit_block);
 
 		this.continue_target = prev_continue_target;
 		this.break_target = prev_break_target;

@@ -1720,20 +1720,48 @@ struct TCContext {
 	}
 
 	func checkForStmt(this: &&TCContext, parsed_stmt: &ParsedForStmt, is_comptime: bool, span: Span) -> Stmt {
-		var result = CompoundStmt(span);
-
 		this.pushScope(ScopeKind::Expr);
-		var get_iterator_args: List!<Expr>;
-		get_iterator_args.append(this.checkExpr(parsed_stmt.range, this.program.bool_type, is_comptime));
-		const get_iterator_call = this.checkCall(Name("iterator"), get_iterator_args, true, false, CallKind::MemberCall, is_comptime, parsed_stmt.range.span);
-
-		if get_iterator_call is Undefined {
+		const range = this.checkExpr(parsed_stmt.range, Type::unknown(), is_comptime);
+		if range is Undefined {
 			return Stmt::Empty(span);
 		}
 
-		result.children.append(Stmt::Expr(get_iterator_call, get_iterator_call.span));
+		if range.type.decl.body is NumericRange && this.program.options.optimization_level > 0 {
+			if parsed_stmt.capture_kind != None {
+				this.error("for loops over numeric ranges don't support capturing by reference", span);
+			}
 
-		const iterator_var = (get_iterator_call.removeDereference() as Call).value().result_var;
+			const range_cleanup = this.collectCleanupCallsForCurrentScope();
+			this.popScope();
+
+			this.pushScope(ScopeKind::Loop);
+
+			const enumerator_type = (range.type.decl.template_parameters[0u].value as Type).value();
+			const enumerator_var = this.current_function.createVariable(span, parsed_stmt.capture_name, enumerator_type, true, is_comptime);
+			this.createDestructorCall(enumerator_var);
+
+			this.addVariableToCurrentScope(enumerator_var);
+			const body = this.checkCompoundStmt(parsed_stmt.body, false);
+			this.popScope();
+
+			var result = CompoundStmt(span);
+			result.children.append(Stmt::For(Box!<ForStmt>(ForStmt(range, enumerator_var, body)), span));
+			result.children.append(range_cleanup);
+			return Stmt::Compound(result, span);
+		}
+
+		const iterator = this.checkCall(Name("iterator"), List!<Expr>(1u, range), true, false, CallKind::MemberCall, is_comptime, parsed_stmt.range.span);
+		if iterator is Undefined {
+			return Stmt::Empty(span);
+		}
+		const iterator_cleanup = this.collectCleanupCallsForCurrentScope();
+		this.popScope();
+
+		return this.checkGenericForStmt(parsed_stmt, iterator, iterator_cleanup, is_comptime, span);
+	}
+
+	func checkGenericForStmt(this: &&TCContext, parsed_stmt: &ParsedForStmt, iterator: &Expr, iterator_cleanup: &List!<Stmt>, is_comptime: bool, span: Span) -> Stmt {
+		const iterator_var = (iterator.removeDereference() as Call).value().result_var;
 		const iterator_var_expr = Expr::Dereference(
 			Box!<Expr>(Expr::VarInvoke(iterator_var, parsed_stmt.range.span, iterator_var.type.varRef())),
 			parsed_stmt.range.span, iterator_var.type
@@ -1787,11 +1815,12 @@ struct TCContext {
 
 		this.popScope();
 
+		var result = CompoundStmt(span);
+		result.children.append(Stmt::Expr(iterator, iterator.span));
 		result.children.append(Stmt::While(Box!<WhileStmt>(
 			WhileStmt(condition, condition_cleanup, Stmt::Compound(body, body.span), WhileStmtKind::While)
 		), span));
-		result.children.append(this.collectCleanupCallsForCurrentScope());
-		this.popScope();
+		result.children.append(iterator_cleanup);
 
 		return Stmt::Compound(result, result.span);
 	}

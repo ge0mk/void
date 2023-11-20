@@ -1592,6 +1592,7 @@ variant Stmt {
 
 	case If: Box!<IfStmt>;
 	case While: Box!<WhileStmt>;
+	case For: Box!<ForStmt>;
 
 	case Case: Box!<CaseStmt>;
 	case ElseCase: Box!<Stmt>;
@@ -1633,6 +1634,15 @@ variant Stmt {
 
 				while_stmt.condition.dump(&&out, false);
 				while_stmt.body.dump(&&out, false);
+
+				out.pop();
+			}
+			case For: for_stmt -> {
+				out.push("ForStmt", is_last);
+				out.span(this.span);
+
+				for_stmt.range.dump(&&out, false);
+				for_stmt.body.dump(&&out, false);
 
 				out.pop();
 			}
@@ -1678,6 +1688,7 @@ variant Stmt {
 			case Expr: expr -> return expr.type == never_type;
 			case If: if_stmt -> return if_stmt.then_branch.isTerminator(never_type, yield_is_terminator) && if_stmt.else_branch.isTerminator(never_type, yield_is_terminator);
 			case While: while_stmt -> return while_stmt.kind == DoWhile && while_stmt.body.isTerminator(never_type, yield_is_terminator);
+			case For: for_stmt -> return false;
 			case Case: case_stmt -> return case_stmt.body.isTerminator(never_type, yield_is_terminator);
 			case ElseCase: body -> return body.isTerminator(never_type, yield_is_terminator);
 			case Break
@@ -1805,6 +1816,7 @@ enum WhileStmtKind {
 }
 
 alias WhileStmt = (condition: Expr, condition_cleanup: List!<Stmt>, body: Stmt, kind: WhileStmtKind);
+alias ForStmt = (range: Expr, enumerator_variable: SharedHandle!<VarDecl>, body: Stmt);
 alias CaseStmt = (span: Span, patterns: List!<Expr>, body: Stmt);
 
 enum ReturnKind {
