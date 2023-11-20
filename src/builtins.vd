@@ -7,48 +7,6 @@ import std/string;
 import program;
 import span;
 
-func createCoreDecls(program: &&Program, dest_namespace: SharedHandle!<Namespace>) -> void {
-	program.any_concept = program.createConcept(Concept::Any("type"));
-	program.bool_concept = program.createConcept(Concept::Boolean("bool"));
-	program.int_concept = program.createConcept(Concept::Integer(true, "int"));
-	program.uint_concept = program.createConcept(Concept::Integer(false, "uint"));
-	program.string_concept = program.createConcept(Concept::String("String"));
-
-	program.void_type = Type(program.createType(dest_namespace, "void", TypeBody::Void));
-	program.never_type = Type(program.createType(dest_namespace, "never", TypeBody::Void));
-
-	program.core_namespace = dest_namespace;
-
-	createPrimitiveCastTemplates(&&program, dest_namespace);
-	createCoreReflectionFunctionTemplates(&&program, dest_namespace);
-
-	createBoolType(&&program, dest_namespace);
-
-	// requires bool type for comparision operators
-	createPtrSizedIntType(&&program, dest_namespace, true);
-	createPtrSizedIntType(&&program, dest_namespace, false);
-
-	// requires uint-literal concept created by ptr-sized uint type
-	createIntTypeTemplate(&&program, dest_namespace, true);
-	createIntTypeTemplate(&&program, dest_namespace, false);
-
-	// requires ptr-sized signed int type for <=> operator
-	createByteType(&&program, dest_namespace);
-
-	createOpaquePtrType(&&program, dest_namespace, false);
-	createOpaquePtrType(&&program, dest_namespace, true);
-	createPtrTypeTemplate(&&program, dest_namespace);
-
-	createFunctionTypeTemplate(&&program, dest_namespace);
-
-	createFloatTypeTemplate(&&program, dest_namespace);
-
-	createNumericRangeTypeTemplate(&&program, dest_namespace);
-	createNumericIteratorTypeTemplate(&&program, dest_namespace);
-
-	createTupleTypeTemplate(&&program, dest_namespace);
-}
-
 func createPrimitiveCastTemplates(program: &&Program, dest_namespace: SharedHandle!<Namespace>) -> void {
 	var cast_template_parameters = List!<TemplateParameterDecl>();
 	cast_template_parameters.append(TemplateParameterDecl("Source", program.any_concept, false));
@@ -216,32 +174,14 @@ func createBoolType(program: &&Program, dest_namespace: SharedHandle!<Namespace>
 	discard program.createBinaryFunction(type_namespace, "operator ^=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::BitwiseXOr | Assign, type));
 }
 
-func createPtrSizedIntType(program: &&Program, dest_namespace: SharedHandle!<Namespace>, is_signed: bool) -> void {
-	const name = "int" if is_signed else "uint";
-	const body = TypeBody::Int(0u) if is_signed else TypeBody::UInt(0u);
-	const type = Type(program.createType(dest_namespace, name, body), ReferenceKind::None);
-	const type_namespace = type.decl.linked_namespace;
-
-	if is_signed {
-		program.int_type = type;
-	} else {
-		program.uint_type = type;
-	}
-
-	createBasicFunctions(&&program, type, type_namespace);
-	createIntComparisonOperators(&&program, type, type_namespace, is_signed);
-	createIntArithmeticOperators(&&program, type, type_namespace, is_signed);
-	createBitwiseOperators(&&program, type, type_namespace, is_signed);
-}
-
-func createIntTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>, is_signed: bool) -> void {
+func createIntTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>, is_signed: bool) -> SharedHandle!<Namespace> {
 	const name = "int" if is_signed else "uint";
 	const body = TypeBody::Int(0u) if is_signed else TypeBody::UInt(0u);
 
 	var template_parameters: List!<TemplateParameterDecl>;
 	template_parameters.append(TemplateParameterDecl("Size", program.uint_concept, false));
 
-	discard program.createType(dest_namespace, name, template_parameters, body);
+	return program.createType(dest_namespace, name, template_parameters, body).linked_namespace;
 }
 
 func createIntTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, is_signed: bool, size: int) -> Type {
@@ -253,6 +193,14 @@ func createIntTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Nam
 
 	const type = Type(program.createType(dest_namespace, name, template_parameters, body), ReferenceKind::None);
 	const type_namespace = type.decl.linked_namespace;
+
+	if size == 0 {
+		if is_signed {
+			program.int_type = type;
+		} else {
+			program.uint_type = type;
+		}
+	}
 
 	createBasicFunctions(&&program, type, type_namespace);
 	createIntComparisonOperators(&&program, type, type_namespace, is_signed);

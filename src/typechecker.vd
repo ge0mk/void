@@ -522,12 +522,6 @@ struct TCContext {
 
 	func checkNamespaceDecl(this: &&TCContext, parsed_decl: &ParsedNamespace) -> SharedHandle!<Namespace> {
 		const template_parameters = this.checkTemplateParameterDecl(parsed_decl.template_parameters);
-
-		if var namespace_decl = this.current_namespace.aliases.get(parsed_decl.name) {
-			namespace_decl.addUncheckedChildren(parsed_decl.children);
-			return namespace_decl;
-		}
-
 		var namespace_decl = this.program.getOrCreateChildNamespace(this.current_namespace, parsed_decl.name, template_parameters, false);
 		namespace_decl.addUncheckedChildren(parsed_decl.children);
 		return namespace_decl;
@@ -1130,7 +1124,43 @@ struct TCContext {
 					this.error("invalid pragma", parsed_stmt.span);
 				} else {
 					if value == "generate_std_core_builtins" {
-						this.program.createCoreDecls(this.current_namespace);
+						this.program.core_namespace = this.current_namespace;
+
+						this.program.any_concept = this.program.createConcept(Concept::Any("type"));
+						this.program.bool_concept = this.program.createConcept(Concept::Boolean("bool"));
+						this.program.int_concept = this.program.createConcept(Concept::Integer(true, "int"));
+						this.program.uint_concept = this.program.createConcept(Concept::Integer(false, "uint"));
+						this.program.string_concept = this.program.createConcept(Concept::String("String"));
+
+						this.program.void_type = Type(this.program.createType(this.current_namespace, "void", TypeBody::Void));
+						this.program.never_type = Type(this.program.createType(this.current_namespace, "never", TypeBody::Void));
+
+						this.program.createPrimitiveCastTemplates(this.current_namespace);
+						this.program.createCoreReflectionFunctionTemplates(this.current_namespace);
+
+						this.program.createBoolType(this.current_namespace);
+
+						const int_template = this.program.createIntTypeTemplate(this.current_namespace, true);
+						discard this.createTemplateInstance(int_template, List!<TemplateParameter>(1u, TemplateParameter::Integer(0)), parsed_stmt.span);
+
+						const uint_template = this.program.createIntTypeTemplate(this.current_namespace, false);
+						discard this.createTemplateInstance(uint_template, List!<TemplateParameter>(1u, TemplateParameter::Integer(0)), parsed_stmt.span);
+
+						// requires ptr-sized signed int type for <=> operator
+						this.program.createByteType(this.current_namespace);
+
+						this.program.createOpaquePtrType(this.current_namespace, false);
+						this.program.createOpaquePtrType(this.current_namespace, true);
+						this.program.createPtrTypeTemplate(this.current_namespace);
+
+						this.program.createFunctionTypeTemplate(this.current_namespace);
+
+						this.program.createFloatTypeTemplate(this.current_namespace);
+
+						this.program.createNumericRangeTypeTemplate(this.current_namespace);
+						this.program.createNumericIteratorTypeTemplate(this.current_namespace);
+
+						this.program.createTupleTypeTemplate(this.current_namespace);
 					} else if value == "generate_std_array_builtins" {
 						this.program.createArrayTypeTemplate(this.current_namespace);
 					} else {
@@ -3578,8 +3608,8 @@ struct TCContext {
 			match base_type.body {
 				case Int | UInt | Float -> {
 					const bits = (template_parameters[0u] as Integer).value();
-					if bits <= 0 {
-						this.error("only numeric types with size >= 1 are allowed", error_span);
+					if bits < 0 {
+						this.error("only numeric types with size >= 0 are allowed", error_span);
 						return SharedHandle!<Namespace>();
 					}
 

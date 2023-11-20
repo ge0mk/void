@@ -1,4 +1,4 @@
-pragma generate_std_core_builtins;
+import std/core;
 
 template <T: type>
 struct Foo {

@@ -1,38 +1,7 @@
 pragma generate_std_core_builtins;
 
-@[extern_name: "exit"]
-func exit(value: int) -> never = extern;
-
-@[extern_name: "abort"]
-func abort() -> never = extern;
-
-namespace int {
-	operator ..(start: int, end: int) -> NumericRange!<int> {
-		return NumericRange!<int>(start, end, 1i);
-	}
-
-	func min(a: int, b: int) -> int {
-		return a if a < b else b;
-	}
-
-	func max(a: int, b: int) -> int {
-		return a if a > b else b;
-	}
-}
-
-namespace uint {
-	operator ..(start: uint, end: uint) -> NumericRange!<uint> {
-		return NumericRange!<uint>(start, end, 1u);
-	}
-
-	func min(a: uint, b: uint) -> uint {
-		return a if a < b else b;
-	}
-
-	func max(a: uint, b: uint) -> uint {
-		return a if a > b else b;
-	}
-}
+alias int = int!<0>;
+alias uint = uint!<0>;
 
 template <Size: uint>
 namespace int {
@@ -64,6 +33,27 @@ namespace uint {
 	}
 }
 
+@[extern_name: "exit"]
+func exit(value: int) -> never = extern;
+
+@[extern_name: "abort"]
+func abort() -> never = extern;
+
+@[extern_name: "error_panic"]
+func panic(error: Error) -> never = extern;
+
+func assert(cond: bool) -> void {
+	if !cond {
+		panic(Error::EASSERTFAILED);
+	}
+}
+
+func assert(cond: bool, error: Error) -> void {
+	if !cond {
+		panic(error);
+	}
+}
+
 enum ReferenceKind {
 	case None;
 	case Const;
@@ -71,65 +61,6 @@ enum ReferenceKind {
 
 	func constructor(this: &&ReferenceKind) -> void {
 		this.constructor(ReferenceKind::None);
-	}
-}
-
-template <T: type>
-variant Optional {
-	case None;
-	case Some: T;
-
-	func constructor(this: &&Optional!<T>) -> void {
-		this.constructor!<0>();	// default to None
-	}
-
-	func hasValue(this: Optional!<T>) -> bool {
-		return this is Some;
-	}
-
-	func value(this: Optional!<T>) -> T {
-		comptime if referenceKindOf!<T>() == ReferenceKind::Var {
-			match this {
-				case Some: &&value -> return &&value;
-				else -> panic(Error::EOPTNONE);
-			}
-		} else if referenceKindOf!<T>() == ReferenceKind::Const {
-			match this {
-				case Some: &value -> return &value;
-				else -> panic(Error::EOPTNONE);
-			}
-		} else {
-			match this {
-				case Some: value -> return value;
-				else -> panic(Error::EOPTNONE);
-			}
-		}
-	}
-
-	operator ??(this: Optional!<T>, other: T) -> T {
-		comptime if referenceKindOf!<T>() == ReferenceKind::Var {
-			match this {
-				case Some: &&value -> return &&value;
-				else -> return &&other;
-			}
-		} else if referenceKindOf!<T>() == ReferenceKind::Const {
-			match this {
-				case Some: &value -> return &value;
-				else -> return &other;
-			}
-		} else {
-			match this {
-				case Some: value -> return value;
-				else -> return other;
-			}
-		}
-	}
-
-	operator ??(this: Optional!<T>, other: Optional!<T>) -> Optional!<T> {
-		match this {
-			case Some -> return this;
-			else -> return other;
-		}
 	}
 }
 
@@ -280,18 +211,62 @@ enum Error: i32 {
 	func toCString(this: Error) -> ptr!<byte, false> = extern;
 }
 
-@[extern_name: "error_panic"]
-func panic(error: Error) -> never = extern;
+template <T: type>
+variant Optional {
+	case None;
+	case Some: T;
 
-func assert(cond: bool) -> void {
-	if !cond {
-		panic(Error::EASSERTFAILED);
+	func constructor(this: &&Optional!<T>) -> void {
+		this.constructor!<0>();	// default to None
 	}
-}
 
-func assert(cond: bool, error: Error) -> void {
-	if !cond {
-		panic(error);
+	func hasValue(this: Optional!<T>) -> bool {
+		return this is Some;
+	}
+
+	func value(this: Optional!<T>) -> T {
+		comptime if referenceKindOf!<T>() == ReferenceKind::Var {
+			match this {
+				case Some: &&value -> return &&value;
+				else -> panic(Error::EOPTNONE);
+			}
+		} else if referenceKindOf!<T>() == ReferenceKind::Const {
+			match this {
+				case Some: &value -> return &value;
+				else -> panic(Error::EOPTNONE);
+			}
+		} else {
+			match this {
+				case Some: value -> return value;
+				else -> panic(Error::EOPTNONE);
+			}
+		}
+	}
+
+	operator ??(this: Optional!<T>, other: T) -> T {
+		comptime if referenceKindOf!<T>() == ReferenceKind::Var {
+			match this {
+				case Some: &&value -> return &&value;
+				else -> return &&other;
+			}
+		} else if referenceKindOf!<T>() == ReferenceKind::Const {
+			match this {
+				case Some: &value -> return &value;
+				else -> return &other;
+			}
+		} else {
+			match this {
+				case Some: value -> return value;
+				else -> return other;
+			}
+		}
+	}
+
+	operator ??(this: Optional!<T>, other: Optional!<T>) -> Optional!<T> {
+		match this {
+			case Some -> return this;
+			else -> return other;
+		}
 	}
 }
 
