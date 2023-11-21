@@ -1743,36 +1743,51 @@ struct TCContext {
 			return Stmt::Empty(span);
 		}
 
-		if range.type.decl.body is NumericRange && this.program.options.optimization_level > 0 {
-			if parsed_stmt.capture_kind != None {
-				this.error("for loops over numeric ranges don't support capturing by reference", span);
-			}
-
-			const range_cleanup = this.collectCleanupCallsForCurrentScope();
-			this.popScope();
-
-			this.pushScope(ScopeKind::Loop);
-
-			const enumerator_type = (range.type.decl.template_parameters[0u].value as Type).value();
-			const enumerator_var = this.current_function.createVariable(span, parsed_stmt.capture_name, enumerator_type, true, is_comptime);
-			this.createDestructorCall(enumerator_var);
-
-			this.addVariableToCurrentScope(enumerator_var);
-			const body = this.checkCompoundStmt(parsed_stmt.body, false);
-			this.popScope();
-
-			var result = CompoundStmt(span);
-			result.children.append(Stmt::For(Box!<ForStmt>(ForStmt(range, enumerator_var, body)), span));
-			result.children.append(range_cleanup);
-			return Stmt::Compound(result, span);
-		}
-
 		const iterator = this.checkCall(Name("iterator"), List!<Expr>(1u, range), true, false, CallKind::MemberCall, is_comptime, parsed_stmt.range.span);
 		if iterator is Undefined {
 			return Stmt::Empty(span);
 		}
+
 		const iterator_cleanup = this.collectCleanupCallsForCurrentScope();
 		this.popScope();
+
+		const iterator_type = iterator.type.decl;
+
+		if this.program.options.optimization_level > 0 {
+			if iterator_type.body is RangeIterator || iterator_type.body is NumericIterator {
+				if iterator.type.decl.body is NumericIterator && parsed_stmt.capture_kind != None {
+					this.error("for loops over numeric ranges don't support capturing by reference", span);
+					return Stmt::Empty(span);
+				}
+
+				this.pushScope(ScopeKind::Loop);
+
+				var enumerator_type = (iterator_type.template_parameters[0u].value as Type).value();
+				if iterator_type.body is RangeIterator {
+					const is_var_range = (iterator_type.template_parameters[1u].value as Boolean).value();
+					if !is_var_range && parsed_stmt.capture_kind == Var {
+						this.error("cannot take mutable reference to const range", range.span);
+						return Stmt::Empty(span);
+					}
+
+					enumerator_type = Type(enumerator_type.decl, parsed_stmt.capture_kind);
+				}
+
+				const enumerator_var = this.current_function.createVariable(span, parsed_stmt.capture_name, enumerator_type, enumerator_type.reference_kind == Const, is_comptime);
+				this.createDestructorCall(enumerator_var);
+				this.addVariableToCurrentScope(enumerator_var);
+
+				const body = this.checkCompoundStmt(parsed_stmt.body, false);
+				this.popScope();
+
+				const kind = ForStmtKind::Range if iterator_type.body is RangeIterator else ForStmtKind::Count;
+
+				var result = CompoundStmt(span);
+				result.children.append(Stmt::For(Box!<ForStmt>(ForStmt(iterator, enumerator_var, body, kind)), span));
+				result.children.append(iterator_cleanup);
+				return Stmt::Compound(result, span);
+			}
+		}
 
 		return this.checkGenericForStmt(parsed_stmt, iterator, iterator_cleanup, is_comptime, span);
 	}

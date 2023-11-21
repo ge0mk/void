@@ -1659,7 +1659,7 @@ variant Stmt {
 				out.push("ForStmt", is_last);
 				out.span(this.span);
 
-				for_stmt.range.dump(&&out, false);
+				for_stmt.iterator.dump(&&out, false);
 				for_stmt.body.dump(&&out, false);
 
 				out.pop();
@@ -1833,8 +1833,13 @@ enum WhileStmtKind {
 	case DoWhile;
 }
 
+enum ForStmtKind {
+	case Count;
+	case Range;
+}
+
 alias WhileStmt = (condition: Expr, condition_cleanup: List!<Stmt>, body: Stmt, kind: WhileStmtKind);
-alias ForStmt = (range: Expr, enumerator_variable: SharedHandle!<VarDecl>, body: Stmt);
+alias ForStmt = (iterator: Expr, enumerator_variable: SharedHandle!<VarDecl>, body: Stmt, kind: ForStmtKind);
 alias CaseStmt = (span: Span, patterns: List!<Expr>, body: Stmt);
 
 enum ReturnKind {

@@ -1718,39 +1718,54 @@ struct CGContext {
 		this.continue_target = latch_block;
 		this.break_target = exit_block;
 
-		const enumerator_type = (for_stmt.range.type.decl.template_parameters[0u].value as Type).value();
+		const enumerator_type = for_stmt.iterator.type.decl.member_variables[0u].type;
 
-		const range = this.codegenExpr(for_stmt.range);
-		const start = LLVMBuildExtractValue(this.builder, range, 0u, "");
-		const end = LLVMBuildExtractValue(this.builder, range, 1u, "");
+		// range only
+		const element_type = (for_stmt.iterator.type.decl.template_parameters[0u].value as Type).value();
 
-		const lt_predicate = LLVMIntPredicate::LLVMIntSLT if enumerator_type.isSigned() else LLVMIntPredicate::LLVMIntULT;
-		const gt_predicate = LLVMIntPredicate::LLVMIntSGT if enumerator_type.isSigned() else LLVMIntPredicate::LLVMIntUGT;
-		const is_ascending = LLVMBuildICmp(this.builder, lt_predicate, start, end, "");
-
-		var step = LLVMBuildExtractValue(this.builder, range, 2u, "");
-		step = LLVMBuildSelect(this.builder, is_ascending, step, LLVMBuildNeg(this.builder, step, ""), "");
+		const iterator = this.codegenExpr(for_stmt.iterator);
+		const begin = LLVMBuildExtractValue(this.builder, iterator, 0u, "");
+		const end = LLVMBuildExtractValue(this.builder, iterator, 1u, "");
+		const step = LLVMBuildExtractValue(this.builder, iterator, 2u, "") if for_stmt.kind is Count else LLVMValueRef();
+		const is_ascending = LLVMBuildExtractValue(this.builder, iterator, 3u, "") if for_stmt.kind is Count else LLVMValueRef();
 
 		discard LLVMBuildBr(this.builder, header_block);
 
 		const pre_header = LLVMGetInsertBlock(this.builder);
 		LLVMPositionBuilderAtEnd(this.builder, header_block);
-		this.setCurrentDebugLocation(span);
 		const phi = LLVMBuildPhi(this.builder, this.getType(enumerator_type), "");
 
-		const lt = LLVMBuildICmp(this.builder, lt_predicate, phi, end, "");
-		const gt = LLVMBuildICmp(this.builder, gt_predicate, phi, end, "");
-		const condition = LLVMBuildSelect(this.builder, is_ascending, lt, gt, "");
+		var condition = LLVMValueRef();
+		if for_stmt.kind == Range {
+			condition = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntULT, phi, end, "");
+		} else {
+			const lt_predicate = LLVMIntPredicate::LLVMIntSLT if enumerator_type.isSigned() else LLVMIntPredicate::LLVMIntULT;
+			const gt_predicate = LLVMIntPredicate::LLVMIntSGT if enumerator_type.isSigned() else LLVMIntPredicate::LLVMIntUGT;
+			const lt = LLVMBuildICmp(this.builder, lt_predicate, phi, end, "");
+			const gt = LLVMBuildICmp(this.builder, gt_predicate, phi, end, "");
+			condition = LLVMBuildSelect(this.builder, is_ascending, lt, gt, "");
+		}
 
 		discard LLVMBuildCondBr(this.builder, condition, body_block, exit_block);
 
 		LLVMPositionBuilderAtEnd(this.builder, body_block);
 		this.codegenLifeTimeStart(this.getVariable(for_stmt.enumerator_variable));
 
-		var parameters: List!<LLVMValueRef>;
-		parameters.append(this.getVariable(for_stmt.enumerator_variable));
-		parameters.append(phi);
-		discard this.codegenCall(enumerator_type.decl.copy_constructor, parameters, ReturnKind::None, for_stmt.enumerator_variable.span);
+		if for_stmt.kind == Range {
+			if for_stmt.enumerator_variable.type.reference_kind == None {
+				var parameters: List!<LLVMValueRef>;
+				parameters.append(this.getVariable(for_stmt.enumerator_variable));
+				parameters.append(LLVMBuildLoad2(this.builder, this.getType(element_type), phi, ""));
+				discard this.codegenCall(element_type.decl.copy_constructor, parameters, ReturnKind::None, for_stmt.enumerator_variable.span);
+			} else {
+				discard LLVMBuildStore(this.builder, phi, this.getVariable(for_stmt.enumerator_variable));
+			}
+		} else {
+			var parameters: List!<LLVMValueRef>;
+			parameters.append(this.getVariable(for_stmt.enumerator_variable));
+			parameters.append(phi);
+			discard this.codegenCall(enumerator_type.decl.copy_constructor, parameters, ReturnKind::None, for_stmt.enumerator_variable.span);
+		}
 
 		this.codegenStmt(for_stmt.body);
 
@@ -1760,14 +1775,19 @@ struct CGContext {
 
 		LLVMPositionBuilderAtEnd(this.builder, latch_block);
 
-		const next = LLVMBuildAdd(this.builder, phi, step, "");
+		var next = LLVMValueRef();
+		if for_stmt.kind == Range {
+			next = LLVMBuildGEP2(this.builder, this.getType(element_type), phi, List!<LLVMValueRef>(1u, LLVMConstInt(this.int_type, 1, false)), "");
+		} else {
+			next = LLVMBuildAdd(this.builder, phi, step, "");
+		}
 
 		var incoming_blocks: List!<LLVMBasicBlockRef>;
 		incoming_blocks.append(pre_header);
 		incoming_blocks.append(latch_block);
 
 		var incoming_values: List!<LLVMValueRef>;
-		incoming_values.append(start);
+		incoming_values.append(begin);
 		incoming_values.append(next);
 
 		LLVMAddIncoming(phi, incoming_values, incoming_blocks);
