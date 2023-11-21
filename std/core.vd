@@ -1,8 +1,5 @@
 pragma generate_std_core_builtins;
 
-alias int = int!<0>;
-alias uint = uint!<0>;
-
 @[extern_name: "exit"]
 func exit(value: int) -> never = extern;
 

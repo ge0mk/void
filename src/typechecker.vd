@@ -1159,6 +1159,9 @@ struct TCContext {
 						discard this.createTemplateInstance(int_template, List!<TemplateParameter>(1u, TemplateParameter::Integer(0)), parsed_stmt.span);
 						discard this.createTemplateInstance(uint_template, List!<TemplateParameter>(1u, TemplateParameter::Integer(0)), parsed_stmt.span);
 
+						this.current_namespace.aliases["int"] = this.program.int_type.decl.linked_namespace;
+						this.current_namespace.aliases["uint"] = this.program.uint_type.decl.linked_namespace;
+
 						// requires ptr-sized signed int type for <=> operator
 						this.program.createByteType(this.current_namespace);
 
