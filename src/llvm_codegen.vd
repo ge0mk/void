@@ -1402,6 +1402,39 @@ struct CGContext {
 			case AlignmentOf -> return LLVMConstInt(this.int_type, LLVMPreferredAlignmentOfType(this.data_layout, this.getType(function.base_type)) as int, false);
 			case ReferenceKindOf -> return LLVMConstInt(this.int_type, function.base_type.reference_kind as int, false);
 
+			case RangeGetData -> return LLVMBuildExtractValue(this.builder, parameters[0u], 0u, "");
+			case RangeGetSize -> return LLVMBuildExtractValue(this.builder, parameters[0u], 1u, "");
+			case RangeGetIterator: iterator_type -> {
+				const pointee_type = (function.base_type.decl.template_parameters[0u].value as Type).value();
+
+				const begin = LLVMBuildExtractValue(this.builder, parameters[0u], 0u, "");
+				const size = LLVMBuildExtractValue(this.builder, parameters[0u], 1u, "");
+				const end = LLVMBuildGEP2(this.builder, this.getType(pointee_type), begin, List!<LLVMValueRef>(1u, size), "");
+
+				var iterator = LLVMConstNull(this.getType(iterator_type));
+				iterator = LLVMBuildInsertValue(this.builder, iterator, begin, 0u, "");
+				iterator = LLVMBuildInsertValue(this.builder, iterator, end, 1u, "");
+				return iterator;
+			}
+			case RangeIteratorHasNext -> {
+				const current = LLVMBuildExtractValue(this.builder, parameters[0u], 0u, "");
+				const next = LLVMBuildExtractValue(this.builder, parameters[0u], 1u, "");
+				return LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntULT, current, next, "");
+			}
+			case RangeIteratorGetNext -> {
+				const pointee_type = (function.base_type.decl.template_parameters[0u].value as Type).value();
+				const current_ptr = LLVMBuildStructGEP2(this.builder, this.getType(function.base_type), parameters[0u], 0u, "");
+				const current = LLVMBuildLoad2(this.builder, this.ptr_type, current_ptr, "");
+				// TODO: assert current < end
+
+				var indices: List!<LLVMValueRef>;
+				indices.append(LLVMConstInt(this.int_type, 1, false));
+				const next = LLVMBuildGEP2(this.builder, this.getType(pointee_type), current, indices, "");
+				discard LLVMBuildStore(this.builder, next, current_ptr);
+
+				return current;
+			}
+
 			case NumericTypeRangeOperator: range_type -> {
 				var value = LLVMConstNull(this.getType(range_type));
 				value = LLVMBuildInsertValue(this.builder, value, parameters[0u], 0u, "");
@@ -1414,24 +1447,25 @@ struct CGContext {
 				return value;
 			}
 
-			case NumericRangeConstructor -> {
-				var value = LLVMConstNull(this.getType(function.base_type));
-				value = LLVMBuildInsertValue(this.builder, value, parameters[1u], 0u, "");
-				value = LLVMBuildInsertValue(this.builder, value, parameters[2u], 1u, "");
-				value = LLVMBuildInsertValue(this.builder, value, parameters[3u], 2u, "");
-				discard LLVMBuildStore(this.builder, value, parameters[0u]);
-				return LLVMValueRef();
-			}
 			case NumericRangeSetStep -> return LLVMBuildInsertValue(this.builder, parameters[0u], parameters[1u], 2u, "");
 			case NumericRangeGetIterator: iterator_type -> {
 				const numeric_type = function.base_type.decl.member_variables[0u].type;
 				const start = LLVMBuildExtractValue(this.builder, parameters[0u], 0u, "");
 				const end = LLVMBuildExtractValue(this.builder, parameters[0u], 1u, "");
 
-				const comparison_kind = LLVMIntPredicate::LLVMIntSLT if numeric_type.isSigned() else LLVMIntPredicate::LLVMIntULT;
-				const is_ascending = LLVMBuildICmp(this.builder, comparison_kind, start, end, "");
+				var is_ascending: LLVMValueRef;
+				if numeric_type.isIntType() {
+					const comparison_kind = LLVMIntPredicate::LLVMIntSLT if numeric_type.isSigned() else LLVMIntPredicate::LLVMIntULT;
+					is_ascending = LLVMBuildICmp(this.builder, comparison_kind, start, end, "");
+				} else {
+					is_ascending = LLVMBuildFCmp(this.builder, LLVMRealPredicate::LLVMRealOLT, start, end, "");
+				}
+
 				var step = LLVMBuildExtractValue(this.builder, parameters[0u], 2u, "");
-				step = LLVMBuildSelect(this.builder, is_ascending, step, LLVMBuildNeg(this.builder, step, ""), "");
+				step = LLVMBuildSelect(
+					this.builder, is_ascending, step,
+					LLVMBuildNeg(this.builder, step, "") if numeric_type.isIntType() else LLVMBuildFNeg(this.builder, step, ""), ""
+				);
 
 				var iterator = LLVMConstNull(this.getType(iterator_type));
 				iterator = LLVMBuildInsertValue(this.builder, iterator, start, 0u, "");
@@ -1445,17 +1479,16 @@ struct CGContext {
 				const end = LLVMBuildExtractValue(this.builder, parameters[0u], 1u, "");
 				const is_ascending = LLVMBuildExtractValue(this.builder, parameters[0u], 3u, "");
 
-				const lt = LLVMBuildICmp(
-					this.builder,
-					LLVMIntPredicate::LLVMIntSLT if numeric_type.isSigned() else LLVMIntPredicate::LLVMIntULT,
-					current, end, ""
-				);
+				var lt: LLVMValueRef;
+				var gt: LLVMValueRef;
 
-				const gt = LLVMBuildICmp(
-					this.builder,
-					LLVMIntPredicate::LLVMIntSGT if numeric_type.isSigned() else LLVMIntPredicate::LLVMIntUGT,
-					current, end, ""
-				);
+				if numeric_type.isIntType() {
+					lt = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntSLT if numeric_type.isSigned() else LLVMIntPredicate::LLVMIntULT, current, end, "");
+					gt = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntSGT if numeric_type.isSigned() else LLVMIntPredicate::LLVMIntUGT, current, end, "");
+				} else {
+					lt = LLVMBuildFCmp(this.builder, LLVMRealPredicate::LLVMRealOLT, current, end, "");
+					gt = LLVMBuildFCmp(this.builder, LLVMRealPredicate::LLVMRealOGT, current, end, "");
+				}
 
 				return LLVMBuildSelect(this.builder, is_ascending, lt, gt, "");
 			}
@@ -1464,7 +1497,14 @@ struct CGContext {
 				const current = LLVMBuildLoad2(this.builder, this.getType(numeric_type), current_ptr, "");
 				const step_ptr = LLVMBuildStructGEP2(this.builder, this.getType(function.base_type), parameters[0u], 2u, "");
 				const step = LLVMBuildLoad2(this.builder, this.getType(numeric_type), step_ptr, "");
-				const next = LLVMBuildAdd(this.builder, current, step, "");
+
+				var next: LLVMValueRef;
+				if numeric_type.isIntType() {
+					next = LLVMBuildAdd(this.builder, current, step, "");
+				} else {
+					next = LLVMBuildFAdd(this.builder, current, step, "");
+				}
+
 				discard LLVMBuildStore(this.builder, next, current_ptr);
 				return current;
 			}

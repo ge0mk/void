@@ -850,11 +850,13 @@ struct TypeDecl {
 			}
 			case Range: type -> {
 				out.push("Range", is_last);
-				out.value(type.signature());
+				out.value(type.element_type.signature());
+				out.value(format(type.is_mutable));
 			}
 			case RangeIterator: type -> {
 				out.push("RangeIterator", is_last);
-				out.value(type.signature());
+				out.value(type.element_type.signature());
+				out.value(format(type.is_mutable));
 			}
 			case NumericRange: type -> {
 				out.push("NumericRange", is_last);
@@ -1314,8 +1316,8 @@ variant TypeBody {
 
 	case Array: (element_type: Type, size: uint);
 
-	case Range: Type;
-	case RangeIterator: Type;
+	case Range: (element_type: Type, is_mutable: bool);
+	case RangeIterator: (element_type: Type, is_mutable: bool);
 
 	case NumericRange: Type;
 	case NumericIterator: Type;
@@ -1508,11 +1510,19 @@ variant BuiltinFunction {
 	case AlignmentOf;
 	case ReferenceKindOf;
 
+	case RangeGetData;
+	case RangeGetSize;
+
+	// attached type is iterator type
+	case RangeGetIterator: Type;
+
+	case RangeIteratorHasNext;
+	case RangeIteratorGetNext;
+
 	// attached type is range type
 	case NumericTypeRangeOperator: Type;
 
 	// attached type is numeric type
-	case NumericRangeConstructor: Type;
 	case NumericRangeSetStep: Type;
 
 	// attached type is iterator type
@@ -1567,7 +1577,6 @@ variant BuiltinFunction {
 			| AlignmentOf
 			| ReferenceKindOf
 			| NumericTypeRangeOperator
-			| NumericRangeConstructor
 			| NumericRangeSetStep
 			| NumericRangeGetIterator
 			| NumericIteratorHasNext

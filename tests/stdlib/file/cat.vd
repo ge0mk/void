@@ -2,10 +2,9 @@
 //> output "Hello World"
 
 import std/core;
-import std/range;
-import std/string;
 import std/file;
 import std/io;
+import std/string;
 
 func main(args: Range!<String, false>) -> int {
 	const path = args.at(1u) else {

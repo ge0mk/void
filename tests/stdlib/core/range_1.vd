@@ -2,7 +2,6 @@
 //> output "hello"
 
 import std/core;
-import std/range;
 import std/string;
 import std/io;
 

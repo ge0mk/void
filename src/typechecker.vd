@@ -1149,6 +1149,8 @@ struct TCContext {
 
 						this.program.createFloatTypeTemplate(this.current_namespace);
 
+						this.program.createRangeTypeTemplate(this.current_namespace);
+						this.program.createRangeIteratorTypeTemplate(this.current_namespace);
 						this.program.createNumericRangeTypeTemplate(this.current_namespace);
 						this.program.createNumericIteratorTypeTemplate(this.current_namespace);
 
@@ -3703,6 +3705,25 @@ struct TCContext {
 					}
 
 					type_instance = this.program.createTupleTypeInstance(base.parent, names, elements);
+				}
+				case Range -> {
+					const element_type = (template_parameters[0u] as Type).value();
+					const is_mutable = (template_parameters[1u] as Boolean).value();
+					const element_ptr_type = this.getType(Name("ptr", template_parameters), error_span);
+					const iterator_type = this.getType(Name("RangeIterator", template_parameters), error_span);
+					var mutable_range_type = Type::unknown();
+					if !is_mutable {
+						var template_parameters_2 = template_parameters;
+						template_parameters_2[1u] = TemplateParameter::Boolean(true);
+						mutable_range_type = this.getType(Name("Range", template_parameters_2), error_span);
+					}
+					type_instance = this.program.createRangeTypeInstance(base.parent, element_type, is_mutable, element_ptr_type, iterator_type, mutable_range_type);
+				}
+				case RangeIterator -> {
+					const element_type = (template_parameters[0u] as Type).value();
+					const is_mutable = (template_parameters[1u] as Boolean).value();
+					const element_ptr_type = this.getType(Name("ptr", template_parameters), error_span);
+					type_instance = this.program.createRangeIteratorTypeInstance(base.parent, element_type, is_mutable, element_ptr_type);
 				}
 				case NumericRange -> {
 					const numeric_type = (template_parameters[0u] as Type).value();

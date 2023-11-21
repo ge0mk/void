@@ -403,3 +403,40 @@ variant Result {
 		}
 	}
 }
+
+template <Type: type, Mutable: bool>
+namespace Range {
+	func at(this: &Range!<Type, Mutable>, index: uint) -> Optional!<&Type> {
+		if index >= this.size {
+			return None;
+		}
+
+		return Some(&this.data[index]);
+	}
+
+	comptime if Mutable {
+		operator [](this: &Range!<Type, Mutable>, index: uint) -> &&Type {
+			assert(index < this.size, Error::EINVAL);
+			return &&this.data[index];
+		}
+	} else {
+		operator [](this: &Range!<Type, Mutable>, index: uint) -> &Type {
+			assert(index < this.size, Error::EINVAL);
+			return &this.data[index];
+		}
+	}
+
+	func find(this: Range!<Type, Mutable>, value: Type) -> Optional!<uint> {
+		for index in 0u..this.size() {
+			if this.data[index] == value {
+				return Some(index);
+			}
+		}
+
+		return None;
+	}
+
+	func contains(this: Range!<Type, Mutable>, value: Type) -> bool {
+		return this.find(value) is Some;
+	}
+}

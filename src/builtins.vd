@@ -391,6 +391,82 @@ func createArrayTypeInstance(program: &&Program, dest_namespace: SharedHandle!<N
 	return type_decl;
 }
 
+func createRangeTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>) -> void {
+	var template_parameters: List!<TemplateParameterDecl>;
+	template_parameters.append(TemplateParameterDecl("Type", program.any_concept, false));
+	template_parameters.append(TemplateParameterDecl("Mutable", program.bool_concept, false));
+	discard program.createType(dest_namespace, "Range", template_parameters, TypeBody::Range((element_type: Type::unknown(), is_mutable: false)));
+}
+
+func createRangeTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, element_type: Type, is_mutable: bool, element_ptr_type: Type, iterator_type: Type, mutable_range_type: Type) -> SharedHandle!<TypeDecl> {
+	var template_parameters: List!<TemplateParameterDecl>;
+	template_parameters.append(TemplateParameterDecl("Type", program.any_concept, false, TemplateParameter::Type(element_type)));
+	template_parameters.append(TemplateParameterDecl("Mutable", program.bool_concept, false, TemplateParameter::Boolean(is_mutable)));
+	var type_decl =  program.createType(dest_namespace, "Range", template_parameters, TypeBody::Range((element_type: element_type, is_mutable: is_mutable)));
+	const type = Type(type_decl, ReferenceKind::None);
+	const type_namespace = type_decl.linked_namespace;
+
+	type_decl.createMemberVariable(Span(), "data", element_ptr_type, Expr::Undefined(Span(), Type::unknown()));
+	type_decl.createMemberVariable(Span(), "size", program.uint_type, Expr::Undefined(Span(), Type::unknown()));
+
+	var value_constructor_parameter_types: List!<Type>;
+	value_constructor_parameter_types.append(type.varRef());
+	value_constructor_parameter_types.append(element_ptr_type);
+	value_constructor_parameter_types.append(program.uint_type);
+	discard program.createFunction(type_namespace, "constructor", value_constructor_parameter_types, program.void_type, BuiltinFunction::StructValueConstructor(type));
+
+	type.decl.copy_constructor = program.createBinaryFunction(type_namespace, "constructor", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
+
+	if !is_mutable {
+		discard program.createBinaryFunction(type_namespace, "constructor", type.varRef(), mutable_range_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
+	}
+
+	type.decl.destructor = program.createUnaryFunction(type_namespace, "destructor", type.varRef(), program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::NoOp, type));
+	type.decl.op_assign = program.createBinaryFunction(type_namespace, "operator =", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
+	type_decl.op_equal = program.createBinaryFunction(type_namespace, "operator ==", type, type, program.bool_type, BuiltinFunction::StructOpEqual(type));
+
+	discard program.createUnaryFunction(type_namespace, "data", type, element_ptr_type, BuiltinFunction::RangeGetData(type));
+	discard program.createUnaryFunction(type_namespace, "size", type, program.uint_type, BuiltinFunction::RangeGetSize(type));
+	discard program.createUnaryFunction(type_namespace, "iterator", type, iterator_type, BuiltinFunction::RangeGetIterator(iterator_type, type));
+
+	return type_decl;
+}
+
+func createRangeIteratorTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>) -> void {
+	var template_parameters: List!<TemplateParameterDecl>;
+	template_parameters.append(TemplateParameterDecl("Type", program.any_concept, false));
+	template_parameters.append(TemplateParameterDecl("Mutable", program.bool_concept, false));
+	discard program.createType(dest_namespace, "RangeIterator", template_parameters, TypeBody::RangeIterator((element_type: Type::unknown(), is_mutable: false)));
+}
+
+func createRangeIteratorTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, element_type: Type, is_mutable: bool, element_ptr_type: Type) -> SharedHandle!<TypeDecl> {
+	var template_parameters: List!<TemplateParameterDecl>;
+	template_parameters.append(TemplateParameterDecl("Type", program.any_concept, false, TemplateParameter::Type(element_type)));
+	template_parameters.append(TemplateParameterDecl("Mutable", program.bool_concept, false, TemplateParameter::Boolean(is_mutable)));
+	var type_decl = program.createType(dest_namespace, "RangeIterator", template_parameters, TypeBody::RangeIterator((element_type: element_type, is_mutable: is_mutable)));
+	const type = Type(type_decl, ReferenceKind::None);
+	const type_namespace = type_decl.linked_namespace;
+
+	type_decl.createMemberVariable(Span(), "current", element_ptr_type, Expr::Undefined(Span(), Type::unknown()));
+	type_decl.createMemberVariable(Span(), "end", element_ptr_type, Expr::Undefined(Span(), Type::unknown()));
+
+	var value_constructor_parameter_types: List!<Type>;
+	value_constructor_parameter_types.append(type.varRef());
+	value_constructor_parameter_types.append(element_ptr_type);
+	value_constructor_parameter_types.append(element_ptr_type);
+	discard program.createFunction(type_namespace, "constructor", value_constructor_parameter_types, program.void_type, BuiltinFunction::StructValueConstructor(type));
+
+	type.decl.copy_constructor = program.createBinaryFunction(type_namespace, "constructor", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
+	type.decl.destructor = program.createUnaryFunction(type_namespace, "destructor", type.varRef(), program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::NoOp, type));
+	type.decl.op_assign = program.createBinaryFunction(type_namespace, "operator =", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
+	type_decl.op_equal = program.createBinaryFunction(type_namespace, "operator ==", type, type, program.bool_type, BuiltinFunction::StructOpEqual(type));
+
+	discard program.createUnaryFunction(type_namespace, "hasNext", type, program.bool_type, BuiltinFunction::RangeIteratorHasNext(type));
+	discard program.createUnaryFunction(type_namespace, "getNext", type.varRef(), element_type.varRef() if is_mutable else element_type.constRef(), BuiltinFunction::RangeIteratorGetNext(type));
+
+	return type_decl;
+}
+
 func createNumericRangeTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>) -> void {
 	var template_parameters: List!<TemplateParameterDecl>;
 	template_parameters.append(TemplateParameterDecl("Type", program.any_concept, false));
