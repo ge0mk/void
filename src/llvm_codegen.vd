@@ -1402,6 +1402,25 @@ struct CGContext {
 			case AlignmentOf -> return LLVMConstInt(this.int_type, LLVMPreferredAlignmentOfType(this.data_layout, this.getType(function.base_type)) as int, false);
 			case ReferenceKindOf -> return LLVMConstInt(this.int_type, function.base_type.reference_kind as int, false);
 
+			case Assert | AssertError -> {
+				const panic_block = LLVMAppendBasicBlockInContext(this.llvm_context, this.current_function, "panic");
+				const ok_block = LLVMAppendBasicBlockInContext(this.llvm_context, this.current_function, "ok");
+				discard LLVMBuildCondBr(this.builder, parameters[0u], ok_block, panic_block);
+
+				LLVMPositionBuilderAtEnd(this.builder, panic_block);
+				var panic_args: List!<LLVMValueRef>;
+				if function is Assert {
+					panic_args.append(LLVMConstInt(this.getType(this.program.error_type), Error::EASSERTFAILED as int, false));
+				} else {
+					panic_args.append(parameters[1u]);
+				}
+				discard this.codegenCall(this.program.panic_function, panic_args, ReturnKind::None, Span());
+				discard LLVMBuildUnreachable(this.builder);
+
+				LLVMPositionBuilderAtEnd(this.builder, ok_block);
+				return LLVMValueRef();
+			}
+
 			case RangeGetData -> return LLVMBuildExtractValue(this.builder, parameters[0u], 0u, "");
 			case RangeGetSize -> return LLVMBuildExtractValue(this.builder, parameters[0u], 1u, "");
 			case RangeGetIterator: iterator_type -> {
@@ -1425,7 +1444,14 @@ struct CGContext {
 				const pointee_type = (function.base_type.decl.template_parameters[0u].value as Type).value();
 				const current_ptr = LLVMBuildStructGEP2(this.builder, this.getType(function.base_type), parameters[0u], 0u, "");
 				const current = LLVMBuildLoad2(this.builder, this.ptr_type, current_ptr, "");
-				// TODO: assert current < end
+
+				const end_ptr = LLVMBuildStructGEP2(this.builder, this.getType(function.base_type), parameters[0u], 1u, "");
+				const end = LLVMBuildLoad2(this.builder, this.ptr_type, end_ptr, "");
+
+				var assert_args: List!<LLVMValueRef>;
+				assert_args.append(LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntULT, current, end, ""));
+				assert_args.append(LLVMConstInt(this.getType(this.program.error_type), Error::EBOUNDS as int, false));
+				discard this.codegenCall(this.program.assert_error_function, assert_args, ReturnKind::None, Span());
 
 				var indices: List!<LLVMValueRef>;
 				indices.append(LLVMConstInt(this.int_type, 1, false));

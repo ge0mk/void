@@ -1,0 +1,8 @@
+//> output "Assertion failed"
+//> test-crash
+
+import std/core;
+
+func main() -> void {
+	panic(Error::EASSERTFAILED);
+}

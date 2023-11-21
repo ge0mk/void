@@ -220,6 +220,15 @@ func createByteType(program: &&Program, dest_namespace: SharedHandle!<Namespace>
 	createBitwiseOperators(&&program, type, type_namespace, false);
 }
 
+func createErrorType(program: &&Program, dest_namespace: SharedHandle!<Namespace>, i32_type: Type) -> void {
+	var type_decl = program.createType(dest_namespace, "Error", TypeBody::Enum);
+	type_decl.id_type = i32_type;
+	type_decl.addContainedType(i32_type);
+
+	program.error_type = Type(type_decl);
+	program.createDefaultFunctions(Type(type_decl));
+}
+
 func createOpaquePtrType(program: &&Program, dest_namespace: SharedHandle!<Namespace>, is_mutable: bool) -> void {
 	var template_parameters: List!<TemplateParameterDecl>;
 	template_parameters.append(TemplateParameterDecl("Mutable", program.bool_concept, false, TemplateParameter::Boolean(is_mutable)));

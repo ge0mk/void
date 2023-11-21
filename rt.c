@@ -16,7 +16,7 @@ const char* error_toCString(int error) {
 	}
 }
 
-void error_panic(int error) {
+void panic(int error) {
 	const char *prefix = "PANIC: ";
 	const char *msg = error_toCString(error);
 	fwrite(prefix, 1, strlen(prefix), stderr);

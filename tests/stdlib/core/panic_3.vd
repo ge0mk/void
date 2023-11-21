@@ -1,0 +1,8 @@
+//> output "Not an error"
+//> test-crash
+
+import std/core;
+
+func main() -> void {
+	panic(Error::OK);
+}

@@ -72,6 +72,7 @@ struct Program {
 
 	var void_type: Type;
 	var never_type: Type;
+	var error_type: Type;
 
 	var bool_type: Type;
 
@@ -86,6 +87,11 @@ struct Program {
 	// functions
 	var functions: SharedList!<FunctionDecl>;
 
+	var exit_function: SharedHandle!<FunctionDecl>;
+	var abort_function: SharedHandle!<FunctionDecl>;
+	var panic_function: SharedHandle!<FunctionDecl>;
+	var assert_function: SharedHandle!<FunctionDecl>;
+	var assert_error_function: SharedHandle!<FunctionDecl>;
 	var main_function: SharedHandle!<FunctionDecl>;
 
 	// llvm
@@ -1509,6 +1515,9 @@ variant BuiltinFunction {
 	case SizeOf;
 	case AlignmentOf;
 	case ReferenceKindOf;
+
+	case Assert;
+	case AssertError;
 
 	case RangeGetData;
 	case RangeGetSize;

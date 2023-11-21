@@ -1,26 +1,5 @@
 pragma generate_std_core_builtins;
 
-@[extern_name: "exit"]
-func exit(value: int) -> never = extern;
-
-@[extern_name: "abort"]
-func abort() -> never = extern;
-
-@[extern_name: "error_panic"]
-func panic(error: Error) -> never = extern;
-
-func assert(cond: bool) -> void {
-	if !cond {
-		panic(Error::EASSERTFAILED);
-	}
-}
-
-func assert(cond: bool, error: Error) -> void {
-	if !cond {
-		panic(error);
-	}
-}
-
 enum ReferenceKind {
 	case None;
 	case Const;
@@ -31,7 +10,7 @@ enum ReferenceKind {
 	}
 }
 
-enum Error: i32 {
+namespace Error {
 	case OK = 0;
 	case EPERM = 1;
 	case ENOENT = 2;
