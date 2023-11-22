@@ -1,7 +1,6 @@
 //> test-ec "3"
 
 import std/core;
-import std/array;
 
 func main() -> int {
 	var a = [1, 2, 3, 4, 5];

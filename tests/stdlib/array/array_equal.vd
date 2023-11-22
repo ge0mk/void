@@ -1,5 +1,4 @@
 import std/core;
-import std/array;
 
 func main() -> void {
 	assert([0, 1, 2] == [0, 1, 2]);

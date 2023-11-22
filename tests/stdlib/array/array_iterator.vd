@@ -3,7 +3,6 @@
 //> output "3"
 
 import std/core;
-import std/array;
 import std/format;
 import std/io;
 
