@@ -700,9 +700,9 @@ alias LLVMBinaryRef = ptr!<LLVMOpaqueBinary, true>;
 
 alias LLVMFatalErrorHandler = (ptr!<byte, false>) -> void;
 
-alias LLVMDiagnosticHandler = (LLVMDiagnosticInfoRef, ptr!<true>) -> void;
+alias LLVMDiagnosticHandler = (LLVMDiagnosticInfoRef, ptr!<byte, true>) -> void;
 
-alias LLVMYieldCallback = (LLVMContextRef, ptr!<true>) -> void;
+alias LLVMYieldCallback = (LLVMContextRef, ptr!<byte, true>) -> void;
 
 alias LLVMTargetDataRef = ptr!<LLVMOpaqueTargetData, true>;
 
@@ -718,13 +718,13 @@ alias LLVMExecutionEngineRef = ptr!<LLVMOpaqueExecutionEngine, true>;
 
 alias LLVMMCJITMemoryManagerRef = ptr!<LLVMOpaqueMCJITMemoryManager, true>;
 
-alias LLVMMemoryManagerAllocateCodeSectionCallback = (ptr!<true>, uint, u32, u32, ptr!<byte, false>) -> ptr!<u8, true>;
+alias LLVMMemoryManagerAllocateCodeSectionCallback = (ptr!<byte, true>, uint, u32, u32, ptr!<byte, false>) -> ptr!<u8, true>;
 
-alias LLVMMemoryManagerAllocateDataSectionCallback = (ptr!<true>, uint, u32, u32, ptr!<byte, false>, i32) -> ptr!<u8, true>;
+alias LLVMMemoryManagerAllocateDataSectionCallback = (ptr!<byte, true>, uint, u32, u32, ptr!<byte, false>, i32) -> ptr!<u8, true>;
 
-alias LLVMMemoryManagerFinalizeMemoryCallback = (ptr!<true>, ptr!<ptr!<byte, true>, true>) -> i32;
+alias LLVMMemoryManagerFinalizeMemoryCallback = (ptr!<byte, true>, ptr!<ptr!<byte, true>, true>) -> i32;
 
-alias LLVMMemoryManagerDestroyCallback = (ptr!<true>) -> void;
+alias LLVMMemoryManagerDestroyCallback = (ptr!<byte, true>) -> void;
 
 func LLVMInstallFatalErrorHandler(Handler: LLVMFatalErrorHandler) -> void = extern;
 func LLVMResetFatalErrorHandler() -> void = extern;
@@ -736,10 +736,10 @@ func LLVMCreateMessage(Message: ptr!<byte, false>) -> ptr!<byte, true> = extern;
 func LLVMDisposeMessage(Message: ptr!<byte, true>) -> void = extern;
 func LLVMContextCreate() -> LLVMContextRef = extern;
 func LLVMGetGlobalContext() -> LLVMContextRef = extern;
-func LLVMContextSetDiagnosticHandler(C: LLVMContextRef, Handler: LLVMDiagnosticHandler, DiagnosticContext: ptr!<true>) -> void = extern;
+func LLVMContextSetDiagnosticHandler(C: LLVMContextRef, Handler: LLVMDiagnosticHandler, DiagnosticContext: ptr!<byte, true>) -> void = extern;
 func LLVMContextGetDiagnosticHandler(C: LLVMContextRef) -> LLVMDiagnosticHandler = extern;
-func LLVMContextGetDiagnosticContext(C: LLVMContextRef) -> ptr!<true> = extern;
-func LLVMContextSetYieldCallback(C: LLVMContextRef, Callback: LLVMYieldCallback, OpaqueHandle: ptr!<true>) -> void = extern;
+func LLVMContextGetDiagnosticContext(C: LLVMContextRef) -> ptr!<byte, true> = extern;
+func LLVMContextSetYieldCallback(C: LLVMContextRef, Callback: LLVMYieldCallback, OpaqueHandle: ptr!<byte, true>) -> void = extern;
 func LLVMContextShouldDiscardValueNames(C: LLVMContextRef) -> i32 = extern;
 func LLVMContextSetDiscardValueNames(C: LLVMContextRef, Discard: i32) -> void = extern;
 func LLVMContextSetOpaquePointers(C: LLVMContextRef, OpaquePointers: i32) -> void = extern;
@@ -1713,11 +1713,11 @@ func LLVMAddAnalysisPasses(T: LLVMTargetMachineRef, PM: LLVMPassManagerRef) -> v
 func LLVMLinkInMCJIT() -> void = extern;
 func LLVMLinkInInterpreter() -> void = extern;
 func LLVMCreateGenericValueOfInt(Ty: LLVMTypeRef, N: u32, IsSigned: i32) -> LLVMGenericValueRef = extern;
-func LLVMCreateGenericValueOfPointer(P: ptr!<true>) -> LLVMGenericValueRef = extern;
+func LLVMCreateGenericValueOfPointer(P: ptr!<byte, true>) -> LLVMGenericValueRef = extern;
 func LLVMCreateGenericValueOfFloat(Ty: LLVMTypeRef, N: f64) -> LLVMGenericValueRef = extern;
 func LLVMGenericValueIntWidth(GenValRef: LLVMGenericValueRef) -> u32 = extern;
 func LLVMGenericValueToInt(GenVal: LLVMGenericValueRef, IsSigned: i32) -> u32 = extern;
-func LLVMGenericValueToPointer(GenVal: LLVMGenericValueRef) -> ptr!<true> = extern;
+func LLVMGenericValueToPointer(GenVal: LLVMGenericValueRef) -> ptr!<byte, true> = extern;
 func LLVMGenericValueToFloat(TyRef: LLVMTypeRef, GenVal: LLVMGenericValueRef) -> f64 = extern;
 func LLVMDisposeGenericValue(GenVal: LLVMGenericValueRef) -> void = extern;
 func LLVMCreateExecutionEngineForModule(OutEE: ptr!<LLVMExecutionEngineRef, true>, M: LLVMModuleRef, OutError: ptr!<ptr!<byte, true>, true>) -> i32 = extern;
@@ -1734,15 +1734,15 @@ func LLVMFreeMachineCodeForFunction(EE: LLVMExecutionEngineRef, F: LLVMValueRef)
 func LLVMAddModule(EE: LLVMExecutionEngineRef, M: LLVMModuleRef) -> void = extern;
 func LLVMRemoveModule(EE: LLVMExecutionEngineRef, M: LLVMModuleRef, OutMod: ptr!<LLVMModuleRef, true>, OutError: ptr!<ptr!<byte, true>, true>) -> i32 = extern;
 func LLVMFindFunction(EE: LLVMExecutionEngineRef, Name: ptr!<byte, false>, OutFn: ptr!<LLVMValueRef, true>) -> i32 = extern;
-func LLVMRecompileAndRelinkFunction(EE: LLVMExecutionEngineRef, Fn: LLVMValueRef) -> ptr!<true> = extern;
+func LLVMRecompileAndRelinkFunction(EE: LLVMExecutionEngineRef, Fn: LLVMValueRef) -> ptr!<byte, true> = extern;
 func LLVMGetExecutionEngineTargetData(EE: LLVMExecutionEngineRef) -> LLVMTargetDataRef = extern;
 func LLVMGetExecutionEngineTargetMachine(EE: LLVMExecutionEngineRef) -> LLVMTargetMachineRef = extern;
-func LLVMAddGlobalMapping(EE: LLVMExecutionEngineRef, Global: LLVMValueRef, Addr: ptr!<true>) -> void = extern;
-func LLVMGetPointerToGlobal(EE: LLVMExecutionEngineRef, Global: LLVMValueRef) -> ptr!<true> = extern;
+func LLVMAddGlobalMapping(EE: LLVMExecutionEngineRef, Global: LLVMValueRef, Addr: ptr!<byte, true>) -> void = extern;
+func LLVMGetPointerToGlobal(EE: LLVMExecutionEngineRef, Global: LLVMValueRef) -> ptr!<byte, true> = extern;
 func LLVMGetGlobalValueAddress(EE: LLVMExecutionEngineRef, Name: ptr!<byte, false>) -> u64 = extern;
 func LLVMGetFunctionAddress(EE: LLVMExecutionEngineRef, Name: ptr!<byte, false>) -> u64 = extern;
 func LLVMExecutionEngineGetErrMsg(EE: LLVMExecutionEngineRef, OutError: ptr!<ptr!<byte, true>, true>) -> i32 = extern;
-func LLVMCreateSimpleMCJITMemoryManager(Opaque: ptr!<true>, AllocateCodeSection: LLVMMemoryManagerAllocateCodeSectionCallback, AllocateDataSection: LLVMMemoryManagerAllocateDataSectionCallback, FinalizeMemory: LLVMMemoryManagerFinalizeMemoryCallback, Destroy: LLVMMemoryManagerDestroyCallback) -> LLVMMCJITMemoryManagerRef = extern;
+func LLVMCreateSimpleMCJITMemoryManager(Opaque: ptr!<byte, true>, AllocateCodeSection: LLVMMemoryManagerAllocateCodeSectionCallback, AllocateDataSection: LLVMMemoryManagerAllocateDataSectionCallback, FinalizeMemory: LLVMMemoryManagerFinalizeMemoryCallback, Destroy: LLVMMemoryManagerDestroyCallback) -> LLVMMCJITMemoryManagerRef = extern;
 func LLVMDisposeMCJITMemoryManager(MM: LLVMMCJITMemoryManagerRef) -> void = extern;
 func LLVMCreateGDBRegistrationListener() -> LLVMJITEventListenerRef = extern;
 func LLVMCreateIntelJITEventListener() -> LLVMJITEventListenerRef = extern;

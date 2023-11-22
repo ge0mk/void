@@ -81,9 +81,6 @@ struct Program {
 
 	var byte_type: Type;
 
-	var cptr_type: Type;
-	var vptr_type: Type;
-
 	// functions
 	var functions: SharedList!<FunctionDecl>;
 
@@ -1158,7 +1155,7 @@ struct Type {
 
 	func getPrimitiveSizeInBits(this: &Type) -> uint {
 		if this.reference_kind != None {
-			return sizeOf!<ptr!<false>>() * 8;
+			return sizeOf!<ptr!<byte, false>>() * 8;
 		}
 
 		if this.decl.isEmpty() {
@@ -1172,7 +1169,7 @@ struct Type {
 			case Int: bits -> return bits;
 			case UInt: bits -> return bits;
 			case Float: bits -> return bits;
-			case Pointer -> return sizeOf!<ptr!<false>>() * 8;
+			case Pointer -> return sizeOf!<ptr!<byte, false>>() * 8;
 			case Enum -> return this.decl.id_type.getPrimitiveSizeInBits();
 			else -> return 0;
 		}

@@ -21,17 +21,17 @@ func ferror(file: ptr!<FILE, true>) -> Error = extern;
 func fflush(file: ptr!<FILE, true>) -> i32 = extern;
 func clearerr(file: ptr!<FILE, true>) -> void = extern;
 
-func fread(data: ptr!<true>, element_size: uint, element_count: uint, file: ptr!<FILE, true>) -> uint = extern;
-func fwrite(data: ptr!<false>, element_size: uint, element_count: uint, file: ptr!<FILE, true>) -> uint = extern;
+func fread(data: ptr!<byte, true>, element_size: uint, element_count: uint, file: ptr!<FILE, true>) -> uint = extern;
+func fwrite(data: ptr!<byte, false>, element_size: uint, element_count: uint, file: ptr!<FILE, true>) -> uint = extern;
 
 template <T: type>
 func fread(data: ptr!<T, true>, count: uint, file: ptr!<FILE, true>) -> uint {
-	return fread(data as ptr!<true>, sizeOf!<T>(), count, file);
+	return fread(data as ptr!<byte, true>, sizeOf!<T>(), count, file);
 }
 
 template <T: type>
 func fwrite(data: ptr!<T, false>, count: uint, file: ptr!<FILE, true>) -> uint {
-	return fwrite(data as ptr!<false>, sizeOf!<T>(), count, file);
+	return fwrite(data as ptr!<byte, false>, sizeOf!<T>(), count, file);
 }
 
 func fgetc(file: ptr!<FILE, true>) -> i32 = extern;

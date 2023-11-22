@@ -1162,6 +1162,8 @@ struct TCContext {
 						this.current_namespace.aliases["int"] = this.program.int_type.decl.linked_namespace;
 						this.current_namespace.aliases["uint"] = this.program.uint_type.decl.linked_namespace;
 
+						this.program.createByteType(this.current_namespace);
+
 						const i32_type = Type(this.createTemplateInstance(int_template, List!<TemplateParameter>(1u, TemplateParameter::Integer(32)), parsed_stmt.span).linked_type);
 						this.program.createErrorType(this.current_namespace, i32_type);
 
@@ -1173,12 +1175,6 @@ struct TCContext {
 						this.program.panic_function.extern_name = "panic";
 						this.program.assert_function = this.program.createFunction(this.current_namespace, "assert", List!<Type>(1u, this.program.bool_type), this.program.void_type, BuiltinFunction::Assert(Type::unknown()));
 						this.program.assert_error_function = this.program.createFunction(this.current_namespace, "assert", List!<Type>() + this.program.bool_type + this.program.error_type, this.program.void_type, BuiltinFunction::AssertError(Type::unknown()));
-
-						// requires ptr-sized signed int type for <=> operator
-						this.program.createByteType(this.current_namespace);
-
-						this.program.createOpaquePtrType(this.current_namespace, false);
-						this.program.createOpaquePtrType(this.current_namespace, true);
 					} else if value == "generate_std_array_builtins" {
 						this.program.createArrayTypeTemplate(this.current_namespace);
 					} else {

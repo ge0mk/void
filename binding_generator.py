@@ -116,15 +116,15 @@ def main(args):
 			if t.startswith("const "):
 				pointee = parse_type(t[6:-1])
 				if pointee == "void":
-					return "ptr!<false>"
+					return "ptr!<byte, false>"
 				else:
 					return "ptr!<" + pointee + ", false>"
 			else:
 				pointee = parse_type(t[:-1])
 				if pointee == "void":
-					return "ptr!<true>"
+					return "ptr!<byte, true>"
 				else:
-					return "ptr!<" + parse_type(t[:-1]) + ", true>"
+					return "ptr!<" + pointee + ", true>"
 		elif t.endswith("*const"):
 			return "ptr!<" + parse_type(t[:-6]) + ", false>"
 		elif "(*)" in t:

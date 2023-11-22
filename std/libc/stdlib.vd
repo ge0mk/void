@@ -2,9 +2,9 @@ import std/core;
 
 func system(command: ptr!<byte, false>) -> i32 = extern;
 
-func malloc(size: uint) -> ptr!<true> = extern;
-func realloc(data: ptr!<true>, size: uint) -> ptr!<true> = extern;
-func free(data: ptr!<true>) -> void = extern;
+func malloc(size: uint) -> ptr!<byte, true> = extern;
+func realloc(data: ptr!<byte, true>, size: uint) -> ptr!<byte, true> = extern;
+func free(data: ptr!<byte, true>) -> void = extern;
 
 template <T: type>
 func malloc(count: uint) -> ptr!<T, true> {
@@ -13,10 +13,10 @@ func malloc(count: uint) -> ptr!<T, true> {
 
 template <T: type>
 func realloc(data: ptr!<T, true>, count: uint) -> ptr!<T, true> {
-	return realloc(data as ptr!<true>, count * sizeOf!<T>()) as ptr!<T, true>;
+	return realloc(data as ptr!<byte, true>, count * sizeOf!<T>()) as ptr!<T, true>;
 }
 
 template <T: type>
 func free(data: ptr!<T, true>) -> void {
-	free(data as ptr!<true>);
+	free(data as ptr!<byte, true>);
 }

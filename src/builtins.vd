@@ -229,26 +229,6 @@ func createErrorType(program: &&Program, dest_namespace: SharedHandle!<Namespace
 	program.createDefaultFunctions(Type(type_decl));
 }
 
-func createOpaquePtrType(program: &&Program, dest_namespace: SharedHandle!<Namespace>, is_mutable: bool) -> void {
-	var template_parameters: List!<TemplateParameterDecl>;
-	template_parameters.append(TemplateParameterDecl("Mutable", program.bool_concept, false, TemplateParameter::Boolean(is_mutable)));
-
-	const body = TypeBody::Pointer((pointee_type: Type::unknown(), is_mutable: is_mutable));
-	const type = Type(program.createType(dest_namespace, "ptr", template_parameters, body), ReferenceKind::None);
-	const type_namespace = type.decl.linked_namespace;
-
-	if is_mutable {
-		program.vptr_type = type;
-	} else {
-		program.cptr_type = type;
-	}
-
-	createBasicFunctions(&&program, type, type_namespace);
-	createIntComparisonOperators(&&program, type, type_namespace, false);
-
-	discard program.createFunction(type_namespace, "null", List!<Type>(), type, BuiltinFunction::PrimitiveOp(PrimitiveOp::ConstNull, type));
-}
-
 func createPtrTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>) -> void {
 	const body = TypeBody::Pointer((pointee_type: Type::unknown(), is_mutable: false));
 
@@ -287,15 +267,6 @@ func createPtrTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Nam
 
 	discard program.createBinaryFunction(type_namespace, "operator []", type, program.int_type, pointee_type.varRef() if is_mutable else pointee_type.constRef(), BuiltinFunction::PointerOpIndex(type));
 	discard program.createBinaryFunction(type_namespace, "operator []", type, program.uint_type, pointee_type.varRef() if is_mutable else pointee_type.constRef(), BuiltinFunction::PointerOpIndex(type));
-
-	discard program.createBinaryFunction(type_namespace, "operator ==", type, program.cptr_type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::BitwiseEQ, type));
-	discard program.createBinaryFunction(type_namespace, "operator ==", type, program.vptr_type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::BitwiseEQ, type));
-
-	discard program.createBinaryFunction(type_namespace, "operator !=", type, program.cptr_type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::BitwiseNE, type));
-	discard program.createBinaryFunction(type_namespace, "operator !=", type, program.vptr_type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::BitwiseNE, type));
-
-	discard program.createBinaryFunction(type_namespace, "operator <=>", type, program.cptr_type, program.int_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::UIntCmp, type));
-	discard program.createBinaryFunction(type_namespace, "operator <=>", type, program.vptr_type, program.int_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::UIntCmp, type));
 
 	return type;
 }
