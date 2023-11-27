@@ -34,45 +34,11 @@ enum CallKind {
 	case TempVar;
 }
 
-enum SymbolLookupFilter {
-	case None = 0;
-	case Namespaces = 1;
-	case Types = 2;
-	case Functions = 4;
-	case MemberVariables = 8;
-	case CaseDecls = 16;
-	case TemplateParameters = 32;
-	case Variables = 64;
-	case Any = 127;
+variant CaseDecl {
+	var parent_type: SharedHandle!<TypeDecl>;
 
-	operator &(this: SymbolLookupFilter, other: SymbolLookupFilter) -> SymbolLookupFilter = default;
-	operator |(this: SymbolLookupFilter, other: SymbolLookupFilter) -> SymbolLookupFilter = default;
-}
-
-variant Symbol {
-	var parent_namespace: SharedHandle!<Namespace>;
-
-	case Namespace: SharedHandle!<Namespace>;
-	case Type: SharedHandle!<TypeDecl>;
-	case Function: SharedHandle!<FunctionDecl>;
-	case MemberVariable: uint;
 	case EnumCase: uint;
 	case VariantCase: uint;
-	case TemplateParameter: TemplateParameter;
-	case Variable: SharedHandle!<VarDecl>;
-}
-
-func format(symbol: &Symbol) -> String {
-	match symbol {
-		case Namespace: value -> return "namespace " + value.signature();
-		case Type: value -> return "type " + value.signature();
-		case Function: value -> return "function " + value.signature();
-		case MemberVariable: value -> return "member variable";
-		case EnumCase: value -> return "enum case";
-		case VariantCase: value -> return "variant case";
-		case TemplateParameter: value -> return "template parameter " + format(value);
-		case Variable: value -> return "variable " + value.signature();
-	}
 }
 
 enum ScopeKind {
@@ -2596,43 +2562,36 @@ struct TCContext {
 
 	func checkNameExpr(this: &&TCContext, parsed_name: &ParsedName, expected_type: Type, is_comptime: bool, span: Span) -> Expr {
 		const checked_name = this.checkName(parsed_name);
-		const symbols = this.lookupSymbol(
-			checked_name,
-			SharedHandle!<TypeDecl>(),
-			SymbolLookupFilter::Variables | TemplateParameters,
-			span
-		) + this.lookupSymbol(
-			checked_name,
-			expected_type.decl,
-			SymbolLookupFilter::CaseDecls,
-			span
-		);
 
 		var result_candidates: List!<Expr>;
+		for variable in this.lookupVariable(checked_name, span) {
+			result_candidates.append(this.createVarInvokeExpr(variable, span));
+		}
 
-		for s in symbols {
-			match s {
-				case EnumCase: index -> {
-					const parent_type = symbols[0u].parent_namespace.linked_type;
-					result_candidates.append(Expr::Integer(parent_type.enum_cases[index].id, span, Type(parent_type)));
-				}
+		for case_decl in this.lookupCaseDecl(checked_name, expected_type.decl, span) {
+			match case_decl {
+				case EnumCase: index -> result_candidates.append(Expr::Integer(case_decl.parent_type.enum_cases[index].id, span, Type(case_decl.parent_type)));
 				case VariantCase: index -> {
-					const parent_type = symbols[0u].parent_namespace.linked_type;
-
 					var template_parameters: List!<TemplateParameter>;
 					template_parameters.append(TemplateParameter::Integer(
-						parent_type.variant_cases[index].id
+						case_decl.parent_type.variant_cases[index].id
 					));
 
 					result_candidates.append(this.createTemporaryVariable(
-						Type(parent_type),
+						Type(case_decl.parent_type),
 						template_parameters,
 						List!<Expr>(),
 						is_comptime,
 						span
 					));
 				}
-				case TemplateParameter: parameter -> match parameter {
+			}
+		}
+
+		const last_segment = checked_name.segments[checked_name.segments.size() - 1];
+		if checked_name.segments.size() == 1 && last_segment.template_parameters.isEmpty() {
+			for template_parameter in this.lookupTemplateParameter(last_segment.name) {
+				match template_parameter {
 					case Boolean: value -> {
 						result_candidates.append(Expr::Integer(value as int, span, this.program.bool_type));
 					}
@@ -2645,8 +2604,6 @@ struct TCContext {
 					}
 					else -> {}
 				}
-				case Variable: variable -> result_candidates.append(this.createVarInvokeExpr(variable, span));
-				else -> {}
 			}
 		}
 
@@ -2655,9 +2612,6 @@ struct TCContext {
 			return Expr::Undefined(span, Type::unknown());
 		} else if result_candidates.size() > 1 {
 			this.error("too many matching symbols found", span);
-			for s in symbols {
-				this.info("   " + format(s), Span());
-			}
 		}
 
 		return result_candidates[0u];
@@ -2733,24 +2687,31 @@ struct TCContext {
 						);
 
 						if matching_functions.isEmpty() {
-							const matching_symbols = this.lookupSymbol(
-								checked_name,
-								expected_type.decl,
-								SymbolLookupFilter::Types | CaseDecls | Variables,
-								span
-							);
+							const matching_types = this.lookupType(checked_name, span);
+							const matching_variables = this.lookupVariable(checked_name, span);
+							const matching_case_decls = this.lookupCaseDecl(checked_name, expected_type.decl, span);
 
-							if matching_symbols.size() == 1 {
-								match matching_symbols[0u] {
-									case Type: type_decl -> return this.createTemporaryVariable(
-										Type(type_decl),
-										List!<TemplateParameter>(),
-										arguments,
-										is_comptime,
-										span
-									);
+							if matching_types.size() + matching_variables.size() + matching_case_decls.size() > 1 {
+								this.error("too many matching symbols found", span);
+								return Expr::Undefined(span, Type::unknown());
+							}
+
+							if matching_types.size() == 1 {
+								return this.createTemporaryVariable(matching_types[0u], List!<TemplateParameter>(), arguments, is_comptime, span);
+							} else if matching_variables.size() == 1 {
+								arguments.insert(0u, this.checkExpr(function, Type::unknown(), is_comptime));
+								return this.checkCall(
+									Name("operator ()"),
+									arguments,
+									true, true,
+									CallKind::MemberCall,
+									is_comptime,
+									span
+								);
+							} else if matching_case_decls.size() == 1 {
+								match matching_case_decls[0u] {
 									case VariantCase: index -> {
-										const parent_type = matching_symbols[0u].parent_namespace.linked_type;
+										const parent_type = matching_case_decls[0u].parent_type;
 
 										var template_parameters: List!<TemplateParameter>;
 										template_parameters.append(TemplateParameter::Integer(
@@ -2765,22 +2726,8 @@ struct TCContext {
 											span
 										);
 									}
-									case Variable: variable -> {
-										arguments.insert(0u, this.checkExpr(function, Type::unknown(), is_comptime));
-										return this.checkCall(
-											Name("operator ()"),
-											arguments,
-											true, true,
-											CallKind::MemberCall,
-											is_comptime,
-											span
-										);
-									}
 									else -> {}
 								}
-							} else if matching_symbols.size() > 1 {
-								this.error("too many matching symbols found", span);
-								return Expr::Undefined(span, Type::unknown());
 							}
 						}
 
@@ -3267,30 +3214,27 @@ struct TCContext {
 		return result;
 	}
 
-	func lookupSymbol(this: &&TCContext, name: &Name, parent_type: SharedHandle!<TypeDecl>, filter: SymbolLookupFilter, span: Span) -> List!<Symbol> {
-		var result: List!<Symbol>;
-		if name.segments.isEmpty() {
-			return result;
-		}
-
+	func getNamespacesToSearch(this: &&TCContext, name: &Name, parent_type: SharedHandle!<TypeDecl>, span: Span) -> Set!<SharedHandle!<Namespace>> {
 		var name_segments = name.segments;
-		const last_segment = name_segments.last().value();
 		name_segments.removeLast();
 
 		var namespaces_to_search: Set!<SharedHandle!<Namespace>>;
 		namespaces_to_search.grow(8u);
 
-		for n in this.current_namespace.visible_namespaces {
-			const intersecting_segments = n.full_name.intersection(name_segments);
+		if name_segments.isEmpty() {
+			namespaces_to_search = this.current_namespace.visible_namespaces;
+		} else {
+			for n in this.current_namespace.visible_namespaces {
+				var matching_namespaces: Set!<SharedHandle!<Namespace>>;
+				matching_namespaces.add(n);
 
-			var matching_namespaces: Set!<SharedHandle!<Namespace>>;
-			matching_namespaces.add(n);
+				const intersecting_segments = n.full_name.intersection(name_segments);
+				for i in intersecting_segments..name_segments.size() {
+					matching_namespaces = this.lookupNamespace(matching_namespaces, name_segments[i], span);
+				}
 
-			for i in intersecting_segments..name_segments.size() {
-				matching_namespaces = this.lookupNamespace(matching_namespaces, name_segments[i], span);
+				namespaces_to_search.add(matching_namespaces);
 			}
-
-			namespaces_to_search.add(matching_namespaces);
 		}
 
 		if name_segments.isEmpty() && parent_type.isAlive() {
@@ -3301,19 +3245,49 @@ struct TCContext {
 			}
 		}
 
-		for n in this.lookupNamespace(namespaces_to_search, last_segment, span) {
-			if (filter & Namespaces) != None {
-				result.append(Symbol::Namespace(n, n.parent));
-			}
+		return namespaces_to_search;
+	}
 
-			if (filter & Types) != None {
-				if n.linked_type.isAlive() {
-					result.append(Symbol::Type(n.linked_type, n.parent));
+	func lookupTemplateParameter(this: &&TCContext, name: String) -> List!<TemplateParameter> {
+		var result: List!<TemplateParameter>;
+
+		if this.current_function.isAlive() {
+			for template_parameter in this.current_function.template_parameters {
+				if template_parameter.name == name && !(template_parameter.value is None) {
+					result.append(template_parameter.value);
 				}
 			}
 		}
 
-		if (filter & Types) != None && name_segments.isEmpty() && last_segment.template_parameters.isEmpty() && this.program.core_namespace.isAlive() && namespaces_to_search.contains(this.program.core_namespace) {
+		var current_namespace = this.current_namespace;
+		while current_namespace.isAlive() {
+			for template_parameter in current_namespace.template_parameters {
+				if template_parameter.name == name && !(template_parameter.value is None) {
+					result.append(template_parameter.value);
+				}
+			}
+
+			current_namespace = current_namespace.parent;
+		}
+
+		return result;
+	}
+
+	func lookupType(this: &&TCContext, name: &Name, span: Span) -> List!<Type> {
+		const namespaces_to_search = this.getNamespacesToSearch(name, SharedHandle!<TypeDecl>(), span);
+
+		const last_segment = name.segments[name.segments.size() - 1];
+		const is_templated_name = last_segment.template_parameters.size() > 0;
+		const is_namespaced_name = name.segments.size() > 1;
+
+		var result: List!<Type>;
+		for n in this.lookupNamespace(namespaces_to_search, last_segment, span) {
+			if n.linked_type.isAlive() {
+				result.append(Type(n.linked_type));
+			}
+		}
+
+		if !is_namespaced_name && !is_templated_name && namespaces_to_search.contains(this.program.core_namespace) {
 			if const bits = getNumericTypeBits(last_segment.name) {
 				var numeric_type_template_parameters: List!<TemplateParameter>;
 				numeric_type_template_parameters.append(TemplateParameter::Integer(bits as int));
@@ -3327,129 +3301,109 @@ struct TCContext {
 
 				for n in this.lookupNamespace(namespaces_to_search, NameSegment(numeric_type_name, numeric_type_template_parameters), span) {
 					if n.linked_type.isAlive() {
-						result.append(Symbol::Type(n.linked_type, n.parent));
+						result.append(Type(n.linked_type));
 					}
 				}
 			}
 		}
 
-		if name_segments.isEmpty() && parent_type.isAlive() {
-			if (filter & MemberVariables) != None {
-				if const index = parent_type.member_variables_by_name.get(last_segment.name) {
-					result.append(Symbol::MemberVariable(index, parent_type.linked_namespace));
+		if !is_namespaced_name && !is_templated_name {
+			for template_parameter in this.lookupTemplateParameter(last_segment.name) {
+				match template_parameter {
+					case Type: type -> result.append(type);
+					else -> {}
 				}
-			}
-
-			if (filter & CaseDecls) != None {
-				if const index = parent_type.enum_cases_by_name.get(last_segment.name) {
-					result.append(Symbol::EnumCase(index, parent_type.linked_namespace));
-				}
-
-				if const index = parent_type.variant_cases_by_name.get(last_segment.name) {
-					result.append(Symbol::VariantCase(index, parent_type.linked_namespace));
-				}
-			}
-		}
-
-		if !name_segments.isEmpty() {
-			for n in namespaces_to_search {
-				if n.linked_type.isEmpty() {
-					continue;
-				}
-
-				if (filter & CaseDecls) != None {
-					if const index = n.linked_type.enum_cases_by_name.get(last_segment.name) {
-						result.append(Symbol::EnumCase(index, n));
-					}
-
-					if const index = n.linked_type.variant_cases_by_name.get(last_segment.name) {
-						result.append(Symbol::VariantCase(index, n));
-					}
-				}
-			}
-		}
-
-		if (filter & Functions) != None {
-			for n in namespaces_to_search {
-				var most_matching_template_parameters = 0;
-				var functions_with_matching_template_parameters: List!<SharedHandle!<FunctionDecl>>;
-				for function in n.functions_by_name.getOrDefault(last_segment.name) {
-					const matching_template_parameters = this.getMatchingTemplateParameterCount(function.template_parameters, last_segment.template_parameters);
-
-					if matching_template_parameters > most_matching_template_parameters {
-						functions_with_matching_template_parameters.clear();
-						functions_with_matching_template_parameters.append(function);
-						most_matching_template_parameters = matching_template_parameters;
-					} else if matching_template_parameters == most_matching_template_parameters {
-						functions_with_matching_template_parameters.append(function);
-					}
-				}
-
-				for function in functions_with_matching_template_parameters {
-					if function.isIncompleteTemplate() {
-						result.append(Symbol::Function(this.createTemplateInstance(function, last_segment.template_parameters, span), n));
-					} else {
-						result.append(Symbol::Function(function, n));
-					}
-				}
-			}
-		}
-
-		if last_segment.template_parameters.isEmpty() && (filter & Variables) != None {
-			for n in namespaces_to_search {
-				if const variable = n.comptime_variables_by_name.get(last_segment.name) {
-					result.append(Symbol::Variable(variable, n));
-				}
-			}
-		}
-
-		if name_segments.isEmpty() && last_segment.template_parameters.isEmpty() && (filter & Variables) != None {
-			if const variable = this.getVariableByName(last_segment.name) {
-				result.append(Symbol::Variable(variable, SharedHandle!<Namespace>()));
-			}
-		}
-
-		if name_segments.isEmpty() && last_segment.template_parameters.isEmpty() && (filter & TemplateParameters) != None {
-			if this.current_function.isAlive() {
-				for template_parameter in this.current_function.template_parameters {
-					if template_parameter.name != last_segment.name || template_parameter.value is None {
-						continue;
-					}
-
-					result.append(Symbol::TemplateParameter(template_parameter.value, SharedHandle!<Namespace>()));
-				}
-			}
-
-			var current_namespace = this.current_namespace;
-			while current_namespace.isAlive() {
-				for template_parameter in current_namespace.template_parameters {
-					if template_parameter.name != last_segment.name || template_parameter.value is None {
-						continue;
-					}
-
-					result.append(Symbol::TemplateParameter(template_parameter.value, current_namespace));
-				}
-
-				current_namespace = current_namespace.parent;
 			}
 		}
 
 		return result;
 	}
 
-	func lookupType(this: &&TCContext, name: &Name, span: Span) -> List!<Type> {
-		var candidates: List!<Type>;
-		for s in this.lookupSymbol(name, SharedHandle!<TypeDecl>(), SymbolLookupFilter::Types | TemplateParameters, span) {
-			match s {
-				case Type: type -> candidates.append(Type(type));
-				case TemplateParameter: template_parameter -> match template_parameter {
-					case Type: type -> candidates.append(Type(type));
-					else -> {}
+	func lookupFunction(this: &&TCContext, name: &Name, parent_type: SharedHandle!<TypeDecl>, parameter_types: &List!<Type>, allow_unwrapping_this: bool, allow_unwrapping: bool, span: Span) -> List!<SharedHandle!<FunctionDecl>> {
+		var candidates: List!<SharedHandle!<FunctionDecl>>;
+
+		const last_segment = name.segments[name.segments.size() - 1];
+		for n in this.getNamespacesToSearch(name, parent_type, span) {
+			var most_matching_template_parameters = 0;
+			var functions_with_matching_template_parameters: List!<SharedHandle!<FunctionDecl>>;
+			for function in n.functions_by_name.getOrDefault(last_segment.name) {
+				const matching_template_parameters = this.getMatchingTemplateParameterCount(function.template_parameters, last_segment.template_parameters);
+
+				if matching_template_parameters > most_matching_template_parameters {
+					functions_with_matching_template_parameters.clear();
+					functions_with_matching_template_parameters.append(function);
+					most_matching_template_parameters = matching_template_parameters;
+				} else if matching_template_parameters == most_matching_template_parameters {
+					functions_with_matching_template_parameters.append(function);
 				}
-				else -> {}
+			}
+
+			for function in functions_with_matching_template_parameters {
+				if function.isIncompleteTemplate() {
+					candidates.append(this.createTemplateInstance(function, last_segment.template_parameters, span));
+				} else {
+					candidates.append(function);
+				}
 			}
 		}
-		return candidates;
+
+		return this.selectMatchingFunctions(candidates, parameter_types, allow_unwrapping_this, allow_unwrapping);
+	}
+
+	func lookupCaseDecl(this: &&TCContext, name: &Name, parent_type: SharedHandle!<TypeDecl>, span: Span) -> List!<CaseDecl> {
+		const last_segment = name.segments[name.segments.size() - 1];
+		const is_templated_name = last_segment.template_parameters.size() > 0;
+		const is_namespaced_name = name.segments.size() > 1;
+
+		var result: List!<CaseDecl>;
+
+		if !is_namespaced_name && parent_type.isAlive() {
+			if const index = parent_type.enum_cases_by_name.get(last_segment.name) {
+				result.append(CaseDecl::EnumCase(index, parent_type));
+			}
+
+			if const index = parent_type.variant_cases_by_name.get(last_segment.name) {
+				result.append(CaseDecl::VariantCase(index, parent_type));
+			}
+		} else if is_namespaced_name {
+			for n in this.getNamespacesToSearch(name, parent_type, span) {
+				if n.linked_type.isEmpty() {
+					continue;
+				}
+
+				if const index = n.linked_type.enum_cases_by_name.get(last_segment.name) {
+					result.append(CaseDecl::EnumCase(index, n.linked_type));
+				}
+
+				if const index = n.linked_type.variant_cases_by_name.get(last_segment.name) {
+					result.append(CaseDecl::VariantCase(index, n.linked_type));
+				}
+			}
+		}
+
+		return result;
+	}
+
+	func lookupVariable(this: &&TCContext, name: &Name, span: Span) -> List!<SharedHandle!<VarDecl>> {
+		const last_segment = name.segments[name.segments.size() - 1];
+		if last_segment.template_parameters.size() > 0 {
+			return List!<SharedHandle!<VarDecl>>();
+		}
+
+		var result: List!<SharedHandle!<VarDecl>>;
+		for n in this.getNamespacesToSearch(name, SharedHandle!<TypeDecl>(), span) {
+			if const variable = n.comptime_variables_by_name.get(last_segment.name) {
+				result.append(variable);
+			}
+		}
+
+		if name.segments.size() == 1 {
+			if const variable = this.getVariableByName(last_segment.name) {
+				result.append(variable);
+			}
+		}
+
+		return result;
 	}
 
 	func getType(this: &&TCContext, name: &Name, span: Span) -> Type {
@@ -3475,14 +3429,6 @@ struct TCContext {
 
 			return Type::unknown();
 		}
-	}
-
-	func lookupFunction(this: &&TCContext, name: &Name, parent_type: SharedHandle!<TypeDecl>, parameter_types: &List!<Type>, allow_unwrapping_this: bool, allow_unwrapping: bool, span: Span) -> List!<SharedHandle!<FunctionDecl>> {
-		var candidates: List!<SharedHandle!<FunctionDecl>>;
-		for s in this.lookupSymbol(name, parent_type, SymbolLookupFilter::Functions, span) {
-			candidates.append((s as Function).value());
-		}
-		return this.selectMatchingFunctions(candidates, parameter_types, allow_unwrapping_this, allow_unwrapping);
 	}
 
 	func getNumericTypeBits(name: String) -> Optional!<uint> {

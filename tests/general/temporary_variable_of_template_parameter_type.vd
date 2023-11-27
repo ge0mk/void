@@ -1,0 +1,10 @@
+import std/core;
+
+template <T: type>
+func foo() -> T {
+	return T(0);
+}
+
+func main() -> void {
+	assert(foo!<int>() == 0);
+}
