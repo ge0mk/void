@@ -1582,6 +1582,13 @@ variant BuiltinFunction {
 			| SizeOf
 			| AlignmentOf
 			| ReferenceKindOf
+			| Assert
+			| AssertError
+			| RangeGetData
+			| RangeGetSize
+			| RangeGetIterator
+			| RangeIteratorHasNext
+			| RangeIteratorGetNext
 			| NumericTypeRangeOperator
 			| NumericRangeSetStep
 			| NumericRangeGetIterator
