@@ -19,7 +19,7 @@ clean-but-keep-stage0:
 stage0: build/stage0
 
 build/stage0: build/stage0.bc
-	clang build/stage0.bc -o build/stage0 -lc -lm -lLLVM -ltcmalloc -O3 -march=native -flto
+	clang build/stage0.bc -o build/stage0 -lc -lm -lLLVM -O3 -march=native -flto
 
 test-stage0: build/stage0
 	python3 test.py build/stage0 -q -- -M -b -s
