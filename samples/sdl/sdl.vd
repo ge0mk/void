@@ -26,7 +26,6 @@ func quit() -> void = extern;
 @[extern_name: "SDL_GetTicks"]
 func getTicks() -> u32 = extern;
 
-func createWindow(title: String, x: int, y: int, width: int, height: int, flags: WindowFlags) -> vptr!<Window> {
-	const ctitle = title + '\0'b;
-	return SDL_CreateWindow(ctitle.data(), x as i32, y as i32, width as i32, height as i32, flags);
+func createWindow(title: String, x: int, y: int, width: int, height: int, flags: WindowFlags) -> ptr!<Window, true> {
+	return SDL_CreateWindow((title + '\0'b).data(), x as i32, y as i32, width as i32, height as i32, flags);
 }

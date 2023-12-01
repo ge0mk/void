@@ -30,7 +30,7 @@ enum WindowFlags {
 
 struct Window {}
 
-func SDL_CreateWindow(title: cptr!<byte>, x: i32, y: i32, w: i32, h: i32, flags: WindowFlags) -> vptr!<Window> = extern;
+func SDL_CreateWindow(title: ptr!<byte, false>, x: i32, y: i32, w: i32, h: i32, flags: WindowFlags) -> ptr!<Window, true> = extern;
 
 @[extern_name: "SDL_DestroyWindow"]
-func destroy(window: vptr!<Window>) -> void = extern;
+func destroy(window: ptr!<Window, true>) -> void = extern;

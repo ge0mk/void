@@ -14,32 +14,32 @@ enum RendererFlags {
 struct Renderer {}
 
 @[extern_name: "SDL_CreateRenderer"]
-func createRenderer(window: vptr!<Window>, index: i32, flags: RendererFlags) -> vptr!<Renderer> = extern;
+func createRenderer(window: ptr!<Window, true>, index: i32, flags: RendererFlags) -> ptr!<Renderer, true> = extern;
 
 @[extern_name: "SDL_DestroyRenderer"]
-func destroy(renderer: vptr!<Renderer>) -> void = extern;
+func destroy(renderer: ptr!<Renderer, true>) -> void = extern;
 
 @[extern_name: "SDL_RenderClear"]
-func clear(renderer: vptr!<Renderer>) -> void = extern;
+func clear(renderer: ptr!<Renderer, true>) -> void = extern;
 
 @[extern_name: "SDL_RenderPresent"]
-func present(renderer: vptr!<Renderer>) -> void = extern;
+func present(renderer: ptr!<Renderer, true>) -> void = extern;
 
-func SDL_SetRenderDrawColor(renderer: vptr!<Renderer>, r: u8, g: u8, b: u8, a: u8) -> i32 = extern;
+func SDL_SetRenderDrawColor(renderer: ptr!<Renderer, true>, r: u8, g: u8, b: u8, a: u8) -> i32 = extern;
 
-func setDrawColor(renderer: vptr!<Renderer>, r: u8, g: u8, b: u8, a: u8) -> void {
+func setDrawColor(renderer: ptr!<Renderer, true>, r: u8, g: u8, b: u8, a: u8) -> void {
 	discard SDL_SetRenderDrawColor(renderer, r, g, b, a);
 }
 
-func SDL_RenderDrawRect(renderer: vptr!<Renderer>, rect: cptr!<Rect>) -> i32 = extern;
-func SDL_RenderFillRect(renderer: vptr!<Renderer>, rect: cptr!<Rect>) -> i32 = extern;
+func SDL_RenderDrawRect(renderer: ptr!<Renderer, true>, rect: ptr!<Rect, false>) -> i32 = extern;
+func SDL_RenderFillRect(renderer: ptr!<Renderer, true>, rect: ptr!<Rect, false>) -> i32 = extern;
 
-func drawRect(renderer: vptr!<Renderer>, rect: Rect) -> void {
-	discard SDL_RenderDrawRect(renderer, cptr!<Rect>::addressOf(&rect));
+func drawRect(renderer: ptr!<Renderer, true>, rect: Rect) -> void {
+	discard SDL_RenderDrawRect(renderer, ptr!<Rect, false>::addressOf(&rect));
 }
 
-func fillRect(renderer: vptr!<Renderer>, rect: Rect) -> void {
-	discard SDL_RenderFillRect(renderer, cptr!<Rect>::addressOf(&rect));
+func fillRect(renderer: ptr!<Renderer, true>, rect: Rect) -> void {
+	discard SDL_RenderFillRect(renderer, ptr!<Rect, false>::addressOf(&rect));
 }
 
 struct Rect {

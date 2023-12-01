@@ -4,8 +4,8 @@ import std/string;
 import sdl;
 
 struct Application {
-	var window: vptr!<Window>;
-	var renderer: vptr!<Renderer>;
+	var window: ptr!<Window, true>;
+	var renderer: ptr!<Renderer, true>;
 
 	var tetrominos: Array!<Array!<bool, 16>, 28>;
 	var colors: Array!<Array!<int, 4>, 8>;
