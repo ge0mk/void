@@ -359,10 +359,15 @@ func createArrayTypeInstance(program: &&Program, dest_namespace: SharedHandle!<N
 	type_decl.addContainedType(element_type);
 	const type_namespace = type_decl.linked_namespace;
 
-	type_decl.default_constructor = program.createUnaryFunction(type_namespace, "constructor", type.varRef(), program.void_type, BuiltinFunction::ArrayDefaultConstructor(type));
-	type_decl.copy_constructor = program.createBinaryFunction(type_namespace, "constructor", type.varRef(), type, program.void_type, BuiltinFunction::ArrayCopyConstructor(type));
-	type_decl.destructor = program.createUnaryFunction(type_namespace, "destructor", type.varRef(), program.void_type, BuiltinFunction::ArrayDestructor(type));
-	type_decl.op_assign = program.createBinaryFunction(type_namespace, "operator =", type.varRef(), type, program.void_type, BuiltinFunction::ArrayOpAssign(type));
+	if element_type.isPrimitive() {
+		createBasicFunctions(&&program, type, type_namespace);
+	} else {
+		type_decl.default_constructor = program.createUnaryFunction(type_namespace, "constructor", type.varRef(), program.void_type, BuiltinFunction::ArrayDefaultConstructor(type));
+		type_decl.copy_constructor = program.createBinaryFunction(type_namespace, "constructor", type.varRef(), type, program.void_type, BuiltinFunction::ArrayCopyConstructor(type));
+		type_decl.destructor = program.createUnaryFunction(type_namespace, "destructor", type.varRef(), program.void_type, BuiltinFunction::ArrayDestructor(type));
+		type_decl.op_assign = program.createBinaryFunction(type_namespace, "operator =", type.varRef(), type, program.void_type, BuiltinFunction::ArrayOpAssign(type));
+	}
+
 	type_decl.op_equal = program.createBinaryFunction(type_namespace, "operator ==", type, type, program.bool_type, BuiltinFunction::ArrayOpEqual(type));
 	discard program.createUnaryFunction(type_namespace, "data", type.constRef(), element_cptr_type, BuiltinFunction::ArrayGetDataPointer(type));
 	discard program.createUnaryFunction(type_namespace, "data", type.varRef(), element_vptr_type, BuiltinFunction::ArrayGetDataPointer(type));

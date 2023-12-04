@@ -1,0 +1,8 @@
+//> test-ec "0"
+
+import std/core;
+
+func main() -> int {
+	var a: Array!<int, 5>;
+	return a[2u];
+}

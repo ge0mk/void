@@ -1138,6 +1138,7 @@ struct Type {
 			| Pointer
 			| Function
 			| Enum -> return true;
+			case Array: array_type -> return array_type.element_type.isPrimitive();
 			else -> return false;
 		}
 	}
