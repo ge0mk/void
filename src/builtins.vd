@@ -255,18 +255,20 @@ func createPtrTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Nam
 	const empty_parameter_types = List!<Type>();
 	discard program.createFunction(type_namespace, "null", empty_parameter_types, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::ConstNull, type));
 
-	const pointee_reference_type = pointee_type.varRef() if is_mutable else pointee_type.constRef();
+	if pointee_type != program.void_type && pointee_type != program.never_type {
+		const pointee_reference_type = pointee_type.varRef() if is_mutable else pointee_type.constRef();
 
-	discard program.createUnaryFunction(type_namespace, "value", type, pointee_reference_type, BuiltinFunction::PointerToRef(type));
-	discard program.createUnaryFunction(type_namespace, "addressOf", pointee_reference_type, type, BuiltinFunction::RefToPointer(type));
+		discard program.createUnaryFunction(type_namespace, "value", type, pointee_reference_type, BuiltinFunction::PointerToRef(type));
+		discard program.createUnaryFunction(type_namespace, "addressOf", pointee_reference_type, type, BuiltinFunction::RefToPointer(type));
 
-	discard program.createBinaryFunction(type_namespace, "operator -", type, type, program.int_type, BuiltinFunction::PointerDiff(type));
+		discard program.createBinaryFunction(type_namespace, "operator -", type, type, program.int_type, BuiltinFunction::PointerDiff(type));
 
-	discard program.createBinaryFunction(type_namespace, "operator +", type, program.int_type, type, BuiltinFunction::PointerOffset(type));
-	discard program.createBinaryFunction(type_namespace, "operator +", type, program.uint_type, type, BuiltinFunction::PointerOffset(type));
+		discard program.createBinaryFunction(type_namespace, "operator +", type, program.int_type, type, BuiltinFunction::PointerOffset(type));
+		discard program.createBinaryFunction(type_namespace, "operator +", type, program.uint_type, type, BuiltinFunction::PointerOffset(type));
 
-	discard program.createBinaryFunction(type_namespace, "operator []", type, program.int_type, pointee_type.varRef() if is_mutable else pointee_type.constRef(), BuiltinFunction::PointerOpIndex(type));
-	discard program.createBinaryFunction(type_namespace, "operator []", type, program.uint_type, pointee_type.varRef() if is_mutable else pointee_type.constRef(), BuiltinFunction::PointerOpIndex(type));
+		discard program.createBinaryFunction(type_namespace, "operator []", type, program.int_type, pointee_type.varRef() if is_mutable else pointee_type.constRef(), BuiltinFunction::PointerOpIndex(type));
+		discard program.createBinaryFunction(type_namespace, "operator []", type, program.uint_type, pointee_type.varRef() if is_mutable else pointee_type.constRef(), BuiltinFunction::PointerOpIndex(type));
+	}
 
 	return type;
 }

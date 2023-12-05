@@ -3627,11 +3627,6 @@ struct TCContext {
 				}
 				case Pointer: pointer_type -> {
 					const pointee_type = (template_parameters[0u] as Type).value();
-					if pointee_type == this.program.void_type || pointee_type == this.program.never_type {
-						this.error("invalid pointer template parameter: pointee type must not be void", error_span);
-						return SharedHandle!<Namespace>();
-					}
-
 					const is_mutable = (template_parameters[1u] as Boolean).value();
 					type_instance = this.program.createPtrTypeInstance(base.parent, is_mutable, pointee_type).decl;
 				}

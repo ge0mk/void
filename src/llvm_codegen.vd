@@ -275,12 +275,12 @@ struct CGContext {
 					di_return_and_parameter_types.append(this.getDIType(parameter_type));
 				}
 
-				type.llvm_di = LLVMDIBuilderCreateSubroutineType(
+				type.llvm_di = LLVMDIBuilderCreatePointerType(this.di_builder, LLVMDIBuilderCreateSubroutineType(
 					this.di_builder,
 					this.program.files[type.span.file as uint].llvm_di_file,
 					di_return_and_parameter_types,
 					LLVMDIFlags::LLVMDIFlagZero
-				);
+				), size_in_bits, alignment_in_bits, 0u, di_name);
 			}
 			case Array: array_type -> {
 				type.llvm_di = LLVMDIBuilderCreateReplaceableCompositeType(this.di_builder, DWARFTag::Tag_unspecified_type, di_name, parent_namespace, di_file, line, 0u32, size_in_bits, alignment_in_bits, LLVMDIFlags::LLVMDIFlagZero, type.signature());
