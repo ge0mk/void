@@ -35,6 +35,7 @@ func fwrite(data: ptr!<T, false>, count: uint, file: ptr!<FILE, true>) -> uint {
 }
 
 func fgetc(file: ptr!<FILE, true>) -> i32 = extern;
+func fgets(data: ptr!<byte, true>, size: i32, file: ptr!<FILE, true>) -> ptr!<byte, true> = extern;
 func fputc(data: i32, file: ptr!<FILE, true>) -> i32 = extern;
 
 func fdopen(fd: i32, mode: ptr!<byte, false>) -> ptr!<FILE, true> = extern;

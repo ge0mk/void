@@ -203,7 +203,7 @@ struct File {
 	func readString(this: &&File, size: uint) -> Result!<String> {
 		var result = String(size, '\0'b);
 
-		const r = fread!<byte>(result.data, size, this.c_file);
+		const r = fread!<byte>(result.vdata(), size, this.c_file);
 		const err = ferror(this.c_file);
 		if err != Error::OK {
 			throw err;
@@ -231,20 +231,33 @@ struct File {
 	template<T: type>
 	func readSome(this: &&File, count: uint) -> Result!<List!<T>> {
 		var buffer = malloc!<T>(count);
+		defer free!<T>(buffer);
 
 		const r = fread!<T>(buffer, count, this.c_file);
 		const err = ferror(this.c_file);
 		if err != Error::OK {
-			free!<T>(buffer);
 			throw err;
 		}
 
 		const result = List!<T>(Range!<T>(buffer as ptr!<T, false>, r));
-		free!<T>(buffer);
 		return Ok(result);
 	}
 
-	// read entire file into String in 4KiB steps
+	func readLine(this: &&File) -> Result!<String> {
+		var result: String;
+		var buffer: Array!<byte, 256u>;
+		do {
+			if fgets(buffer.data(), buffer.size() as i32, this.c_file) == ptr!<byte, true>::null() {
+				throw ferror(this.c_file);
+			}
+
+			result.append(byteRangeFromCString(buffer.data() as ptr!<byte, false>));
+		} while result[result.size() - 1] != '\n'b;
+
+		return Ok(result);
+	}
+
+	// read entire file into String
 	func readAll(this: &&File) -> Result!<String> {
 		var result = "";
 		while !this.eof() {
