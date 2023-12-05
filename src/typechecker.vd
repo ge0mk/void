@@ -3215,15 +3215,20 @@ struct TCContext {
 	}
 
 	func getNamespacesToSearch(this: &&TCContext, name: &Name, parent_type: SharedHandle!<TypeDecl>, span: Span) -> Set!<SharedHandle!<Namespace>> {
-		var name_segments = name.segments;
-		name_segments.removeLast();
-
 		var namespaces_to_search: Set!<SharedHandle!<Namespace>>;
 		namespaces_to_search.grow(8u);
 
-		if name_segments.isEmpty() {
+		if name.segments.size() == 1 {
 			namespaces_to_search = this.current_namespace.visible_namespaces;
+			if parent_type.isAlive() {
+				namespaces_to_search.add(parent_type.linked_namespace);
+
+				if parent_type.unwrapped_type.isAlive() {
+					namespaces_to_search.add(parent_type.unwrapped_type.linked_namespace);
+				}
+			}
 		} else {
+			const name_segments: List!<NameSegment> = name.segments[0u..(name.segments.size() - 1)];
 			for n in this.current_namespace.visible_namespaces {
 				var matching_namespaces: Set!<SharedHandle!<Namespace>>;
 				matching_namespaces.add(n);
@@ -3234,14 +3239,6 @@ struct TCContext {
 				}
 
 				namespaces_to_search.add(matching_namespaces);
-			}
-		}
-
-		if name_segments.isEmpty() && parent_type.isAlive() {
-			namespaces_to_search.add(parent_type.linked_namespace);
-
-			if parent_type.unwrapped_type.isAlive() {
-				namespaces_to_search.add(parent_type.unwrapped_type.linked_namespace);
 			}
 		}
 
