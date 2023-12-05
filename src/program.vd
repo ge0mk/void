@@ -176,7 +176,7 @@ struct Program {
 		LLVMInitializeX86TargetMC();
 		LLVMInitializeX86AsmPrinter();
 
-		match createJITCompilerForModule(this.llvm_module, 0u) {
+		match createJITCompilerForModule(this.llvm_module, min!<uint>(this.options.optimization_level, 3u)) {
 			case Ok: ee -> this.llvm_execution_engine = ee;
 			case Error: error -> panic(error);
 		}
