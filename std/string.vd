@@ -277,6 +277,24 @@ struct String {
 		return this.find(needle) is Some;
 	}
 
+	func remove(this: &&String, pattern: byte) -> void {
+		var pos = this.find(0u, pattern);
+		while pos.hasValue() {
+			const index = pos.value();
+			this.remove(index..(index + 1u));
+			pos = this.find(index, pattern);
+		}
+	}
+
+	func remove(this: &&String, @[shallow] pattern: String) -> void {
+		var pos = this.find(0u, pattern);
+		while pos.hasValue() {
+			const index = pos.value();
+			this.remove(index..(index + pattern.size()));
+			pos = this.find(index, pattern);
+		}
+	}
+
 	func replace(this: &&String, range: NumericRange!<uint>, @[shallow] with: String) -> void {
 		assert(range.end <= this.size(), Error::EBOUNDS);
 		assert(range.start <= range.end && range.step == 1u, Error::EINVAL);
@@ -297,7 +315,15 @@ struct String {
 		}
 	}
 
-	func replace(this: &&String, @[shallow] pattern: byte, @[shallow] with: String) -> void {
+	func replace(this: &&String, pattern: byte, with: byte) -> void {
+		for i in 0u..this.size() {
+			if this.data()[i] == pattern {
+				this.vdata()[i] = with;
+			}
+		}
+	}
+
+	func replace(this: &&String, pattern: byte, @[shallow] with: String) -> void {
 		var start = 0u;
 		var pos = this.find(start, pattern);
 
@@ -500,6 +526,10 @@ struct String {
 	func _cmp(this: &String, offset: uint, other_data: ptr!<byte, false>, length: uint) -> int {
 		return strncmp(this.data() + offset, other_data, length) as int;
 	}
+}
+
+func byteRangeFromCString(c_str: ptr!<byte, false>) -> Range!<byte, false> {
+	return Range!<byte, false>(c_str, strlen(c_str));
 }
 
 // number: (0[bodx])?[0-9]+(\.[0-9]+(e[+-]?[0-9]+)?)?
