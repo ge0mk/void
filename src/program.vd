@@ -1734,7 +1734,7 @@ struct CompoundStmt {
 
 	func constructor(this: &&CompoundStmt, span: Span) -> void {
 		this.span := span;
-		this.children := List!<Stmt>();
+		this.children := SharedPtr!<List!<Stmt>>::new(List!<Stmt>());
 	}
 
 	func constructor(this: &&CompoundStmt, other: CompoundStmt) -> void = default;

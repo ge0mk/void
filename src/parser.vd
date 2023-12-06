@@ -513,7 +513,7 @@ struct Parser {
 			return ParsedStmt::Garbage(start..this.previousSpan(), false);
 		}
 
-		var decl = ParsedNamespace(start, this.previousSpan(), annotations, template_parameters, name, SharedPtr!<List!<ParsedStmt>>(List!<ParsedStmt>()));
+		var decl = ParsedNamespace(start, this.previousSpan(), annotations, template_parameters, name, SharedPtr!<List!<ParsedStmt>>::new(List!<ParsedStmt>()));
 
 		if !this.expect(TokenType::LCurly) {
 			return ParsedStmt::Garbage(start..this.previousSpan(), false);
@@ -565,7 +565,7 @@ struct Parser {
 
 		this.pushScope(ParserScope::TypeDecl);
 
-		var children: SharedPtr!<List!<ParsedStmt>> = List!<ParsedStmt>();
+		var children = SharedPtr!<List!<ParsedStmt>>::new(List!<ParsedStmt>());
 		while !this.accept(TokenType::RCurly) {
 			const child = this.parseStmt();
 			if !(child is Garbage) {
@@ -774,7 +774,7 @@ struct Parser {
 	}
 
 	func parseCompoundStmt(this: &&Parser) -> ParsedCompoundStmt {
-		var stmt = ParsedCompoundStmt(this.currentSpan(), SharedPtr!<List!<ParsedStmt>>(List!<ParsedStmt>()));
+		var stmt = ParsedCompoundStmt(this.currentSpan(), SharedPtr!<List!<ParsedStmt>>::new(List!<ParsedStmt>()));
 
 		if !this.expect(TokenType::LCurly) {
 			return stmt;
@@ -1190,7 +1190,7 @@ struct Parser {
 		match this.parsePrefixOperator() {
 			case Some: op -> {
 				const rhs = this.parseExpr(op.precedence());
-				var operands: SharedPtr!<List!<ParsedExpr>> = List!<ParsedExpr>(1u, rhs);
+				var operands = SharedPtr!<List!<ParsedExpr>>::new(List!<ParsedExpr>(1u, rhs));
 				lhs = ParsedExpr::Operator(ParsedOperatorExpr(op, operands), start..rhs.span);
 			}
 			else -> lhs = this.parseOperand();
@@ -1208,7 +1208,7 @@ struct Parser {
 				break;
 			}
 
-			var operands: SharedPtr!<List!<ParsedExpr>> = List!<ParsedExpr>(1u, lhs);
+			var operands = SharedPtr!<List!<ParsedExpr>>::new(List!<ParsedExpr>(1u, lhs));
 			if op == Call {
 				while !this.accept(TokenType::RParen) {
 					operands.append(this.parseExpr());

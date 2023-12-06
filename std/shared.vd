@@ -12,11 +12,18 @@ template <T: type>
 struct SharedPtr {
 	var data: ptr!<refc!<T>, true>;
 
-	func constructor(this: &&SharedPtr!<T>, @[shallow] value: T) -> void {
-		this.data := malloc!<refc!<T>>(1u);
-		this.data[0u].strong_count = 1;
-		this.data[0u].weak_count = 1;
-		this.data[0u].value.constructor(value);
+	func new(@[shallow] value: T) -> SharedPtr!<T> {
+		var data = malloc!<refc!<T>>(1u);
+		data[0u].strong_count = 1;
+		data[0u].weak_count = 1;
+		data[0u].value.constructor(value);
+		return SharedPtr!<T>(data);
+	}
+
+	func constructor(this: &&SharedPtr!<T>, data: ptr!<refc!<T>, true>) -> void {
+		this.data := data;
+		assert(this.data[0u].strong_count == 1);
+		assert(this.data[0u].weak_count == 1);
 	}
 
 	func destructor(this: &&SharedPtr!<T>) -> void {
@@ -52,10 +59,6 @@ struct SharedPtr {
 
 	operator ==(this: SharedPtr!<T>, other: SharedPtr!<T>) -> bool = default;
 	operator <=>(this: SharedPtr!<T>, other: SharedPtr!<T>) -> int = default;
-
-	func new(@[shallow] value: T) -> SharedPtr!<T> {
-		return SharedPtr!<T>(value);
-	}
 
 	operator unwrap(@[shallow] this: SharedPtr!<T>) -> T {
 		return this.data[0u].value;

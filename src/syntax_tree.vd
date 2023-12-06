@@ -236,14 +236,14 @@ func makeParsedName(span: Span, name: String) -> ParsedName {
 }
 
 func makeParsedOperatorExpr(lhs: ParsedExpr, op: Operator, rhs: ParsedExpr, span: Span) -> ParsedExpr {
-	var operands: SharedPtr!<List!<ParsedExpr>> = List!<ParsedExpr>();
+	var operands = SharedPtr!<List!<ParsedExpr>>::new(List!<ParsedExpr>());
 	operands.append(lhs);
 	operands.append(rhs);
 	return ParsedExpr::Operator(ParsedOperatorExpr(op, operands), span);
 }
 
 func makeParsedOperatorExpr(op: Operator, rhs: ParsedExpr, span: Span) -> ParsedExpr {
-	var operands: SharedPtr!<List!<ParsedExpr>> = List!<ParsedExpr>();
+	var operands = SharedPtr!<List!<ParsedExpr>>::new(List!<ParsedExpr>());
 	operands.append(rhs);
 	return ParsedExpr::Operator(ParsedOperatorExpr(op, operands), span);
 }

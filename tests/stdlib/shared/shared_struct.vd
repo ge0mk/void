@@ -18,7 +18,7 @@ struct Foo {
 }
 
 func main() -> int {
-	var a = SharedPtr!<Foo>(Foo(0));
+	var a = SharedPtr!<Foo>::new(Foo(0));
 	a.value += 5;
 	return a.value;
 }

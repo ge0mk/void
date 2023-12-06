@@ -1533,7 +1533,7 @@ struct TCContext {
 
 		// else -> {}
 		cases.append(ParsedStmt::ElseCase(Box!<ParsedStmt>(
-			ParsedStmt::Compound(ParsedCompoundStmt(value.span, SharedPtr!<List!<ParsedStmt>>(List!<ParsedStmt>())), value.span, false)
+			ParsedStmt::Compound(ParsedCompoundStmt(value.span, SharedPtr!<List!<ParsedStmt>>::new(List!<ParsedStmt>())), value.span, false)
 		), value.span, false));
 
 		result.append(Stmt::Expr(this.checkMatchExpr(value, cases, Type::unknown(), is_comptime, span), span));
@@ -2993,7 +2993,7 @@ struct TCContext {
 		//     true -> yield x;
 		//     false -> yield z;
 		// }
-		var children: SharedPtr!<List!<ParsedStmt>> = List!<ParsedStmt>();
+		var children = SharedPtr!<List!<ParsedStmt>>::new(List!<ParsedStmt>());
 
 		children.append(ParsedStmt::Case(Box!<ParsedCaseStmt>(ParsedCaseStmt(
 			List!<ParsedExpr>(1u, ParsedExpr::Bool(true, then_value.span)),
@@ -4026,7 +4026,7 @@ struct TCContext {
 	}
 
 	func unwrapArguments(this: &&TCContext, arguments: &List!<Expr>, required_parameter_types: &List!<Type>, is_comptime: bool) -> SharedPtr!<List!<Expr>> {
-		var result: SharedPtr!<List!<Expr>> = arguments;
+		var result = SharedPtr!<List!<Expr>>::new(arguments);
 
 		for i in 0u..result.size() {
 			if result[i].type.decl != required_parameter_types[i].decl {
