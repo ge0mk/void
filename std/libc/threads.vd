@@ -1,0 +1,44 @@
+import std/core;
+
+enum ThreadStatus {
+	case Success  = 0;
+	case Busy     = 1;
+	case Error    = 2;
+	case Nomem    = 3;
+	case Timedout = 4;
+}
+
+enum MutexType {
+	case Plain     = 0;
+	case Recursive = 1;
+	case Timed     = 2;
+
+	operator |(lhs: MutexType, rhs: MutexType) -> MutexType = default;
+	operator &(lhs: MutexType, rhs: MutexType) -> MutexType = default;
+}
+
+alias thrd_t = ptr!<void, false>;
+func thrd_alloc() -> ptr!<thrd_t, true> = extern;
+func thrd_create(t: ptr!<thrd_t, true>, f: (ptr!<void, true>) -> i32, arg: ptr!<void, true>) -> ThreadStatus = extern;
+func thrd_equal(a: thrd_t, b: thrd_t) -> i32 = extern;
+func thrd_current() -> thrd_t = extern;
+func thrd_yield() -> void = extern;
+func thrd_exit(exit_code: i32) -> void = extern;
+func thrd_detach(t: thrd_t) -> ThreadStatus = extern;
+func thrd_join(t: thrd_t, result: &&i32) -> ThreadStatus = extern;
+
+struct mtx_t {}
+func mtx_alloc() -> ptr!<mtx_t, true> = extern;
+func mtx_init(m: ptr!<mtx_t, true>, type: MutexType) -> ThreadStatus = extern;
+func mtx_lock(m: ptr!<mtx_t, true>) -> ThreadStatus = extern;
+func mtx_trylock(m: ptr!<mtx_t, true>) -> ThreadStatus = extern;
+func mtx_unlock(m: ptr!<mtx_t, true>) -> ThreadStatus = extern;
+func mtx_destroy(m: ptr!<mtx_t, true>) -> void = extern;
+
+struct cnd_t {}
+func cnd_alloc() -> ptr!<cnd_t, true> = extern;
+func cnd_init(c: ptr!<cnd_t, true>) -> ThreadStatus = extern;
+func cnd_signal(c: ptr!<cnd_t, true>) -> ThreadStatus = extern;
+func cnd_broadcast(c: ptr!<cnd_t, true>) -> ThreadStatus = extern;
+func cnd_wait(c: ptr!<cnd_t, true>, m: ptr!<mtx_t, true>) -> ThreadStatus = extern;
+func cnd_destroy(c: ptr!<cnd_t, true>) -> void = extern;

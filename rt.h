@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <threads.h>
 
 extern intptr_t void_main(void *data, uintptr_t size);
 
@@ -14,3 +15,6 @@ void panic(int error);
 FILE* get_stdin();
 FILE* get_stdout();
 FILE* get_stderr();
+
+mtx_t* mtx_alloc();
+cnd_t* cnd_alloc();

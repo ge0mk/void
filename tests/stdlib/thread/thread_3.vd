@@ -1,0 +1,22 @@
+import std/core;
+import std/thread;
+
+func main() -> void {
+	const worker = func (x: int) -> void {
+		assert(x == 10);
+	};
+
+	var a: Thread!<void, int> = (worker, 10);
+	assert(a.isJoinable());
+	assert(a.isDetachable());
+	a.join();
+	assert(!a.isJoinable());
+	assert(!a.isDetachable());
+
+	var b: Thread!<void, int> = (worker, 10);
+	assert(b.isJoinable());
+	assert(b.isDetachable());
+	b.detach();
+	assert(!b.isJoinable());
+	assert(!b.isDetachable());
+}

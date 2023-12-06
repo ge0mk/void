@@ -1,0 +1,175 @@
+import std/core;
+import std/libc/errno;
+import std/libc/stdlib;
+import std/libc/threads;
+
+template <Tresult: type, Targ: type>
+struct Thread {
+	comptime if Targ == void {
+		alias WorkerType = () -> Tresult;
+	} else {
+		alias WorkerType = (Targ) -> Tresult;
+	}
+
+	struct Storage {
+		var worker: WorkerType;
+
+		comptime if Tresult != void {
+			var result: Tresult;
+		}
+
+		comptime if Targ != void {
+			var arg: Targ;
+		}
+	}
+
+	var handle: thrd_t;
+	var storage: ptr!<Storage, true>;
+
+	var is_detached: bool;
+	var is_joined: bool;
+
+	comptime if Targ == void {
+		func constructor(this: &&Thread!<Tresult, Targ>, worker: WorkerType) -> void {
+			this.handle := ();
+			this.storage := malloc!<Storage>(1u);
+			this.storage[0u].worker.constructor(worker);
+
+			const cb = func (arg: ptr!<void, true>) -> i32 {
+				const storage = arg as ptr!<Storage, true>;
+
+				comptime if Tresult == void {
+					storage[0u].worker();
+				} else {
+					storage[0u].result.constructor(storage[0u].worker());
+				}
+
+				return 0;
+			};
+
+			assert(thrd_create(ptr!<thrd_t, true>::addressOf(&&this.handle), cb, this.storage as ptr!<void, true>) == Success);
+		}
+	} else {
+		func constructor(this: &&Thread!<Tresult, Targ>, worker: WorkerType, @[shallow] arg: Targ) -> void {
+			this.handle := ();
+			this.storage := malloc!<Storage>(1u);
+			this.storage[0u].worker.constructor(worker);
+			this.storage[0u].arg.constructor(arg);
+
+			const cb = func (arg: ptr!<void, true>) -> i32 {
+				const storage = arg as ptr!<Storage, true>;
+
+				comptime if Tresult == void {
+					storage[0u].worker(storage[0u].arg);
+				} else {
+					storage[0u].result.constructor(storage[0u].worker(storage[0u].arg));
+				}
+
+				return 0;
+			};
+
+			assert(thrd_create(ptr!<thrd_t, true>::addressOf(&&this.handle), cb, this.storage as ptr!<void, true>) == Success);
+		}
+	}
+
+	func destructor(this: &&Thread!<Tresult, Targ>) -> void {
+		if this.isJoinable() {
+			discard this.join();
+		}
+
+		this.storage[0u].worker.destructor();
+
+		comptime if Targ != void {
+			this.storage[0u].arg.destructor();
+		}
+
+		comptime if Tresult != void {
+			this.storage[0u].result.destructor();
+		}
+
+		free!<Storage>(this.storage);
+	}
+
+	func isJoinable(this: &Thread!<Tresult, Targ>) -> bool {
+		return !this.is_detached && !this.is_joined && thrd_equal(this.handle, thrd_current()) == 0;
+	}
+
+	func join(this: &&Thread!<Tresult, Targ>) -> Tresult {
+		var exit_code: i32;
+		assert(this.isJoinable(), Error::EINVAL);
+		assert(thrd_join(this.handle, &&exit_code) == Success, Error::EINVAL);
+		this.is_joined = true;
+
+		comptime if Tresult != void {
+			return this.storage[0u].result;
+		}
+	}
+
+	comptime if Tresult == void {
+		func isDetachable(this: &&Thread!<Tresult, Targ>) -> bool {
+			return !this.is_detached && !this.is_joined;
+		}
+
+		func detach(this: &&Thread!<Tresult, Targ>) -> void {
+			assert(this.isDetachable(), Error::EINVAL);
+			assert(thrd_detach(this.handle) == Success, Error::EINVAL);
+			this.is_detached = true;
+		}
+	}
+}
+
+struct Mutex {
+	var handle: ptr!<mtx_t, true>;
+
+	func constructor(this: &&Mutex, type: MutexType) -> void {
+		this.handle := mtx_alloc();
+		assert(mtx_init(this.handle, type) == Success);
+	}
+
+	func destructor(this: &&Mutex) -> void {
+		mtx_destroy(this.handle);
+		free!<mtx_t>(this.handle);
+	}
+
+	operator ==(this: Mutex, other: Mutex) -> bool = default;
+
+	func lock(this: &&Mutex) -> ThreadStatus {
+		return mtx_lock(this.handle);
+	}
+
+	func tryLock(this: &&Mutex) -> ThreadStatus {
+		return mtx_trylock(this.handle);
+	}
+
+	func unlock(this: &&Mutex) -> ThreadStatus {
+		return mtx_unlock(this.handle);
+	}
+}
+
+struct Condition {
+	var handle: ptr!<cnd_t, true>;
+
+	func constructor(this: &&Condition) -> void {
+		this.handle := cnd_alloc();
+		assert(cnd_init(this.handle) == Success);
+	}
+
+	func destructor(this: &&Condition) -> void {
+		cnd_destroy(this.handle);
+		free!<cnd_t>(this.handle);
+	}
+
+	operator ==(this: Condition, other: Condition) -> bool = default;
+
+	func signal(this: &&Condition) -> ThreadStatus {
+		return cnd_signal(this.handle);
+	}
+
+	func broadcast(this: &&Condition) -> ThreadStatus {
+		return cnd_broadcast(this.handle);
+	}
+
+	func wait(this: &&Condition, mutex: &&Mutex) -> ThreadStatus {
+		return cnd_wait(this.handle, mutex.handle);
+	}
+}

@@ -1,0 +1,13 @@
+import std/core;
+import std/thread;
+
+func main() -> void {
+	const worker = func (x: int) -> int {
+		return x * 2;
+	};
+
+	var a: Thread!<int, int> = (worker, 5);
+	assert(a.isJoinable());
+	assert(a.join() == 10);
+	assert(!a.isJoinable());
+}

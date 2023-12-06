@@ -53,3 +53,11 @@ int main(int argc, char *argv[]) {
 
 	return void_main(&args, argc);
 }
+
+mtx_t* mtx_alloc() {
+	return malloc(sizeof(mtx_t));
+}
+
+cnd_t* cnd_alloc() {
+	return malloc(sizeof(cnd_t));
+}
