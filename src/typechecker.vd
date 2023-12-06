@@ -3787,7 +3787,9 @@ struct TCContext {
 				}
 				case SizeOf
 				| AlignmentOf
-				| ReferenceKindOf -> {
+				| ReferenceKindOf
+				| HasDefaultConstructor
+				| HasCopyConstructor -> {
 					var name = "";
 					var parameter_types: List!<Type>;
 					var return_type: Type;
@@ -3799,6 +3801,8 @@ struct TCContext {
 						case SizeOf -> name = "sizeOf";
 						case AlignmentOf -> name = "alignmentOf";
 						case ReferenceKindOf -> name = "referenceKindOf";
+						case HasDefaultConstructor -> name = "hasDefaultConstructor";
+						case HasCopyConstructor -> name = "hasCopyConstructor";
 						else -> panic(Error::EINVAL);
 					}
 
@@ -3806,6 +3810,8 @@ struct TCContext {
 						case SizeOf
 						| AlignmentOf -> return_type = this.program.uint_type;
 						case ReferenceKindOf -> return_type = this.getType(Name("ReferenceKind"), error_span);
+						case HasDefaultConstructor
+						| HasCopyConstructor -> return_type = this.program.bool_type;
 						else -> panic(Error::EINVAL);
 					}
 

@@ -52,6 +52,8 @@ func createCoreReflectionFunctionTemplates(program: &&Program, dest_namespace: S
 	discard program.createFunction(dest_namespace, "sizeOf", template_parameters, BuiltinFunction::SizeOf(Type::unknown()));
 	discard program.createFunction(dest_namespace, "alignmentOf", template_parameters, BuiltinFunction::AlignmentOf(Type::unknown()));
 	discard program.createFunction(dest_namespace, "referenceKindOf", template_parameters, BuiltinFunction::ReferenceKindOf(Type::unknown()));
+	discard program.createFunction(dest_namespace, "hasDefaultConstructor", template_parameters, BuiltinFunction::HasDefaultConstructor(Type::unknown()));
+	discard program.createFunction(dest_namespace, "hasCopyConstructor", template_parameters, BuiltinFunction::HasCopyConstructor(Type::unknown()));
 }
 
 func createUnaryFunction(program: &&Program, type_namespace: SharedHandle!<Namespace>, name: String, obj: Type, return_type: Type, body: BuiltinFunction) -> SharedHandle!<FunctionDecl> {

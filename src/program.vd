@@ -1513,6 +1513,8 @@ variant BuiltinFunction {
 	case SizeOf;
 	case AlignmentOf;
 	case ReferenceKindOf;
+	case HasDefaultConstructor;
+	case HasCopyConstructor;
 
 	case Assert;
 	case AssertError;
@@ -1583,6 +1585,8 @@ variant BuiltinFunction {
 			| SizeOf
 			| AlignmentOf
 			| ReferenceKindOf
+			| HasDefaultConstructor
+			| HasCopyConstructor
 			| Assert
 			| AssertError
 			| RangeGetData

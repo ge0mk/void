@@ -1401,6 +1401,8 @@ struct CGContext {
 			}
 			case AlignmentOf -> return LLVMConstInt(this.int_type, LLVMPreferredAlignmentOfType(this.data_layout, this.getType(function.base_type)) as int, false);
 			case ReferenceKindOf -> return LLVMConstInt(this.int_type, function.base_type.reference_kind as int, false);
+			case HasDefaultConstructor -> return LLVMConstInt(this.bool_type, function.base_type.decl.default_constructor.isAlive() as int, false);
+			case HasCopyConstructor -> return LLVMConstInt(this.bool_type, function.base_type.decl.copy_constructor.isAlive() as int, false);
 
 			case Assert | AssertError -> {
 				const panic_block = LLVMAppendBasicBlockInContext(this.llvm_context, this.current_function, "panic");

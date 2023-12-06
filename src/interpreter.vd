@@ -227,6 +227,8 @@ struct Interpreter {
 			case FloatToInt: target_type -> return Expr::Integer(args[0u].toFloat() as int, span, target_type);
 			// reflection functions
 			case ReferenceKindOf -> return Expr::Integer(function.base_type.reference_kind as int, span, return_type);
+			case HasDefaultConstructor -> return Expr::Integer(function.base_type.decl.default_constructor.isAlive() as int, span, return_type);
+			case HasCopyConstructor -> return Expr::Integer(function.base_type.decl.copy_constructor.isAlive() as int, span, return_type);
 			else -> {
 				this.todo("finish interpretation of builtin functions", span);
 				return Expr::Undefined(Span(), Type::unknown());
