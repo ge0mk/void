@@ -1,9 +1,8 @@
-#include <stdbool.h>
-#include <stdio.h>
-#include <stdint.h>
-#include <stdlib.h>
-#include <string.h>
-#include <errno.h>
+#include "rt.h"
+
+int* get_errno() {
+	return &errno;
+}
 
 const char* error_toCString(int error) {
 	switch (error) {
@@ -25,10 +24,6 @@ void panic(int error) {
 	abort();
 }
 
-int* get_errno() {
-	return &errno;
-}
-
 FILE* get_stdin() {
 	return stdin;
 }
@@ -41,14 +36,12 @@ FILE* get_stderr() {
 	return stderr;
 }
 
-extern int64_t void_main(void *data, uint64_t size);
-
 int main(int argc, char *argv[]) {
 	struct {
 		char *data;
-		uint64_t size;
-		uint64_t capacity;
-		uint64_t short_size_and_flags;
+		uintptr_t size;
+		uintptr_t capacity;
+		uintptr_t short_size_and_flags;
 	} args[argc];
 
 	for(int i = 0; i < argc; i++) {
