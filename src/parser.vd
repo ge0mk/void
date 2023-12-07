@@ -1,7 +1,7 @@
 import std/core;
 import std/box;
 import std/list;
-import std/shared;
+import std/shared_list;
 import std/string;
 
 import error;
@@ -9,7 +9,6 @@ import lexer;
 import operators;
 import program;
 import span;
-import syntax_tree;
 
 enum ParserScope {
 	case Root;
@@ -29,6 +28,7 @@ enum ParserScope {
 
 struct Parser {
 	var program: &&Program;
+	var file: SharedHandle!<CompilationUnit>;
 
 	var tokens: &List!<Token>;
 	var strings: &List!<String>;
@@ -38,8 +38,10 @@ struct Parser {
 
 	var scope_stack: List!<ParserScope>;
 
-	func constructor(this: &&Parser, program: &&Program, tokens: &List!<Token>, strings: &List!<String>, numbers: &List!<ParsedNumber>) -> void {
+	func constructor(this: &&Parser, program: &&Program, file: SharedHandle!<CompilationUnit>, tokens: &List!<Token>, strings: &List!<String>, numbers: &List!<ParsedNumber>) -> void {
 		this.program := &&program;
+		this.file := file;
+
 		this.tokens := &tokens;
 		this.strings := &strings;
 		this.numbers := &numbers;
@@ -181,7 +183,10 @@ struct Parser {
 		this.index++;
 	}
 
-	func parseStmt(this: &&Parser) -> ParsedStmt {
+	func parseStmt(this: &&Parser) -> uint {
+		defer discard this.accept(TokenType::Semicolon);
+		const start = this.currentSpan();
+
 		match this.current() {
 			case KeywordPragma -> return this.parsePragma();
 			case KeywordImport -> return this.parseImport();
@@ -194,10 +199,7 @@ struct Parser {
 			| KeywordTemplate
 			| AtSign -> return this.parseDecl();
 			case KeywordAlias -> return this.parseAlias();
-			case LCurly -> {
-				const compound = this.parseCompoundStmt();
-				return ParsedStmt::Compound(compound, compound.span, false);
-			}
+			case LCurly -> return this.parseCompoundStmt();
 			case KeywordVar
 			| KeywordConst -> return this.parseVarDeclStmt();
 			case KeywordCase -> if this.countScope(ParserScope::MatchExpr) != this.countScope(ParserScope::CaseStmt) {
@@ -205,30 +207,69 @@ struct Parser {
 			} else {
 				return this.parseCaseDecl();
 			}
-			case KeywordIf -> match this.peek() {
-				case KeywordVar
-				| KeywordConst -> return this.parseIfVarStmt();
-				else -> return this.parseIfStmt();
-			}
 			case KeywordElse -> if this.peek() is Arrow
 								&& this.countScope(ParserScope::MatchExpr) != this.countScope(ParserScope::CaseStmt) {
-				const start = this.currentSpan();
 				this.index += 2;
 
 				this.pushScope(ParserScope::CaseStmt);
 				const body = this.parseStmt();
 				this.popScope();
 
-				return ParsedStmt::ElseCase(Box!<ParsedStmt>(body), start..body.span, false);
+				return this.file.addNode(Node::ElseCaseStmt(body, start..this.previousSpan(), false));
 			} else {
 				this.next();
-				return ParsedStmt::Garbage(this.previousSpan(), false);
+				return this.file.garbageNode();
+			}
+			case KeywordIf -> match this.peek() {
+				case KeywordVar
+				| KeywordConst -> return this.parseIfVarStmt();
+				else -> return this.parseIfStmt();
+			}
+			case KeywordWhile -> return this.parseWhileStmt();
+			case KeywordDo -> return this.parseDoWhileStmt();
+			case KeywordFor -> return this.parseForStmt();
+			case KeywordBreak -> {
+				this.next();
+				return this.file.addNode(Node::BreakStmt(start..this.previousSpan(), false));
+			}
+			case KeywordContinue -> {
+				this.next();
+				return this.file.addNode(Node::ContinueStmt(start..this.previousSpan(), false));
 			}
 			case KeywordDefer -> {
-				const start = this.currentSpan();
 				this.next();
 				const body = this.parseStmt();
-				return ParsedStmt::Defer(Box!<ParsedStmt>(body), start..body.span, false);
+				return this.file.addNode(Node::DeferStmt(body, start..this.previousSpan(), false));
+			}
+			case KeywordThrow -> {
+				this.next();
+				const value = this.parseExpr();
+				return this.file.addNode(Node::ThrowStmt(value, start..this.previousSpan(), false));
+			}
+			case KeywordReturn -> {
+				this.next();
+
+				var value = this.file.emptyNode();
+				if !(this.current() is Semicolon || this.current() is RCurly) {
+					value = this.parseExpr();
+				}
+
+				return this.file.addNode(Node::ReturnStmt(value, start..this.previousSpan(), false));
+			}
+			case KeywordYield -> {
+				this.next();
+
+				var value = this.file.emptyNode();
+				if !(this.current() is Semicolon || this.current() is RCurly) {
+					value = this.parseExpr();
+				}
+
+				return this.file.addNode(Node::YieldStmt(value, start..this.previousSpan(), false));
+			}
+			case KeywordDiscard -> {
+				this.next();
+				const value = this.parseExpr();
+				return this.file.addNode(Node::DiscardStmt(value, start..this.previousSpan(), false));
 			}
 			case KeywordComptime -> match this.peek() {
 				case KeywordFunc
@@ -237,153 +278,73 @@ struct Parser {
 				case KeywordWhile -> return this.parseWhileStmt();
 				case KeywordDo -> return this.parseDoWhileStmt();
 				case KeywordFor -> return this.parseForStmt();
-				case KeywordVar
-				| KeywordConst -> return this.parseVarDeclStmt();
-				case LCurly -> {
-					this.next();
-					const compound = this.parseCompoundStmt();
-					return ParsedStmt::Compound(compound, compound.span, true);
-				}
+				case KeywordVar | KeywordConst -> return this.parseVarDecl(false);
 				else -> {
 					this.next();
 					this.error("invalid comptime stmt", this.previousSpan());
-					return ParsedStmt::Garbage(this.previousSpan(), false);
+					return this.file.garbageNode();
 				}
 			}
-			case KeywordWhile -> return this.parseWhileStmt();
-			case KeywordDo -> return this.parseDoWhileStmt();
-			case KeywordFor -> return this.parseForStmt();
-			case KeywordBreak -> {
-				const start = this.currentSpan();
-				this.next();
-				discard this.accept(TokenType::Semicolon);
-				return ParsedStmt::Break(start..this.previousSpan(), false);
-			}
-			case KeywordContinue -> {
-				const start = this.currentSpan();
-				this.next();
-				discard this.accept(TokenType::Semicolon);
-				return ParsedStmt::Continue(start..this.previousSpan(), false);
-			}
-			case KeywordThrow -> {
-				const start = this.currentSpan();
-				this.next();
-
-				var value = this.parseExpr();
-				discard this.accept(TokenType::Semicolon);
-
-				const end = this.previousSpan();
-				return ParsedStmt::Throw(value, start..end, false);
-			}
-			case KeywordReturn -> {
-				const start = this.currentSpan();
-				this.next();
-
-				var value = ParsedExpr::Empty(start);
-				if !(this.current() is Semicolon || this.current() is RCurly) {
-					value = this.parseExpr();
-				}
-				discard this.accept(TokenType::Semicolon);
-
-				const end = this.previousSpan();
-				return ParsedStmt::Return(value, start..end, false);
-			}
-			case KeywordYield -> {
-				const start = this.currentSpan();
-				this.next();
-
-				var value = ParsedExpr::Empty(start);
-				if !(this.current() is Semicolon || this.current() is RCurly) {
-					value = this.parseExpr();
-				}
-				discard this.accept(TokenType::Semicolon);
-
-				const end = this.previousSpan();
-				return ParsedStmt::Yield(value, start..end, false);
-			}
-			case KeywordDiscard -> {
-				const start = this.currentSpan();
-				this.next();
-
-				var value = this.parseExpr();
-				discard this.accept(TokenType::Semicolon);
-
-				const end = this.previousSpan();
-				return ParsedStmt::Discard(value, start..end, false);
-			}
-			else -> {
-				const expr = this.parseExpr();
-				discard this.accept(TokenType::Semicolon);
-				return ParsedStmt::Expr(expr, expr.span, false);
-			}
+			else -> return this.parseExpr();
 		}
 	}
 
-	func parsePragma(this: &&Parser) -> ParsedStmt {
+	func parsePragma(this: &&Parser) -> uint {
 		const start = this.currentSpan();
 		if !this.expect(TokenType::KeywordPragma) {
-			return ParsedStmt::Garbage(start..this.currentSpan(), false);
+			return this.file.garbageNode();
 		}
 
 		const name = this.expectIdentifier();
 		if name.isEmpty() {
-			return ParsedStmt::Garbage(start..this.currentSpan(), false);
+			return this.file.garbageNode();
 		}
 
-		discard this.accept(TokenType::Semicolon);
-
-		const end = this.previousSpan();
-
-		return ParsedStmt::Pragma(name, start..end, true);
+		return this.file.addNode(Node::Pragma(name, start..this.previousSpan(), true));
 	}
 
-	func parseImport(this: &&Parser) -> ParsedStmt {
+	func parseImport(this: &&Parser) -> uint {
 		const start = this.currentSpan();
 		if !this.expect(TokenType::KeywordImport) {
-			return ParsedStmt::Garbage(start..this.currentSpan(), false);
+			return this.file.garbageNode();
 		}
 
 		var name = this.expectIdentifier();
 		if name.isEmpty() {
-			return ParsedStmt::Garbage(start..this.currentSpan(), false);
+			return this.file.garbageNode();
 		}
 
-		while this.current() is Slash {
-			this.next();
+		while this.accept(TokenType::Slash) {
 			const segment = this.expectIdentifier();
 			if name.isEmpty() {
-				return ParsedStmt::Garbage(start..this.currentSpan(), false);
+				return this.file.garbageNode();
 			}
 
 			name += "/" + segment;
 		}
 
-		discard this.accept(TokenType::Semicolon);
-
-		const end = this.previousSpan();
-
-		return ParsedStmt::Import(name, start..end, true);
+		return this.file.addNode(Node::Import(name, start..this.previousSpan(), true));
 	}
 
-	func parseDecl(this: &&Parser) -> ParsedStmt {
+	func parseDecl(this: &&Parser) -> uint {
 		const start = this.currentSpan();
 
 		var annotations = this.parseAnnotations();
 		var template_parameters = this.parseTemplateParameterDecl();
 
-		var result = ParsedStmt::Garbage(start..this.currentSpan(), false);
 		match this.current() {
-			case KeywordNamespace -> result = this.parseNamespace(start, annotations, template_parameters);
+			case KeywordNamespace -> return this.parseNamespace(start, annotations, template_parameters);
 			case KeywordStruct
 			| KeywordEnum
-			| KeywordVariant -> result = this.parseTypeDecl(start, annotations, template_parameters);
+			| KeywordVariant -> return this.parseTypeDecl(start, annotations, template_parameters);
 			case KeywordFunc
 			| KeywordOperator
-			| KeywordComptime -> result = this.parseFunctionDecl(start, annotations, template_parameters);
-			else -> {}
+			| KeywordComptime -> return this.parseFunctionDecl(start, annotations, template_parameters);
+			else -> {
+				this.error("expected decl", this.currentSpan());
+				return this.file.garbageNode();
+			}
 		}
-
-		return result;
 	}
 
 	func parseAnnotations(this: &&Parser) -> List!<ParsedAnnotation> {
@@ -480,7 +441,7 @@ struct Parser {
 				break;
 			}
 
-			var value = ParsedExpr::Empty(this.previousSpan());
+			var value = this.file.emptyNode();
 			if this.accept(TokenType::Assign) {
 				value = this.parseHighPrecedenceExpr();
 			}
@@ -503,44 +464,34 @@ struct Parser {
 		return template_parameters;
 	}
 
-	func parseNamespace(this: &&Parser, start: Span, annotations: List!<ParsedAnnotation>, template_parameters: List!<ParsedTemplateParameterDecl>) -> ParsedStmt {
+	func parseNamespace(this: &&Parser, start: Span, annotations: List!<ParsedAnnotation>, template_parameters: List!<ParsedTemplateParameterDecl>) -> uint {
 		if !this.expect(TokenType::KeywordNamespace) {
-			return ParsedStmt::Garbage(start..this.previousSpan(), false);
+			return this.file.garbageNode();
 		}
 
 		const name = this.expectIdentifier();
 		if name.isEmpty() {
-			return ParsedStmt::Garbage(start..this.previousSpan(), false);
+			return this.file.garbageNode();
 		}
-
-		var decl = ParsedNamespace(start, this.previousSpan(), annotations, template_parameters, name, SharedPtr!<List!<ParsedStmt>>::new(List!<ParsedStmt>()));
-
-		if !this.expect(TokenType::LCurly) {
-			return ParsedStmt::Garbage(start..this.previousSpan(), false);
-		}
+		const name_span = this.previousSpan();
 
 		this.pushScope(ParserScope::Namespace);
-
-		while !this.accept(TokenType::RCurly) {
-			const child = this.parseStmt();
-			if !(child is Garbage) {
-				decl.children.append(child);
-			}
-		}
-
+		const body = this.parseCompoundStmt();
 		this.popScope();
 
-		decl.span = start..this.previousSpan();
-		return ParsedStmt::Namespace(decl, decl.span, false);
+		return this.file.addNode(Node::NamespaceDecl(
+			ParsedNamespaceDecl(name_span, annotations, template_parameters, name, body),
+			start..this.previousSpan(), false
+		));
 	}
 
-	func parseTypeDecl(this: &&Parser, start: Span, annotations: List!<ParsedAnnotation>, template_parameters: List!<ParsedTemplateParameterDecl>) -> ParsedStmt {
+	func parseTypeDecl(this: &&Parser, start: Span, annotations: List!<ParsedAnnotation>, template_parameters: List!<ParsedTemplateParameterDecl>) -> uint {
 		const kind = match this.current() {
 			case KeywordStruct -> yield TypeDeclKind::Struct;
 			case KeywordEnum -> yield TypeDeclKind::Enum;
 			case KeywordVariant -> yield TypeDeclKind::Variant;
 			else -> {
-				return ParsedStmt::Garbage(start..this.previousSpan(), false);
+				return this.file.garbageNode();
 			}
 		}
 
@@ -548,77 +499,54 @@ struct Parser {
 
 		const name = this.expectIdentifier();
 		if name.isEmpty() {
-			return ParsedStmt::Garbage(start..this.previousSpan(), false);
+			return this.file.garbageNode();
 		}
 		const name_span = this.previousSpan();
 
-		var id_type = ParsedType::Empty(Span());
+		var id_type = this.file.emptyNode();
 		if kind == Enum || kind == Variant {
 			if this.accept(TokenType::Colon) {
-				id_type = this.parseType();
+				id_type = this.parseHighPrecedenceExpr();
 			}
-		}
-
-		if !this.expect(TokenType::LCurly) {
-			return ParsedStmt::Garbage(start..this.previousSpan(), false);
 		}
 
 		this.pushScope(ParserScope::TypeDecl);
-
-		var children = SharedPtr!<List!<ParsedStmt>>::new(List!<ParsedStmt>());
-		while !this.accept(TokenType::RCurly) {
-			const child = this.parseStmt();
-			if !(child is Garbage) {
-				children.append(child);
-			}
-		}
-
+		const body = this.parseCompoundStmt();
 		this.popScope();
 
-		const span = start..this.previousSpan();
-		return ParsedStmt::TypeDecl(ParsedTypeDecl(
-			span, name_span,
-			annotations,
-			template_parameters,
-			kind,
-			name,
-			id_type,
-			children
-		), span, false);
+		return this.file.addNode(Node::TypeDecl(
+			ParsedTypeDecl(name_span, annotations, template_parameters, kind, name, id_type, body),
+			start..this.previousSpan(), false
+		));
 	}
 
-	func parseFunctionDecl(this: &&Parser, start: Span, annotations: List!<ParsedAnnotation>, template_parameters: List!<ParsedTemplateParameterDecl>) -> ParsedStmt {
+	func parseFunctionDecl(this: &&Parser, start: Span, annotations: List!<ParsedAnnotation>, template_parameters: List!<ParsedTemplateParameterDecl>) -> uint {
 		const is_comptime = this.accept(TokenType::KeywordComptime);
 
 		const signature = this.parseFunctionSignature() else {
-			return ParsedStmt::Garbage(this.currentSpan(), false);
+			return this.file.garbageNode();
 		}
 
-		var body = ParsedStmt::Garbage(start, false);
+		var body = this.file.emptyNode();
 		if this.accept(TokenType::Assign) {
 			if this.accept(TokenType::KeywordExtern) {
-				body = ParsedStmt::ExternFunctionBody(this.previousSpan(), false);
+				body = this.file.addNode(Node::ExternFunctionBody(this.previousSpan(), false));
 			} else if this.expect(TokenType::KeywordDefault) {
-				body = ParsedStmt::DefaultFunctionBody(this.previousSpan(), false);
+				body = this.file.addNode(Node::DefaultFunctionBody(this.previousSpan(), false));
 			}
 
 			discard this.accept(TokenType::Semicolon);
 		} else {
 			this.pushScope(ParserScope::FunctionDecl);
-			const compound_stmt = this.parseCompoundStmt();
-			body = ParsedStmt::Compound(compound_stmt, compound_stmt.span, false);
+			body = this.parseCompoundStmt();
 			this.popScope();
 		}
 
 		const span = start..this.previousSpan();
-		return ParsedStmt::FunctionDecl(Box!<ParsedFunctionDecl>(ParsedFunctionDecl(
-			span,
-			annotations,
-			template_parameters,
-			is_comptime,
-			signature,
-			body
-		)), span, true);
+		return this.file.addNode(Node::FunctionDecl(
+			ParsedFunctionDecl(span, annotations, template_parameters, is_comptime, signature, body),
+			span, true
+		));
 	}
 
 	func parseFunctionSignature(this: &&Parser) -> Optional!<ParsedFunctionSignature> {
@@ -642,36 +570,10 @@ struct Parser {
 			return None;
 		}
 
-		var parameters: List!<ParsedParameterDecl>;
+		var parameters: List!<uint>;
 		var error = false;
 		while !this.accept(TokenType::RParen) {
-			const parameter_start = this.currentSpan();
-
-			const annotations = this.parseAnnotations();
-			const parameter_name = this.expectIdentifier();
-			if parameter_name.isEmpty() {
-				error = true;
-				break;
-			}
-
-			if !this.expect(TokenType::Colon) {
-				error = true;
-				break;
-			}
-
-			const param_type = this.parseType();
-			var initializer = ParsedExpr::Empty(this.previousSpan());
-			if this.accept(TokenType::Assign) {
-				initializer = this.parseExpr();
-			}
-
-			parameters.append(ParsedParameterDecl(
-				parameter_start..this.previousSpan(),
-				annotations,
-				parameter_name,
-				param_type,
-				initializer
-			));
+			parameters.append(this.parseVarDecl(true));
 
 			if !(this.current() is RParen) {
 				if !this.expect(TokenType::Comma) {
@@ -687,157 +589,157 @@ struct Parser {
 
 		if !this.expect(TokenType::Arrow) {
 			this.error("expected function return type", this.currentSpan());
-			return Some(ParsedFunctionSignature(start..this.previousSpan(), name, parameters, ParsedType::Garbage(this.currentSpan())));
+			return Some(ParsedFunctionSignature(start..this.previousSpan(), name, parameters, this.file.garbageNode()));
 		}
 
-		const return_type = this.parseType();
+		const return_type = this.parseHighPrecedenceExpr();
 		return Some(ParsedFunctionSignature(start..this.previousSpan(), name, parameters, return_type));
 	}
 
-	func parseVarDecl(this: &&Parser) -> Optional!<ParsedVarDecl> {
+	func parseVarDecl(this: &&Parser, is_parameter: bool) -> uint {
 		const start = this.currentSpan();
-		const is_const = this.accept(TokenType::KeywordConst);
-		if !is_const {
-			if !this.expect(TokenType::KeywordVar) {
-				return None;
+		var is_comptime = false;
+		var is_const = false;
+
+		const annotations = this.parseAnnotations();
+
+		if !is_parameter {
+			is_comptime = this.accept(TokenType::KeywordComptime);
+			is_const = this.accept(TokenType::KeywordConst);
+			if !is_const {
+				if !this.expect(TokenType::KeywordVar) {
+					return this.file.garbageNode();
+				}
 			}
 		}
 
 		const name = this.expectIdentifier();
 		if name.isEmpty() {
-			return None;
+			return this.file.garbageNode();
 		}
 
-		var var_type = ParsedType::Empty(this.previousSpan());
+		var type = this.file.emptyNode();
 		if this.accept(TokenType::Colon) {
-			var_type = this.parseType();
+			type = this.parseHighPrecedenceExpr();
 		}
 
-		if var_type is Empty && !(this.current() is Assign) {
+		if type == this.file.emptyNode() && !(this.current() is Assign) {
 			this.error("variable must be declared with a type or an initializer", start..this.previousSpan());
-			return None;
+			return this.file.garbageNode();
 		}
 
-		var initializer = ParsedExpr::Empty(this.previousSpan());
+		var initializer = this.file.emptyNode();
 		if this.accept(TokenType::Assign) {
 			initializer = this.parseExpr();
 		}
 
-		return Some(ParsedVarDecl(start..this.previousSpan(), name, is_const, var_type, initializer));
+		const variable = ParsedVarDecl(annotations, name, type, initializer, is_const, is_parameter);
+		return this.file.addNode(Node::VarDecl(variable, start..this.previousSpan(), is_comptime));
 	}
 
-	func parseCaseDecl(this: &&Parser) -> ParsedStmt {
+	func parseCaseDecl(this: &&Parser) -> uint {
 		const start = this.currentSpan();
 		if !this.expect(TokenType::KeywordCase) {
-			return ParsedStmt::Garbage(start, false);
+			return this.file.garbageNode();
 		}
 
 		const name = this.expectIdentifier();
 		if name.isEmpty() {
-			return ParsedStmt::Garbage(start, false);
+			return this.file.garbageNode();
 		}
 
-		var payload = ParsedType::Empty(this.previousSpan());
+		var payload = this.file.emptyNode();
 		if this.accept(TokenType::Colon) {
-			payload = this.parseType();
+			payload = this.parseHighPrecedenceExpr();
 		}
 
-		var id = ParsedExpr::Empty(this.previousSpan());
+		var id = this.file.emptyNode();
 		if this.accept(TokenType::Assign) {
 			id = this.parseExpr();
 		}
 
-		discard this.accept(TokenType::Semicolon);
-		const decl = ParsedCaseDecl(start..this.previousSpan(), name, payload, id);
-		return ParsedStmt::CaseDecl(decl, decl.span, true);
+		return this.file.addNode(Node::CaseDecl(ParsedCaseDecl(name, payload, id), start..this.previousSpan(), true));
 	}
 
-	func parseAlias(this: &&Parser) -> ParsedStmt {
+	func parseAlias(this: &&Parser) -> uint {
 		const start = this.currentSpan();
 		if !this.expect(TokenType::KeywordAlias) {
-			return ParsedStmt::Garbage(start, false);
+			return this.file.garbageNode();
 		}
 
 		const name = this.expectIdentifier();
 		if name.isEmpty() {
-			return ParsedStmt::Garbage(start..this.previousSpan(), false);
+			return this.file.garbageNode();
 		}
 
 		if !this.expect(TokenType::Assign) {
-			return ParsedStmt::Garbage(start..this.previousSpan(), false);
+			return this.file.garbageNode();
 		}
 
-		const type = this.parseType();
-
-		discard this.accept(TokenType::Semicolon);
-		return ParsedStmt::Alias(ParsedTypeAlias(name, type), start..this.previousSpan(), true);
+		const type = this.parseHighPrecedenceExpr();
+		return this.file.addNode(Node::AliasDecl(ParsedAliasDecl(name, type), start..this.previousSpan(), true));
 	}
 
-	func parseCompoundStmt(this: &&Parser) -> ParsedCompoundStmt {
-		var stmt = ParsedCompoundStmt(this.currentSpan(), SharedPtr!<List!<ParsedStmt>>::new(List!<ParsedStmt>()));
+	func parseCompoundStmt(this: &&Parser) -> uint {
+		const start = this.currentSpan();
 
 		if !this.expect(TokenType::LCurly) {
-			return stmt;
+			return this.file.garbageNode();
 		}
 
 		this.pushScope(ParserScope::CompoundStmt);
 
+		var children: List!<uint>;
 		while !this.accept(TokenType::RCurly) {
 			const child = this.parseStmt();
-			if !(child is Garbage) {
-				stmt.children.append(child);
+			if child != this.file.garbageNode() && child != this.file.emptyNode() {
+				children.append(child);
 			}
 		}
 
 		this.popScope();
 
-		stmt.span = stmt.span..this.previousSpan();
-		return stmt;
+		return this.file.addNode(Node::CompoundStmt(children, start..this.previousSpan(), false));
 	}
 
-	func parseVarDeclStmt(this: &&Parser) -> ParsedStmt {
+	func parseVarDeclStmt(this: &&Parser) -> uint {
 		const start = this.currentSpan();
+		const decl = this.parseVarDecl(false);
 
-		const is_comptime = this.accept(TokenType::KeywordComptime);
-
-		const decl = this.parseVarDecl() else {
-			return ParsedStmt::Garbage(start..this.previousSpan(), false);
+		if !this.accept(TokenType::KeywordElse) {
+			return decl;
 		}
 
-		if this.accept(TokenType::KeywordElse) {
-			var capture_name = "";
-			var capture_kind = ReferenceKind::None;
-			if this.accept(TokenType::Colon) {
-				if this.accept(TokenType::Ampersand) {
-					capture_kind = ReferenceKind::Const;
-				} else if this.accept(TokenType::DoubleAmpersand) {
-					capture_kind = ReferenceKind::Var;
-				}
-
-				capture_name = this.expectIdentifier();
+		// var else stmt
+		var capture_name = "";
+		var capture_kind = ReferenceKind::None;
+		if this.accept(TokenType::Colon) {
+			if this.accept(TokenType::Ampersand) {
+				capture_kind = ReferenceKind::Const;
+			} else if this.accept(TokenType::DoubleAmpersand) {
+				capture_kind = ReferenceKind::Var;
 			}
 
-			this.pushScope(ParserScope::VarElseStmt);
-			const body = this.parseCompoundStmt();
-			this.popScope();
-
-			return ParsedStmt::VarElse(
-				ParsedVarElseStmt(decl, body, capture_name, capture_kind),
-				start..this.previousSpan(), is_comptime
-			);
-		} else {
-			discard this.accept(TokenType::Semicolon);
-			return ParsedStmt::VarDecl(decl, decl.span, is_comptime);
+			capture_name = this.expectIdentifier();
 		}
+
+		this.pushScope(ParserScope::VarElseStmt);
+		const body = this.parseCompoundStmt();
+		this.popScope();
+
+		return this.file.addNode(Node::VarElseStmt(
+			ParsedVarElseStmt(decl, body, capture_name, capture_kind),
+			start..this.previousSpan(), this.file.nodes[decl].is_comptime
+		));
 	}
 
-	func parseIfStmt(this: &&Parser) -> ParsedStmt {
+	func parseIfStmt(this: &&Parser) -> uint {
 		const start = this.currentSpan();
 
 		const is_comptime = this.accept(TokenType::KeywordComptime);
 
 		if !this.expect(TokenType::KeywordIf) {
-			return ParsedStmt::Garbage(start..this.currentSpan(), is_comptime);
+			return this.file.garbageNode();
 		}
 
 		const condition = this.parseExpr();
@@ -845,47 +747,45 @@ struct Parser {
 		this.pushScope(ParserScope::IfStmt);
 		const then_branch = this.parseCompoundStmt();
 
-		var else_branch = ParsedStmt::Empty(Span(), false);
+		var else_branch = this.file.emptyNode();
 		if this.accept(TokenType::KeywordElse) {
 			else_branch = this.parseStmt();
-			else_branch.is_comptime = is_comptime;
+			this.file.nodes[else_branch].is_comptime = is_comptime;
 		}
 
 		this.popScope();
 
-		return ParsedStmt::If(
-			Box!<ParsedIfStmt>(ParsedIfStmt(condition, ParsedStmt::Compound(then_branch, then_branch.span, false), else_branch)),
+		return this.file.addNode(Node::IfStmt(
+			ParsedIfStmt(condition, then_branch, else_branch),
 			start..this.previousSpan(), is_comptime
-		);
+		));
 	}
 
-	func parseIfVarStmt(this: &&Parser) -> ParsedStmt {
+	func parseIfVarStmt(this: &&Parser) -> uint {
 		const start = this.currentSpan();
 		if !this.expect(TokenType::KeywordIf) {
-			return ParsedStmt::Garbage(start, false);
+			return this.file.garbageNode();
 		}
 
-		const var_decl = this.parseVarDecl() else {
-			return ParsedStmt::Garbage(start..this.previousSpan(), false);
-		}
+		const var_decl = this.parseVarDecl(false);
 
 		this.pushScope(ParserScope::IfVarStmt);
 		const body = this.parseCompoundStmt();
 		this.popScope();
 
-		return ParsedStmt::IfVar(
+		return this.file.addNode(Node::IfVarStmt(
 			ParsedIfVarStmt(var_decl, body),
 			start..this.previousSpan(), false
-		);
+		));
 	}
 
-	func parseWhileStmt(this: &&Parser) -> ParsedStmt {
+	func parseWhileStmt(this: &&Parser) -> uint {
 		const start = this.currentSpan();
 
 		const is_comptime = this.accept(TokenType::KeywordComptime);
 
 		if !this.expect(TokenType::KeywordWhile) {
-			return ParsedStmt::Garbage(start..this.previousSpan(), false);
+			return this.file.garbageNode();
 		}
 
 		const condition = this.parseExpr();
@@ -894,19 +794,19 @@ struct Parser {
 		const body = this.parseCompoundStmt();
 		this.popScope();
 
-		return ParsedStmt::While(
+		return this.file.addNode(Node::WhileStmt(
 			ParsedWhileStmt(condition, body),
 			start..this.previousSpan(), is_comptime
-		);
+		));
 	}
 
-	func parseDoWhileStmt(this: &&Parser) -> ParsedStmt {
+	func parseDoWhileStmt(this: &&Parser) -> uint {
 		const start = this.currentSpan();
 
 		const is_comptime = this.accept(TokenType::KeywordComptime);
 
 		if !this.expect(TokenType::KeywordDo) {
-			return ParsedStmt::Garbage(start..this.previousSpan(), false);
+			return this.file.garbageNode();
 		}
 
 		this.pushScope(ParserScope::DoWhileStmt);
@@ -914,24 +814,24 @@ struct Parser {
 		this.popScope();
 
 		if !this.expect(TokenType::KeywordWhile) {
-			return ParsedStmt::Garbage(start..this.previousSpan(), false);
+			return this.file.garbageNode();
 		}
 
 		const condition = this.parseExpr();
 		discard this.accept(TokenType::Semicolon);
 
-		return ParsedStmt::DoWhile(
+		return this.file.addNode(Node::DoWhileStmt(
 			ParsedDoWhileStmt(body, condition),
 			start..this.previousSpan(), is_comptime
-		);
+		));
 	}
 
-	func parseForStmt(this: &&Parser) -> ParsedStmt {
+	func parseForStmt(this: &&Parser) -> uint {
 		const start = this.currentSpan();
 		const is_comptime = this.accept(TokenType::KeywordComptime);
 
 		if !this.expect(TokenType::KeywordFor) {
-			return ParsedStmt::Garbage(start..this.previousSpan(), false);
+			return this.file.garbageNode();
 		}
 
 		var capture_kind = ReferenceKind::None;
@@ -943,12 +843,12 @@ struct Parser {
 
 		const capture_name = this.expectIdentifier();
 		if capture_name.isEmpty() {
-			return ParsedStmt::Garbage(start..this.previousSpan(), false);
+			return this.file.garbageNode();
 		}
 		const capture_span = this.previousSpan();
 
 		if !this.expect(TokenType::KeywordIn) {
-			return ParsedStmt::Garbage(start..this.previousSpan(), false);
+			return this.file.garbageNode();
 		}
 
 		const range = this.parseExpr();
@@ -957,21 +857,21 @@ struct Parser {
 		const body = this.parseCompoundStmt();
 		this.popScope();
 
-		return ParsedStmt::For(
+		return this.file.addNode(Node::ForStmt(
 			ParsedForStmt(capture_name, capture_kind, capture_span, range, body),
 			start..this.previousSpan(), is_comptime
-		);
+		));
 	}
 
-	func parseCaseStmt(this: &&Parser) -> ParsedStmt {
+	func parseCaseStmt(this: &&Parser) -> uint {
 		const start = this.currentSpan();
 		if !this.expect(TokenType::KeywordCase) {
-			return ParsedStmt::Garbage(start, false);
+			return this.file.garbageNode();
 		}
 
-		var patterns: List!<ParsedExpr>;
+		var patterns: List!<uint>;
 		do {
-			patterns.append(this.parseOperand());
+			patterns.append(this.parseHighPrecedenceExpr());
 		} while this.accept(TokenType::Pipe);
 
 		var capture_name = "";
@@ -987,129 +887,20 @@ struct Parser {
 		}
 
 		if !this.expect(TokenType::Arrow) {
-			return ParsedStmt::Garbage(this.previousSpan(), false);
+			return this.file.garbageNode();
 		}
 
 		this.pushScope(ParserScope::CaseStmt);
 		const body = this.parseStmt();
 		this.popScope();
 
-		return ParsedStmt::Case(
-			Box!<ParsedCaseStmt>(ParsedCaseStmt(patterns, capture_name, capture_kind, body)),
+		return this.file.addNode(Node::CaseStmt(
+			ParsedCaseStmt(patterns, capture_name, capture_kind, body),
 			start..this.previousSpan(), false
-		);
+		));
 	}
 
-	func parseType(this: &&Parser) -> ParsedType {
-		const start = this.currentSpan();
-		match this.current() {
-			case Identifier -> {
-				const name = this.parseName();
-				return ParsedType::Name(name, name.span);
-			}
-			case Ampersand -> {
-				this.next();
-				const base = this.parseType();
-				return ParsedType::ConstReference(Box!<ParsedType>(base), start..base.span);
-			}
-			case DoubleAmpersand -> {
-				this.next();
-				const base = this.parseType();
-				return ParsedType::VarReference(Box!<ParsedType>(base), start..base.span);
-			}
-			case QuestionMark -> {
-				this.next();
-				const base = this.parseType();
-				return ParsedType::Optional(Box!<ParsedType>(base), start..base.span);
-			}
-			case LParen -> {
-				this.next();
-				var is_named = false;
-				var types: List!<ParsedType>;
-				var elements: List!<ParsedTupleTypeElement>;
-
-				while !this.accept(TokenType::RParen) {
-					var name = "";
-					if this.peek() is Colon {
-						is_named = true;
-						name = this.expectIdentifier();
-						if name.isEmpty() {
-							this.next();
-						}
-						discard this.expect(TokenType::Colon);
-					}
-
-					const type = this.parseType();
-					types.append(type);
-					elements.append(ParsedTupleTypeElement(name, type));
-
-					if !(this.current() is RParen) {
-						if !this.expect(TokenType::Comma) {
-							this.recover(TokenType::RParen);
-							break;
-						}
-					}
-				}
-
-				if this.accept(TokenType::Arrow) {
-					const return_type = Box!<ParsedType>(this.parseType());
-					return ParsedType::Function(ParsedFunctionType(types, return_type), start..this.previousSpan());
-				} else {
-					return ParsedType::Tuple(elements, start..this.previousSpan());
-				}
-			}
-			case LSquare -> {
-				this.next();
-				const element_type = Box!<ParsedType>(this.parseType());
-
-				if this.accept(TokenType::Comma) {
-					const size = Box!<ParsedExpr>(this.parseExpr());
-					discard this.expect(TokenType::RSquare);
-					return ParsedType::Array(ParsedArrayType(element_type, size), start..this.previousSpan());
-				} else {
-					discard this.expect(TokenType::RSquare);
-					return ParsedType::List(element_type, start..this.previousSpan());
-				}
-			}
-			case LCurly -> {
-				this.next();
-				const key_type = Box!<ParsedType>(this.parseType());
-				discard this.expect(TokenType::Comma);
-				const value_type = Box!<ParsedType>(this.parseType());
-				discard this.expect(TokenType::RCurly);
-				return ParsedType::Dict(ParsedDictType(key_type, value_type), start..this.previousSpan());
-			}
-			else -> {
-				this.next();
-				this.error("invalid type", start);
-				return ParsedType::Garbage(start);
-			}
-		}
-	}
-
-	func parseName(this: &&Parser) -> ParsedName {
-		const start = this.currentSpan();
-
-		var segments: List!<ParsedNameSegment>;
-
-		match this.parseNameSegment() {
-			case Some: segment -> segments.append(segment);
-			else -> return ParsedName(start, segments);
-		}
-
-		while this.current() is DoubleColon {
-			this.next();
-			match this.parseNameSegment() {
-				case Some: segment -> segments.append(segment);
-				else -> break;
-			}
-		}
-
-		const span = start..this.previousSpan();
-		return ParsedName(span, segments);
-	}
-
-	func parseNameSegment(this: &&Parser) -> Optional!<ParsedNameSegment> {
+	func parseName(this: &&Parser) -> uint {
 		const start = this.currentSpan();
 		var name = "";
 		if this.current() is Identifier {
@@ -1117,11 +908,11 @@ struct Parser {
 		} else if this.current() is KeywordOperator {
 			name = this.parseOperatorName();
 		} else {
-			return None;
+			return this.file.emptyNode();
 		}
 
 		const template_parameters = this.parseTemplateParameters();
-		return Some(ParsedNameSegment(start..this.previousSpan(), name, template_parameters));
+		return this.file.addNode(Node::Name(ParsedName(name, template_parameters), start..this.previousSpan(), false));
 	}
 
 	func parseOperatorName(this: &&Parser) -> String {
@@ -1150,8 +941,8 @@ struct Parser {
 		return "operator " + op.toString();
 	}
 
-	func parseTemplateParameters(this: &&Parser) -> List!<ParsedExpr> {
-		var template_parameters: List!<ParsedExpr>;
+	func parseTemplateParameters(this: &&Parser) -> List!<uint> {
+		var template_parameters: List!<uint>;
 
 		if !this.accept(TokenType::ExclamationMark) {
 			return template_parameters;
@@ -1175,30 +966,30 @@ struct Parser {
 		return template_parameters;
 	}
 
-	func parseExpr(this: &&Parser) -> ParsedExpr {
+	func parseExpr(this: &&Parser) -> uint {
 		return this.parseExpr(-1);
 	}
 
-	func parseHighPrecedenceExpr(this: &&Parser) -> ParsedExpr {
+	func parseHighPrecedenceExpr(this: &&Parser) -> uint {
 		return this.parseExpr(16);
 	}
 
-	func parseExpr(this: &&Parser, min_precedence: int) -> ParsedExpr {
-		var lhs = ParsedExpr::Garbage(this.currentSpan());
+	func parseExpr(this: &&Parser, min_precedence: int) -> uint {
+		var lhs = this.file.emptyNode();
 		var start = this.currentSpan();
 
 		match this.parsePrefixOperator() {
 			case Some: op -> {
 				const rhs = this.parseExpr(op.precedence());
-				var operands = SharedPtr!<List!<ParsedExpr>>::new(List!<ParsedExpr>(1u, rhs));
-				lhs = ParsedExpr::Operator(ParsedOperatorExpr(op, operands), start..rhs.span);
+				lhs = this.file.addNode(Node::UnaryOperatorExpr(ParsedUnaryOperatorExpr(op, rhs), start..this.previousSpan(), false));
 			}
 			else -> lhs = this.parseOperand();
 		}
 
 		while true {
 			const prev_index = this.index;
-			var op = this.parsePostfixOrInfixOperator() else {
+
+			const op = this.parsePostfixOrInfixOperator() else {
 				this.index = prev_index;
 				break;
 			}
@@ -1208,8 +999,8 @@ struct Parser {
 				break;
 			}
 
-			var operands = SharedPtr!<List!<ParsedExpr>>::new(List!<ParsedExpr>(1u, lhs));
 			if op == Call {
+				var operands = List!<uint>(1u, lhs);
 				while !this.accept(TokenType::RParen) {
 					operands.append(this.parseExpr());
 
@@ -1220,7 +1011,9 @@ struct Parser {
 						}
 					}
 				}
+				lhs = this.file.addNode(Node::CallExpr(operands, start..this.previousSpan(), false));
 			} else if op == Index {
+				var operands = List!<uint>(1u, lhs);
 				while !this.accept(TokenType::RSquare) {
 					operands.append(this.parseExpr());
 
@@ -1231,6 +1024,7 @@ struct Parser {
 						}
 					}
 				}
+				lhs = this.file.addNode(Node::IndexExpr(operands, start..this.previousSpan(), false));
 			} else if op == InlineIf {
 				if this.accept(TokenType::KeywordVar) || this.accept(TokenType::KeywordConst) {
 					// expression followed by an if-var stmt
@@ -1238,28 +1032,33 @@ struct Parser {
 					break;
 				}
 
-				operands.append(this.parseExpr());
+				const prev_node_count = this.file.nodes.size();
+				const condition = this.parseExpr();
 
 				if !this.accept(TokenType::KeywordElse) {
 					// expression followed by an if stmt
 					this.index = prev_index;
+					this.file.nodes.remove(prev_node_count..this.file.nodes.size());
 					break;
 				}
 
-				operands.append(this.parseExpr());
-			} else if op == MemberAccess {
-				operands.append(this.parseOperand());
+				const else_value = this.parseExpr();
+				lhs = this.file.addNode(Node::InlineIfExpr(ParsedInlineIfExpr(condition, lhs, else_value), start..this.previousSpan(), false));
 			} else if op.isBinaryOperator() {
-				operands.append(this.parseExpr(op.precedence()));
-			} else if !op.isUnaryOperator() {
+				const rhs = this.parseExpr(op.precedence());
+				lhs = this.file.addNode(Node::BinaryOperatorExpr(
+					ParsedBinaryOperatorExpr(op, lhs, rhs),
+					start..this.previousSpan(), false
+				));
+			} else if op.isUnaryOperator() {
+				lhs = this.file.addNode(Node::UnaryOperatorExpr(
+					ParsedUnaryOperatorExpr(op, lhs),
+					start..this.previousSpan(), false
+				));
+			} else {
 				this.error("unknown operator " + op.toString(), this.previousSpan());
 				continue;
 			}
-
-			lhs = ParsedExpr::Operator(
-				ParsedOperatorExpr(op, operands),
-				start..this.previousSpan()
-			);
 		}
 
 		return lhs;
@@ -1475,6 +1274,10 @@ struct Parser {
 				this.next();
 				return Some(Operator::GreaterEqual);
 			}
+			case DoubleColon -> {
+				this.next();
+				return Some(Operator::Namespace);
+			}
 			else -> return None;
 		}
 	}
@@ -1503,14 +1306,66 @@ struct Parser {
 		return None;
 	}
 
-	func parseArrayExpr(this: &&Parser) -> ParsedExpr {
+	func parseTupleExpr(this: &&Parser) -> uint {
+		const start = this.currentSpan();
+
+		if !this.expect(TokenType::LParen) {
+			return this.file.garbageNode();
+		}
+
+		var elements: List!<ParsedTupleElement>;
+		var is_named = false;
+		while !this.accept(TokenType::RParen) {
+			const element_start = this.currentSpan();
+
+			var name = "";
+			if this.current() is Identifier && this.peek() is Colon {
+				name = this.strings[this.tokens[this.index].data()];
+				is_named = true;
+				this.index += 2;
+			}
+
+			const value = this.parseExpr();
+			elements.append(ParsedTupleElement(element_start..this.previousSpan(), name, value));
+
+			if !(this.current() is RParen) {
+				if !this.expect(TokenType::Comma) {
+					this.recover(TokenType::RParen);
+					break;
+				}
+			}
+		}
+
+		if !is_named {
+			if this.accept(TokenType::Arrow) {
+				var parameter_types: List!<uint>;
+				for e in elements {
+					parameter_types.append(e.value);
+				}
+
+				return this.file.addNode(Node::FunctionType(
+					ParsedFunctionType(parameter_types, this.parseHighPrecedenceExpr()),
+					start..this.previousSpan(), false
+				));
+			}
+		}
+
+		const end = this.previousSpan();
+		if elements.size() == 1 && !is_named {
+			return this.file.addNode(Node::ParenExpr(elements[0u].value, start..end, false));
+		}
+
+		return this.file.addNode(Node::TupleExpr(elements, start..end, false));
+	}
+
+	func parseArrayExpr(this: &&Parser) -> uint {
 		const start = this.currentSpan();
 
 		if !this.expect(TokenType::LSquare) {
-			return ParsedExpr::Garbage(start);
+			return this.file.garbageNode();
 		}
 
-		var values: List!<ParsedExpr>;
+		var values: List!<uint>;
 
 		var error = false;
 		while !this.accept(TokenType::RSquare) {
@@ -1529,77 +1384,14 @@ struct Parser {
 		}
 
 		const end = this.previousSpan();
-		return ParsedExpr::Array(values, start..end);
+		return this.file.addNode(Node::ArrayExpr(values, start..end, false));
 	}
 
-	func parseTupleExpr(this: &&Parser) -> ParsedExpr {
-		const start = this.currentSpan();
-
-		if !this.expect(TokenType::LParen) {
-			return ParsedExpr::Garbage(start);
-		}
-
-		var elements: List!<ParsedTupleElement>;
-		var is_named = false;
-		while !this.accept(TokenType::RParen) {
-			const element_start = this.currentSpan();
-
-			var name = "";
-			if this.current() is Identifier && this.peek() is Colon {
-				name = this.strings[this.tokens[this.index].data()];
-				is_named = true;
-				this.index += 2;
-			}
-
-			const value = this.parseExpr();
-
-			elements.append(ParsedTupleElement(element_start..value.span, name, value));
-
-			if !(this.current() is RParen) {
-				if !this.expect(TokenType::Comma) {
-					this.recover(TokenType::RParen);
-					break;
-				}
-			}
-		}
-
-		if !is_named {
-			if this.accept(TokenType::Arrow) {
-				var is_valid_function_type = true;
-
-				var parameter_types: List!<ParsedType>;
-				for e in elements {
-					const t = e.value.toType();
-					if t is Garbage {
-						is_valid_function_type = false;
-						break;
-					}
-
-					parameter_types.append(t);
-				}
-
-				const return_type = Box!<ParsedType>(this.parseType());
-				const function_type = ParsedType::Function(
-					ParsedFunctionType(parameter_types, return_type),
-					start..this.previousSpan()
-				);
-				return ParsedExpr::Type(function_type, start..this.previousSpan());
-			}
-		}
-
-		const end = this.previousSpan();
-		if elements.size() == 1 && !is_named {
-			return ParsedExpr::Paren(Box!<ParsedExpr>(elements[0u].value), start..end);
-		}
-
-		return ParsedExpr::Tuple(elements, start..end);
-	}
-
-	func parseDictExpr(this: &&Parser) -> ParsedExpr {
+	func parseDictExpr(this: &&Parser) -> uint {
 		const start = this.currentSpan();
 
 		if !this.expect(TokenType::LCurly) {
-			return ParsedExpr::Garbage(start);
+			return this.file.garbageNode();
 		}
 
 		var elements: List!<ParsedDictElement>;
@@ -1631,15 +1423,14 @@ struct Parser {
 			this.recover(TokenType::RCurly);
 		}
 
-		const end = this.previousSpan();
-		return ParsedExpr::Dict(elements, start..end);
+		return this.file.addNode(Node::DictExpr(elements, start..this.previousSpan(), false));
 	}
 
-	func parseMatchExpr(this: &&Parser) -> ParsedExpr {
+	func parseMatchExpr(this: &&Parser) -> uint {
 		const start = this.currentSpan();
 
 		if !this.expect(TokenType::KeywordMatch) {
-			return ParsedExpr::Garbage(start);
+			return this.file.garbageNode();
 		}
 
 		const value = this.parseExpr();
@@ -1648,49 +1439,55 @@ struct Parser {
 		const body = this.parseCompoundStmt();
 		this.popScope();
 
-		return ParsedExpr::Match(
-			Box!<ParsedMatchExpr>(ParsedMatchExpr(value, body)),
-			start..this.previousSpan()
-		);
+		return this.file.addNode(Node::MatchExpr(
+			ParsedMatchExpr(value, body),
+			start..this.previousSpan(), false
+		));
 	}
 
-	func parseFunctionExpr(this: &&Parser) -> ParsedExpr {
+	func parseFunctionExpr(this: &&Parser) -> uint {
 		const start = this.currentSpan();
 
-		if !this.expect(TokenType::KeywordFunc) {
-			return ParsedExpr::Garbage(start);
-		}
+		if this.peek() is LParen {
+			if !this.expect(TokenType::KeywordFunc) {
+				return this.file.garbageNode();
+			}
 
-		if this.current() is LParen {
 			const signature = this.parseFunctionSignature("", this.currentSpan()) else {
-				return ParsedExpr::Garbage(this.currentSpan());
+				return this.file.garbageNode();
 			}
 
 			this.pushScope(ParserScope::FunctionDecl);
-			const compound_stmt = this.parseCompoundStmt();
-			const body = ParsedStmt::Compound(compound_stmt, compound_stmt.span, false);
+			const body = this.parseCompoundStmt();
 			this.popScope();
 
 			const span = start..this.previousSpan();
-			return ParsedExpr::AnonymousFunction(Box!<ParsedFunctionDecl>(ParsedFunctionDecl(
+			const function = this.file.addNode(Node::FunctionDecl(ParsedFunctionDecl(
 				span,
 				List!<ParsedAnnotation>(),
 				List!<ParsedTemplateParameterDecl>(),
 				false,
 				signature,
 				body
-			)), span);
+			), span, false));
+
+			return this.file.addNode(Node::AnonymousFunctionExpr(function, span, false));
 		} else {
-			const name = this.parseName();
+			if this.current() != TokenType::KeywordOperator {
+				if !this.expect(TokenType::KeywordFunc) {
+					return this.file.garbageNode();
+				}
+			}
 
-			var parameter_types: List!<ParsedType>;
+			const name = this.parseExpr(19);
 
+			var parameter_types: List!<uint>;
 			if !this.expect(TokenType::LParen) {
-				return ParsedExpr::Garbage(start);
+				return this.file.garbageNode();
 			}
 
 			while !this.accept(TokenType::RParen) {
-				parameter_types.append(this.parseType());
+				parameter_types.append(this.parseExpr());
 
 				if !(this.current() is RParen) {
 					if !this.expect(TokenType::Comma) {
@@ -1700,43 +1497,39 @@ struct Parser {
 				}
 			}
 
-			return ParsedExpr::FunctionRef(
+			return this.file.addNode(Node::FunctionRefExpr(
 				ParsedFunctionRefExpr(name, parameter_types),
-				start..this.previousSpan()
-			);
+				start..this.previousSpan(), false
+			));
 		}
 	}
 
-	func parseOperand(this: &&Parser) -> ParsedExpr {
+	func parseOperand(this: &&Parser) -> uint {
 		const start = this.currentSpan();
 		match this.current() {
-			case Identifier
-			| KeywordOperator -> {
-				const name = this.parseName();
-				return ParsedExpr::Name(name, name.span)
-			}
+			case Identifier | KeywordOperator -> return this.parseName();
 			case CharLiteral -> {
 				const value = this.tokens[this.index].data() as byte;
 				this.next();
-				return ParsedExpr::Char((value: value, postfix: this.acceptLiteralPostfix()), start);
+				return this.file.addNode(Node::CharLiteralExpr((value: value, postfix: this.acceptLiteralPostfix()), start, false));
 			}
 			case StringLiteral -> {
 				const value = this.strings[this.tokens[this.index].data()];
 				this.next();
-				return ParsedExpr::String((value: value, postfix: this.acceptLiteralPostfix()), start);
+				return this.file.addNode(Node::StringLiteralExpr((value: value, postfix: this.acceptLiteralPostfix()), start, false));
 			}
 			case NumberLiteral -> {
 				const value = this.numbers[this.tokens[this.index].data()];
 				this.next();
-				return ParsedExpr::Number((value: value, postfix: this.acceptLiteralPostfix()), start);
+				return this.file.addNode(Node::NumberLiteralExpr((value: value, postfix: this.acceptLiteralPostfix()), start, false));
 			}
 			case KeywordTrue -> {
 				this.next();
-				return ParsedExpr::Bool(true, start);
+				return this.file.addNode(Node::BoolLiteralExpr(true, start, false));
 			}
 			case KeywordFalse -> {
 				this.next();
-				return ParsedExpr::Bool(false, start);
+				return this.file.addNode(Node::BoolLiteralExpr(false, start, false));
 			}
 			case LParen -> return this.parseTupleExpr();
 			case LSquare -> return this.parseArrayExpr();
@@ -1746,7 +1539,7 @@ struct Parser {
 			else -> {
 				this.index++;
 				this.error("invalid expr operand", start);
-				return ParsedExpr::Garbage(start);
+				return this.file.garbageNode();
 			}
 		}
 	}

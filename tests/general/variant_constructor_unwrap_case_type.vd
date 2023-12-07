@@ -14,12 +14,12 @@ func main() -> void {
 	const val = a as A else {
 		abort();
 	}
+	assert(val == 5);
 
 	const b = a;
 	assert(b is A);
 	const val2 = b as A else {
 		abort();
 	}
-
 	assert(val2 == 5);
 }

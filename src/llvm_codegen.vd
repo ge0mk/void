@@ -1972,15 +1972,15 @@ struct CGContext {
 
 		if match_expr.value.type.isVariant() {
 			const value_type_decl = match_expr.value.type.decl;
-			value = LLVMBuildLoad2(this.builder, 
+			value = LLVMBuildLoad2(this.builder,
 				this.getType(value_type_decl.id_type),
-				LLVMBuildStructGEP2(this.builder, 
+				LLVMBuildStructGEP2(this.builder,
 					this.getType(match_expr.value.type.base()),
 					value, 0u, ""
 				), ""
 			);
 		} else if match_expr.value.type.reference_kind != None {
-			value = LLVMBuildLoad2(this.builder, 
+			value = LLVMBuildLoad2(this.builder,
 				this.getType(match_expr.value.type.base()),
 				value, ""
 			);

@@ -69,6 +69,8 @@ enum Operator {
 
 	case MemberAccess;	// foo.bar
 
+	case Namespace;		// foo::bar
+
 	func isUnaryOperator(this: Operator) -> bool {
 		match this {
 			case Increment
@@ -115,7 +117,8 @@ enum Operator {
 			| Spaceship
 			| Range
 			| Is | As
-			| MemberAccess -> return true;
+			| MemberAccess
+			| Namespace -> return true;
 			else -> return false;
 		}
 	}
@@ -148,6 +151,7 @@ enum Operator {
 
 	func precedence(this: Operator) -> int {
 		match this {
+			case Namespace -> return 19;
 			case MemberAccess -> return 18;
 
 			case Call
@@ -266,6 +270,7 @@ enum Operator {
 			case Must -> return "must";
 			case InlineIf -> return "if..else";
 			case MemberAccess -> return ".";
+			case Namespace -> return "::";
 		}
 	}
 }
