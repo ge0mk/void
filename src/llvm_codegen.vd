@@ -29,6 +29,7 @@ struct CGContext {
 
 	var builder: LLVMBuilderRef;
 	var current_function: LLVMValueRef;
+	var current_function_decl: SharedHandle!<FunctionDecl>;
 	var variables: Map!<SharedHandle!<VarDecl>, LLVMValueRef>;
 
 	var break_target: LLVMBasicBlockRef;
@@ -219,6 +220,7 @@ struct CGContext {
 
 				LLVMStructSetBody(type.llvm_type, element_types, type.is_packed);
 			}
+			case Unchecked -> panic("can't codegen unchecked type");
 		}
 	}
 
@@ -415,6 +417,7 @@ struct CGContext {
 				LLVMMetadataReplaceAllUsesWith(type.llvm_di, di_type);
 				type.llvm_di = di_type;
 			}
+			case Unchecked -> panic("can't codegen unchecked type");
 		}
 	}
 
@@ -482,10 +485,12 @@ struct CGContext {
 		const prev_di_scope = this.current_di_scope;
 		const prev_builder = this.builder;
 		const prev_function = this.current_function;
+		const prev_function_decl = this.current_function_decl;
 		const prev_variables = this.variables;
 
 		this.variables.clear();
 		this.current_function = function.llvm_func;
+		this.current_function_decl = function;
 
 		// setup debug info for the function
 		if this.program.options.generate_debug_info {
@@ -631,6 +636,7 @@ struct CGContext {
 		this.current_di_scope = prev_di_scope;
 		this.builder = prev_builder;
 		this.current_function = prev_function;
+		this.current_function_decl = prev_function_decl;
 		this.variables = prev_variables;
 	}
 
@@ -1593,7 +1599,7 @@ struct CGContext {
 				discard LLVMBuildBr(this.builder, this.yield_target);
 			}
 			case Return: &value -> {
-				if value is Void && this.current_function == this.getFunction(this.program.main_function) {
+				if value is Void && this.current_function_decl == this.program.main_function {
 					this.setCurrentDebugLocation(stmt.span);
 					discard LLVMBuildRet(this.builder, LLVMConstInt(this.int_type, 0, false));
 				} else {

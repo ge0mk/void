@@ -69,6 +69,22 @@ struct CompilationUnit {
 		return 1u;
 	}
 
+	func duplicateNodes(this: &&CompilationUnit, start: uint, end: uint) -> uint {
+		assert(start <= end, Error::EINVAL);
+
+		const result_start = this.nodes.size();
+		const result_end = result_start + (end - start);
+		const result_offset = result_start - start;
+
+		this.nodes.grow(end - start);
+		for i in start..end {
+			this.nodes.append(this.nodes[i]);
+			this.nodes[this.nodes.size() - 1].addIdOffset(result_offset);
+		}
+
+		return result_offset;
+	}
+
 	func dump(this: &CompilationUnit) -> String {
 		var out: TreeFormatter = ("Module");
 		out.value(this.name);
@@ -877,7 +893,7 @@ struct Namespace {
 	var comptime_variables_by_name: Map!<String, SharedHandle!<VarDecl>>;
 
 	var state: NamespaceState;
-	var unchecked_children: List!<uint>;
+	var unchecked_bodies: List!<ParsedNamespaceDecl>;
 	var unchecked_types: List!<SharedHandle!<TypeDecl>>;
 	var unchecked_functions: List!<SharedHandle!<FunctionDecl>>;
 	var unchecked_function_bodies: List!<SharedHandle!<FunctionDecl>>;
@@ -1008,21 +1024,12 @@ struct Namespace {
 		}
 	}
 
-	func addUncheckedChildren(this: &&Namespace, children: &List!<uint>) -> void {
-		this.unchecked_children.append(children);
+	func addUncheckedBody(this: &&Namespace, body: &ParsedNamespaceDecl) -> void {
+		this.unchecked_bodies.append(body);
 		this.updateMinState(NamespaceState::Unchecked);
 
 		for instance in this.template_instances {
-			instance.addUncheckedChildren(children);
-		}
-	}
-
-	func addUncheckedChild(this: &&Namespace, child: uint) -> void {
-		this.unchecked_children.append(child);
-		this.updateMinState(NamespaceState::Unchecked);
-
-		for instance in this.template_instances {
-			instance.addUncheckedChild(child);
+			instance.addUncheckedBody(body);
 		}
 	}
 
@@ -1071,6 +1078,8 @@ struct TypeDecl {
 	var contained_types: Set!<SharedHandle!<TypeDecl>>;
 
 	var parsed_annotations: List!<ParsedAnnotation>;
+
+	var parsed_body: uint;
 
 	// struct & variant
 	var member_variables: List!<MemberVarDecl>;
@@ -1129,12 +1138,8 @@ struct TypeDecl {
 				out.attribute("var" if pointer_type.is_mutable else "const");
 				out.value(pointer_type.pointee_type.signature());
 			}
-			case Function -> {
-				out.push("FunctionTypeDecl", is_last);
-			}
-			case Tuple -> {
-				out.push("TupleTypeDecl", is_last);
-			}
+			case Function -> out.push("FunctionTypeDecl", is_last);
+			case Tuple -> out.push("TupleTypeDecl", is_last);
 			case Array: array_type -> {
 				out.push("ArrayTypeDecl", is_last);
 				out.value(array_type.element_type.signature());
@@ -1158,15 +1163,10 @@ struct TypeDecl {
 				out.push("NumericIterator", is_last);
 				out.value(type.signature());
 			}
-			case Enum -> {
-				out.push("EnumTypeDecl", is_last);
-			}
-			case Struct -> {
-				out.push("StructTypeDecl", is_last);
-			}
-			case Variant -> {
-				out.push("VariantTypeDecl", is_last);
-			}
+			case Enum -> out.push("EnumTypeDecl", is_last);
+			case Struct -> out.push("StructTypeDecl", is_last);
+			case Variant -> out.push("VariantTypeDecl", is_last);
+			case Unchecked -> out.push("UncheckedType", is_last);
 		}
 
 		out.attribute(this.signature());
@@ -1618,6 +1618,8 @@ variant TypeBody {
 	case Struct;
 	case Enum;
 	case Variant;
+
+	case Unchecked: ParsedTypeDecl;
 }
 
 variant FunctionBody {
@@ -2562,6 +2564,171 @@ variant Node {
 			else -> return false;
 		}
 	}
+
+	func addIdOffset(this: &&Node, offset: uint) -> void {
+		match this {
+			case NamespaceDecl: &&decl -> {
+				decl.first_node_id += offset;
+				decl.last_node_id += offset;
+				for &&p in decl.template_parameters {
+					if p.value > 1 { p.value += offset; }
+				}
+				if decl.body > 1 { decl.body += offset; }
+			}
+			case TypeDecl: &&decl -> {
+				decl.first_node_id += offset;
+				decl.last_node_id += offset;
+				for &&p in decl.template_parameters {
+					if p.value > 1 { p.value += offset; }
+				}
+				if decl.id_type > 1 { decl.id_type += offset; }
+				if decl.body > 1 { decl.body += offset; }
+			}
+			case FunctionDecl: &&decl -> {
+				decl.first_node_id += offset;
+				decl.last_node_id += offset;
+				for &&p in decl.template_parameters {
+					if p.value > 1 { p.value += offset; }
+				}
+				for &&p in decl.signature.parameters {
+					if p > 1 { p += offset; }
+				}
+				if decl.signature.return_type > 1 { decl.signature.return_type += offset; }
+				if decl.body > 1 { decl.body += offset; }
+			}
+			case AliasDecl: &&decl -> {
+				if decl.type > 1 { decl.type += offset; }
+			}
+			case VarDecl: &&decl -> {
+				if decl.type > 1 { decl.type += offset; }
+				if decl.initializer > 1 { decl.initializer += offset; }
+			}
+			case CaseDecl: &&decl -> {
+				if decl.payload > 1 { decl.payload += offset; }
+				if decl.id > 1 { decl.id += offset; }
+			}
+			case CompoundStmt: &&children -> {
+				for &&c in children {
+					if c > 1 { c += offset; }
+				}
+			}
+			case IfStmt: &&stmt -> {
+				if stmt.condition > 1 { stmt.condition += offset; }
+				if stmt.then_branch > 1 { stmt.then_branch += offset; }
+				if stmt.else_branch > 1 { stmt.else_branch += offset; }
+			}
+			case IfVarStmt: &&stmt -> {
+				if stmt.var_decl > 1 { stmt.var_decl += offset; }
+				if stmt.body > 1 { stmt.body += offset; }
+			}
+			case VarElseStmt: &&stmt -> {
+				if stmt.var_decl > 1 { stmt.var_decl += offset; }
+				if stmt.body > 1 { stmt.body += offset; }
+			}
+			case WhileStmt: &&stmt -> {
+				if stmt.condition > 1 { stmt.condition += offset; }
+				if stmt.body > 1 { stmt.body += offset; }
+			}
+			case DoWhileStmt: &&stmt -> {
+				if stmt.condition > 1 { stmt.condition += offset; }
+				if stmt.body > 1 { stmt.body += offset; }
+			}
+			case ForStmt: &&stmt -> {
+				if stmt.range > 1 { stmt.range += offset; }
+				if stmt.body > 1 { stmt.body += offset; }
+			}
+			case CaseStmt: &&stmt -> {
+				for &&pattern in stmt.patterns {
+					if pattern > 1 { pattern += offset; }
+				}
+				if stmt.body > 1 { stmt.body += offset; }
+			}
+			case ElseCaseStmt: &&body -> {
+				if body > 1 { body += offset; }
+			}
+			case DeferStmt: &&body -> {
+				if body > 1 { body += offset; }
+			}
+			case ThrowStmt: &&value -> {
+				if value > 1 { value += offset; }
+			}
+			case ReturnStmt: &&value -> {
+				if value > 1 { value += offset; }
+			}
+			case YieldStmt: &&value -> {
+				if value > 1 { value += offset; }
+			}
+			case DiscardStmt: &&value -> {
+				if value > 1 { value += offset; }
+			}
+			case Name: &&name -> {
+				for &&p in name.template_parameters {
+					if p > 1 { p += offset; }
+				}
+			}
+			case ParenExpr: &&child -> {
+				if child > 1 { child += offset; }
+			}
+			case UnaryOperatorExpr: &&expr -> {
+				if expr.operand > 1 { expr.operand += offset; }
+			}
+			case BinaryOperatorExpr: &&expr -> {
+				if expr.lhs > 1 { expr.lhs += offset; }
+				if expr.rhs > 1 { expr.rhs += offset; }
+			}
+			case CallExpr: &&args -> {
+				for &&arg in args {
+					if arg > 1 { arg += offset; }
+				}
+			}
+			case IndexExpr: &&args -> {
+				for &&arg in args {
+					if arg > 1 { arg += offset; }
+				}
+			}
+			case InlineIfExpr: &&expr -> {
+				if expr.condition > 1 { expr.condition += offset; }
+				if expr.then_value > 1 { expr.then_value += offset; }
+				if expr.else_value > 1 { expr.else_value += offset; }
+			}
+			case ArrayExpr: &&elements -> {
+				for &&e in elements {
+					if e > 1 { e += offset; }
+				}
+			}
+			case TupleExpr: &&elements -> {
+				for &&e in elements {
+					if e.value > 1 { e.value += offset; }
+				}
+			}
+			case DictExpr: &&elements -> {
+				for &&e in elements {
+					if e.value > 1 { e.value += offset; }
+					if e.key > 1 { e.key += offset; }
+				}
+			}
+			case MatchExpr: &&expr -> {
+				if expr.value > 1 { expr.value += offset; }
+				if expr.body > 1 { expr.body += offset; }
+			}
+			case FunctionRefExpr: &&expr -> {
+				if expr.name > 1 { expr.name += offset; }
+				for &&type in expr.parameter_types {
+					if type > 1 { type += offset; }
+				}
+			}
+			case AnonymousFunctionExpr: &&function -> {
+				if function > 1 { function += offset; }
+			}
+			case FunctionType: &&type -> {
+				if type.return_type > 1 { type.return_type += offset; }
+				for &&parameter in type.parameter_types {
+					if parameter > 1 { parameter += offset; }
+				}
+			}
+			else -> {}
+		}
+	}
 }
 
 variant ParsedAnnotation {
@@ -2582,6 +2749,8 @@ enum TypeDeclKind {
 alias ParsedTemplateParameterDecl = (span: Span, name: String, concept: String, value: uint);
 
 alias ParsedNamespaceDecl = (
+	first_node_id: uint,
+	last_node_id: uint,
 	name_span: Span,
 	annotations: List!<ParsedAnnotation>,
 	template_parameters: List!<ParsedTemplateParameterDecl>,
@@ -2590,6 +2759,8 @@ alias ParsedNamespaceDecl = (
 );
 
 alias ParsedTypeDecl = (
+	first_node_id: uint,
+	last_node_id: uint,
 	name_span: Span,
 	annotations: List!<ParsedAnnotation>,
 	template_parameters: List!<ParsedTemplateParameterDecl>,
@@ -2601,6 +2772,8 @@ alias ParsedTypeDecl = (
 
 alias ParsedFunctionSignature = (span: Span, name: String, parameters: List!<uint>, return_type: uint);
 alias ParsedFunctionDecl = (
+	first_node_id: uint,
+	last_node_id: uint,
 	span: Span,
 	annotations: List!<ParsedAnnotation>,
 	template_parameters: List!<ParsedTemplateParameterDecl>,

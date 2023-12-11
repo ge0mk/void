@@ -329,17 +329,18 @@ struct Parser {
 	func parseDecl(this: &&Parser) -> uint {
 		const start = this.currentSpan();
 
+		const first_node_id = this.file.nodes.size();
 		var annotations = this.parseAnnotations();
 		var template_parameters = this.parseTemplateParameterDecl();
 
 		match this.current() {
-			case KeywordNamespace -> return this.parseNamespace(start, annotations, template_parameters);
+			case KeywordNamespace -> return this.parseNamespace(start, first_node_id, annotations, template_parameters);
 			case KeywordStruct
 			| KeywordEnum
-			| KeywordVariant -> return this.parseTypeDecl(start, annotations, template_parameters);
+			| KeywordVariant -> return this.parseTypeDecl(start, first_node_id, annotations, template_parameters);
 			case KeywordFunc
 			| KeywordOperator
-			| KeywordComptime -> return this.parseFunctionDecl(start, annotations, template_parameters);
+			| KeywordComptime -> return this.parseFunctionDecl(start, first_node_id, annotations, template_parameters);
 			else -> {
 				this.error("expected decl", this.currentSpan());
 				return this.file.garbageNode();
@@ -464,7 +465,7 @@ struct Parser {
 		return template_parameters;
 	}
 
-	func parseNamespace(this: &&Parser, start: Span, annotations: List!<ParsedAnnotation>, template_parameters: List!<ParsedTemplateParameterDecl>) -> uint {
+	func parseNamespace(this: &&Parser, start: Span, first_node_id: uint, annotations: List!<ParsedAnnotation>, template_parameters: List!<ParsedTemplateParameterDecl>) -> uint {
 		if !this.expect(TokenType::KeywordNamespace) {
 			return this.file.garbageNode();
 		}
@@ -479,13 +480,14 @@ struct Parser {
 		const body = this.parseCompoundStmt();
 		this.popScope();
 
+		const last_node_id = this.file.nodes.size();
 		return this.file.addNode(Node::NamespaceDecl(
-			ParsedNamespaceDecl(name_span, annotations, template_parameters, name, body),
+			ParsedNamespaceDecl(first_node_id, last_node_id, name_span, annotations, template_parameters, name, body),
 			start..this.previousSpan(), false
 		));
 	}
 
-	func parseTypeDecl(this: &&Parser, start: Span, annotations: List!<ParsedAnnotation>, template_parameters: List!<ParsedTemplateParameterDecl>) -> uint {
+	func parseTypeDecl(this: &&Parser, start: Span, first_node_id: uint, annotations: List!<ParsedAnnotation>, template_parameters: List!<ParsedTemplateParameterDecl>) -> uint {
 		const kind = match this.current() {
 			case KeywordStruct -> yield TypeDeclKind::Struct;
 			case KeywordEnum -> yield TypeDeclKind::Enum;
@@ -514,13 +516,14 @@ struct Parser {
 		const body = this.parseCompoundStmt();
 		this.popScope();
 
+		const last_node_id = this.file.nodes.size();
 		return this.file.addNode(Node::TypeDecl(
-			ParsedTypeDecl(name_span, annotations, template_parameters, kind, name, id_type, body),
+			ParsedTypeDecl(first_node_id, last_node_id, name_span, annotations, template_parameters, kind, name, id_type, body),
 			start..this.previousSpan(), false
 		));
 	}
 
-	func parseFunctionDecl(this: &&Parser, start: Span, annotations: List!<ParsedAnnotation>, template_parameters: List!<ParsedTemplateParameterDecl>) -> uint {
+	func parseFunctionDecl(this: &&Parser, start: Span, first_node_id: uint, annotations: List!<ParsedAnnotation>, template_parameters: List!<ParsedTemplateParameterDecl>) -> uint {
 		const is_comptime = this.accept(TokenType::KeywordComptime);
 
 		const signature = this.parseFunctionSignature() else {
@@ -543,8 +546,9 @@ struct Parser {
 		}
 
 		const span = start..this.previousSpan();
+		const last_node_id = this.file.nodes.size();
 		return this.file.addNode(Node::FunctionDecl(
-			ParsedFunctionDecl(span, annotations, template_parameters, is_comptime, signature, body),
+			ParsedFunctionDecl(first_node_id, last_node_id, span, annotations, template_parameters, is_comptime, signature, body),
 			span, true
 		));
 	}
@@ -1453,6 +1457,7 @@ struct Parser {
 				return this.file.garbageNode();
 			}
 
+			const first_node_id = this.file.nodes.size();
 			const signature = this.parseFunctionSignature("", this.currentSpan()) else {
 				return this.file.garbageNode();
 			}
@@ -1462,13 +1467,11 @@ struct Parser {
 			this.popScope();
 
 			const span = start..this.previousSpan();
+			const last_node_id = this.file.nodes.size();
 			const function = this.file.addNode(Node::FunctionDecl(ParsedFunctionDecl(
-				span,
-				List!<ParsedAnnotation>(),
-				List!<ParsedTemplateParameterDecl>(),
-				false,
-				signature,
-				body
+				first_node_id, last_node_id, span,
+				List!<ParsedAnnotation>(), List!<ParsedTemplateParameterDecl>(),
+				false, signature, body
 			), span, false));
 
 			return this.file.addNode(Node::AnonymousFunctionExpr(function, span, false));
