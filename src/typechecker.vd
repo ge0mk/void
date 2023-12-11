@@ -1253,9 +1253,11 @@ struct TCContext {
 			case IfStmt: &if_stmt -> result.append(this.checkIfStmt(if_stmt, node.is_comptime, node.span));
 			case IfVarStmt: &if_var_stmt -> result.append(this.checkIfVarStmt(if_var_stmt, node.is_comptime, node.span));
 			case VarElseStmt: &var_else_stmt -> result.append(this.checkVarElseStmt(var_else_stmt, node.is_comptime, node.span));
-			case WhileStmt: &while_stmt -> result.append(this.checkWhileStmt(while_stmt, node.is_comptime, node.span));
-			case DoWhileStmt: &do_while_stmt -> result.append(this.checkDoWhileStmt(do_while_stmt, node.is_comptime, node.span));
-			case ForStmt: &for_stmt -> result.append(this.checkForStmt(for_stmt, node.is_comptime, node.span));
+			case WhileStmt: &while_stmt -> match while_stmt.kind {
+				case While -> result.append(this.checkWhileStmt(while_stmt, node.is_comptime, node.span));
+				case DoWhile -> result.append(this.checkDoWhileStmt(while_stmt, node.is_comptime, node.span));
+			}
+			case ParsedForStmt: &for_stmt -> result.append(this.checkForStmt(for_stmt, node.is_comptime, node.span));
 			case BreakStmt -> result.append(this.checkBreakStmt(node.span));
 			case ContinueStmt -> result.append(this.checkContinueStmt(node.span));
 			case CaseStmt: &case_stmt -> result.append(this.checkCaseStmt(case_stmt, node.span));
@@ -1282,7 +1284,7 @@ struct TCContext {
 			| MatchExpr
 			| FunctionRefExpr
 			| AnonymousFunctionExpr -> result.append(this.checkExprStmt(node, false, node.is_comptime, node.span));
-			else -> panic("not implemented");
+			else -> panic("invalid unchecked node");
 		}
 
 		if result.isEmpty() {
@@ -1571,11 +1573,11 @@ struct TCContext {
 					return List!<Stmt>();
 				}
 
-				var_decl.initializer = this.addASTNode(Node::Name(ParsedName("#value", List!<uint>()), var_decl_span, false));
+				var_decl.initializer = this.addASTNode(Node::Name(ParsedName("#value", List!<uint>()), var_decl_span, Type::unknown(), false));
 				if value.type.reference_kind == Var {
-					var_decl.initializer = this.addASTNode(Node::UnaryOperatorExpr(ParsedUnaryOperatorExpr(Operator::VarRef, var_decl.initializer), var_decl_span, false));
+					var_decl.initializer = this.addASTNode(Node::UnaryOperatorExpr(ParsedUnaryOperatorExpr(Operator::VarRef, var_decl.initializer), var_decl_span, Type::unknown(), false));
 				} else if value.type.reference_kind == Const {
-					var_decl.initializer = this.addASTNode(Node::UnaryOperatorExpr(ParsedUnaryOperatorExpr(Operator::ConstRef, var_decl.initializer), var_decl_span, false));
+					var_decl.initializer = this.addASTNode(Node::UnaryOperatorExpr(ParsedUnaryOperatorExpr(Operator::ConstRef, var_decl.initializer), var_decl_span, Type::unknown(), false));
 				}
 				this.replaceASTNode(parsed_stmt.var_decl, parsed_var_decl);
 
@@ -1592,19 +1594,19 @@ struct TCContext {
 
 				// Ok | Some: #val -> { var x = #val; ... }
 				cases.append(this.addASTNode(Node::CaseStmt(ParsedCaseStmt(
-					List!<uint>(1u, this.addASTNode(Node::Name(ParsedName(ok_case_name, List!<uint>()), value.span, false))),
+					List!<uint>(1u, this.addASTNode(Node::Name(ParsedName(ok_case_name, List!<uint>()), value.span, Type::unknown(), false))),
 					"#value", value.type.reference_kind,
 					parsed_stmt.body
-				), value.span, false)));
+				), value.span, Type::unknown(), false)));
 
 				// else -> {}
 				cases.append(this.addASTNode(Node::ElseCaseStmt(
-					this.addASTNode(Node::CompoundStmt(List!<uint>(), value.span, false)),
-					value.span, false
+					this.addASTNode(Node::CompoundStmt(List!<uint>(), value.span, Type::unknown(), false)),
+					value.span, Type::unknown(), false
 				)));
 
 				var result: List!<Stmt>;
-				result.append(Stmt::Expr(this.checkMatchExpr(value, Node::CompoundStmt(cases, span, false), Type::unknown(), is_comptime, span), span));
+				result.append(Stmt::Expr(this.checkMatchExpr(value, Node::CompoundStmt(cases, span, Type::unknown(), false), Type::unknown(), is_comptime, span), span));
 				result.append(this.collectCleanupCallsForCurrentScope());
 				return result;
 			}
@@ -1653,10 +1655,10 @@ struct TCContext {
 			return List!<Stmt>();
 		}
 
-		var value_invoke_expr = this.addASTNode(Node::Name(ParsedName("#value", List!<uint>()), var_decl_span, false));
+		var value_invoke_expr = this.addASTNode(Node::Name(ParsedName("#value", List!<uint>()), var_decl_span, Type::unknown(), false));
 		match value.type.reference_kind {
-			case Var -> value_invoke_expr = this.addASTNode(Node::UnaryOperatorExpr(ParsedUnaryOperatorExpr(Operator::VarRef, value_invoke_expr), var_decl_span, false));
-			case Const -> value_invoke_expr = this.addASTNode(Node::UnaryOperatorExpr(ParsedUnaryOperatorExpr(Operator::ConstRef, value_invoke_expr), var_decl_span, false));
+			case Var -> value_invoke_expr = this.addASTNode(Node::UnaryOperatorExpr(ParsedUnaryOperatorExpr(Operator::VarRef, value_invoke_expr), var_decl_span, Type::unknown(), false));
+			case Const -> value_invoke_expr = this.addASTNode(Node::UnaryOperatorExpr(ParsedUnaryOperatorExpr(Operator::ConstRef, value_invoke_expr), var_decl_span, Type::unknown(), false));
 			else -> {}
 		}
 
@@ -1664,19 +1666,19 @@ struct TCContext {
 
 		// case Ok: val -> yield val
 		cases.append(this.addASTNode(Node::CaseStmt(ParsedCaseStmt(
-			List!<uint>(1u, this.addASTNode(Node::Name(ParsedName(ok_case_name, List!<uint>()), var_decl_span, false))),
+			List!<uint>(1u, this.addASTNode(Node::Name(ParsedName(ok_case_name, List!<uint>()), var_decl_span, Type::unknown(), false))),
 			"#value", value.type.reference_kind,
-			this.addASTNode(Node::YieldStmt(value_invoke_expr, var_decl_span, false))
-		), var_decl_span, false)));
+			this.addASTNode(Node::YieldStmt(value_invoke_expr, var_decl_span, Type::unknown(), false))
+		), var_decl_span, Type::unknown(), false)));
 
 		// case Error: (&&err) -> { ... }
 		cases.append(this.addASTNode(Node::CaseStmt(ParsedCaseStmt(
-			List!<uint>(1u, this.addASTNode(Node::Name(ParsedName(error_case_name, List!<uint>()), var_decl_span, false))),
+			List!<uint>(1u, this.addASTNode(Node::Name(ParsedName(error_case_name, List!<uint>()), var_decl_span, Type::unknown(), false))),
 			parsed_stmt.capture_name, parsed_stmt.capture_kind, parsed_stmt.body
-		), var_decl_span, false)));
+		), var_decl_span, Type::unknown(), false)));
 
 		this.pushScope(ScopeKind::Expr);
-		const initializer = this.checkMatchExpr(value, Node::CompoundStmt(cases, span, false), Type::unknown(), is_comptime, span);
+		const initializer = this.checkMatchExpr(value, Node::CompoundStmt(cases, span, Type::unknown(), false), Type::unknown(), is_comptime, span);
 		const initializer_cleanup = this.collectCleanupCallsForCurrentScope();
 		this.popScope();
 
@@ -1729,7 +1731,7 @@ struct TCContext {
 		return result;
 	}
 
-	func checkDoWhileStmt(this: &&TCContext, parsed_stmt: &ParsedDoWhileStmt, is_comptime: bool, span: Span) -> List!<Stmt> {
+	func checkDoWhileStmt(this: &&TCContext, parsed_stmt: &ParsedWhileStmt, is_comptime: bool, span: Span) -> List!<Stmt> {
 		var result: List!<Stmt>;
 
 		this.pushScope(ScopeKind::Loop);
@@ -2234,8 +2236,8 @@ struct TCContext {
 			case Name -> return this.checkNameExpr(node, expected_type, is_comptime, node.span);
 			case UnaryOperatorExpr: &operator_expr -> return this.checkUnaryOperatorExpr(operator_expr, expected_type, is_comptime, node.span);
 			case BinaryOperatorExpr: &operator_expr -> return this.checkBinaryOperatorExpr(node, operator_expr, expected_type, is_comptime, node.span);
-			case CallExpr: &args -> return this.checkCallExpr(args, expected_type, is_comptime, node.span);
-			case IndexExpr: &args -> return this.checkIndexExpr(args, expected_type, is_comptime, node.span);
+			case CallExpr: &call_expr -> return this.checkCallExpr(call_expr, expected_type, is_comptime, node.span);
+			case IndexExpr: &call_expr -> return this.checkIndexExpr(call_expr, expected_type, is_comptime, node.span);
 			case InlineIfExpr: &expr -> return this.checkInlineIfExpr(expr, expected_type, is_comptime, node.span);
 			case ParenExpr: child -> return this.checkExpr(this.getASTNode(child), expected_type, is_comptime);
 			case ArrayExpr: &elements -> return this.checkArrayExpr(elements, expected_type, is_comptime, node.span);
@@ -2796,15 +2798,15 @@ struct TCContext {
 		}
 	}
 
-	func checkCallExpr(this: &&TCContext, operands: List!<uint>, expected_type: Type, is_comptime: bool, span: Span) -> Expr {
-		var arguments = this.checkExprList(List!<uint>(operands[1u..operands.size()]), is_comptime);
+	func checkCallExpr(this: &&TCContext, call_expr: &ParsedCallExpr, expected_type: Type, is_comptime: bool, span: Span) -> Expr {
+		var arguments = this.checkExprList(call_expr.parameters, is_comptime);
 		for &arg in arguments {
 			if arg is Undefined {
 				return Expr::Undefined(span, Type::unknown());
 			}
 		}
 
-		const function_name = this.checkName(this.getASTNode(operands[0u]));
+		const function_name = this.checkName(this.getASTNode(call_expr.callee));
 		if function_name.segments.size() > 0 {
 			const argument_types = getArgumentTypes(arguments, false);
 			const matching_functions = this.lookupFunction(function_name, SharedHandle!<TypeDecl>(), argument_types, true, true, span);
@@ -2822,7 +2824,7 @@ struct TCContext {
 				if matching_types.size() == 1 {
 					return this.createTemporaryVariable(matching_types[0u], List!<TemplateParameter>(), arguments, is_comptime, span);
 				} else if matching_variables.size() == 1 {
-					arguments.insert(0u, this.checkExpr(this.getASTNode(operands[0u]), Type::unknown(), is_comptime));
+					arguments.insert(0u, this.checkExpr(this.getASTNode(call_expr.callee), Type::unknown(), is_comptime));
 					return this.checkCall(Name("operator ()"), arguments, true, true, CallKind::MemberCall, is_comptime, span);
 				} else if matching_case_decls.size() == 1 {
 					if const index = matching_case_decls[0u] as VariantCase {
@@ -2841,7 +2843,7 @@ struct TCContext {
 			return this.createCall(matching_functions[0u], arguments, CallKind::Static, is_comptime, span);
 		}
 
-		if const operator_expr = this.getASTNode(operands[0u]) as BinaryOperatorExpr {
+		if const operator_expr = this.getASTNode(call_expr.callee) as BinaryOperatorExpr {
 			if operator_expr.op == MemberAccess {
 				const name = this.checkName(this.getASTNode(operator_expr.rhs));
 				if name.segments.size() > 0 {
@@ -2870,7 +2872,7 @@ struct TCContext {
 			}
 		}
 
-		arguments.insert(0u, this.checkExpr(this.getASTNode(operands[0u]), Type::unknown(), is_comptime));
+		arguments.insert(0u, this.checkExpr(this.getASTNode(call_expr.callee), Type::unknown(), is_comptime));
 		return this.checkCall(Name("operator ()"), arguments, true, true, CallKind::MemberCall, is_comptime, span);
 	}
 
@@ -2950,56 +2952,54 @@ struct TCContext {
 		if yield_type == this.program.void_type {
 			// case Ok -> yield
 			cases.append(this.addASTNode(Node::CaseStmt(ParsedCaseStmt(
-				List!<uint>(1u, this.addASTNode(Node::Name(ParsedName("Ok", List!<uint>()), span, false))),
+				List!<uint>(1u, this.addASTNode(Node::Name(ParsedName("Ok", List!<uint>()), span, Type::unknown(), false))),
 				"", ok_case_decl.type.reference_kind,
-				this.addASTNode(Node::YieldStmt(this.current_namespace.file.emptyNode(), span, false))
-			), span, false)));
+				this.addASTNode(Node::YieldStmt(this.current_namespace.file.emptyNode(), span, Type::unknown(), false))
+			), span, Type::unknown(), false)));
 		} else {
 			// case Ok: val -> yield val
-			var value_invoke_expr = this.addASTNode(Node::Name(ParsedName("#value", List!<uint>()), span, false));
+			var value_invoke_expr = this.addASTNode(Node::Name(ParsedName("#value", List!<uint>()), span, Type::unknown(), false));
 			match ok_case_decl.type.reference_kind {
-				case Var -> value_invoke_expr = this.addASTNode(Node::UnaryOperatorExpr(ParsedUnaryOperatorExpr(Operator::VarRef, value_invoke_expr), span, false));
-				case Const -> value_invoke_expr = this.addASTNode(Node::UnaryOperatorExpr(ParsedUnaryOperatorExpr(Operator::ConstRef, value_invoke_expr), span, false));
+				case Var -> value_invoke_expr = this.addASTNode(Node::UnaryOperatorExpr(ParsedUnaryOperatorExpr(Operator::VarRef, value_invoke_expr), span, Type::unknown(), false));
+				case Const -> value_invoke_expr = this.addASTNode(Node::UnaryOperatorExpr(ParsedUnaryOperatorExpr(Operator::ConstRef, value_invoke_expr), span, Type::unknown(), false));
 				else -> {}
 			}
 
 			cases.append(this.addASTNode(Node::CaseStmt(ParsedCaseStmt(
-				List!<uint>(1u, this.addASTNode(Node::Name(ParsedName("Ok", List!<uint>()), span, false))),
+				List!<uint>(1u, this.addASTNode(Node::Name(ParsedName("Ok", List!<uint>()), span, Type::unknown(), false))),
 				"#value", ok_case_decl.type.reference_kind,
-				this.addASTNode(Node::YieldStmt(value_invoke_expr, span, false))
-			), span, false)));
+				this.addASTNode(Node::YieldStmt(value_invoke_expr, span, Type::unknown(), false))
+			), span, Type::unknown(), false)));
 		}
 
-		var error_invoke_expr = this.addASTNode(Node::Name(ParsedName("#error", List!<uint>()), span, false));
+		var error_invoke_expr = this.addASTNode(Node::Name(ParsedName("#error", List!<uint>()), span, Type::unknown(), false));
 		match error_case_decl.type.reference_kind {
-			case Var -> error_invoke_expr = this.addASTNode(Node::UnaryOperatorExpr(ParsedUnaryOperatorExpr(Operator::VarRef, error_invoke_expr), span, false));
-			case Const -> error_invoke_expr = this.addASTNode(Node::UnaryOperatorExpr(ParsedUnaryOperatorExpr(Operator::ConstRef, error_invoke_expr), span, false));
+			case Var -> error_invoke_expr = this.addASTNode(Node::UnaryOperatorExpr(ParsedUnaryOperatorExpr(Operator::VarRef, error_invoke_expr), span, Type::unknown(), false));
+			case Const -> error_invoke_expr = this.addASTNode(Node::UnaryOperatorExpr(ParsedUnaryOperatorExpr(Operator::ConstRef, error_invoke_expr), span, Type::unknown(), false));
 			else -> {}
 		}
 
 		if op == Try {
 			// case Error: error -> throw error
 			cases.append(this.addASTNode(Node::CaseStmt(ParsedCaseStmt(
-				List!<uint>(1u, this.addASTNode(Node::Name(ParsedName("Error", List!<uint>()), span, false))),
+				List!<uint>(1u, this.addASTNode(Node::Name(ParsedName("Error", List!<uint>()), span, Type::unknown(), false))),
 				"#error", error_case_decl.type.reference_kind,
-				this.addASTNode(Node::ThrowStmt(error_invoke_expr, span, false))
-			), span, false)));
+				this.addASTNode(Node::ThrowStmt(error_invoke_expr, span, Type::unknown(), false))
+			), span, Type::unknown(), false)));
 		} else if op == Must {
 			// case Error: error -> panic(error)
-			var panic_args: List!<uint>;
-			panic_args.append(this.addASTNode(Node::Name(ParsedName("panic", List!<uint>()), span, false)));
-			panic_args.append(error_invoke_expr);
+			const panic_function = this.addASTNode(Node::Name(ParsedName("panic", List!<uint>()), span, Type::unknown(), false));
 			cases.append(this.addASTNode(Node::CaseStmt(ParsedCaseStmt(
-				List!<uint>(1u, this.addASTNode(Node::Name(ParsedName("Error", List!<uint>()), span, false))),
+				List!<uint>(1u, this.addASTNode(Node::Name(ParsedName("Error", List!<uint>()), span, Type::unknown(), false))),
 				"#error", error_case_decl.type.reference_kind,
-				this.addASTNode(Node::CallExpr(panic_args, span, false))
-			), span, false)));
+				this.addASTNode(Node::CallExpr(ParsedCallExpr(panic_function, List!<uint>(1u, error_invoke_expr), SharedHandle!<VarDecl>(), ReturnKind::None), span, Type::unknown(), false))
+			), span, Type::unknown(), false)));
 		} else {
 			this.error("invalid operator for validate expr: must be try or must", span);
 			abort();
 		}
 
-		return this.checkMatchExpr(value, Node::CompoundStmt(cases, span, false), yield_type, is_comptime, span);
+		return this.checkMatchExpr(value, Node::CompoundStmt(cases, span, Type::unknown(), false), yield_type, is_comptime, span);
 	}
 
 	func checkInlineIfExpr(this: &&TCContext, expr: &ParsedInlineIfExpr, expected_type: Type, is_comptime: bool, span: Span) -> Expr {
@@ -3015,19 +3015,19 @@ struct TCContext {
 
 		var children = List!<uint>();
 		children.append(this.addASTNode(Node::CaseStmt(ParsedCaseStmt(
-			List!<uint>(1u, this.addASTNode(Node::BoolLiteralExpr(true, then_value_span, false))),
+			List!<uint>(1u, this.addASTNode(Node::BoolLiteralExpr(true, then_value_span, Type::unknown(), false))),
 			"", ReferenceKind::None,
-			this.addASTNode(Node::YieldStmt(expr.then_value, then_value_span, false))
-		), then_value_span, false)));
+			this.addASTNode(Node::YieldStmt(expr.then_value, then_value_span, Type::unknown(), false))
+		), then_value_span, Type::unknown(), false)));
 
 		children.append(this.addASTNode(Node::CaseStmt(ParsedCaseStmt(
-			List!<uint>(1u, this.addASTNode(Node::BoolLiteralExpr(false, else_value_span, false))),
+			List!<uint>(1u, this.addASTNode(Node::BoolLiteralExpr(false, else_value_span, Type::unknown(), false))),
 			"", ReferenceKind::None,
-			this.addASTNode(Node::YieldStmt(expr.else_value, else_value_span, false))
-		), else_value_span, false)));
+			this.addASTNode(Node::YieldStmt(expr.else_value, else_value_span, Type::unknown(), false))
+		), else_value_span, Type::unknown(), false)));
 
 		const condition = this.checkExpr(this.getASTNode(expr.condition), this.program.bool_type, is_comptime);
-		return this.checkMatchExpr(condition, Node::CompoundStmt(children, span, false), expected_type, is_comptime, span);
+		return this.checkMatchExpr(condition, Node::CompoundStmt(children, span, Type::unknown(), false), expected_type, is_comptime, span);
 	}
 
 	func checkOperatorIsExpr(this: &&TCContext, parsed_lhs: &Node, parsed_rhs: &Node, is_comptime: bool, span: Span) -> Expr {
@@ -3164,38 +3164,36 @@ struct TCContext {
 
 		const yield_type = this.getType(Name("Optional", List!<TemplateParameter>(1u, TemplateParameter::Type(case_decl.type))), span);
 
-		var value_invoke_expr = this.addASTNode(Node::Name(ParsedName("#value", List!<uint>()), span, false));
+		var value_invoke_expr = this.addASTNode(Node::Name(ParsedName("#value", List!<uint>()), span, Type::unknown(), false));
 		match case_decl.type.reference_kind {
-			case Var -> value_invoke_expr = this.addASTNode(Node::UnaryOperatorExpr(ParsedUnaryOperatorExpr(Operator::VarRef, value_invoke_expr), span, false));
-			case Const -> value_invoke_expr = this.addASTNode(Node::UnaryOperatorExpr(ParsedUnaryOperatorExpr(Operator::ConstRef, value_invoke_expr), span, false));
+			case Var -> value_invoke_expr = this.addASTNode(Node::UnaryOperatorExpr(ParsedUnaryOperatorExpr(Operator::VarRef, value_invoke_expr), span, Type::unknown(), false));
+			case Const -> value_invoke_expr = this.addASTNode(Node::UnaryOperatorExpr(ParsedUnaryOperatorExpr(Operator::ConstRef, value_invoke_expr), span, Type::unknown(), false));
 			else -> {}
 		}
 
 		var cases: List!<uint>;
 
 		// case Foo: val -> yield Some(val)
-		var some_args: List!<uint>;
-		some_args.append(this.addASTNode(Node::Name(ParsedName("Some", List!<uint>()), span, false)));
-		some_args.append(value_invoke_expr);
+		const some_name = this.addASTNode(Node::Name(ParsedName("Some", List!<uint>()), span, Type::unknown(), false));
 		cases.append(this.addASTNode(Node::CaseStmt(ParsedCaseStmt(
-			List!<uint>(1u, this.addASTNode(Node::Name(ParsedName(case_name, List!<uint>()), span, false))),
+			List!<uint>(1u, this.addASTNode(Node::Name(ParsedName(case_name, List!<uint>()), span, Type::unknown(), false))),
 			"#value", case_decl.type.reference_kind,
 			this.addASTNode(Node::YieldStmt(
-				this.addASTNode(Node::CallExpr(some_args, span, false)),
-				span, false
+				this.addASTNode(Node::CallExpr(ParsedCallExpr(some_name, List!<uint>(1u, value_invoke_expr), SharedHandle!<VarDecl>(), ReturnKind::None), span, Type::unknown(), false)),
+				span, Type::unknown(), false
 			))
-		), span, false)));
+		), span, Type::unknown(), false)));
 
 		// else -> yield None
 		cases.append(this.addASTNode(Node::ElseCaseStmt(
 			this.addASTNode(Node::YieldStmt(
-				this.addASTNode(Node::Name(ParsedName("None", List!<uint>()), span, false)),
-				span, false
+				this.addASTNode(Node::Name(ParsedName("None", List!<uint>()), span, Type::unknown(), false)),
+				span, Type::unknown(), false
 			)),
-			span, false
+			span, Type::unknown(), false
 		)));
 
-		return this.checkMatchExpr(value, Node::CompoundStmt(cases, span, is_comptime), yield_type, is_comptime, span);
+		return this.checkMatchExpr(value, Node::CompoundStmt(cases, span, Type::unknown(), is_comptime), yield_type, is_comptime, span);
 	}
 
 	func lookupNamespace(this: &&TCContext, namespaces_to_search: &Set!<SharedHandle!<Namespace>>, name: &NameSegment, span: Span) -> Set!<SharedHandle!<Namespace>> {

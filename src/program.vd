@@ -42,8 +42,8 @@ struct CompilationUnit {
 		this.line_spans := line_spans;
 
 		this.nodes := ();
-		this.nodes.append(Node::Empty(Span(), false));
-		this.nodes.append(Node::Garbage(Span(), false));
+		this.nodes.append(Node::Empty(Span(), Type::unknown(), false));
+		this.nodes.append(Node::Garbage(Span(), Type::unknown(), false));
 	}
 
 	func constructor(this: &&CompilationUnit, other: CompilationUnit) -> void = default;
@@ -99,6 +99,7 @@ struct CompilationUnit {
 	func dump(this: &CompilationUnit, out: &&TreeFormatter, index: uint, is_last: bool) -> void {
 		out.push(this.nodes[index].name(), is_last);
 		out.span(this.nodes[index].span);
+		out.attribute(this.nodes[index].type.signature());
 
 		match this.nodes[index] {
 			case Empty
@@ -184,6 +185,9 @@ struct CompilationUnit {
 			}
 			case IfStmt: &if_stmt -> {
 				this.dump(&&out, if_stmt.condition, false);
+				for c in if_stmt.condition_cleanup {
+					this.dump(&&out, c, false);
+				}
 				this.dump(&&out, if_stmt.then_branch, false);
 				this.dump(&&out, if_stmt.else_branch, true);
 			}
@@ -198,15 +202,19 @@ struct CompilationUnit {
 			}
 			case WhileStmt: &while_stmt -> {
 				this.dump(&&out, while_stmt.condition, false);
+				for c in while_stmt.condition_cleanup {
+					this.dump(&&out, c, false);
+				}
 				this.dump(&&out, while_stmt.body, true);
 			}
-			case DoWhileStmt: &do_while_stmt -> {
-				this.dump(&&out, do_while_stmt.body, false);
-				this.dump(&&out, do_while_stmt.condition, true);
-			}
-			case ForStmt: &for_stmt -> {
+			case ParsedForStmt: &for_stmt -> {
 				out.attribute(for_stmt.capture_kind.toString() + for_stmt.capture_name);
 				this.dump(&&out, for_stmt.range, false);
+				this.dump(&&out, for_stmt.body, true);
+			}
+			case ForStmt: &for_stmt -> {
+				for_stmt.enumerator_variable.dump(&&out, false);
+				this.dump(&&out, for_stmt.iterator, false);
 				this.dump(&&out, for_stmt.body, true);
 			}
 			case CaseStmt: case_stmt -> {
@@ -223,16 +231,25 @@ struct CompilationUnit {
 			case ReturnStmt: value -> this.dump(&&out, value, true);
 			case YieldStmt: value -> this.dump(&&out, value, true);
 			case DiscardStmt: expr -> this.dump(&&out, expr, true);
+			case LifeTimeStart: variable -> variable.dump(&&out, true);
+			case LifeTimeEnd: variable -> out.value(variable.signature());
 			case Name: &name -> {
 				out.value(name.name);
 				for i in 0u..name.template_parameters.size() {
 					this.dump(&&out, name.template_parameters[i], i == name.template_parameters.size() - 1);
 				}
 			}
+			case IntegerLiteralExpr: value -> out.value(format(value));
+			case FloatLiteralExpr: value -> out.value(format(value as int));
+			case BoolLiteralExpr: value -> out.attribute(format(value));
 			case CharLiteralExpr: &literal -> out.attribute("\'" + literal.value + "\'" + literal.postfix);
 			case StringLiteralExpr: &literal -> out.attribute("\"" + literal.value + "\"" + literal.postfix);
 			case NumberLiteralExpr: &literal -> out.attribute(format(literal.value) + literal.postfix);
-			case BoolLiteralExpr: value -> out.attribute(format(value));
+			case ConstAggregateExpr: elements -> {
+				for i in 0u..elements.size() {
+					this.dump(&&out, elements[i], i == elements.size());
+				}
+			}
 			case ParenExpr: child -> this.dump(&&out, child, true);
 			case UnaryOperatorExpr: &operator_expr -> {
 				out.attribute(operator_expr.op.toString());
@@ -243,14 +260,15 @@ struct CompilationUnit {
 				this.dump(&&out, operator_expr.lhs, false);
 				this.dump(&&out, operator_expr.rhs, true);
 			}
-			case CallExpr: &args -> {
-				for i in 0u..args.size() {
-					this.dump(&&out, args[i], i == args.size() - 1);
+			case CallExpr: &call_expr -> {
+				this.dump(&&out, call_expr.callee, call_expr.parameters.isEmpty());
+				for i in 0u..call_expr.parameters.size() {
+					this.dump(&&out, call_expr.parameters[i], i == call_expr.parameters.size() - 1);
 				}
 			}
-			case IndexExpr: &args -> {
-				for i in 0u..args.size() {
-					this.dump(&&out, args[i], i == args.size() - 1);
+			case IndexExpr: &operands -> {
+				for i in 0u..operands.size() {
+					this.dump(&&out, operands[i], i == operands.size() - 1);
 				}
 			}
 			case InlineIfExpr: &inline_if_expr -> {
@@ -285,6 +303,8 @@ struct CompilationUnit {
 				this.dump(&&out, match_expr.value, false);
 				this.dump(&&out, match_expr.body, true);
 			}
+			case TypeRefExpr: type -> out.value(type.signature());
+			case VarInvokeExpr: variable -> out.value(variable.signature());
 			case FunctionRefExpr: &function -> {
 				this.dump(&&out, function.name, false);
 				for i in 0u..function.parameter_types.size() {
@@ -297,6 +317,15 @@ struct CompilationUnit {
 					this.dump(&&out, t, false);
 				}
 				this.dump(&&out, type.return_type, true);
+			}
+			case DereferenceExpr: target -> this.dump(&&out, target, true);
+			case MemberVarInvokeExpr: expr -> {
+				out.value(format(expr.id));
+				this.dump(&&out, expr.object, true);
+			}
+			case ShallowCopyExpr: expr -> {
+				this.dump(&&out, expr.destination, false);
+				this.dump(&&out, expr.value, true);
 			}
 		}
 
@@ -2434,6 +2463,7 @@ func format(parsed_number: ParsedNumber) -> String {
 
 variant Node {
 	var span: Span;
+	var type: Type;
 	var is_comptime: bool;
 
 	case Empty;
@@ -2460,8 +2490,8 @@ variant Node {
 	case VarElseStmt: ParsedVarElseStmt;
 
 	case WhileStmt: ParsedWhileStmt;
-	case DoWhileStmt: ParsedDoWhileStmt;
-	case ForStmt: ParsedForStmt;
+	case ParsedForStmt: ParsedForStmt;
+	case ForStmt: CheckedForStmt;
 
 	case CaseStmt: ParsedCaseStmt;
 	case ElseCaseStmt: uint;
@@ -2475,18 +2505,26 @@ variant Node {
 	case YieldStmt: uint;
 	case DiscardStmt: uint;
 
+	case LifeTimeStart: SharedHandle!<VarDecl>;
+	case LifeTimeEnd: SharedHandle!<VarDecl>;
+
 	case Name: ParsedName;
+
+	case IntegerLiteralExpr: int;
+	case FloatLiteralExpr: f64;
+	case BoolLiteralExpr: bool;
 
 	case CharLiteralExpr: ParsedCharLiteralExpr;
 	case StringLiteralExpr: ParsedStringLiteralExpr;
 	case NumberLiteralExpr: ParsedNumberLiteralExpr;
-	case BoolLiteralExpr: bool;
+
+	case ConstAggregateExpr: List!<uint>;
 
 	case ParenExpr: uint;
 
 	case UnaryOperatorExpr: ParsedUnaryOperatorExpr;
 	case BinaryOperatorExpr: ParsedBinaryOperatorExpr;
-	case CallExpr: List!<uint>;
+	case CallExpr: ParsedCallExpr;
 	case IndexExpr: List!<uint>;
 	case InlineIfExpr: ParsedInlineIfExpr;
 
@@ -2496,10 +2534,16 @@ variant Node {
 
 	case MatchExpr: ParsedMatchExpr;
 
+	case TypeRefExpr: Type;
+	case VarInvokeExpr: SharedHandle!<VarDecl>;
 	case FunctionRefExpr: ParsedFunctionRefExpr;
-	case AnonymousFunctionExpr: uint;
 
+	case AnonymousFunctionExpr: uint;
 	case FunctionType: ParsedFunctionType;
+
+	case DereferenceExpr: uint;
+	case MemberVarInvokeExpr: (object: uint, id: uint);
+	case ShallowCopyExpr: (destination: uint, value: uint);
 
 	func name(this: &Node) -> String {
 		match this {
@@ -2520,7 +2564,7 @@ variant Node {
 			case IfVarStmt -> return "IfVarStmt";
 			case VarElseStmt -> return "VarElseStmt";
 			case WhileStmt -> return "WhileStmt";
-			case DoWhileStmt -> return "DoWhileStmt";
+			case ParsedForStmt -> return "ParsedForStmt";
 			case ForStmt -> return "ForStmt";
 			case CaseStmt -> return "CaseStmt";
 			case ElseCaseStmt -> return "ElseCaseStmt";
@@ -2531,11 +2575,16 @@ variant Node {
 			case ReturnStmt -> return "ReturnStmt";
 			case YieldStmt -> return "YieldStmt";
 			case DiscardStmt -> return "DiscardStmt";
+			case LifeTimeStart -> return "LifeTimeStart";
+			case LifeTimeEnd -> return "LifeTimeEnd";
 			case Name -> return "Name";
+			case IntegerLiteralExpr -> return "IntegerLiteralExpr";
+			case FloatLiteralExpr -> return "FloatLiteralExpr";
+			case BoolLiteralExpr -> return "BoolLiteralExpr";
 			case CharLiteralExpr -> return "CharLiteralExpr";
 			case StringLiteralExpr -> return "StringLiteralExpr";
 			case NumberLiteralExpr -> return "NumberLiteralExpr";
-			case BoolLiteralExpr -> return "BoolLiteralExpr";
+			case ConstAggregateExpr -> return "ConstAggregateExpr";
 			case ParenExpr -> return "ParenExpr";
 			case UnaryOperatorExpr -> return "UnaryOperatorExpr";
 			case BinaryOperatorExpr -> return "BinaryOperatorExpr";
@@ -2546,9 +2595,14 @@ variant Node {
 			case TupleExpr -> return "TupleExpr";
 			case DictExpr -> return "DictExpr";
 			case MatchExpr -> return "MatchExpr";
+			case TypeRefExpr -> return "TypeRefExpr";
+			case VarInvokeExpr -> return "VarInvokeExpr";
 			case FunctionRefExpr -> return "FunctionRefExpr";
 			case AnonymousFunctionExpr -> return "AnonymousFunctionExpr";
 			case FunctionType -> return "FunctionType";
+			case DereferenceExpr -> return "DereferenceExpr";
+			case MemberVarInvokeExpr -> return "MemberVarInvokeExpr";
+			case ShallowCopyExpr -> return "ShallowCopyExpr";
 		}
 	}
 
@@ -2614,6 +2668,9 @@ variant Node {
 			}
 			case IfStmt: &&stmt -> {
 				if stmt.condition > 1 { stmt.condition += offset; }
+				for &&c in stmt.condition_cleanup {
+					if c > 1 { c += offset; }
+				}
 				if stmt.then_branch > 1 { stmt.then_branch += offset; }
 				if stmt.else_branch > 1 { stmt.else_branch += offset; }
 			}
@@ -2627,13 +2684,12 @@ variant Node {
 			}
 			case WhileStmt: &&stmt -> {
 				if stmt.condition > 1 { stmt.condition += offset; }
+				for &&c in stmt.condition_cleanup {
+					if c > 1 { c += offset; }
+				}
 				if stmt.body > 1 { stmt.body += offset; }
 			}
-			case DoWhileStmt: &&stmt -> {
-				if stmt.condition > 1 { stmt.condition += offset; }
-				if stmt.body > 1 { stmt.body += offset; }
-			}
-			case ForStmt: &&stmt -> {
+			case ParsedForStmt: &&stmt -> {
 				if stmt.range > 1 { stmt.range += offset; }
 				if stmt.body > 1 { stmt.body += offset; }
 			}
@@ -2676,13 +2732,14 @@ variant Node {
 				if expr.lhs > 1 { expr.lhs += offset; }
 				if expr.rhs > 1 { expr.rhs += offset; }
 			}
-			case CallExpr: &&args -> {
-				for &&arg in args {
+			case CallExpr: &&call_expr -> {
+				if call_expr.callee > 1 { call_expr.callee += offset; }
+				for &&arg in call_expr.parameters {
 					if arg > 1 { arg += offset; }
 				}
 			}
-			case IndexExpr: &&args -> {
-				for &&arg in args {
+			case IndexExpr: &&operands -> {
+				for &&arg in operands {
 					if arg > 1 { arg += offset; }
 				}
 			}
@@ -2786,12 +2843,12 @@ alias ParsedAliasDecl = (name: String, type: uint);
 alias ParsedVarDecl = (annotations: List!<ParsedAnnotation>, name: String, type: uint, initializer: uint, is_const: bool, is_parameter: bool);
 alias ParsedCaseDecl = (name: String, payload: uint, id: uint);
 
-alias ParsedIfStmt = (condition: uint, then_branch: uint, else_branch: uint);
+alias ParsedIfStmt = (condition: uint, condition_cleanup: List!<uint>, then_branch: uint, else_branch: uint);
 alias ParsedIfVarStmt = (var_decl: uint, body: uint);
 alias ParsedVarElseStmt = (var_decl: uint, body: uint, capture_name: String, capture_kind: ReferenceKind);
-alias ParsedWhileStmt = (condition: uint, body: uint);
-alias ParsedDoWhileStmt = (body: uint, condition: uint);
+alias ParsedWhileStmt = (condition: uint, condition_cleanup: List!<uint>, body: uint, kind: WhileStmtKind);
 alias ParsedForStmt = (capture_name: String, capture_kind: ReferenceKind, capture_span: Span, range: uint, body: uint);
+alias CheckedForStmt = (iterator: uint, enumerator_variable: SharedHandle!<VarDecl>, body: uint, kind: ForStmtKind);
 alias ParsedCaseStmt = (patterns: List!<uint>, capture_name: String, capture_kind: ReferenceKind, body: uint);
 
 alias ParsedName = (name: String, template_parameters: List!<uint>);
@@ -2802,13 +2859,13 @@ alias ParsedNumberLiteralExpr = (value: ParsedNumber, postfix: String);
 
 alias ParsedUnaryOperatorExpr = (op: Operator, operand: uint);
 alias ParsedBinaryOperatorExpr = (op: Operator, lhs: uint, rhs: uint);
+alias ParsedCallExpr = (callee: uint, parameters: List!<uint>, result_var: SharedHandle!<VarDecl>, return_kind: ReturnKind);
 alias ParsedInlineIfExpr = (condition: uint, then_value: uint, else_value: uint);
 
 alias ParsedTupleElement = (span: Span, name: String, value: uint);
 alias ParsedDictElement = (span: Span, key: uint, value: uint);
 
-alias ParsedMatchExpr = (value: uint, body: uint);
-alias ParsedFunctionRefExpr = (name: uint, parameter_types: List!<uint>);
+alias ParsedMatchExpr = (value: uint, body: uint, cases: List!<uint>, else_case: uint, yield_var: SharedHandle!<VarDecl>);
+alias ParsedFunctionRefExpr = (name: uint, parameter_types: List!<uint>, function: SharedHandle!<FunctionDecl>);
 
 alias ParsedFunctionType = (parameter_types: List!<uint>, return_type: uint);
-

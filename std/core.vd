@@ -1,6 +1,6 @@
 pragma generate_std_core_builtins;
 
-enum ReferenceKind {
+enum ReferenceKind: byte {
 	case None;
 	case Const;
 	case Var;
