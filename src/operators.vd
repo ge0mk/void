@@ -218,59 +218,59 @@ enum Operator {
 			| CoalescingAssign -> return 0;
 		}
 	}
+}
 
-	func toString(this: Operator) -> String {
-		match this {
-			case Add -> return "+";
-			case Sub -> return "-";
-			case Mul -> return "*";
-			case Div -> return "/";
-			case Mod -> return "%";
-			case Increment -> return "++";
-			case Decrement -> return "--";
-			case Negate -> return "-";
-			case BitwiseAnd -> return "&";
-			case BitwiseOr -> return "|";
-			case BitwiseXOr -> return "^";
-			case BitwiseNot -> return "~";
-			case ShiftLeft -> return "<<";
-			case ShiftRight -> return ">>";
-			case LogicalAnd -> return "&&";
-			case LogicalOr -> return "||";
-			case LogicalNot -> return "!";
-			case Coalescing -> return "??";
-			case Assign -> return "=";
-			case Initialize -> return ":=";
-			case AddAssign -> return "+=";
-			case SubAssign -> return "-=";
-			case MulAssign -> return "*=";
-			case DivAssign -> return "/=";
-			case ModAssign -> return "%=";
-			case BitwiseAndAssign -> return "&=";
-			case BitwiseOrAssign -> return "|=";
-			case BitwiseXOrAssign -> return "^=";
-			case ShiftLeftAssign -> return "<<=";
-			case ShiftRightAssign -> return ">>=";
-			case CoalescingAssign -> return "??=";
-			case Equal -> return "==";
-			case NotEqual -> return "!=";
-			case LessThan -> return "<";
-			case LessEqual -> return "<=";
-			case GreaterThan -> return ">";
-			case GreaterEqual -> return ">=";
-			case Spaceship -> return "<=>";
-			case Range -> return "..";
-			case Call -> return "()";
-			case Index -> return "[]";
-			case ConstRef -> return "&";
-			case VarRef -> return "&&";
-			case Is -> return "is";
-			case As -> return "as";
-			case Try -> return "try";
-			case Must -> return "must";
-			case InlineIf -> return "if..else";
-			case MemberAccess -> return ".";
-			case Namespace -> return "::";
-		}
+func format(this: Operator) -> String {
+	match this {
+		case Add -> return "+";
+		case Sub -> return "-";
+		case Mul -> return "*";
+		case Div -> return "/";
+		case Mod -> return "%";
+		case Increment -> return "++";
+		case Decrement -> return "--";
+		case Negate -> return "-";
+		case BitwiseAnd -> return "&";
+		case BitwiseOr -> return "|";
+		case BitwiseXOr -> return "^";
+		case BitwiseNot -> return "~";
+		case ShiftLeft -> return "<<";
+		case ShiftRight -> return ">>";
+		case LogicalAnd -> return "&&";
+		case LogicalOr -> return "||";
+		case LogicalNot -> return "!";
+		case Coalescing -> return "??";
+		case Assign -> return "=";
+		case Initialize -> return ":=";
+		case AddAssign -> return "+=";
+		case SubAssign -> return "-=";
+		case MulAssign -> return "*=";
+		case DivAssign -> return "/=";
+		case ModAssign -> return "%=";
+		case BitwiseAndAssign -> return "&=";
+		case BitwiseOrAssign -> return "|=";
+		case BitwiseXOrAssign -> return "^=";
+		case ShiftLeftAssign -> return "<<=";
+		case ShiftRightAssign -> return ">>=";
+		case CoalescingAssign -> return "??=";
+		case Equal -> return "==";
+		case NotEqual -> return "!=";
+		case LessThan -> return "<";
+		case LessEqual -> return "<=";
+		case GreaterThan -> return ">";
+		case GreaterEqual -> return ">=";
+		case Spaceship -> return "<=>";
+		case Range -> return "..";
+		case Call -> return "()";
+		case Index -> return "[]";
+		case ConstRef -> return "&";
+		case VarRef -> return "&&";
+		case Is -> return "is";
+		case As -> return "as";
+		case Try -> return "try";
+		case Must -> return "must";
+		case InlineIf -> return "if..else";
+		case MemberAccess -> return ".";
+		case Namespace -> return "::";
 	}
 }

@@ -64,6 +64,10 @@ struct CGContext {
 		this.program.printError(CompilationError(message, ErrorType::Todo, ErrorStage::CodeGenerator, span));
 	}
 
+	func getASTNode(this: &&CGContext, id: uint) -> Node {
+		return this.current_function_decl.parent_namespace.file.nodes[id];
+	}
+
 	func getType(this: &&CGContext, type: Type) -> LLVMTypeRef {
 		if type.isUnknown() {
 			return this.void_type;
@@ -613,7 +617,7 @@ struct CGContext {
 		// codegen body
 		match function.body {
 			case Builtin: builtin_function -> this.codegenBuiltinFunction(builtin_function, function.signature_span);
-			case Stmt: &stmt -> this.codegenStmt(stmt);
+			case Stmt: &stmt -> discard this.codegenNode(this.getASTNode(stmt));
 			else -> panic("invalid function body for codegen");
 		}
 
@@ -623,7 +627,7 @@ struct CGContext {
 			} else if function.return_type == this.program.void_type {
 				discard LLVMBuildRetVoid(this.builder);
 			} else {
-				panic("function doesn't have a terminator");
+				this.error("function doesn't have a terminator", function.signature_span);
 			}
 		}
 
@@ -1295,7 +1299,7 @@ struct CGContext {
 			case FloatDiv -> result = LLVMBuildFDiv(this.builder, lhs, rhs, "");
 			case FloatMod -> result = LLVMBuildFRem(this.builder, lhs, rhs, "");
 			case FloatNeg -> result = LLVMBuildFNeg(this.builder, lhs, "");
-			case Assign -> {}
+			else -> panic("invalid primitive op");
 		}
 
 		if op.isAssignment() {
@@ -1408,7 +1412,7 @@ struct CGContext {
 				);
 			}
 			case AlignmentOf -> return LLVMConstInt(this.int_type, LLVMPreferredAlignmentOfType(this.data_layout, this.getType(function.base_type)) as int, false);
-			case ReferenceKindOf -> return LLVMConstInt(this.int_type, function.base_type.reference_kind as int, false);
+			case ReferenceKindOf -> return LLVMConstInt(this.byte_type, function.base_type.reference_kind as int, false);
 			case HasDefaultConstructor -> return LLVMConstInt(this.bool_type, function.base_type.decl.default_constructor.isAlive() as int, false);
 			case HasCopyConstructor -> return LLVMConstInt(this.bool_type, function.base_type.decl.copy_constructor.isAlive() as int, false);
 
@@ -1574,67 +1578,150 @@ struct CGContext {
 		}
 	}
 
-	func codegenStmt(this: &&CGContext, stmt: &Stmt) -> void {
-		match stmt {
-			case Compound: &compound_stmt -> this.codegenCompoundStmt(compound_stmt);
-			case Expr: &expr -> {
-				discard this.codegenExpr(expr);
-				if expr.type == this.program.never_type {
-					discard LLVMBuildUnreachable(this.builder);
+	func codegenNode(this: &&CGContext, node: &Node) -> LLVMValueRef {
+		var result = LLVMValueRef();
+		if node.type.isAlive() && node.type != this.program.void_type && node.type != this.program.never_type {
+			result = LLVMGetUndef(this.getType(node.type));
+		}
+
+		match node {
+			case Empty | Garbage -> {}
+			case CompoundStmt: &children -> {
+				for child in children {
+					discard this.codegenNode(this.getASTNode(child));
 				}
 			}
-			case If: &if_stmt -> this.codegenIfStmt(if_stmt, stmt.span);
-			case While: &while_stmt -> this.codegenWhileStmt(while_stmt, stmt.span);
-			case For: &for_stmt -> this.codegenForStmt(for_stmt, stmt.span);
-			case Break -> {
-				this.setCurrentDebugLocation(stmt.span);
+			case IfStmt: &if_stmt -> this.codegenIfStmt(if_stmt, node.span);
+			case WhileStmt: &while_stmt -> this.codegenWhileStmt(while_stmt, node.span);
+			case ForStmt: &for_stmt -> this.codegenForStmt(for_stmt, node.span);
+			case BreakStmt -> {
+				this.setCurrentDebugLocation(node.span);
 				discard LLVMBuildBr(this.builder, this.break_target);
 			}
-			case Continue -> {
-				this.setCurrentDebugLocation(stmt.span);
+			case ContinueStmt -> {
+				this.setCurrentDebugLocation(node.span);
 				discard LLVMBuildBr(this.builder, this.continue_target);
 			}
-			case Yield -> {
-				this.setCurrentDebugLocation(stmt.span);
+			case YieldStmt -> {
+				this.setCurrentDebugLocation(node.span);
 				discard LLVMBuildBr(this.builder, this.yield_target);
 			}
-			case Return: &value -> {
-				if value is Void && this.current_function_decl == this.program.main_function {
-					this.setCurrentDebugLocation(stmt.span);
+			case ReturnStmt: &value -> {
+				if value == 0 && this.current_function_decl == this.program.main_function {
+					this.setCurrentDebugLocation(node.span);
 					discard LLVMBuildRet(this.builder, LLVMConstInt(this.int_type, 0, false));
 				} else {
-					const built_value = this.codegenExpr(value);
-					this.setCurrentDebugLocation(stmt.span);
+					const built_value = this.codegenNode(this.getASTNode(value));
+					this.setCurrentDebugLocation(node.span);
 					discard LLVMBuildRet(this.builder, built_value);
 				}
 			}
 			case LifeTimeStart: variable -> {
-				if !(variable.destructor_call is Undefined) {
+				if variable.destructor_call > 1 {
 					this.codegenLifeTimeStart(this.getVariable(variable));
 				}
-				discard this.codegenExpr(variable.constructor_call);
+				discard this.codegenNode(this.getASTNode(variable.constructor_call));
 			}
 			case LifeTimeEnd: variable -> {
-				discard this.codegenExpr(variable.destructor_call);
-				if !(variable.destructor_call is Undefined) {
+				discard this.codegenNode(this.getASTNode(variable.destructor_call));
+				if variable.destructor_call > 1 {
 					this.codegenLifeTimeEnd(this.getVariable(variable));
 				}
 			}
-			case Empty -> {}
-			else -> this.todo("finish codegen of statements", stmt.span);
-		}
-	}
+			case BoolLiteralExpr: value -> result = LLVMConstInt(this.getType(node.type), value as int, false);
+			case IntegerLiteralExpr: value -> result = LLVMConstInt(this.getType(node.type), value, node.type.isSigned());
+			case FloatLiteralExpr: value -> result = LLVMConstReal(this.getType(node.type), value);
+			case StringLiteralExpr: expr -> {
+				const data_ptr = this.codegenStringGlobal(expr.value);
+				result = LLVMConstNull(this.getType(node.type));
+				result = LLVMBuildInsertValue(this.builder, result, data_ptr, 0u, "");
+				result = LLVMBuildInsertValue(this.builder, result, LLVMConstInt(this.int_type, expr.value.size() as int, false), 1u, ""); // size
+				result = LLVMBuildInsertValue(this.builder, result, LLVMConstInt(this.int_type, expr.value.size() as int, false), 2u, ""); // capacity
+			}
+			case ConstAggregateExpr: &elements -> {
+				result = LLVMConstNull(this.getType(node.type));
+				for i in 0u..elements.size() {
+					const element = this.codegenNode(this.getASTNode(elements[i]));
+					result = LLVMBuildInsertValue(this.builder, result, element, i, "");
+				}
+			}
+			case CallExpr: &call_expr -> {
+				var parameters: List!<LLVMValueRef>;
+				for parameter in call_expr.parameters {
+					parameters.append(this.codegenNode(this.getASTNode(parameter)));
+				}
 
-	func codegenCompoundStmt(this: &&CGContext, compound_stmt: &CompoundStmt) -> void {
-		for stmt in compound_stmt.children {
-			this.codegenStmt(stmt);
+				result = this.codegenCall(call_expr.function, parameters, call_expr.return_kind, call_expr.result_var, node.span);
+			}
+			case VarInvokeExpr: &variable -> {
+				if variable.type.reference_kind == None || variable.is_parameter {
+					result = this.getVariable(variable);
+				} else {
+					this.setCurrentDebugLocation(node.span);
+					result = LLVMBuildLoad2(this.builder, this.getType(variable.type), this.getVariable(variable), "");
+				}
+			}
+			case MemberVarInvokeExpr: &member_var_invoke_expr -> {
+				const object_type = this.getASTNode(member_var_invoke_expr.object).type;
+				const object = this.codegenNode(this.getASTNode(member_var_invoke_expr.object));
+
+				var id = member_var_invoke_expr.id;
+				if object_type.isVariant() {
+					id += 2;
+				}
+
+				this.setCurrentDebugLocation(node.span);
+				result = LLVMBuildStructGEP2(this.builder, this.getType(object_type.base()), object, id, "");
+
+				const member_decl = object_type.decl.member_variables[member_var_invoke_expr.id];
+				if member_decl.type.reference_kind != None {
+					result = LLVMBuildLoad2(this.builder, this.getType(member_decl.type), result, "");
+				}
+			}
+			case DereferenceExpr: &base -> {
+				this.setCurrentDebugLocation(node.span);
+				result = LLVMBuildLoad2(this.builder, this.getType(node.type), this.codegenNode(this.getASTNode(base)), "");
+			}
+			case MatchExpr: &match_expr -> result = this.codegenMatchExpr(match_expr, node.span);
+			case ShallowCopyExpr: shallow_copy_expr -> {
+				var dst = LLVMValueRef();
+				match this.getASTNode(shallow_copy_expr.destination) {
+					case VarInvokeExpr: &variable -> dst = this.getVariable(variable);
+					case MemberVarInvokeExpr: &member_var_invoke_expr -> {
+						const object_type = this.getASTNode(member_var_invoke_expr.object).type;
+						const object = this.codegenNode(this.getASTNode(member_var_invoke_expr.object));
+
+						var id = member_var_invoke_expr.id;
+						if object_type.isVariant() {
+							id += 2;
+						}
+
+						dst = LLVMBuildStructGEP2(this.builder, this.getType(object_type.base()), object, member_var_invoke_expr.id, "");
+					}
+					else -> panic("invalid shallow copy expr");
+				}
+
+				result = this.codegenNode(this.getASTNode(shallow_copy_expr.value));
+
+				this.setCurrentDebugLocation(node.span);
+				discard LLVMBuildStore(this.builder, result, dst);
+			}
+			case FunctionRefExpr: function -> result = this.getFunction(function);
+			else -> {
+				this.error("invalid node for codegen '" + node.name() + "'", node.span);
+			}
 		}
+
+		if node.type == this.program.never_type && !LLVMHasBasicBlockTerminator(LLVMGetInsertBlock(this.builder)) {
+			discard LLVMBuildUnreachable(this.builder);
+		}
+		return result;
 	}
 
 	func codegenIfStmt(this: &&CGContext, if_stmt: &IfStmt, span: Span) -> void {
-		const condition = this.codegenExpr(if_stmt.condition);
+		const condition = this.codegenNode(this.getASTNode(if_stmt.condition));
 		for stmt in if_stmt.condition_cleanup {
-			discard this.codegenStmt(stmt);
+			discard this.codegenNode(this.getASTNode(stmt));
 		}
 
 		const then_block = LLVMAppendBasicBlockInContext(this.llvm_context, this.current_function, "then");
@@ -1648,7 +1735,7 @@ struct CGContext {
 		discard LLVMBuildCondBr(this.builder, condition, then_block, else_block);
 
 		LLVMPositionBuilderAtEnd(this.builder, then_block);
-		this.codegenStmt(if_stmt.then_branch);
+		discard this.codegenNode(this.getASTNode(if_stmt.then_branch));
 		if !LLVMHasBasicBlockTerminator(LLVMGetInsertBlock(this.builder)) {
 			discard LLVMBuildBr(this.builder, exit_block);
 		} else {
@@ -1656,7 +1743,7 @@ struct CGContext {
 		}
 
 		LLVMPositionBuilderAtEnd(this.builder, else_block);
-		this.codegenStmt(if_stmt.else_branch);
+		discard this.codegenNode(this.getASTNode(if_stmt.else_branch));
 		if !LLVMHasBasicBlockTerminator(LLVMGetInsertBlock(this.builder)) {
 			discard LLVMBuildBr(this.builder, exit_block);
 		} else {
@@ -1690,16 +1777,16 @@ struct CGContext {
 		}
 
 		LLVMPositionBuilderAtEnd(this.builder, header_block);
-		const condition = this.codegenExpr(while_stmt.condition);
+		const condition = this.codegenNode(this.getASTNode(while_stmt.condition));
 		for stmt in while_stmt.condition_cleanup {
-			discard this.codegenStmt(stmt);
+			discard this.codegenNode(this.getASTNode(stmt));
 		}
 		discard LLVMBuildCondBr(this.builder, condition, body_block, exit_block);
 
 		var body_terminates = false;
 
 		LLVMPositionBuilderAtEnd(this.builder, body_block);
-		this.codegenStmt(while_stmt.body);
+		discard this.codegenNode(this.getASTNode(while_stmt.body));
 
 		if !LLVMHasBasicBlockTerminator(LLVMGetInsertBlock(this.builder)) {
 			discard LLVMBuildBr(this.builder, header_block);
@@ -1728,12 +1815,13 @@ struct CGContext {
 		this.continue_target = latch_block;
 		this.break_target = exit_block;
 
-		const enumerator_type = for_stmt.iterator.type.decl.member_variables[0u].type;
+		const iterator_type = this.getASTNode(for_stmt.iterator).type;
+		const enumerator_type = iterator_type.decl.member_variables[0u].type;
 
 		// range only
-		const element_type = (for_stmt.iterator.type.decl.template_parameters[0u].value as Type).value();
+		const element_type = (iterator_type.decl.template_parameters[0u].value as Type).value();
 
-		const iterator = this.codegenExpr(for_stmt.iterator);
+		const iterator = this.codegenNode(this.getASTNode(for_stmt.iterator));
 		const begin = LLVMBuildExtractValue(this.builder, iterator, 0u, "");
 		const end = LLVMBuildExtractValue(this.builder, iterator, 1u, "");
 		const step = LLVMBuildExtractValue(this.builder, iterator, 2u, "") if for_stmt.kind is Count else LLVMValueRef();
@@ -1777,7 +1865,7 @@ struct CGContext {
 			discard this.codegenCall(enumerator_type.decl.copy_constructor, parameters, ReturnKind::None, for_stmt.enumerator_variable.span);
 		}
 
-		this.codegenStmt(for_stmt.body);
+		discard this.codegenNode(this.getASTNode(for_stmt.body));
 
 		if !LLVMHasBasicBlockTerminator(LLVMGetInsertBlock(this.builder)) {
 			discard LLVMBuildBr(this.builder, latch_block);
@@ -1828,107 +1916,6 @@ struct CGContext {
 		return result;
 	}
 
-	func codegenExpr(this: &&CGContext, expr: &Expr) -> LLVMValueRef {
-		match expr {
-			case Undefined -> {
-				if expr.type == this.program.void_type || expr.type.isUnknown() {
-					return LLVMValueRef();
-				} else {
-					return LLVMGetUndef(this.getType(expr.type));
-				}
-			}
-			case Void -> return LLVMValueRef();
-			case Integer: value -> return LLVMConstInt(this.getType(expr.type), value, expr.type.isSigned());
-			case Float: value -> return LLVMConstReal(this.getType(expr.type), value);
-			case String: value -> {
-				const data_ptr = this.codegenStringGlobal(value);
-				var result = LLVMConstNull(this.getType(expr.type));
-				result = LLVMBuildInsertValue(this.builder, result, data_ptr, 0u, "");
-				result = LLVMBuildInsertValue(this.builder, result, LLVMConstInt(this.int_type, value.size() as int, false), 1u, ""); // size
-				result = LLVMBuildInsertValue(this.builder, result, LLVMConstInt(this.int_type, value.size() as int, false), 2u, ""); // capacity
-				return result;
-			}
-			case ConstAggregate: &elements -> {
-				var result = LLVMConstNull(this.getType(expr.type));
-				for i in 0u..elements.size() {
-					const element = this.codegenExpr(elements[i]);
-					result = LLVMBuildInsertValue(this.builder, result, element, i, "");
-				}
-				return result;
-			}
-			case Call: &call_expr -> return this.codegenCall(call_expr, expr.span);
-			case VarInvoke: &variable -> {
-				if variable.type.reference_kind == None || variable.is_parameter {
-					return this.getVariable(variable);
-				} else {
-					this.setCurrentDebugLocation(expr.span);
-					return LLVMBuildLoad2(this.builder, this.getType(variable.type), this.getVariable(variable), "");
-				}
-			}
-			case MemberVarInvoke: &member_var_invoke_expr -> {
-				const object_type_decl = member_var_invoke_expr.object.type.decl;
-				const member_decl = object_type_decl.member_variables[member_var_invoke_expr.id];
-
-				const object = this.codegenExpr(member_var_invoke_expr.object);
-				const object_type = this.getType(member_var_invoke_expr.object.type.base());
-
-				var id = member_var_invoke_expr.id;
-				if member_var_invoke_expr.object.type.isVariant() {
-					id += 2;
-				}
-
-				this.setCurrentDebugLocation(expr.span);
-				const ptr = LLVMBuildStructGEP2(this.builder, object_type, object, id, "");
-
-				if member_decl.type.reference_kind == None {
-					return ptr;
-				} else {
-					return LLVMBuildLoad2(this.builder, this.getType(member_decl.type), ptr, "");
-				}
-			}
-			case Dereference: &base -> {
-				this.setCurrentDebugLocation(expr.span);
-				return LLVMBuildLoad2(this.builder, this.getType(expr.type), this.codegenExpr(base), "");
-			}
-			case Match: &match_expr -> return this.codegenMatchExpr(match_expr, expr.span);
-			case ShallowCopy: shallow_copy_expr -> {
-				var dst = LLVMValueRef();
-				match shallow_copy_expr.destination {
-					case VarInvoke: &variable -> dst = this.getVariable(variable);
-					case MemberVarInvoke: &member_var_invoke_expr -> {
-						const object = this.codegenExpr(member_var_invoke_expr.object);
-						const object_type = this.getType(member_var_invoke_expr.object.type.base());
-
-						var id = member_var_invoke_expr.id;
-						if member_var_invoke_expr.object.type.isVariant() {
-							id += 2;
-						}
-
-						dst = LLVMBuildStructGEP2(this.builder, object_type, object, member_var_invoke_expr.id, "");
-					}
-					else -> panic("invalid shallow copy expr");
-				}
-
-				const val = this.codegenExpr(shallow_copy_expr.value);
-
-				this.setCurrentDebugLocation(expr.span);
-				discard LLVMBuildStore(this.builder, val, dst);
-				return val;
-			}
-			case TypeRef -> return LLVMValueRef();
-			case FunctionRef: function -> return this.getFunction(function);
-		}
-	}
-
-	func codegenCall(this: &&CGContext, call_expr: &CallExpr, span: Span) -> LLVMValueRef {
-		var parameters: List!<LLVMValueRef>;
-		for parameter in call_expr.parameters {
-			parameters.append(this.codegenExpr(parameter));
-		}
-
-		return this.codegenCall(call_expr.function, parameters, call_expr.return_kind, call_expr.result_var, span);
-	}
-
 	func codegenCall(this: &&CGContext, function: SharedHandle!<FunctionDecl>, parameters: &List!<LLVMValueRef>, return_kind: ReturnKind, span: Span) -> LLVMValueRef {
 		assert(return_kind == ReturnKind::None || return_kind == ReturnKind::Value);
 		return this.codegenCall(function, parameters, return_kind, SharedHandle!<VarDecl>(), span);
@@ -1974,20 +1961,21 @@ struct CGContext {
 	}
 
 	func codegenMatchExpr(this: &&CGContext, match_expr: &MatchExpr, span: Span) -> LLVMValueRef {
-		var value = this.codegenExpr(match_expr.value);
+		const value_type = this.getASTNode(match_expr.value).type;
+		var value = this.codegenNode(this.getASTNode(match_expr.value));
 
-		if match_expr.value.type.isVariant() {
-			const value_type_decl = match_expr.value.type.decl;
+		if value_type.isVariant() {
+			const value_type_decl = value_type.decl;
 			value = LLVMBuildLoad2(this.builder,
 				this.getType(value_type_decl.id_type),
 				LLVMBuildStructGEP2(this.builder,
-					this.getType(match_expr.value.type.base()),
+					this.getType(value_type.base()),
 					value, 0u, ""
 				), ""
 			);
-		} else if match_expr.value.type.reference_kind != None {
+		} else if value_type.reference_kind != None {
 			value = LLVMBuildLoad2(this.builder,
-				this.getType(match_expr.value.type.base()),
+				this.getType(value_type.base()),
 				value, ""
 			);
 		}
@@ -2008,29 +1996,30 @@ struct CGContext {
 		var switch_instr = LLVMBuildSwitch(this.builder, value, else_block, case_blocks.size());
 
 		for i in 0u..match_expr.cases.size() {
-			for pattern in match_expr.cases[i].patterns {
-				const built_pattern = this.codegenExpr(pattern);
+			const case_stmt = (this.getASTNode(match_expr.cases[i]) as CaseStmt).value();
+			for pattern in case_stmt.patterns {
+				const built_pattern = this.codegenNode(this.getASTNode(pattern));
 				LLVMAddCase(switch_instr, built_pattern, case_blocks[i]);
 			}
 		}
 
 		for i in 0u..match_expr.cases.size() {
+			const case_stmt = (this.getASTNode(match_expr.cases[i]) as CaseStmt).value();
 			LLVMPositionBuilderAtEnd(this.builder, case_blocks[i]);
-			this.codegenStmt(match_expr.cases[i].body);
+			discard this.codegenNode(this.getASTNode(case_stmt.body));
 			if !LLVMHasBasicBlockTerminator(LLVMGetInsertBlock(this.builder)) {
 				discard LLVMBuildBr(this.builder, cont_block);
 			}
 		}
 
 		LLVMPositionBuilderAtEnd(this.builder, else_block);
-		if match_expr.else_case is Empty {
-			discard LLVMBuildUnreachable(this.builder);
-		} else {
-			this.codegenStmt(match_expr.else_case);
-
+		if match_expr.else_case > 1 {
+			discard this.codegenNode(this.getASTNode(match_expr.else_case));
 			if !LLVMHasBasicBlockTerminator(LLVMGetInsertBlock(this.builder)) {
 				discard LLVMBuildBr(this.builder, cont_block);
 			}
+		} else {
+			discard LLVMBuildUnreachable(this.builder);
 		}
 
 		LLVMPositionBuilderAtEnd(this.builder, cont_block);

@@ -7,22 +7,17 @@ import program;
 // if expr is copy constructor call
 //     and lhs is variable and removeDereference(rhs) is call
 // -> replace result var of rhs with lhs and replace expr with rhs
-func eliminateCallResultCopies(expr: &&Expr) -> void {
-	const call = expr as Call else {
-		return;
-	}
-
+func eliminateCallResultCopies(call: &&CallExpr, cu: &CompilationUnit) -> void {
 	if !call.function.is_copy_constructor {
 		return;
 	}
 
 	const lhs = call.parameters[0u];
-	const rhs = call.parameters[1u].removeDereference();
-	var rhs_call = rhs as Call else {
+	const result_var = cu.getASTNode(lhs) as VarInvokeExpr else {
 		return;
 	}
 
-	const result_var = lhs as VarInvoke else {
+	const rhs_call = cu.getASTNode(cu.removeDereference(call.parameters[1u])) as CallExpr else {
 		return;
 	}
 
@@ -30,22 +25,17 @@ func eliminateCallResultCopies(expr: &&Expr) -> void {
 		return;
 	}
 
-	const old_result_var = rhs_call.result_var;
-	old_result_var.destructor_call = Expr::Undefined(old_result_var.destructor_call.span, Type::unknown());
-	old_result_var.is_unused = true;
+	call = rhs_call;
+	call.result_var.destructor_call = cu.getEmptyNode();
+	call.result_var.is_unused = true;
 
-	rhs_call.result_var = result_var;
-
-	if rhs_call.return_kind == Variable {
-		rhs_call.return_kind = VariableButYieldNone;
-	} else if rhs_call.return_kind == Parameter {
-		rhs_call.return_kind = None;
-		rhs_call.parameters[0u] = lhs;
-	} else if rhs_call.return_kind == VariableButYieldNone {
-		// don't change it
-	} else {
-		panic("invalid call");
+	call.result_var = result_var;
+	match call.return_kind {
+		case Variable | VariableButYieldNone -> call.return_kind = VariableButYieldNone;
+		case Parameter -> {
+			call.return_kind = None;
+			call.parameters[0u] = lhs;
+		}
+		else -> panic("invalid call");
 	}
-
-	expr = Expr::Call(rhs_call, expr.span, expr.type);
 }

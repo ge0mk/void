@@ -395,8 +395,8 @@ func createRangeTypeInstance(program: &&Program, dest_namespace: SharedHandle!<N
 	const type = Type(type_decl, ReferenceKind::None);
 	const type_namespace = type_decl.linked_namespace;
 
-	type_decl.createMemberVariable(Span(), "data", element_ptr_type, Expr::Undefined(Span(), Type::unknown()));
-	type_decl.createMemberVariable(Span(), "size", program.uint_type, Expr::Undefined(Span(), Type::unknown()));
+	type_decl.createMemberVariable(Span(), "data", element_ptr_type);
+	type_decl.createMemberVariable(Span(), "size", program.uint_type);
 
 	var value_constructor_parameter_types: List!<Type>;
 	value_constructor_parameter_types.append(type.varRef());
@@ -436,8 +436,8 @@ func createRangeIteratorTypeInstance(program: &&Program, dest_namespace: SharedH
 	const type = Type(type_decl, ReferenceKind::None);
 	const type_namespace = type_decl.linked_namespace;
 
-	type_decl.createMemberVariable(Span(), "current", element_ptr_type, Expr::Undefined(Span(), Type::unknown()));
-	type_decl.createMemberVariable(Span(), "end", element_ptr_type, Expr::Undefined(Span(), Type::unknown()));
+	type_decl.createMemberVariable(Span(), "current", element_ptr_type);
+	type_decl.createMemberVariable(Span(), "end", element_ptr_type);
 
 	var value_constructor_parameter_types: List!<Type>;
 	value_constructor_parameter_types.append(type.varRef());
@@ -469,9 +469,9 @@ func createNumericRangeTypeInstance(program: &&Program, dest_namespace: SharedHa
 	const type = Type(type_decl, ReferenceKind::None);
 	const type_namespace = type_decl.linked_namespace;
 
-	type_decl.createMemberVariable(Span(), "start", numeric_type, Expr::Undefined(Span(), Type::unknown()));
-	type_decl.createMemberVariable(Span(), "end", numeric_type, Expr::Undefined(Span(), Type::unknown()));
-	type_decl.createMemberVariable(Span(), "step", numeric_type, Expr::Undefined(Span(), Type::unknown()));
+	type_decl.createMemberVariable(Span(), "start", numeric_type);
+	type_decl.createMemberVariable(Span(), "end", numeric_type);
+	type_decl.createMemberVariable(Span(), "step", numeric_type);
 
 	var value_constructor_parameter_types = List!<Type>(3u, numeric_type);
 	value_constructor_parameter_types.insert(0u, type.varRef());
@@ -501,10 +501,10 @@ func createNumericIteratorTypeInstance(program: &&Program, dest_namespace: Share
 	const type = Type(type_decl, ReferenceKind::None);
 	const type_namespace = type_decl.linked_namespace;
 
-	type_decl.createMemberVariable(Span(), "start", numeric_type, Expr::Undefined(Span(), Type::unknown()));
-	type_decl.createMemberVariable(Span(), "end", numeric_type, Expr::Undefined(Span(), Type::unknown()));
-	type_decl.createMemberVariable(Span(), "step", numeric_type, Expr::Undefined(Span(), Type::unknown()));
-	type_decl.createMemberVariable(Span(), "is_ascending", program.bool_type, Expr::Undefined(Span(), Type::unknown()));
+	type_decl.createMemberVariable(Span(), "start", numeric_type);
+	type_decl.createMemberVariable(Span(), "end", numeric_type);
+	type_decl.createMemberVariable(Span(), "step", numeric_type);
+	type_decl.createMemberVariable(Span(), "is_ascending", program.bool_type);
 
 	var value_constructor_parameter_types = List!<Type>(3u, numeric_type);
 	value_constructor_parameter_types.append(program.bool_type);
@@ -540,7 +540,7 @@ func createTupleTypeInstance(program: &&Program, dest_namespace: SharedHandle!<N
 	const type = Type(type_decl, ReferenceKind::None);
 
 	for i in 0u..types.size() {
-		type_decl.createMemberVariable(Span(), names[i], types[i], Expr::Undefined(Span(), Type::unknown()));
+		type_decl.createMemberVariable(Span(), names[i], types[i]);
 	}
 
 	const type_namespace = type_decl.linked_namespace;
@@ -562,41 +562,16 @@ func createDefaultFunctions(program: &&Program, type: Type) -> void {
 	var type_namespace = type_decl.linked_namespace;
 
 	if type_decl.body is Enum {
-		if type_decl.copy_constructor.isEmpty() {
-			type_decl.copy_constructor = program.createBinaryFunction(type_namespace, "constructor", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
-		}
-
-		if type_decl.destructor.isEmpty() {
-			type_decl.destructor = program.createUnaryFunction(type_namespace, "destructor", type.varRef(), program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::NoOp, type));
-		}
-
-		if type_decl.op_assign.isEmpty() {
-			type_decl.op_assign = program.createBinaryFunction(type_namespace, "operator =", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
-		}
-
-		if type_decl.op_equal.isEmpty() {
-			type_decl.op_equal = program.createBinaryFunction(type_namespace, "operator ==", type, type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::BitwiseEQ, type));
-		}
-
-		if type_decl.op_compare.isEmpty() {
-			type_decl.op_compare = program.createBinaryFunction(type_namespace, "operator <=>", type, type, program.int_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::UIntCmp, type));
-		}
+		type_decl.copy_constructor = program.createBinaryFunction(type_namespace, "constructor", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
+		type_decl.destructor = program.createUnaryFunction(type_namespace, "destructor", type.varRef(), program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::NoOp, type));
+		type_decl.op_assign = program.createBinaryFunction(type_namespace, "operator =", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
+		type_decl.op_equal = program.createBinaryFunction(type_namespace, "operator ==", type, type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::BitwiseEQ, type));
+		type_decl.op_compare = program.createBinaryFunction(type_namespace, "operator <=>", type, type, program.int_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::UIntCmp, type));
 	} else if type_decl.body is Variant {
-		if type_decl.copy_constructor.isEmpty() {
-			type_decl.copy_constructor = program.createBinaryFunction(type_namespace, "constructor", type.varRef(), type, program.void_type, BuiltinFunction::VariantCopyConstructor(type));
-		}
-
-		if type_decl.destructor.isEmpty() {
-			type_decl.destructor = program.createUnaryFunction(type_namespace, "destructor", type.varRef(), program.void_type, BuiltinFunction::VariantDestructor(type));
-		}
-
-		if type_decl.op_assign.isEmpty() {
-			type_decl.op_assign = program.createBinaryFunction(type_namespace, "operator =", type.varRef(), type, program.void_type, BuiltinFunction::VariantOpAssign(type));
-		}
-
-		if type_decl.op_equal.isEmpty() {
-			type_decl.op_equal = program.createBinaryFunction(type_namespace, "operator ==", type, type, program.bool_type, BuiltinFunction::VariantOpEqual(type));
-		}
+		type_decl.copy_constructor = program.createBinaryFunction(type_namespace, "constructor", type.varRef(), type, program.void_type, BuiltinFunction::VariantCopyConstructor(type));
+		type_decl.destructor = program.createUnaryFunction(type_namespace, "destructor", type.varRef(), program.void_type, BuiltinFunction::VariantDestructor(type));
+		type_decl.op_assign = program.createBinaryFunction(type_namespace, "operator =", type.varRef(), type, program.void_type, BuiltinFunction::VariantOpAssign(type));
+		type_decl.op_equal = program.createBinaryFunction(type_namespace, "operator ==", type, type, program.bool_type, BuiltinFunction::VariantOpEqual(type));
 	}
 }
 

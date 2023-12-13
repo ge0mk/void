@@ -10,7 +10,7 @@ import program;
 import span;
 
 struct StackFrame {
-	var variables: Map!<SharedHandle!<VarDecl>, Expr>;
+	var variables: Map!<SharedHandle!<VarDecl>, Value>;
 	var return_variable: SharedHandle!<VarDecl>;
 
 	func constructor(this: &&StackFrame) -> void = default;
@@ -30,6 +30,7 @@ enum ControlFlow {
 struct Interpreter {
 	var program: &&Program;
 	var stack: List!<StackFrame>;
+	var current_namespace: SharedHandle!<Namespace>;
 
 	func constructor(this: &&Interpreter, program: &&Program) -> void {
 		this.program := &&program;
@@ -45,20 +46,24 @@ struct Interpreter {
 		this.program.printError(CompilationError(message, ErrorType::Todo, ErrorStage::Interpreter, span));
 	}
 
+	func getASTNode(this: &&Interpreter, id: uint) -> Node {
+		return this.current_namespace.file.nodes[id];
+	}
+
 	func pushStackFrame(this: &&Interpreter) -> void {
 		this.stack.append(StackFrame());
 	}
 
-	func popStackFrame(this: &&Interpreter) -> Expr {
+	func popStackFrame(this: &&Interpreter) -> Value {
 		const last_stack_frame = this.stack.last() else {
-			return Expr::Undefined(Span(), Type::unknown());
+			return Value::Undefined;
 		}
 
 		this.stack.removeLast();
-		return last_stack_frame.variables.get(last_stack_frame.return_variable) ?? Expr::Void(Span(), this.program.void_type);
+		return last_stack_frame.variables.get(last_stack_frame.return_variable) ?? Value::Void(this.program.void_type);
 	}
 
-	func setVariable(this: &&Interpreter, variable: SharedHandle!<VarDecl>, value: &Expr) -> void {
+	func setVariable(this: &&Interpreter, variable: SharedHandle!<VarDecl>, value: &Value) -> void {
 		if variable.is_comptime {
 			variable.value = value;
 		} else {
@@ -66,7 +71,7 @@ struct Interpreter {
 		}
 	}
 
-	func getVariable(this: &&Interpreter, variable: SharedHandle!<VarDecl>) -> Expr {
+	func getVariable(this: &&Interpreter, variable: SharedHandle!<VarDecl>) -> Value {
 		if variable.is_comptime {
 			return variable.value;
 		} else {
@@ -74,32 +79,36 @@ struct Interpreter {
 		}
 	}
 
-	func interpret(this: &&Interpreter, stmt: &Stmt) -> Result!<void, ControlFlow> {
-		match stmt {
-			case Empty -> return Ok;
-			case Compound: compound_stmt -> return this.interpret(compound_stmt);
-			case Expr: expr -> {
-				discard try this.interpret(expr);
-				return Ok;
+	func interpret(this: &&Interpreter, node: &Node) -> Result!<Value, ControlFlow> {
+		var result = Value::Undefined;
+
+		match node {
+			case Empty -> return Ok(Value::Void(this.program.void_type));
+			case Garbage -> return Ok(Value::Undefined);
+			case CompoundStmt: children -> {
+				for child in children {
+					discard this.interpret(this.getASTNode(child));
+				}
+				return Ok(Value::Void(this.program.void_type));
 			}
-			case If: if_stmt -> {
-				const condition = try this.interpret(if_stmt.condition);
+			case IfStmt: if_stmt -> {
+				const condition = try this.interpret(this.getASTNode(if_stmt.condition));
 				if condition is Undefined {
-					return Ok;
+					return Ok(Value::Void(this.program.void_type));
 				}
 
 				if condition.toBool() {
-					return this.interpret(if_stmt.then_branch);
+					return this.interpret(this.getASTNode(if_stmt.then_branch));
 				} else {
-					return this.interpret(if_stmt.else_branch);
+					return this.interpret(this.getASTNode(if_stmt.else_branch));
 				}
 			}
-			case While: while_stmt -> {
+			case WhileStmt: while_stmt -> {
+				var condition = Value::Undefined;
 				if while_stmt.kind == While {
-					var condition = try this.interpret(while_stmt.condition);
-
+					condition = try this.interpret(this.getASTNode(while_stmt.condition));
 					while condition.toBool() {
-						if const control_flow = this.interpret(while_stmt.body) as Error {
+						if const control_flow = this.interpret(this.getASTNode(while_stmt.body)) as Error {
 							match control_flow {
 								case Break -> break;
 								case Continue -> {}
@@ -107,13 +116,11 @@ struct Interpreter {
 							}
 						}
 
-						condition = try this.interpret(while_stmt.condition);
+						condition = try this.interpret(this.getASTNode(while_stmt.condition));
 					}
 				} else if while_stmt.kind == DoWhile {
-					var condition = Expr::Undefined(Span(), Type::unknown());
-
 					do {
-						if const control_flow = this.interpret(while_stmt.body) as Error {
+						if const control_flow = this.interpret(this.getASTNode(while_stmt.body)) as Error {
 							match control_flow {
 								case Break -> break;
 								case Continue -> {}
@@ -121,53 +128,46 @@ struct Interpreter {
 							}
 						}
 
-						condition = try this.interpret(while_stmt.condition);
+						condition = try this.interpret(this.getASTNode(while_stmt.condition));
 					} while condition.toBool();
 				}
 
-				return Ok;
+				return Ok(Value::Void(this.program.void_type));
 			}
-			case For: for_stmt -> {
-				this.todo("implement interpretation of for loops", stmt.span);
-				return Ok;
-			}
-			case Case | ElseCase -> panic("case stmts should be handled by interpret(Expr)");
-			case Break -> throw ControlFlow::Break;
-			case Continue -> throw ControlFlow::Continue;
-			case Yield -> throw ControlFlow::Yield;
-			case Return: value -> {
-				this.setVariable(this.stack[this.stack.size() - 1].return_variable, try this.interpret(value));
+			case BreakStmt -> throw ControlFlow::Break;
+			case ContinueStmt -> throw ControlFlow::Continue;
+			case YieldStmt -> throw ControlFlow::Yield;
+			case ReturnStmt: value -> {
+				this.setVariable(this.stack[this.stack.size() - 1].return_variable, try this.interpret(this.getASTNode(value)));
 				throw ControlFlow::Return;
 			}
 			case LifeTimeStart: variable -> {
-				discard try this.interpret(variable.constructor_call);
-				return Ok;
+				discard try this.interpret(this.getASTNode(variable.constructor_call));
+				return Ok(Value::Void(this.program.void_type));
 			}
 			case LifeTimeEnd: variable -> {
-				discard try this.interpret(variable.destructor_call);
-				return Ok;
+				discard try this.interpret(this.getASTNode(variable.destructor_call));
+				return Ok(Value::Void(this.program.void_type));
 			}
-		}
-	}
-
-	func interpret(this: &&Interpreter, stmt: &CompoundStmt) -> Result!<void, ControlFlow> {
-		for child in stmt.children {
-			try this.interpret(child);
-		}
-
-		return Ok;
-	}
-
-	func interpret(this: &&Interpreter, expr: &Expr) -> Result!<Expr, ControlFlow> {
-		var result = Expr::Undefined(expr.span, Type::unknown());
-
-		match expr {
-			case Undefined | Void | Integer | Float | String | ConstAggregate | VarInvoke | TypeRef | FunctionRef -> return Ok(expr);
-			case Call: call -> {
-				var parameters: List!<Expr>;
+			case IntegerLiteralExpr: value -> return Ok(Value::Integer(value, node.type));
+			case FloatLiteralExpr: value -> return Ok(Value::Float(value, node.type));
+			case BoolLiteralExpr: value -> return Ok(Value::Integer(value as int, node.type));
+			case StringLiteralExpr: literal -> return Ok(Value::String(literal.value, node.type));
+			case ConstAggregateExpr: children -> {
+				var values: List!<Value>;
+				for child in children {
+					values.append(try this.interpret(this.getASTNode(child)));
+				}
+				return Ok(Value::Aggregate(values, node.type));
+			}
+			case TypeRefExpr: type -> return Ok(Value::Type(type, node.type));
+			case FunctionRefExpr: function -> return Ok(Value::Function(function, node.type));
+			case VarInvokeExpr: variable -> return Ok(Value::Variable(variable, node.type));
+			case CallExpr: call -> {
+				var parameters: List!<Value>;
 				var has_errors = false;
 				for param in call.parameters {
-					const value = try this.interpret(param);
+					const value = try this.interpret(this.getASTNode(param));
 					if value is Undefined {
 						has_errors = true;
 					}
@@ -175,72 +175,74 @@ struct Interpreter {
 				}
 
 				if !has_errors {
-					result = this.interpret(call.function, parameters, expr.span);
+					result = this.interpret(call.function, parameters, node.span);
 				}
 			}
-			case Dereference: base -> match try this.interpret(base) {
-				case VarInvoke: variable -> result = this.getVariable(variable);
+			case DereferenceExpr: base -> match try this.interpret(this.getASTNode(base)) {
+				case Variable: variable -> result = this.getVariable(variable);
 				else -> {}
 			}
 			else -> {}
 		}
 
 		if result is Undefined {
-			result = this.compileAndRun(expr, List!<Stmt>());
+			result = this.compileAndRun(node);
 		}
 
 		return Ok(result);
 	}
 
-	func interpret(this: &&Interpreter, function: SharedHandle!<FunctionDecl>, args: &List!<Expr>, error_span: Span) -> Expr {
+	func interpret(this: &&Interpreter, function: SharedHandle!<FunctionDecl>, args: &List!<Value>, error_span: Span) -> Value {
 		match function.body {
 			case Extern -> {
 				this.todo("interpret calls to extern functions", error_span);
-				return Expr::Undefined(Span(), Type::unknown());
+				return Value::Undefined;
 			}
 			case Builtin: builtin_funcion -> return this.interpret(builtin_funcion, function.return_type, args, error_span);
 			case Stmt: stmt -> {
+				const prev_namespace = this.current_namespace;
+				this.current_namespace = function.parent_namespace;
 				this.pushStackFrame();
 
 				for i in 0u..args.size() {
 					this.setVariable(function.variables[i], args[i]);
 				}
 
-				discard this.interpret(stmt);
-
+				discard this.interpret(this.getASTNode(stmt));
+				this.current_namespace = prev_namespace;
 				return this.popStackFrame();
 			}
 			else -> {
 				this.error("function can't be interpreted: " + function.signature(), error_span);
-				return Expr::Undefined(Span(), Type::unknown());
+				return Value::Undefined;
 			}
 		}
 	}
 
-	func interpret(this: &&Interpreter, function: BuiltinFunction, return_type: Type, args: &List!<Expr>, span: Span) -> Expr {
+	func interpret(this: &&Interpreter, function: BuiltinFunction, return_type: Type, args: &List!<Value>, span: Span) -> Value {
 		match function {
 			case PrimitiveOp: op -> return this.interpret(op, function.base_type, args, span);
 			// casts
-			case IntCast: target_type -> return Expr::Integer(args[0u].toInt(), span, target_type);
-			case FloatCast: target_type -> return Expr::Float(args[0u].toFloat(), span, target_type);
-			case IntToFloat: target_type -> return Expr::Float(args[0u].toInt() as f64, span, target_type);
-			case FloatToInt: target_type -> return Expr::Integer(args[0u].toFloat() as int, span, target_type);
+			case IntCast: target_type -> return Value::Integer(args[0u].toInt(), target_type);
+			case FloatCast: target_type -> return Value::Float(args[0u].toFloat(), target_type);
+			case IntToFloat: target_type -> return Value::Float(args[0u].toInt() as f64, target_type);
+			case FloatToInt: target_type -> return Value::Integer(args[0u].toFloat() as int, target_type);
 			// reflection functions
-			case ReferenceKindOf -> return Expr::Integer(function.base_type.reference_kind as int, span, return_type);
-			case HasDefaultConstructor -> return Expr::Integer(function.base_type.decl.default_constructor.isAlive() as int, span, return_type);
-			case HasCopyConstructor -> return Expr::Integer(function.base_type.decl.copy_constructor.isAlive() as int, span, return_type);
+			case ReferenceKindOf -> return Value::Integer(function.base_type.reference_kind as int, return_type);
+			case HasDefaultConstructor -> return Value::Integer(function.base_type.decl.default_constructor.isAlive() as int, return_type);
+			case HasCopyConstructor -> return Value::Integer(function.base_type.decl.copy_constructor.isAlive() as int, return_type);
 			else -> {
 				this.todo("finish interpretation of builtin functions", span);
-				return Expr::Undefined(Span(), Type::unknown());
+				return Value::Undefined;
 			}
 		}
 	}
 
-	func interpret(this: &&Interpreter, op: PrimitiveOp, type: Type, args: &List!<Expr>, span: Span) -> Expr {
+	func interpret(this: &&Interpreter, op: PrimitiveOp, type: Type, args: &List!<Value>, span: Span) -> Value {
 		var lhs = args[0u];
 		if op.isAssignment() && op.getOp() > Copy {
-			const variable = args[0u] as VarInvoke else {
-				return Expr::Undefined(span, Type::unknown());
+			const variable = args[0u] as Variable else {
+				return Value::Undefined;
 			}
 
 			lhs = this.getVariable(variable);
@@ -250,83 +252,83 @@ struct Interpreter {
 		const lhs_uint = lhs.toUInt();
 		const lhs_float = lhs.toFloat();
 
-		const rhs = args.at(1u) ?? Expr::Undefined(span, Type::unknown());
+		const rhs = args.at(1u) ?? Value::Undefined;
 
 		const rhs_int = rhs.toInt();
 		const rhs_uint = rhs.toUInt();
 		const rhs_float = rhs.toFloat();
 
 		const result = match op.getOp() {
-			case NoOp -> yield Expr::Undefined(span, Type::unknown());
+			case NoOp -> yield Value::Undefined;
 			case ConstNull -> {
 				if type.decl.body is Float {
-					yield Expr::Float(0.0, span, type);
+					yield Value::Float(0.0, type);
 				} else {
-					yield Expr::Integer(0, span, type);
+					yield Value::Integer(0, type);
 				}
 			}
 			case Copy -> yield rhs;
-			case BitwiseEQ -> yield Expr::Integer((lhs_int == rhs_int) as int, span, this.program.bool_type);
-			case BitwiseNE -> yield Expr::Integer((lhs_int != rhs_int) as int, span, this.program.bool_type);
-			case BitwiseAnd -> yield Expr::Integer(lhs_int & rhs_int, span, type);
-			case BitwiseOr -> yield Expr::Integer(lhs_int | rhs_int, span, type);
-			case BitwiseXOr -> yield Expr::Integer(lhs_int ^ rhs_int, span, type);
-			case BitwiseNot -> yield Expr::Integer(~lhs_int, span, type);
-			case BitwiseShl -> yield Expr::Integer(lhs_int << rhs_int, span, type);
-			case BitwiseLShr -> yield Expr::Integer((lhs_uint >> rhs_uint) as int, span, type);
-			case BitwiseAShr -> yield Expr::Integer(lhs_int >> rhs_int, span, type);
-			case IntAdd -> yield Expr::Integer(lhs_int + rhs_int, span, type);
-			case IntSub -> yield Expr::Integer(lhs_int - rhs_int, span, type);
-			case IntMul -> yield Expr::Integer(lhs_int * rhs_int, span, type);
-			case IntNeg -> yield Expr::Integer(-lhs_int, span, type);
-			case IntInc -> yield Expr::Integer(lhs_int + 1, span, type);
-			case IntDec -> yield Expr::Integer(lhs_int - 1, span, type);
-			case SIntLT -> yield Expr::Integer((lhs_int < rhs_int) as int, span, this.program.bool_type);
-			case SIntLE -> yield Expr::Integer((lhs_int <= rhs_int) as int, span, this.program.bool_type);
-			case SIntGT -> yield Expr::Integer((lhs_int > rhs_int) as int, span, this.program.bool_type);
-			case SIntGE -> yield Expr::Integer((lhs_int >= rhs_int) as int, span, this.program.bool_type);
-			case SIntCmp -> yield Expr::Integer(lhs_int <=> rhs_int, span, this.program.int_type);
-			case SIntDiv -> yield Expr::Integer(lhs_int / rhs_int, span, type);
-			case SIntMod -> yield Expr::Integer(lhs_int % rhs_int, span, type);
-			case UIntLT -> yield Expr::Integer((lhs_uint < rhs_uint) as int, span, this.program.bool_type);
-			case UIntLE -> yield Expr::Integer((lhs_uint <= rhs_uint) as int, span, this.program.bool_type);
-			case UIntGT -> yield Expr::Integer((lhs_uint > rhs_uint) as int, span, this.program.bool_type);
-			case UIntGE -> yield Expr::Integer((lhs_uint >= rhs_uint) as int, span, this.program.bool_type);
-			case UIntCmp -> yield Expr::Integer(lhs_uint <=> rhs_uint, span, this.program.int_type);
-			case UIntDiv -> yield Expr::Integer((lhs_uint / rhs_uint) as int, span, type);
-			case UIntMod -> yield Expr::Integer((lhs_uint % rhs_uint) as int, span, type);
-			case FloatEQ -> yield Expr::Integer((lhs_float == rhs_float) as int, span, this.program.bool_type);
-			case FloatNE -> yield Expr::Integer((lhs_float != rhs_float) as int, span, this.program.bool_type);
-			case FloatLT -> yield Expr::Integer((lhs_float < rhs_float) as int, span, this.program.bool_type);
-			case FloatLE -> yield Expr::Integer((lhs_float <= rhs_float) as int, span, this.program.bool_type);
-			case FloatGT -> yield Expr::Integer((lhs_float > rhs_float) as int, span, this.program.bool_type);
-			case FloatGE -> yield Expr::Integer((lhs_float >= rhs_float) as int, span, this.program.bool_type);
-			case FloatCmp -> yield Expr::Integer(lhs_float <=> rhs_float, span, this.program.int_type);
-			case FloatAdd -> yield Expr::Float(lhs_float + rhs_float, span, type);
-			case FloatSub -> yield Expr::Float(lhs_float - rhs_float, span, type);
-			case FloatMul -> yield Expr::Float(lhs_float * rhs_float, span, type);
-			case FloatDiv -> yield Expr::Float(lhs_float / rhs_float, span, type);
-			case FloatMod -> yield Expr::Float(lhs_float % rhs_float, span, type);
-			case FloatNeg -> yield Expr::Float(-lhs_float, span, type)
-			case Assign -> yield Expr::Undefined(span, Type::unknown());
+			case BitwiseEQ -> yield Value::Integer((lhs_int == rhs_int) as int, this.program.bool_type);
+			case BitwiseNE -> yield Value::Integer((lhs_int != rhs_int) as int, this.program.bool_type);
+			case BitwiseAnd -> yield Value::Integer(lhs_int & rhs_int, type);
+			case BitwiseOr -> yield Value::Integer(lhs_int | rhs_int, type);
+			case BitwiseXOr -> yield Value::Integer(lhs_int ^ rhs_int, type);
+			case BitwiseNot -> yield Value::Integer(~lhs_int, type);
+			case BitwiseShl -> yield Value::Integer(lhs_int << rhs_int, type);
+			case BitwiseLShr -> yield Value::Integer((lhs_uint >> rhs_uint) as int, type);
+			case BitwiseAShr -> yield Value::Integer(lhs_int >> rhs_int, type);
+			case IntAdd -> yield Value::Integer(lhs_int + rhs_int, type);
+			case IntSub -> yield Value::Integer(lhs_int - rhs_int, type);
+			case IntMul -> yield Value::Integer(lhs_int * rhs_int, type);
+			case IntNeg -> yield Value::Integer(-lhs_int, type);
+			case IntInc -> yield Value::Integer(lhs_int + 1, type);
+			case IntDec -> yield Value::Integer(lhs_int - 1, type);
+			case SIntLT -> yield Value::Integer((lhs_int < rhs_int) as int, this.program.bool_type);
+			case SIntLE -> yield Value::Integer((lhs_int <= rhs_int) as int, this.program.bool_type);
+			case SIntGT -> yield Value::Integer((lhs_int > rhs_int) as int, this.program.bool_type);
+			case SIntGE -> yield Value::Integer((lhs_int >= rhs_int) as int, this.program.bool_type);
+			case SIntCmp -> yield Value::Integer(lhs_int <=> rhs_int, this.program.int_type);
+			case SIntDiv -> yield Value::Integer(lhs_int / rhs_int, type);
+			case SIntMod -> yield Value::Integer(lhs_int % rhs_int, type);
+			case UIntLT -> yield Value::Integer((lhs_uint < rhs_uint) as int, this.program.bool_type);
+			case UIntLE -> yield Value::Integer((lhs_uint <= rhs_uint) as int, this.program.bool_type);
+			case UIntGT -> yield Value::Integer((lhs_uint > rhs_uint) as int, this.program.bool_type);
+			case UIntGE -> yield Value::Integer((lhs_uint >= rhs_uint) as int, this.program.bool_type);
+			case UIntCmp -> yield Value::Integer(lhs_uint <=> rhs_uint, this.program.int_type);
+			case UIntDiv -> yield Value::Integer((lhs_uint / rhs_uint) as int, type);
+			case UIntMod -> yield Value::Integer((lhs_uint % rhs_uint) as int, type);
+			case FloatEQ -> yield Value::Integer((lhs_float == rhs_float) as int, this.program.bool_type);
+			case FloatNE -> yield Value::Integer((lhs_float != rhs_float) as int, this.program.bool_type);
+			case FloatLT -> yield Value::Integer((lhs_float < rhs_float) as int, this.program.bool_type);
+			case FloatLE -> yield Value::Integer((lhs_float <= rhs_float) as int, this.program.bool_type);
+			case FloatGT -> yield Value::Integer((lhs_float > rhs_float) as int, this.program.bool_type);
+			case FloatGE -> yield Value::Integer((lhs_float >= rhs_float) as int, this.program.bool_type);
+			case FloatCmp -> yield Value::Integer(lhs_float <=> rhs_float, this.program.int_type);
+			case FloatAdd -> yield Value::Float(lhs_float + rhs_float, type);
+			case FloatSub -> yield Value::Float(lhs_float - rhs_float, type);
+			case FloatMul -> yield Value::Float(lhs_float * rhs_float, type);
+			case FloatDiv -> yield Value::Float(lhs_float / rhs_float, type);
+			case FloatMod -> yield Value::Float(lhs_float % rhs_float, type);
+			case FloatNeg -> yield Value::Float(-lhs_float,  type)
+			else -> panic("invalid primitive op");
 		}
 
 		if op.isAssignment() {
-			const variable = args[0u] as VarInvoke else {
-				return Expr::Undefined(span, Type::unknown());
+			const variable = args[0u] as Variable else {
+				return Value::Undefined;
 			}
 			this.setVariable(variable, result);
 
-			return Expr::Void(Span(), this.program.void_type);
+			return Value::Void(this.program.void_type);
 		} else {
 			return result;
 		}
 	}
 
-	func compileAndRun(this: &&Interpreter, expr: &Expr, cleanup: &List!<Stmt>) -> Expr {
-		var result = Expr::Undefined(expr.span, expr.type);
+	func compileAndRun(this: &&Interpreter, node: &Node) -> Value {
+		var result = Value::Undefined;
 
-		this.todo("finish interpretation of expressions using llvm", expr.span);
+		this.todo("finish interpretation of expressions using llvm", node.span);
 
 		return result;
 	}

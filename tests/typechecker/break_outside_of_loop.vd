@@ -1,4 +1,4 @@
-//> error "break statements must be inside of a loop"
+//> error "continue & break statements must be inside of a loop"
 
 import std/core;
 
