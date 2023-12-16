@@ -3,11 +3,16 @@ import std/io;
 import std/list;
 import std/libc/stdlib;
 import std/path;
+import std/shared_list;
 import std/string;
 
 import args;
+import builtins;
+import llvm_c;
+import llvm_util;
 import options;
 import program;
+import span;
 import typechecker;
 
 func parseArguments(arguments: Range!<String, false>) -> Optional!<CompilerOptions> {
@@ -128,65 +133,156 @@ func main(args: Range!<String, false>) -> int {
 	}
 
 	var program: Program = (options);
-	typecheck(&&program);
+	var typechecker: TCContext = (&&program);
+	typechecker.registerPragma("generate_std_core_builtins", func (this: &&TCContext, program: &&Program, ns: SharedHandle!<Namespace>, span: Span) -> void {
+		program.core_namespace = ns;
+
+		program.any_concept = program.createConcept(Concept::Any("type"));
+		program.bool_concept = program.createConcept(Concept::Boolean("bool"));
+		program.int_concept = program.createConcept(Concept::Integer(true, "int"));
+		program.uint_concept = program.createConcept(Concept::Integer(false, "uint"));
+		program.string_concept = program.createConcept(Concept::String("String"));
+
+		program.void_type = Type(program.createType(ns, "void", TypeBody::Void));
+		program.never_type = Type(program.createType(ns, "never", TypeBody::Void));
+		program.createBoolType(ns);
+
+		program.createPrimitiveCastTemplates(ns);
+		program.createCoreReflectionFunctionTemplates(ns);
+
+		const int_template = program.createIntTypeTemplate(ns, true);
+		const uint_template = program.createIntTypeTemplate(ns, false);
+
+		program.createPtrTypeTemplate(ns);
+
+		program.createFunctionTypeTemplate(ns);
+
+		program.createFloatTypeTemplate(ns);
+
+		program.createRangeTypeTemplate(ns);
+		program.createRangeIteratorTypeTemplate(ns);
+		program.createNumericRangeTypeTemplate(ns);
+		program.createNumericIteratorTypeTemplate(ns);
+
+		program.createTupleTypeTemplate(ns);
+
+		discard this.createTemplateInstance(int_template, List!<TemplateParameter>(1u, TemplateParameter::Integer(0)), span);
+		discard this.createTemplateInstance(uint_template, List!<TemplateParameter>(1u, TemplateParameter::Integer(0)), span);
+
+		ns.aliases["int"] = program.int_type.decl.linked_namespace;
+		ns.aliases["uint"] = program.uint_type.decl.linked_namespace;
+
+		program.createByteType(ns);
+
+		const i32_type = Type(this.createTemplateInstance(int_template, List!<TemplateParameter>(1u, TemplateParameter::Integer(32)), span).linked_type);
+		program.createErrorType(ns, i32_type);
+
+		program.exit_function = program.createFunction(ns, "exit", List!<Type>(1u, program.int_type), program.never_type, FunctionBody::Extern);
+		program.exit_function.extern_name = "exit";
+		program.abort_function = program.createFunction(ns, "abort", List!<Type>(), program.never_type, FunctionBody::Extern);
+		program.abort_function.extern_name = "abort";
+		program.panic_function = program.createFunction(ns, "panic", List!<Type>(1u, program.error_type), program.never_type, FunctionBody::Extern);
+		program.panic_function.extern_name = "panic";
+		program.assert_function = program.createFunction(ns, "assert", List!<Type>(1u, program.bool_type), program.void_type, BuiltinFunction::Assert(Type::unknown()));
+		program.assert_error_function = program.createFunction(ns, "assert", List!<Type>() + program.bool_type + program.error_type, program.void_type, BuiltinFunction::AssertError(Type::unknown()));
+
+		program.createArrayTypeTemplate(ns);
+	});
+
+	const root_module_desc = ImportedModule(1u, program.options.root_module_path, program.options.program_name);
+	const module = typechecker.loadModule(root_module_desc) else: error {
+		typechecker.error("couldn't load module " + root_module_desc.path + ": " + String::fromErrorCode(error), Span());
+		return 1;
+	}
+
+	typechecker.checkTopLevelStatements(module);
+	var changes = false;
+	do {
+		changes = false;
+		for ns in program.top_level_namespaces {
+			changes |= typechecker.check(ns, NamespaceState::Done);
+		}
+	} while changes;
 
 	if options.dump_program {
 		print(program.dump());
 	}
 
-	match options.mode {
-		case Check -> return 1 if program.has_errors else 0;
-		case Run -> {
-			if program.has_errors {
-				return 1;
-			}
+	if program.options.mode == Check || program.has_errors {
+		return 1 if program.has_errors else 0;
+	}
 
-			var main_args: List!<String>;
-			var main_env: List!<String>;
+	if program.main_function.isEmpty() {
+		typechecker.error("no main function specified", Span());
+		return 1;
+	}
 
-			main_args.append(options.program_name);
-			main_args.append(options.secondary_args);
+	if program.options.codegen_lazy {
+		typechecker.cg_context.codegenFunctionDecl(program.main_function);
+		typechecker.cg_context.codegenFunctionBody(program.main_function);
+	}
 
-			return program.runMainFunction(main_args, main_env);
+	match program.llvm_context.loadModuleFromFile(program.options.install_path + "/rt.ll") {
+		case Some: rt_module -> discard LLVMLinkModules2(program.llvm_module, rt_module);
+		else -> program.has_errors = true;
+	}
+
+	program.finalizeDI();
+
+	if const error = verifyModule(program.llvm_module, LLVMVerifierFailureAction::LLVMReturnStatusAction) as Error {
+		eprintln(error);
+		program.has_errors = true;
+	}
+
+	if options.mode == Run {
+		if program.has_errors {
+			return 1;
 		}
-		case Compile -> {
-			const assembly_path = match options.output_type {
-				case LLVMAssembly -> yield program.printLLVMIRToFile();
-				case LLVMBitcode -> yield program.writeLLVMBitcodeToFile();
-			}
 
-			if program.has_errors || assembly_path is None {
-				return 1;
-			}
+		var main_args: List!<String>;
+		var main_env: List!<String>;
 
-			if options.codegen_only {
-				return 0;
-			}
+		main_args.append(options.program_name);
+		main_args.append(options.secondary_args);
 
-			var clang_command = "clang " + assembly_path.value();
-			clang_command += " -o " + options.getOutputBinaryPath();
-			clang_command += " -lc -lm";
-
-			for lib in options.link_libraries {
-				clang_command += " -l" + lib;
-			}
-
-			if options.symbol_type == None {
-				clang_command += " -s";
-			}
-
-			if options.generate_debug_info {
-				clang_command += " -g";
-			}
-
-			clang_command += " " + options.getOptimizationLevelAsClangArg();
-
-			if !options.secondary_args.isEmpty() {
-				clang_command += " " + " ".join(options.secondary_args);
-			}
-
-			clang_command += "\0";
-			return system(clang_command.data()) as int;
+		return program.runMainFunction(main_args, main_env);
+	} else {
+		const assembly_path = match options.output_type {
+			case LLVMAssembly -> yield program.printLLVMIRToFile();
+			case LLVMBitcode -> yield program.writeLLVMBitcodeToFile();
 		}
+
+		if program.has_errors || assembly_path is None {
+			return 1;
+		}
+
+		if options.codegen_only {
+			return 0;
+		}
+
+		var clang_command = "clang " + assembly_path.value();
+		clang_command += " -o " + options.getOutputBinaryPath();
+		clang_command += " -lc -lm";
+
+		for lib in options.link_libraries {
+			clang_command += " -l" + lib;
+		}
+
+		if options.symbol_type == None {
+			clang_command += " -s";
+		}
+
+		if options.generate_debug_info {
+			clang_command += " -g";
+		}
+
+		clang_command += " " + options.getOptimizationLevelAsClangArg();
+
+		if !options.secondary_args.isEmpty() {
+			clang_command += " " + " ".join(options.secondary_args);
+		}
+
+		clang_command += "\0";
+		return system(clang_command.data()) as int;
 	}
 }

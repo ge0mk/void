@@ -66,60 +66,15 @@ struct Scope {
 	operator ==(this: Scope, other: Scope) -> bool = default;
 }
 
-func typecheck(program: &&Program) -> void {
-	var context: TCContext = (&&program);
-
-	const root_module_desc = ImportedModule(1u, program.options.root_module_path, program.options.program_name);
-	const module = context.loadModule(root_module_desc) else: error {
-		context.error("couldn't load module " + root_module_desc.path + ": " + String::fromErrorCode(error), Span());
-		return;
-	}
-
-	context.checkTopLevelStatements(module);
-	var changes = false;
-	do {
-		changes = false;
-		for ns in program.top_level_namespaces {
-			changes |= context.check(ns, NamespaceState::Done);
-		}
-	} while changes;
-
-	if program.options.mode == Check {
-		return;
-	}
-
-	if program.main_function.isEmpty() {
-		context.error("no main function specified", Span());
-	}
-
-	if program.has_errors {
-		return;
-	}
-
-	if program.options.codegen_lazy {
-		context.cg_context.codegenFunctionDecl(program.main_function);
-		context.cg_context.codegenFunctionBody(program.main_function);
-	}
-
-	match program.llvm_context.loadModuleFromFile(program.options.install_path + "/rt.ll") {
-		case Some: rt_module -> discard LLVMLinkModules2(program.llvm_module, rt_module);
-		else -> program.has_errors = true;
-	}
-
-	program.finalizeDI();
-
-	if const error = verifyModule(program.llvm_module, LLVMVerifierFailureAction::LLVMReturnStatusAction) as Error {
-		eprintln(error);
-		program.has_errors = true;
-	}
-}
-
 struct TCContext {
+	alias PragmaCallback = (&&TCContext, &&Program, SharedHandle!<Namespace>, Span) -> void;
+
 	var program: &&Program;
 	var interpreter: Interpreter;
 	var cg_context: CGContext;
 
 	var modules_by_import_name: Map!<String, List!<SharedHandle!<Namespace>>>;
+	var pragmas: List!<(name: String, callback: PragmaCallback)>;
 
 	var current_target_state: NamespaceState;
 	var current_namespace: SharedHandle!<Namespace>;
@@ -144,6 +99,10 @@ struct TCContext {
 	}
 
 	func destructor(this: &&TCContext) -> void = default;
+
+	func registerPragma(this: &&TCContext, name: String, callback: PragmaCallback) -> void {
+		this.pragmas.append((name: name, callback: callback));
+	}
 
 	func error(this: &TCContext, msg: String, span: Span) -> void {
 		this.program.printError(CompilationError(msg, ErrorType::Error, ErrorStage::Typechecker, span));
@@ -581,67 +540,15 @@ struct TCContext {
 			}
 			case Garbage -> return id;
 			case ExternFunctionBody | DefaultFunctionBody -> panic("unreachable"); // should be handled by checkFunctionBody()
-			case Pragma: value -> {
-				if this.current_function.isAlive() {
-					this.error("invalid pragma", span);
-				} else {
-					if value == "generate_std_core_builtins" {
-						this.program.core_namespace = this.current_namespace;
-
-						this.program.any_concept = this.program.createConcept(Concept::Any("type"));
-						this.program.bool_concept = this.program.createConcept(Concept::Boolean("bool"));
-						this.program.int_concept = this.program.createConcept(Concept::Integer(true, "int"));
-						this.program.uint_concept = this.program.createConcept(Concept::Integer(false, "uint"));
-						this.program.string_concept = this.program.createConcept(Concept::String("String"));
-
-						this.program.void_type = Type(this.program.createType(this.current_namespace, "void", TypeBody::Void));
-						this.program.never_type = Type(this.program.createType(this.current_namespace, "never", TypeBody::Void));
-						this.program.createBoolType(this.current_namespace);
-
-						this.program.createPrimitiveCastTemplates(this.current_namespace);
-						this.program.createCoreReflectionFunctionTemplates(this.current_namespace);
-
-						const int_template = this.program.createIntTypeTemplate(this.current_namespace, true);
-						const uint_template = this.program.createIntTypeTemplate(this.current_namespace, false);
-
-						this.program.createPtrTypeTemplate(this.current_namespace);
-
-						this.program.createFunctionTypeTemplate(this.current_namespace);
-
-						this.program.createFloatTypeTemplate(this.current_namespace);
-
-						this.program.createRangeTypeTemplate(this.current_namespace);
-						this.program.createRangeIteratorTypeTemplate(this.current_namespace);
-						this.program.createNumericRangeTypeTemplate(this.current_namespace);
-						this.program.createNumericIteratorTypeTemplate(this.current_namespace);
-
-						this.program.createTupleTypeTemplate(this.current_namespace);
-
-						discard this.createTemplateInstance(int_template, List!<TemplateParameter>(1u, TemplateParameter::Integer(0)), span);
-						discard this.createTemplateInstance(uint_template, List!<TemplateParameter>(1u, TemplateParameter::Integer(0)), span);
-
-						this.current_namespace.aliases["int"] = this.program.int_type.decl.linked_namespace;
-						this.current_namespace.aliases["uint"] = this.program.uint_type.decl.linked_namespace;
-
-						this.program.createByteType(this.current_namespace);
-
-						const i32_type = Type(this.createTemplateInstance(int_template, List!<TemplateParameter>(1u, TemplateParameter::Integer(32)), span).linked_type);
-						this.program.createErrorType(this.current_namespace, i32_type);
-
-						this.program.exit_function = this.program.createFunction(this.current_namespace, "exit", List!<Type>(1u, this.program.int_type), this.program.never_type, FunctionBody::Extern);
-						this.program.exit_function.extern_name = "exit";
-						this.program.abort_function = this.program.createFunction(this.current_namespace, "abort", List!<Type>(), this.program.never_type, FunctionBody::Extern);
-						this.program.abort_function.extern_name = "abort";
-						this.program.panic_function = this.program.createFunction(this.current_namespace, "panic", List!<Type>(1u, this.program.error_type), this.program.never_type, FunctionBody::Extern);
-						this.program.panic_function.extern_name = "panic";
-						this.program.assert_function = this.program.createFunction(this.current_namespace, "assert", List!<Type>(1u, this.program.bool_type), this.program.void_type, BuiltinFunction::Assert(Type::unknown()));
-						this.program.assert_error_function = this.program.createFunction(this.current_namespace, "assert", List!<Type>() + this.program.bool_type + this.program.error_type, this.program.void_type, BuiltinFunction::AssertError(Type::unknown()));
-
-						this.program.createArrayTypeTemplate(this.current_namespace);
-					} else {
-						this.error("invalid pragma", span);
+			case Pragma: name -> {
+				for p in this.pragmas {
+					if p.name == name {
+						p.callback(&&this, &&this.program, this.current_namespace, span);
+						return this.getEmptyNode();
 					}
 				}
+
+				this.error("unknown pragma '" + name + "'", span);
 				return this.getEmptyNode();
 			}
 			case Import: name -> {
