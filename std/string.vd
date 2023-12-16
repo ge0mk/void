@@ -413,18 +413,18 @@ struct String {
 		return this._cmp(offset, other.data(), other.size()) == 0;
 	}
 
-	operator ==(this: String, @[shallow] other: String) -> bool {
-		if this.size() != other.size() {
+	operator ==(@[shallow] lhs: String, @[shallow] rhs: String) -> bool {
+		if lhs.size() != rhs.size() {
 			return false;
 		}
 
-		return this._cmp(0u, other.data(), this.size()) == 0;
+		return lhs._cmp(0u, rhs.data(), lhs.size()) == 0;
 	}
 
-	operator <=>(this: String, @[shallow] other: String) -> int {
-		const r = this._cmp(0u, other.data(), min!<uint>(this.size(), other.size()));
+	operator <=>(@[shallow] lhs: String, @[shallow] rhs: String) -> int {
+		const r = lhs._cmp(0u, rhs.data(), min!<uint>(lhs.size(), rhs.size()));
 		if r == 0 {
-			return this.size() <=> other.size();
+			return lhs.size() <=> rhs.size();
 		} else {
 			return r;
 		}
