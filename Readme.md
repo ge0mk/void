@@ -26,50 +26,45 @@ func main() -> void {
 
 planned features (wip / near future)
 --
-- compiler: public / private namespaces, types & functions
 - typechecker: track member (de)initialization through match stmts
 - codegen: generate better llvm ir
 	- function attributes (especially for allocators)
 - codegen: better debug info
 - typechecker: high-level optimizations:
 	- function inlining
-- compiler: performance optimizations
-	- do less unneccessary stuff
-	- multithreading (at least typechecking of function bodies)
+- compiler: multithreading
 - compiler: builtin vector types for faster math
-- meta:
+- typechecker: traits / concepts to restrict types accepted by template parameters
+- typechecker: enums / variant cases as template parameters
+- typechecker: variadic templates
+	- compiletime for-each to iterate parameters
+- typechecker: template parameter inferance ?
+- typechecker+interpreter: expand compile time code execution (ast interpreter)
+	- implement comptime if-var, var-else & for statements, comptime match statement ?
+	- provide functions to query system info at compile-time (e.g. os, architecture, ...)
+	- extend reflection library (get information about types at compile-time)
+	- make all builtin functions & libc external functions available at compile time
+- stdlib:
+	- `format("{}", ...)` for text formatting, similar to https://github.com/fmtlib/fmt
+		- requires variadic templates, better comptime code execution & traits
+	- `embed<T>()` to include files at compile-time as array/string constants
+	- threads
+	- tcp / udp sockets
+- compiler:
 	- lsp interface
-- stdlib: some clean-up:
-	- merge VRange & Range, make is_const a template parameter
-	- reduce duplicated code in Optional & Result with updated comptime if syntax
 - typechecker+parser: optional chaining `foo()?.bar()`
 	- `bar()` can be any operator, function call or member var access
 	- codegen to `foo().value().bar() if foo().hasValue() else None` (but only codegen `foo()` once)
 	- if `bar()` doesn't yield `Optional!<T>`, wrap it in `Some()`
 	- also for `Result!<T, E>`
 		- result from `foo()` and `bar()` must have the same error type or `bar()` must not yield a result type
-- typechecker: template parameter inferance ?
-- typechecker: variadic templates
-	- compiletime for-each to iterate parameters
-- typechecker+interpreter: expand compile time code execution (ast interpreter)
-	- implement comptime if-var, var-else & for statements, comptime match statement ?
-	- provide functions to query system info at compile-time (e.g. os, architecture, ...)
-	- extend reflection library (get information about types at compile-time)
-	- make all builtin functions & libc external functions available at compile time
-- typechecker: traits / concepts to restrict types accepted by template parameters
 - typechecker: tuple unpacking / destructuring assignments
-- typechecker: match strings
-- typechecker: unsafe functions, which can only be called in unsafe blocks
+- typechecker: generic match for non-integer types (e.g. String)
 - typechecker: pick const / non-const functions depending on the usage of the result value
 - typechecker: better error messages for const / non-const conflicts:
 	"no matching function found" -> "can't call mutating function on const object"
-- typechecker: arithmetic expressions as template parameters
-- typechecker: enums as template parameters
 - compiler: incremental builds / cashing of (partially) compiled modules (llvm-ir, output of typechecker ?)
-- stdlib:
-	- `format("{}", ...)` for text formatting, similar to https://github.com/fmtlib/fmt
-		- requires variadic templates, better comptime code execution & traits
-	- `embed<T>()` to include files at compile-time as array/string constants
+- compiler: public / private namespaces, types & functions
 
 planned features (far future)
 --
