@@ -732,15 +732,15 @@ struct CGContext {
 				const id_ptr = LLVMBuildStructGEP2(this.builder, type, param0, 0u, "");
 				discard LLVMBuildStore(this.builder, LLVMConstInt(id_type, case_id, false), id_ptr);
 
+				const this_payload_ptr = LLVMBuildStructGEP2(this.builder, type, param0, 1u, "");
+				discard LLVMBuildStore(this.builder, LLVMConstNull(LLVMStructGetTypeAtIndex(type, 1u32)), this_payload_ptr);
+
 				var member_var_param_offset = 1u;	// first param is this
 
 				const case_decl = decl.getVariantCase(case_id).value();
 				if case_decl.type != this.program.void_type {
 					member_var_param_offset += 1;	// payload is passed before member variables
-
-					const this_payload_ptr = LLVMBuildStructGEP2(this.builder, type, param0, 1u, "");
 					const initializer = param1;
-
 					if case_decl.type.reference_kind == None {
 						const case_type = case_decl.type.decl;
 
@@ -783,6 +783,8 @@ struct CGContext {
 
 				const other_id = LLVMBuildExtractValue(this.builder, param1, 0u, "");
 				discard LLVMBuildStore(this.builder, other_id, id_ptr);
+
+				discard LLVMBuildStore(this.builder, LLVMConstNull(LLVMStructGetTypeAtIndex(type, 1u32)), this_payload_ptr);
 
 				const cont_block = LLVMAppendBasicBlockInContext(this.llvm_context, this.current_function, "cont");
 
