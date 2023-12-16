@@ -4137,7 +4137,7 @@ struct TCContext {
 					const return_type = (template_parameters[0u] as Type).value();
 					var parameter_types: List!<Type>;
 					for i in 1u..template_parameters.size() {
-						parameter_types.append((template_parameters[1u] as Type).value());
+						parameter_types.append((template_parameters[i] as Type).value());
 					}
 
 					type_instance = this.program.createFunctionTypeInstance(base.parent, parameter_types, return_type);
