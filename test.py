@@ -63,7 +63,7 @@ def run_test(test, expected_result, compiler_args, memcheck, compiler):
 	for type, value in expected_result:
 		match type:
 			case "compiler-ec":
-				if compiler_result.returncode != int(value):
+				if compile_result.returncode != int(value):
 					return False, compile_result
 				compile_error_is_success = True
 			case "error":

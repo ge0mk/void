@@ -1,0 +1,29 @@
+name: main
+
+on:
+  push:
+    branches: ["main", "dev"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: install dependencies
+        run: |
+          sudo apt-get install libllvm18 llvm-18 llvm-18-dev llvm-18-runtime clang-18
+          sudo ln -sf /usr/bin/llvm-config-18 /usr/bin/llvm-config
+          sudo ln -sf /usr/bin/clang-18 /usr/bin/clang
+
+      - uses: actions/checkout@v4
+
+      - name: stage0
+        run: make test-stage0
+
+      - name: stage1
+        run: make test-stage1
+
+      - name: stage2
+        run: make test-stage2

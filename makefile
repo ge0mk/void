@@ -1,4 +1,5 @@
 INSTALL_DIR := ~/.local/void
+LLVM_LIBS := $(shell llvm-config --libs)
 
 main: stage1
 
@@ -19,32 +20,32 @@ clean-but-keep-stage0:
 stage0: build/stage0
 
 build/stage0: build/stage0.bc
-	clang build/stage0.bc -o build/stage0 -lc -lm -lLLVM -O3
+	clang build/stage0.bc -o build/stage0 -lc -lm $(LLVM_LIBS) -O3
 
-test-stage0: build/stage0
-	python3 test.py build/stage0 -q -- -M -b -s
+test-stage0: build/stage0 rt.ll
+	python3 test.py build/stage0 -- -M -b -s
 
 stage1: build/stage1
 
 build/stage1: build/stage1.ll
-	clang build/stage1.ll -o build/stage1 -lc -lm -lLLVM
+	clang build/stage1.ll -o build/stage1 -lc -lm $(LLVM_LIBS)
 
 build/stage1.ll: build/stage0 rt.ll std/*.vd src/*.vd src/llvm_c.vd
 	build/stage0 src/main.vd -o stage1 -c -g -M
 
 test-stage1: build/stage1
-	python3 test.py build/stage1 -q -- -M -b -s
+	python3 test.py build/stage1 -- -M -b -s
 
 stage2: build/stage2
 
 build/stage2: build/stage2.ll
-	clang build/stage2.ll -o build/stage2 -lc -lm -lLLVM
+	clang build/stage2.ll -o build/stage2 -lc -lm $(LLVM_LIBS)
 
 build/stage2.ll: build/stage1
 	build/stage1 src/main.vd -o stage2 -c -g -M
 
 test-stage2: build/stage2
-	python3 test.py build/stage2 -q -- -M -b -s
+	python3 test.py build/stage2 -- -M -b -s
 
 src/llvm_c.vd: src/llvm.h
 	python3 binding_generator.py src/llvm.h src/llvm_c.vd
