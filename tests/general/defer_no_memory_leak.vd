@@ -1,0 +1,31 @@
+import std/core;
+
+struct Foo {
+	var counter: &&int;
+
+	func constructor(this: &&Foo, counter: &&int) -> void {
+		this.counter := &&counter;
+		this.counter++;
+	}
+
+	func constructor(this: &&Foo, other: Foo) -> void {
+		this.counter := &&other.counter;
+		this.counter++;
+	}
+
+	func destructor(this: &&Foo) -> void {
+		this.counter--;
+	}
+
+	func bar(this: &Foo) -> void {}
+}
+
+func foo(x: &&int) -> void {
+	defer Foo(&&x).bar();
+}
+
+func main() -> void {
+	var x = 0;
+	foo(&&x);
+	assert(x == 0);
+}

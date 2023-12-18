@@ -631,7 +631,7 @@ struct TCContext {
 			}
 			case CaseStmt: case_stmt -> return this.checkCaseStmt(id, case_stmt, span);
 			case ElseCaseStmt: body -> return this.checkElseCaseStmt(id, body, span);
-			case DeferStmt: body -> return this.checkDeferStmt(body);
+			case DeferStmt: body -> return this.checkDeferStmt(id, body, span);
 			case ThrowStmt: value -> return this.checkThrowStmt(id, value, span);
 			case ReturnStmt: value -> return this.checkReturnStmt(id, value, span);
 			case YieldStmt: value -> return this.checkYieldStmt(id, value, span);
@@ -1967,11 +1967,22 @@ struct TCContext {
 		return id;
 	}
 
-	func checkDeferStmt(this: &&TCContext, body: uint) -> uint {
+	func checkDeferStmt(this: &&TCContext, id: uint, body: uint, span: Span) -> uint {
+		this.pushScope(ScopeKind::Compound);
+
 		body = this.checkStmt(body);
-		if body > 1 {
-			this.scope_stack[this.scope_stack.size() - 1].cleanup.insert(0u, body);
+		if body == 1 {
+			this.popScope();
+			return this.getGarbageNode();
 		}
+
+		var result: List!<uint>;
+		result.append(body);
+		result.append(this.getCleanupCallsForCurrentScope());
+		this.replaceASTNode(id, Node::CompoundStmt(result, span, this.program.void_type, false))
+
+		this.popScope();
+		this.scope_stack[this.scope_stack.size() - 1].cleanup.insert(0u, id);
 		return this.getEmptyNode();
 	}
 
