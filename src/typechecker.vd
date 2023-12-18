@@ -108,6 +108,18 @@ struct TCContext {
 		this.program.printError(CompilationError(msg, ErrorType::Error, ErrorStage::Typechecker, span));
 
 		if this.current_function.isAlive() {
+			for p in this.current_function.template_parameters {
+				this.info("    with " + p.signature(), Span());
+			}
+		}
+
+		if this.current_namespace.isAlive() {
+			for p in this.current_namespace.template_parameters {
+				this.info("    with " + p.signature(), Span());
+			}
+		}
+
+		if this.current_function.isAlive() {
 			this.current_function.has_errors = true;
 		} else if this.current_namespace.isAlive() {
 			this.current_namespace.has_errors = true;
