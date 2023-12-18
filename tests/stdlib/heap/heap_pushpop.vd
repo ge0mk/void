@@ -1,0 +1,14 @@
+import std/core;
+import std/heap;
+
+func main() -> void {
+	var heap = Heap!<int>();
+	heap.push(1);
+
+	assert(heap.pushPop(3) == 1);
+	assert(heap.pushPop(2) == 2);
+	assert(heap.pushPop(4) == 3);
+	assert(heap.pushPop(5) == 4);
+	assert(heap.pop() == 5);
+	assert(heap.isEmpty());
+}
