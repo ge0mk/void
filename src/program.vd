@@ -6,7 +6,6 @@ import std/list;
 import std/map;
 import std/math;
 import std/set;
-import std/shared;
 import std/shared_list;
 import std/string;
 

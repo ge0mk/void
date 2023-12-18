@@ -8,7 +8,6 @@ import std/list;
 import std/map;
 import std/math;
 import std/set;
-import std/shared;
 import std/shared_list;
 import std/string;
 
@@ -705,6 +704,14 @@ struct TCContext {
 	}
 
 	func checkTypeDecl(this: &&TCContext, parsed_decl: ParsedTypeDecl, template_parameters: &List!<TemplateParameterDecl>, span: Span, add_to_unchecked_list: bool, copy_ast: bool) -> SharedHandle!<TypeDecl> {
+		for sibling in this.current_namespace.types_by_name[parsed_decl.name] {
+			if sibling.template_parameters == template_parameters {
+				this.error("type redeclared with identical template parameters", parsed_decl.name_span);
+				this.info("previously declared here: ", sibling.name_span);
+				return sibling;
+			}
+		}
+
 		if copy_ast {
 			const offset = this.current_namespace.file.duplicateNodes(parsed_decl.first_node_id, parsed_decl.last_node_id + 1);
 			parsed_decl = (this.current_namespace.file.nodes[parsed_decl.last_node_id + offset] as TypeDecl).value();
@@ -717,21 +724,6 @@ struct TCContext {
 
 		if add_to_unchecked_list {
 			this.current_namespace.addUncheckedType(type);
-		}
-
-		for sibling in this.current_namespace.types_by_name[type.name] {
-			if sibling == type {
-				continue;
-			}
-
-			if template_parameters.isEmpty() {
-				continue;
-			}
-
-			if sibling.template_parameters == template_parameters {
-				this.error("type redeclared with identical template parameters", type.name_span);
-				this.info("previously declared here: ", sibling.name_span);
-			}
 		}
 
 		return type;
@@ -803,6 +795,16 @@ struct TCContext {
 	}
 
 	func checkFunctionDecl(this: &&TCContext, parsed_decl: ParsedFunctionDecl, template_parameters: &List!<TemplateParameterDecl>, add_to_unchecked_list: bool, copy_ast: bool) -> SharedHandle!<FunctionDecl> {
+		if !template_parameters.isEmpty() {
+			for sibling in this.current_namespace.functions_by_name[parsed_decl.signature.name] {
+				if sibling.template_parameters == template_parameters {
+					this.error("function redeclared with identical template parameters", parsed_decl.signature.span);
+					this.info("previously declared here: ", sibling.signature_span);
+					return sibling;
+				}
+			}
+		}
+
 		if copy_ast {
 			const offset = this.current_namespace.file.duplicateNodes(parsed_decl.first_node_id, parsed_decl.last_node_id + 1);
 			parsed_decl = (this.current_namespace.file.nodes[parsed_decl.last_node_id + offset] as FunctionDecl).value();
@@ -814,21 +816,6 @@ struct TCContext {
 
 		if add_to_unchecked_list {
 			this.current_namespace.addUncheckedFunction(function);
-		}
-
-		for sibling in this.current_namespace.functions_by_name[parsed_decl.signature.name] {
-			if sibling == function {
-				continue;
-			}
-
-			if template_parameters.isEmpty() {
-				continue;
-			}
-
-			if sibling.template_parameters == template_parameters {
-				this.error("function redeclared with identical template parameters", parsed_decl.signature.span);
-				this.info("previously declared here: ", sibling.signature_span);
-			}
 		}
 
 		for annotation in parsed_decl.annotations {
