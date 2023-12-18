@@ -4180,6 +4180,17 @@ struct TCContext {
 
 		match base.body {
 			case Builtin: builtin_function -> match builtin_function {
+				case Swap -> {
+					const type = (template_parameters[0u] as Type).value();
+					instance = this.program.createFunction(
+						base.parent_namespace,
+						"swap",
+						List!<TemplateParameterDecl>(1u, TemplateParameterDecl("Type", this.program.any_concept, false, TemplateParameter::Type(type))),
+						List!<Type>(2u, type.varRef()),
+						this.program.void_type,
+						BuiltinFunction::Swap(type)
+					);
+				}
 				case IntCast
 				| FloatCast
 				| IntToFloat

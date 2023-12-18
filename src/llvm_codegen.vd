@@ -1352,6 +1352,14 @@ struct CGContext {
 				}
 			}
 
+			case Swap -> {
+				const a = LLVMBuildLoad2(this.builder, this.getType(function.base_type), parameters[0u], "");
+				const b = LLVMBuildLoad2(this.builder, this.getType(function.base_type), parameters[1u], "");
+				discard LLVMBuildStore(this.builder, b, parameters[0u]);
+				discard LLVMBuildStore(this.builder, a, parameters[1u]);
+				return LLVMValueRef();
+			}
+
 			case IntCast: target -> {
 				const source_type = this.getType(function.base_type);
 				const target_type = this.getType(target);

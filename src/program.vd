@@ -1842,6 +1842,8 @@ variant BuiltinFunction {
 
 	case FunctionPointerCall;
 
+	case Swap;
+
 	// base type is source type, attached type target
 	case IntCast: Type;
 	case FloatCast: Type;
@@ -1917,6 +1919,7 @@ variant BuiltinFunction {
 			| PointerOffset
 			| PointerOpIndex
 			| FunctionPointerCall
+			| Swap
 			| IntCast
 			| FloatCast
 			| IntToFloat

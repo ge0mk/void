@@ -1,0 +1,9 @@
+import std/core;
+
+func main() -> void {
+	var x = 5;
+	var y = 10;
+	swap!<int>(&&x, &&y);
+	assert(x == 10);
+	assert(y == 5);
+}

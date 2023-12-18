@@ -186,6 +186,8 @@ func main(args: Range!<String, false>) -> int {
 		program.assert_function = program.createFunction(ns, "assert", List!<Type>(1u, program.bool_type), program.void_type, BuiltinFunction::Assert(Type::unknown()));
 		program.assert_error_function = program.createFunction(ns, "assert", List!<Type>() + program.bool_type + program.error_type, program.void_type, BuiltinFunction::AssertError(Type::unknown()));
 
+		discard program.createFunction(ns, "swap", List!<TemplateParameterDecl>(1u, TemplateParameterDecl("Type", program.any_concept, false)), BuiltinFunction::Swap(Type::unknown()));
+
 		program.createArrayTypeTemplate(ns);
 	});
 
