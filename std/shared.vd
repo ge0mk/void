@@ -12,12 +12,24 @@ template <T: type>
 struct SharedPtr {
 	var data: ptr!<refc!<T>, true>;
 
-	func new(@[shallow] value: T) -> SharedPtr!<T> {
-		var data = malloc!<refc!<T>>(1u);
-		data[0u].strong_count = 1;
-		data[0u].weak_count = 1;
-		data[0u].value.constructor(value);
-		return SharedPtr!<T>(data);
+	comptime if hasDefaultConstructor!<T>() {
+		func new() -> SharedPtr!<T> {
+			var data = malloc!<refc!<T>>(1u);
+			data[0u].strong_count = 1;
+			data[0u].weak_count = 1;
+			data[0u].value.constructor();
+			return SharedPtr!<T>(data);
+		}
+	}
+
+	comptime if hasCopyConstructor!<T>() {
+		func new(@[shallow] value: T) -> SharedPtr!<T> {
+			var data = malloc!<refc!<T>>(1u);
+			data[0u].strong_count = 1;
+			data[0u].weak_count = 1;
+			data[0u].value.constructor(value);
+			return SharedPtr!<T>(data);
+		}
 	}
 
 	func constructor(this: &&SharedPtr!<T>, data: ptr!<refc!<T>, true>) -> void {
@@ -59,10 +71,6 @@ struct SharedPtr {
 
 	operator ==(this: SharedPtr!<T>, other: SharedPtr!<T>) -> bool = default;
 	operator <=>(this: SharedPtr!<T>, other: SharedPtr!<T>) -> int = default;
-
-	operator unwrap(@[shallow] this: SharedPtr!<T>) -> T {
-		return this.data[0u].value;
-	}
 
 	operator unwrap(this: &SharedPtr!<T>) -> &T {
 		return &this.data[0u].value;
