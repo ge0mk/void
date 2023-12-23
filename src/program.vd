@@ -704,6 +704,11 @@ struct Program {
 		}
 
 		var child = this.namespaces.append(Namespace(name, template_parameters, parent_namespace, file));
+		for &parameter in template_parameters {
+			if const type = parameter.value as Type {
+				child.imported_namespaces.add(type.decl.linked_namespace);
+			}
+		}
 
 		// add child to parent namespace
 		parent_namespace.children.append(child);

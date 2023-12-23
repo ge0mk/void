@@ -438,7 +438,7 @@ struct TCContext {
 			do {
 				changes = false;
 				for imported_namespace in namespace_to_check.imported_namespaces {
-					changes |= this.check(imported_namespace, this.current_target_state);
+					changes |= this.check(imported_namespace, NamespaceState::UncheckedFunctionBodies);
 				}
 
 				var i = 0u;
@@ -4172,6 +4172,12 @@ struct TCContext {
 	}
 
 	func createTemplateInstance(this: &&TCContext, base: SharedHandle!<FunctionDecl>, template_parameters: &List!<TemplateParameter>, error_span: Span) -> SharedHandle!<FunctionDecl> {
+		for &parameter in template_parameters {
+			if const type = parameter as Type {
+				discard this.check(type.decl.linked_namespace, NamespaceState::UncheckedFunctionBodies);
+			}
+		}
+
 		const prev_namespace = this.current_namespace;
 		this.current_namespace = base.parent_namespace;
 
