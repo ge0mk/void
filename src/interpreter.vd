@@ -231,6 +231,7 @@ struct Interpreter {
 			case ReferenceKindOf -> return Value::Integer(function.base_type.reference_kind as int, return_type);
 			case HasDefaultConstructor -> return Value::Integer(function.base_type.decl.default_constructor.isAlive() as int, return_type);
 			case HasCopyConstructor -> return Value::Integer(function.base_type.decl.copy_constructor.isAlive() as int, return_type);
+			case TypeRefOpEqual -> return Value::Integer((args[0u].toType() == args[1u].toType()) as int, return_type);
 			else -> {
 				this.todo("finish interpretation of builtin functions", span);
 				return Value::Undefined;

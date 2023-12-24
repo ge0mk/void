@@ -487,14 +487,12 @@ struct Program {
 
 	var void_type: Type;
 	var never_type: Type;
-	var error_type: Type;
-
 	var bool_type: Type;
-
+	var typeref_type: Type;
 	var int_type: Type;
 	var uint_type: Type;
-
 	var byte_type: Type;
+	var error_type: Type;
 
 	// functions
 	var functions: SharedList!<FunctionDecl>;
@@ -1861,6 +1859,8 @@ variant BuiltinFunction {
 	case HasDefaultConstructor;
 	case HasCopyConstructor;
 
+	case TypeRefOpEqual;
+
 	case Assert;
 	case AssertError;
 
@@ -2508,6 +2508,13 @@ variant Value {
 		match this {
 			case Float: value -> return value;
 			else -> return 0;
+		}
+	}
+
+	func toType(this: &Value) -> Type {
+		match this {
+			case Type: value -> return value;
+			else -> return Type::unknown();
 		}
 	}
 }

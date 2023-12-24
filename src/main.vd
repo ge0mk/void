@@ -146,6 +146,7 @@ func main(args: Range!<String, false>) -> int {
 		program.void_type = Type(program.createType(ns, "void", TypeBody::Void));
 		program.never_type = Type(program.createType(ns, "never", TypeBody::Void));
 		program.createBoolType(ns);
+		program.createTypeRefTypeDecl(ns);
 
 		program.createPrimitiveCastTemplates(ns);
 		program.createCoreReflectionFunctionTemplates(ns);

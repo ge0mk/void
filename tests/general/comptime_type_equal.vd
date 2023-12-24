@@ -1,0 +1,11 @@
+import std/core;
+
+func main() -> void {
+	comptime if void == int {
+		this_should_not_typecheck();
+	}
+
+	comptime if void != void {
+		this_should_not_typecheck();
+	}
+}

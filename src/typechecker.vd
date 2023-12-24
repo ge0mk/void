@@ -2520,14 +2520,14 @@ struct TCContext {
 	}
 
 	func checkNameExpr(this: &&TCContext, id: uint, expected_type: Type, is_comptime: bool, span: Span) -> uint {
-		const checked_name = this.checkName(id);
+		const name = this.checkName(id);
 
 		var result_candidates: List!<Node>;
-		for variable in this.lookupVariable(checked_name, span) {
+		for variable in this.lookupVariable(name, span) {
 			result_candidates.append(this.createVarInvokeExpr(variable, span));
 		}
 
-		for case_decl in this.lookupCaseDecl(checked_name, expected_type.decl, span) {
+		for case_decl in this.lookupCaseDecl(name, expected_type.decl, span) {
 			match case_decl {
 				case EnumCase: index -> result_candidates.append(
 					Node::IntegerLiteralExpr(case_decl.parent_type.enum_cases[index].id, span, Type(case_decl.parent_type), false)
@@ -2549,13 +2549,11 @@ struct TCContext {
 			}
 		}
 
-		const last_segment = checked_name.segments[checked_name.segments.size() - 1];
-		if checked_name.segments.size() == 1 && last_segment.template_parameters.isEmpty() {
+		const last_segment = name.segments[name.segments.size() - 1];
+		if name.segments.size() == 1 && last_segment.template_parameters.isEmpty() {
 			for template_parameter in this.lookupTemplateParameter(last_segment.name) {
 				match template_parameter {
-					case Boolean: value -> {
-						result_candidates.append(Node::IntegerLiteralExpr(value as int, span, this.program.bool_type, false));
-					}
+					case Boolean: value -> result_candidates.append(Node::IntegerLiteralExpr(value as int, span, this.program.bool_type, false));
 					case Integer: value -> {
 						if expected_type.isIntType() {
 							result_candidates.append(Node::IntegerLiteralExpr(value, span, expected_type, false));
@@ -2569,7 +2567,14 @@ struct TCContext {
 		}
 
 		if result_candidates.isEmpty() {
-			this.error("no matching symbol found for '" + format(checked_name) + "'", checked_name.span);
+			const type = this.getType(name, this.getASTNodeSpan(id), true);
+			if !type.isUnknown() {
+				result_candidates.append(Node::TypeRefExpr(type, span, this.program.typeref_type, false));
+			}
+		}
+
+		if result_candidates.isEmpty() {
+			this.error("no matching symbol found for '" + format(name) + "'", name.span);
 			return this.getGarbageNode();
 		} else if result_candidates.size() > 1 {
 			this.error("too many matching symbols found", span);
@@ -2677,7 +2682,12 @@ struct TCContext {
 					return this.getGarbageNode();
 				}
 
-				this.replaceASTNode(id, this.createMemberAccessExpr(object, parsed_member_name.name, is_comptime, span));
+				const member_access_expr = this.createMemberAccessExpr(object, parsed_member_name.name, is_comptime, span);
+				if member_access_expr is Garbage {
+					return this.getGarbageNode();
+				}
+
+				this.replaceASTNode(id, member_access_expr);
 			}
 			else -> {
 				var arguments: List!<uint>;

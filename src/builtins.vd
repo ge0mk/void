@@ -56,6 +56,20 @@ func createCoreReflectionFunctionTemplates(program: &&Program, dest_namespace: S
 	discard program.createFunction(dest_namespace, "hasCopyConstructor", template_parameters, BuiltinFunction::HasCopyConstructor(Type::unknown()));
 }
 
+func createTypeRefTypeDecl(program: &&Program, dest_namespace: SharedHandle!<Namespace>) -> void {
+	const type_decl = program.createType(dest_namespace, "typeref", TypeBody::Void);
+	const type_namespace = type_decl.linked_namespace;
+	const type = Type(type_decl);
+	program.typeref_type = type;
+
+	type_decl.is_comptime = true;
+
+	type_decl.copy_constructor = program.createBinaryFunction(type_namespace, "constructor", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
+	type_decl.destructor = program.createUnaryFunction(type_namespace, "destructor", type.varRef(), program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::NoOp, type));
+	type_decl.op_assign = program.createBinaryFunction(type_namespace, "operator =", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
+	type_decl.op_equal = program.createBinaryFunction(type_namespace, "operator ==", type, type, program.bool_type, BuiltinFunction::TypeRefOpEqual(type));
+}
+
 func createUnaryFunction(program: &&Program, type_namespace: SharedHandle!<Namespace>, name: String, obj: Type, return_type: Type, body: BuiltinFunction) -> SharedHandle!<FunctionDecl> {
 	var parameter_types: List!<Type>;
 	parameter_types.append(obj);
