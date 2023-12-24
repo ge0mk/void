@@ -1465,7 +1465,7 @@ struct TCContext {
 		this.popScope();
 
 		const condition_type = this.getASTNodeType(if_stmt.condition);
-		if condition_type != this.program.bool_type && (if_stmt.condition > 1) {
+		if condition_type != this.program.bool_type && !condition_type.isUnknown() {
 			this.error("invalid condition type: expected " + this.program.bool_type.signature() + " but got " + condition_type.signature(), this.getASTNodeSpan(if_stmt.condition));
 			return this.getGarbageNode();
 		}
@@ -1669,11 +1669,9 @@ struct TCContext {
 		while_stmt.condition_cleanup = this.getCleanupCallsForCurrentScope();
 		this.popScope();
 
-		if this.getASTNodeType(while_stmt.condition) != this.program.bool_type && while_stmt.condition > 1 {
-			this.error("invalid condition type: expected " + this.program.bool_type.signature() +
-					   " but got " + this.getASTNodeType(while_stmt.condition).signature(),
-					   this.getASTNodeSpan(while_stmt.condition)
-			);
+		const condition_type = this.getASTNodeType(while_stmt.condition);
+		if condition_type != this.program.bool_type && !condition_type.isUnknown() {
+			this.error("invalid condition type: expected " + this.program.bool_type.signature() + " but got " + condition_type.signature(), this.getASTNodeSpan(while_stmt.condition));
 			return this.getGarbageNode();
 		}
 
@@ -1768,7 +1766,12 @@ struct TCContext {
 			}
 		}
 
-		this.replaceASTNode(id, this.createGenericForStmt(id, iterator, iterator_cleanup, parsed_stmt, is_comptime, span));
+		const for_stmt = this.createGenericForStmt(id, iterator, iterator_cleanup, parsed_stmt, is_comptime, span);
+		if for_stmt is Garbage {
+			return this.getGarbageNode();
+		}
+
+		this.replaceASTNode(id, for_stmt);
 		return id;
 	}
 
@@ -1794,12 +1797,13 @@ struct TCContext {
 		const condition_cleanup = this.getCleanupCallsForCurrentScope();
 		this.popScope();
 
-		if condition <= 1 {
+		const condition_type = this.getASTNodeType(condition);
+		if condition_type.isUnknown() {
 			return Node::Garbage(Span(), Type::unknown(), false);
 		}
 
-		if this.getASTNodeType(condition) != this.program.bool_type {
-			this.error("invalid condition type: expected " + this.program.bool_type.signature() + " but got " + this.getASTNodeType(condition).signature(), this.getASTNodeSpan(condition));
+		if condition_type != this.program.bool_type {
+			this.error("invalid condition type: expected " + this.program.bool_type.signature() + " but got " + condition_type.signature(), this.getASTNodeSpan(condition));
 			return Node::Garbage(Span(), Type::unknown(), false);
 		}
 
