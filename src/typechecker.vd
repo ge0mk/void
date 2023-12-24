@@ -813,6 +813,7 @@ struct TCContext {
 		const function = this.program.createFunction(this.current_namespace, parsed_decl.signature.name, template_parameters, FunctionBody::Unchecked(parsed_decl));
 		function.span = parsed_decl.span;
 		function.signature_span = parsed_decl.signature.span;
+		function.is_comptime |= parsed_decl.is_comptime;
 
 		if add_to_unchecked_list {
 			this.current_namespace.addUncheckedFunction(function);
@@ -839,7 +840,7 @@ struct TCContext {
 
 		if function.body is Builtin {
 			function.parent_namespace.addUncheckedFunctionBody(function);
-			if this.program.options.codegen_asap {
+			if this.program.options.codegen_asap && !function.is_comptime {
 				if function.body is Builtin || this.program.options.codegen_inline_builtin_functions {
 					this.cg_context.codegenFunctionDecl(function);
 				}
@@ -969,7 +970,7 @@ struct TCContext {
 			}
 		}
 
-		if this.program.options.codegen_asap {
+		if this.program.options.codegen_asap && !function.is_comptime {
 			this.cg_context.codegenFunctionDecl(function);
 		}
 
@@ -1003,7 +1004,7 @@ struct TCContext {
 			}
 		}
 
-		if this.program.options.codegen_asap {
+		if this.program.options.codegen_asap && !function.is_comptime {
 			match function.body {
 				case Builtin: builtin_function -> {
 					if !builtin_function.isInlineable() || this.program.options.codegen_inline_builtin_functions {
@@ -3423,13 +3424,11 @@ struct TCContext {
 
 		this.checkActiveMembersForCall(arguments, function.name, span);
 
-		var should_be_comptime = false;
+		var should_be_comptime = function.is_comptime;
 		for i in 0u..arguments.size() {
+			should_be_comptime |= this.getASTNodeType(arguments[i]).decl.is_comptime;
 			if const variable = this.getASTNode(arguments[i]) as VarInvokeExpr {
-				if variable.is_comptime {
-					should_be_comptime = true;
-					break;
-				}
+				should_be_comptime |= variable.is_comptime;
 			}
 		}
 

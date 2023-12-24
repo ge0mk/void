@@ -773,6 +773,10 @@ struct Program {
 		parent_namespace.functions.append(function);
 		parent_namespace.functions_by_name[name].append(function);
 
+		if parent_namespace.linked_type.isAlive() {
+			function.is_comptime |= parent_namespace.linked_type.is_comptime;
+		}
+
 		if !(body is Unchecked) {
 			parent_namespace.addUncheckedFunction(function);
 		}
@@ -1132,6 +1136,8 @@ struct TypeDecl {
 	var template_parameters: List!<TemplateParameterDecl>;
 	var body: TypeBody;
 
+	var is_comptime: bool;
+
 	var parent_namespace: SharedHandle!<Namespace>;
 	var linked_namespace: SharedHandle!<Namespace>;
 
@@ -1366,6 +1372,8 @@ struct FunctionDecl {
 	var name: String;
 	var template_parameters: List!<TemplateParameterDecl>;
 	var body: FunctionBody;
+
+	var is_comptime: bool;
 
 	var parent_namespace: SharedHandle!<Namespace>;
 
