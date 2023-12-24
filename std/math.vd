@@ -14,3 +14,27 @@ template <T: type>
 func clamp(value: T, min: T, max: T) -> T {
 	return min!<T>(max!<T>(value, min), max);
 }
+
+template <T: type>
+func abs(value: T) -> T {
+	return value if value >= 0 else -value;
+}
+
+template <T: type>
+func gcd(a: T, b: T) -> T {
+	while b != 0 {
+		const t = b;
+		b = a % b;
+		a = t;
+	}
+	return abs!<T>(a);
+}
+
+template <T: type>
+func lcm(a: T, b: T) -> T {
+	if a == 0 || b == 0 {
+		return 0;
+	}
+
+	return abs!<T>(a) * abs!<T>(b) / gcd!<T>(a, b);
+}

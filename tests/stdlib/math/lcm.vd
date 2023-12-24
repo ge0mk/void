@@ -1,0 +1,11 @@
+import std/core;
+import std/math;
+
+func main() -> void {
+	assert(lcm!<int>(2, 5) == 10);
+	assert(lcm!<int>(4, 6) == 12);
+	assert(lcm!<int>(21, 6) == 42);
+	assert(lcm!<int>(3, 0) == 0);
+	assert(lcm!<int>(0, 3) == 0);
+	assert(lcm!<int>(0, 0) == 0);
+}

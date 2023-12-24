@@ -1,0 +1,19 @@
+import std/core;
+import std/math;
+
+func main() -> void {
+	assert(gcd!<int>(0, 0) == 0);
+	assert(gcd!<int>(3, 3) == 3);
+
+	assert(gcd!<int>(5, 0) == 5);
+	assert(gcd!<int>(0, 5) == 5);
+	assert(gcd!<int>(-5, 0) == 5);
+
+	assert(gcd!<int>(8, 4) == 4);
+	assert(gcd!<int>(8, -4) == 4);
+	assert(gcd!<int>(-8, 4) == 4);
+	assert(gcd!<int>(-8, -4) == 4);
+
+	assert(gcd!<int>(9, 28) == 1);
+	assert(gcd!<int>(42, 56) == 14);
+}
