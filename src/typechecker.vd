@@ -355,7 +355,7 @@ struct TCContext {
 		// parse
 		var parser = Parser(&&this.program, file, &tokens, &strings, &numbers);
 		while !parser.eof() {
-			file.top_level_nodes.append(parser.parseStmt());
+			file.top_level_nodes.append(parser.parseStmt(true));
 		}
 
 		if this.program.options.dump_ast {

@@ -183,7 +183,7 @@ struct Parser {
 		this.index++;
 	}
 
-	func parseStmt(this: &&Parser) -> uint {
+	func parseStmt(this: &&Parser, is_comptime: bool) -> uint {
 		defer discard this.accept(TokenType::Semicolon);
 		const start = this.currentSpan();
 
@@ -212,7 +212,7 @@ struct Parser {
 				this.index += 2;
 
 				this.pushScope(ParserScope::CaseStmt);
-				const body = this.parseStmt();
+				const body = this.parseStmt(false);
 				this.popScope();
 
 				return this.file.addASTNode(Node::ElseCaseStmt(body, start..this.previousSpan(), Type::unknown(), false));
@@ -223,7 +223,7 @@ struct Parser {
 			case KeywordIf -> match this.peek() {
 				case KeywordVar
 				| KeywordConst -> return this.parseIfVarStmt();
-				else -> return this.parseIfStmt();
+				else -> return this.parseIfStmt(is_comptime);
 			}
 			case KeywordWhile -> return this.parseWhileStmt();
 			case KeywordDo -> return this.parseDoWhileStmt();
@@ -238,7 +238,7 @@ struct Parser {
 			}
 			case KeywordDefer -> {
 				this.next();
-				const body = this.parseStmt();
+				const body = this.parseStmt(false);
 				return this.file.addASTNode(Node::DeferStmt(body, start..this.previousSpan(), Type::unknown(), false));
 			}
 			case KeywordThrow -> {
@@ -274,7 +274,7 @@ struct Parser {
 			case KeywordComptime -> match this.peek() {
 				case KeywordFunc
 				| KeywordOperator -> return this.parseDecl();
-				case KeywordIf -> return this.parseIfStmt();
+				case KeywordIf -> return this.parseIfStmt(true);
 				case KeywordWhile -> return this.parseWhileStmt();
 				case KeywordDo -> return this.parseDoWhileStmt();
 				case KeywordFor -> return this.parseForStmt();
@@ -695,7 +695,7 @@ struct Parser {
 
 		var children: List!<uint>;
 		while !this.accept(TokenType::RCurly) {
-			const child = this.parseStmt();
+			const child = this.parseStmt(false);
 			if child != this.file.getGarbageNode() && child != this.file.getEmptyNode() {
 				children.append(child);
 			}
@@ -737,10 +737,10 @@ struct Parser {
 		));
 	}
 
-	func parseIfStmt(this: &&Parser) -> uint {
+	func parseIfStmt(this: &&Parser, is_comptime: bool) -> uint {
 		const start = this.currentSpan();
 
-		const is_comptime = this.accept(TokenType::KeywordComptime);
+		is_comptime |= this.accept(TokenType::KeywordComptime);
 
 		if !this.expect(TokenType::KeywordIf) {
 			return this.file.getGarbageNode();
@@ -753,8 +753,7 @@ struct Parser {
 
 		var else_branch = this.file.getEmptyNode();
 		if this.accept(TokenType::KeywordElse) {
-			else_branch = this.parseStmt();
-			this.file.nodes[else_branch].is_comptime = is_comptime;
+			else_branch = this.parseStmt(is_comptime);
 		}
 
 		this.popScope();
@@ -901,7 +900,7 @@ struct Parser {
 		}
 
 		this.pushScope(ParserScope::CaseStmt);
-		const body = this.parseStmt();
+		const body = this.parseStmt(false);
 		this.popScope();
 
 		return this.file.addASTNode(Node::CaseStmt(
