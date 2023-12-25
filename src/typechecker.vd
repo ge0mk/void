@@ -763,7 +763,6 @@ struct TCContext {
 			}
 		}
 
-		this.program.createDefaultFunctions(Type(type, ReferenceKind::None));
 		if type.body is Enum || type.body is Variant {
 			type.id_type = this.checkTypeUsage(parsed_type.id_type, false);
 			if type.id_type.isUnknown() {
@@ -772,6 +771,8 @@ struct TCContext {
 
 			type.addContainedType(type.id_type);
 		}
+
+		this.program.createDefaultFunctions(Type(type, ReferenceKind::None));
 
 		for child in (this.getASTNode(parsed_type.body) as CompoundStmt).value() {
 			discard this.interpret(this.checkStmt(child));
@@ -4201,15 +4202,14 @@ struct TCContext {
 
 		match base.body {
 			case Builtin: builtin_function -> match builtin_function {
-				case Swap -> {
+				case PrimitiveOp: op -> {
 					const type = (template_parameters[0u] as Type).value();
 					instance = this.program.createFunction(
-						base.parent_namespace,
-						"swap",
+						base.parent_namespace, base.name,
 						List!<TemplateParameterDecl>(1u, TemplateParameterDecl("Type", this.program.any_concept, false, TemplateParameter::Type(type))),
-						List!<Type>(2u, type.varRef()),
-						this.program.void_type,
-						BuiltinFunction::Swap(type)
+						this.program.getPrimitiveOpParameterTypes(op, type),
+						this.program.getPrimitiveOpReturnType(op, type),
+						BuiltinFunction::PrimitiveOp(op, type)
 					);
 				}
 				case IntCast

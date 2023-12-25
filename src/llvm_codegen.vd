@@ -1124,7 +1124,7 @@ struct CGContext {
 						const member_type = decl.member_variables[i].type.decl;
 						sign = this.codegenCall(member_type.op_compare, parameters, ReturnKind::Value, signature_span);
 					} else {
-						sign = this.codegenInlineBuiltinFunctionCall(BuiltinFunction::PrimitiveOp(PrimitiveOp::UIntCmp, decl.member_variables[i].type), parameters);
+						sign = this.codegenInlineBuiltinFunctionCall(BuiltinFunction::PrimitiveOp(PrimitiveOp::Cmp, decl.member_variables[i].type), parameters);
 					}
 					cmp_values.append(sign);
 					cmp_blocks.append(LLVMGetInsertBlock(this.builder));
@@ -1236,69 +1236,81 @@ struct CGContext {
 		}
 	}
 
-	func codegenPrimitiveOp(this: &&CGContext, type: LLVMTypeRef, op: PrimitiveOp, parameters: &List!<LLVMValueRef>) -> LLVMValueRef {
+	func codegenPrimitiveOp(this: &&CGContext, type: Type, op: PrimitiveOp, parameters: &List!<LLVMValueRef>) -> LLVMValueRef {
+		const llvm_type = this.getType(type);
 		var lhs = parameters.at(0u) ?? LLVMValueRef();
 		var rhs = parameters.at(1u) ?? LLVMValueRef();
-		if op.isAssignment() && op.getOp() > Copy {
-			lhs = LLVMBuildLoad2(this.builder, type, lhs, "");
+		if op.isAssignment() && op.getOp() > Swap {
+			lhs = LLVMBuildLoad2(this.builder, llvm_type, lhs, "");
 		}
 
 		var result: LLVMValueRef;
 		match op.getOp() {
 			case NoOp -> {}
-			case ConstNull -> result = LLVMConstNull(type);
+			case ConstNull -> result = LLVMConstNull(llvm_type);
 			case Copy -> result = rhs;
-			case BitwiseEQ -> result = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntEQ, lhs, rhs, "");
-			case BitwiseNE -> result = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntNE, lhs, rhs, "");
-			case BitwiseAnd -> result = LLVMBuildAnd(this.builder, lhs, rhs, "");
-			case BitwiseOr -> result = LLVMBuildOr(this.builder, lhs, rhs, "");
-			case BitwiseXOr -> result = LLVMBuildXor(this.builder, lhs, rhs, "");
-			case BitwiseNot -> result = LLVMBuildNot(this.builder, lhs, "");
-			case BitwiseShl -> result = LLVMBuildShl(this.builder, lhs, rhs, "");
-			case BitwiseLShr -> result = LLVMBuildLShr(this.builder, lhs, rhs, "");
-			case BitwiseAShr -> result = LLVMBuildAShr(this.builder, lhs, rhs, "");
-			case IntAdd -> result = LLVMBuildAdd(this.builder, lhs, rhs, "");
-			case IntSub -> result = LLVMBuildSub(this.builder, lhs, rhs, "");
-			case IntMul -> result = LLVMBuildMul(this.builder, lhs, rhs, "");
-			case IntNeg -> result = LLVMBuildNeg(this.builder, lhs, "");
-			case IntInc -> result = LLVMBuildAdd(this.builder, lhs, LLVMConstInt(type, 1, false), "");
-			case IntDec -> result = LLVMBuildSub(this.builder, lhs, LLVMConstInt(type, 1, false), "");
-			case SIntLT -> result = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntSLT, lhs, rhs, "");
-			case SIntLE -> result = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntSLE, lhs, rhs, "");
-			case SIntGT -> result = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntSGT, lhs, rhs, "");
-			case SIntGE -> result = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntSGE, lhs, rhs, "");
-			case SIntCmp -> result = LLVMBuildSub(this.builder,
-				LLVMBuildZExt(this.builder, LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntSGT, lhs, rhs, ""), this.int_type, ""),
-				LLVMBuildZExt(this.builder, LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntSLT, lhs, rhs, ""), this.int_type, ""), ""
-			);
-			case SIntDiv -> result = LLVMBuildSDiv(this.builder, lhs, rhs, "");
-			case SIntMod -> result = LLVMBuildSRem(this.builder, lhs, rhs, "");
-			case UIntLT -> result = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntULT, lhs, rhs, "");
-			case UIntLE -> result = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntULE, lhs, rhs, "");
-			case UIntGT -> result = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntUGT, lhs, rhs, "");
-			case UIntGE -> result = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntUGE, lhs, rhs, "");
-			case UIntCmp -> result = LLVMBuildSub(this.builder,
+			case Swap -> {
+				const a = LLVMBuildLoad2(this.builder, llvm_type, parameters[0u], "");
+				const b = LLVMBuildLoad2(this.builder, llvm_type, parameters[1u], "");
+				discard LLVMBuildStore(this.builder, b, parameters[0u]);
+				discard LLVMBuildStore(this.builder, a, parameters[1u]);
+			}
+			case (PrimitiveOp::And)				-> result = LLVMBuildAnd(this.builder, lhs, rhs, "");
+			case (PrimitiveOp::Or)				-> result = LLVMBuildOr(this.builder, lhs, rhs, "");
+			case (PrimitiveOp::XOr)				-> result = LLVMBuildXor(this.builder, lhs, rhs, "");
+			case (PrimitiveOp::Not)				-> result = LLVMBuildNot(this.builder, lhs, "");
+			case (PrimitiveOp::Shl)				-> result = LLVMBuildShl(this.builder, lhs, rhs, "");
+			case (PrimitiveOp::Shr | Unsigned)	-> result = LLVMBuildLShr(this.builder, lhs, rhs, "");
+			case (PrimitiveOp::Shr | Signed)	-> result = LLVMBuildAShr(this.builder, lhs, rhs, "");
+			case (PrimitiveOp::Add | Unsigned)	-> result = LLVMBuildAdd(this.builder, lhs, rhs, "");
+			case (PrimitiveOp::Add | Signed)	-> result = LLVMBuildAdd(this.builder, lhs, rhs, "");
+			case (PrimitiveOp::Add | Float)		-> result = LLVMBuildFAdd(this.builder, lhs, rhs, "");
+			case (PrimitiveOp::Sub | Unsigned)	-> result = LLVMBuildSub(this.builder, lhs, rhs, "");
+			case (PrimitiveOp::Sub | Signed)	-> result = LLVMBuildSub(this.builder, lhs, rhs, "");
+			case (PrimitiveOp::Sub | Float)		-> result = LLVMBuildFSub(this.builder, lhs, rhs, "");
+			case (PrimitiveOp::Mul | Unsigned)	-> result = LLVMBuildMul(this.builder, lhs, rhs, "");
+			case (PrimitiveOp::Mul | Signed)	-> result = LLVMBuildMul(this.builder, lhs, rhs, "");
+			case (PrimitiveOp::Mul | Float)		-> result = LLVMBuildFMul(this.builder, lhs, rhs, "");
+			case (PrimitiveOp::Div | Unsigned)	-> result = LLVMBuildUDiv(this.builder, lhs, rhs, "");
+			case (PrimitiveOp::Div | Signed)	-> result = LLVMBuildSDiv(this.builder, lhs, rhs, "");
+			case (PrimitiveOp::Div | Float)		-> result = LLVMBuildFDiv(this.builder, lhs, rhs, "");
+			case (PrimitiveOp::Mod | Unsigned)	-> result = LLVMBuildURem(this.builder, lhs, rhs, "");
+			case (PrimitiveOp::Mod | Signed)	-> result = LLVMBuildSRem(this.builder, lhs, rhs, "");
+			case (PrimitiveOp::Mod | Float)		-> result = LLVMBuildFRem(this.builder, lhs, rhs, "");
+			case (PrimitiveOp::Neg)				-> result = LLVMBuildNeg(this.builder, lhs, "");
+			case (PrimitiveOp::Neg | Float)		-> result = LLVMBuildFNeg(this.builder, lhs, "");
+			case (PrimitiveOp::Inc)				-> result = LLVMBuildAdd(this.builder, lhs, LLVMConstInt(llvm_type, 1, false), "");
+			case (PrimitiveOp::Dec)				-> result = LLVMBuildSub(this.builder, lhs, LLVMConstInt(llvm_type, 1, false), "");
+			case (PrimitiveOp::EQ | Unsigned)	-> result = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntEQ, lhs, rhs, "");
+			case (PrimitiveOp::EQ | Signed)		-> result = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntEQ, lhs, rhs, "");
+			case (PrimitiveOp::EQ | Float)		-> result = LLVMBuildFCmp(this.builder, LLVMRealPredicate::LLVMRealOEQ, lhs, rhs, "");
+			case (PrimitiveOp::NE | Unsigned)	-> result = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntNE, lhs, rhs, "");
+			case (PrimitiveOp::NE | Signed)		-> result = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntNE, lhs, rhs, "");
+			case (PrimitiveOp::NE | Float)		-> result = LLVMBuildFCmp(this.builder, LLVMRealPredicate::LLVMRealONE, lhs, rhs, "");
+			case (PrimitiveOp::LT | Unsigned)	-> result = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntULT, lhs, rhs, "");
+			case (PrimitiveOp::LT | Signed)		-> result = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntSLT, lhs, rhs, "");
+			case (PrimitiveOp::LT | Float)		-> result = LLVMBuildFCmp(this.builder, LLVMRealPredicate::LLVMRealOLT, lhs, rhs, "");
+			case (PrimitiveOp::LE | Unsigned)	-> result = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntULE, lhs, rhs, "");
+			case (PrimitiveOp::LE | Signed)		-> result = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntSLE, lhs, rhs, "");
+			case (PrimitiveOp::LE | Float)		-> result = LLVMBuildFCmp(this.builder, LLVMRealPredicate::LLVMRealOLE, lhs, rhs, "");
+			case (PrimitiveOp::GT | Unsigned)	-> result = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntUGT, lhs, rhs, "");
+			case (PrimitiveOp::GT | Signed)		-> result = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntSGT, lhs, rhs, "");
+			case (PrimitiveOp::GT | Float)		-> result = LLVMBuildFCmp(this.builder, LLVMRealPredicate::LLVMRealOGT, lhs, rhs, "");
+			case (PrimitiveOp::GE | Unsigned)	-> result = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntUGE, lhs, rhs, "");
+			case (PrimitiveOp::GE | Signed)		-> result = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntSGE, lhs, rhs, "");
+			case (PrimitiveOp::GE | Float)		-> result = LLVMBuildFCmp(this.builder, LLVMRealPredicate::LLVMRealOGE, lhs, rhs, "");
+			case (PrimitiveOp::Cmp | Unsigned) -> result = LLVMBuildSub(this.builder,
 				LLVMBuildZExt(this.builder, LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntUGT, lhs, rhs, ""), this.int_type, ""),
 				LLVMBuildZExt(this.builder, LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntULT, lhs, rhs, ""), this.int_type, ""), ""
 			);
-			case UIntDiv -> result = LLVMBuildUDiv(this.builder, lhs, rhs, "");
-			case UIntMod -> result = LLVMBuildURem(this.builder, lhs, rhs, "");
-			case FloatEQ -> result = LLVMBuildFCmp(this.builder, LLVMRealPredicate::LLVMRealOEQ, lhs, rhs, "");
-			case FloatNE -> result = LLVMBuildFCmp(this.builder, LLVMRealPredicate::LLVMRealONE, lhs, rhs, "");
-			case FloatLT -> result = LLVMBuildFCmp(this.builder, LLVMRealPredicate::LLVMRealOLT, lhs, rhs, "");
-			case FloatLE -> result = LLVMBuildFCmp(this.builder, LLVMRealPredicate::LLVMRealOLE, lhs, rhs, "");
-			case FloatGT -> result = LLVMBuildFCmp(this.builder, LLVMRealPredicate::LLVMRealOGT, lhs, rhs, "");
-			case FloatGE -> result = LLVMBuildFCmp(this.builder, LLVMRealPredicate::LLVMRealOGE, lhs, rhs, "");
-			case FloatCmp -> result = LLVMBuildSub(this.builder,
+			case (PrimitiveOp::Cmp | Signed) -> result = LLVMBuildSub(this.builder,
+				LLVMBuildZExt(this.builder, LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntSGT, lhs, rhs, ""), this.int_type, ""),
+				LLVMBuildZExt(this.builder, LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntSLT, lhs, rhs, ""), this.int_type, ""), ""
+			);
+			case (PrimitiveOp::Cmp | Float) -> result = LLVMBuildSub(this.builder,
 				LLVMBuildZExt(this.builder, LLVMBuildFCmp(this.builder, LLVMRealPredicate::LLVMRealOGT, lhs, rhs, ""), this.int_type, ""),
 				LLVMBuildZExt(this.builder, LLVMBuildFCmp(this.builder, LLVMRealPredicate::LLVMRealOLT, lhs, rhs, ""), this.int_type, ""), ""
 			);
-			case FloatAdd -> result = LLVMBuildFAdd(this.builder, lhs, rhs, "");
-			case FloatSub -> result = LLVMBuildFSub(this.builder, lhs, rhs, "");
-			case FloatMul -> result = LLVMBuildFMul(this.builder, lhs, rhs, "");
-			case FloatDiv -> result = LLVMBuildFDiv(this.builder, lhs, rhs, "");
-			case FloatMod -> result = LLVMBuildFRem(this.builder, lhs, rhs, "");
-			case FloatNeg -> result = LLVMBuildFNeg(this.builder, lhs, "");
 			else -> panic("invalid primitive op");
 		}
 
@@ -1312,7 +1324,7 @@ struct CGContext {
 
 	func codegenInlineBuiltinFunctionCall(this: &&CGContext, function: BuiltinFunction, parameters: &List!<LLVMValueRef>) -> LLVMValueRef {
 		match function {
-			case PrimitiveOp: op -> return this.codegenPrimitiveOp(this.getType(function.base_type), op, parameters);
+			case PrimitiveOp: op -> return this.codegenPrimitiveOp(function.base_type, op, parameters);
 			case PointerToRef -> return parameters[0u];	// reference & pointer types are the same in llvm
 			case RefToPointer -> return parameters[0u];	// reference & pointer types are the same in llvm
 			case PointerCast -> return parameters[0u];	// all pointer types are the same in llvm
@@ -1350,14 +1362,6 @@ struct CGContext {
 				} else {
 					return result;
 				}
-			}
-
-			case Swap -> {
-				const a = LLVMBuildLoad2(this.builder, this.getType(function.base_type), parameters[0u], "");
-				const b = LLVMBuildLoad2(this.builder, this.getType(function.base_type), parameters[1u], "");
-				discard LLVMBuildStore(this.builder, b, parameters[0u]);
-				discard LLVMBuildStore(this.builder, a, parameters[1u]);
-				return LLVMValueRef();
 			}
 
 			case IntCast: target -> {

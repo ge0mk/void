@@ -1620,6 +1620,7 @@ struct Type {
 		match this.decl.body {
 			case Int
 			| Float -> return true;
+			case Enum -> return this.decl.id_type.isSigned();
 			else -> return false;
 		}
 	}
@@ -1770,59 +1771,38 @@ enum PrimitiveOp {
 
 	case ConstNull;
 	case Copy;
+	case Swap;
 
-	case BitwiseEQ;
-	case BitwiseNE;
+	case And;
+	case Or;
+	case XOr;
+	case Not;
+	case Shl;
+	case Shr;
 
-	case BitwiseAnd;
-	case BitwiseOr;
-	case BitwiseXOr;
-	case BitwiseNot;
-	case BitwiseShl;
-	case BitwiseLShr;
-	case BitwiseAShr;
+	case Add;
+	case Sub;
+	case Mul;
+	case Div;
+	case Mod;
+	case Neg;
+	case Inc;
+	case Dec;
 
-	case IntAdd;
-	case IntSub;
-	case IntMul;
-	case IntNeg;
-	case IntInc;
-	case IntDec;
+	case EQ;
+	case NE;
+	case LT;
+	case LE;
+	case GT;
+	case GE;
+	case Cmp;
 
-	case SIntLT;
-	case SIntLE;
-	case SIntGT;
-	case SIntGE;
-	case SIntCmp;
+	// flags
+	case Unsigned = 0;
+	case Signed = 128;
+	case Float = 256;
 
-	case SIntDiv;
-	case SIntMod;
-
-	case UIntLT;
-	case UIntLE;
-	case UIntGT;
-	case UIntGE;
-	case UIntCmp;
-
-	case UIntDiv;
-	case UIntMod;
-
-	case FloatEQ;
-	case FloatNE;
-	case FloatLT;
-	case FloatLE;
-	case FloatGT;
-	case FloatGE;
-	case FloatCmp;
-
-	case FloatAdd;
-	case FloatSub;
-	case FloatMul;
-	case FloatDiv;
-	case FloatMod;
-	case FloatNeg;
-
-	case Assign = 64;
+	case Assign = 512;
 
 	operator |(lhs: PrimitiveOp, rhs: PrimitiveOp) -> PrimitiveOp = default;
 	operator &(lhs: PrimitiveOp, rhs: PrimitiveOp) -> PrimitiveOp = default;
@@ -1832,7 +1812,7 @@ enum PrimitiveOp {
 	}
 
 	func getOp(op: PrimitiveOp) -> PrimitiveOp {
-		return ((op as uint) & 63u) as PrimitiveOp;
+		return ((op as uint) & (PrimitiveOp::Assign as uint - 1)) as PrimitiveOp;
 	}
 }
 
@@ -1851,8 +1831,6 @@ variant BuiltinFunction {
 	case PointerOpIndex;
 
 	case FunctionPointerCall;
-
-	case Swap;
 
 	// base type is source type, attached type target
 	case IntCast: Type;
@@ -1931,7 +1909,6 @@ variant BuiltinFunction {
 			| PointerOffset
 			| PointerOpIndex
 			| FunctionPointerCall
-			| Swap
 			| IntCast
 			| FloatCast
 			| IntToFloat
