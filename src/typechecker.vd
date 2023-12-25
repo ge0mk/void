@@ -1890,7 +1890,8 @@ struct TCContext {
 
 				this.replaceASTNode(id, Node::IntegerLiteralExpr(pattern.id, pattern.span, match_type_decl.id_type, false));
 			} else {
-				id = this.checkNode(id, this.match_type, false);
+				id = this.checkNode(id, this.match_type, true);
+				this.replaceASTNode(id, this.comptimeValueToASTNode(this.interpret(id), this.getASTNodeSpan(id)));
 				if id > 1 && this.getASTNodeType(id) != this.match_type {
 					this.error("pattern has invalid type: expected '" + this.match_type.signature() + "' but got '" + this.getASTNodeType(id).signature() + "'", this.getASTNodeSpan(id));
 					continue;

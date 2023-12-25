@@ -1,0 +1,10 @@
+import std/core;
+
+func main() -> void {
+	var x = 0;
+	match 5 {
+		case (4 | 1) -> x = 3;
+		else -> x = 10;
+	}
+	assert(x == 3);
+}

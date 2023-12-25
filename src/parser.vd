@@ -24,6 +24,7 @@ enum ParserScope {
 	case ForStmt;
 	case MatchExpr;
 	case CaseStmt;
+	case CaseStmtPattern;
 }
 
 struct Parser {
@@ -45,6 +46,8 @@ struct Parser {
 		this.tokens := &tokens;
 		this.strings := &strings;
 		this.numbers := &numbers;
+
+		this.scope_stack := (1u, ParserScope::Root);
 	}
 
 	func constructor(this: &&Parser, other: Parser) -> void = default;
@@ -878,10 +881,12 @@ struct Parser {
 			return this.file.getGarbageNode();
 		}
 
+		this.pushScope(ParserScope::CaseStmtPattern);
 		var patterns: List!<uint>;
 		do {
 			patterns.append(this.parseHighPrecedenceExpr());
 		} while this.accept(TokenType::Pipe);
+		this.popScope();
 
 		var capture_name = "";
 		var capture_kind = ReferenceKind::None;
@@ -1345,7 +1350,7 @@ struct Parser {
 			}
 		}
 
-		if !is_named {
+		if !is_named && this.scope_stack.last().value() != CaseStmtPattern {
 			if this.accept(TokenType::Arrow) {
 				var parameter_types: List!<uint>;
 				for e in elements {
