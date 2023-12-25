@@ -888,18 +888,20 @@ struct TCContext {
 
 		this.current_namespace.addUncheckedFunctionBody(function);
 
-		for sibling in this.current_namespace.functions_by_name[function.name] {
-			if sibling == function {
-				continue;
-			}
+		if function.name != "" {
+			for sibling in this.current_namespace.functions_by_name[function.name] {
+				if sibling == function {
+					continue;
+				}
 
-			if sibling.template_parameters != function.template_parameters {
-				continue;
-			}
+				if sibling.template_parameters != function.template_parameters {
+					continue;
+				}
 
-			if sibling.parameter_types == function.parameter_types {
-				this.error("function redeclared with identical parameter types", function.signature_span);
-				this.info("previously declared here: ", sibling.signature_span);
+				if sibling.parameter_types == function.parameter_types {
+					this.error("function redeclared with identical parameter types", function.signature_span);
+					this.info("previously declared here: ", sibling.signature_span);
+				}
 			}
 		}
 
