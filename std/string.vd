@@ -2,7 +2,6 @@ import std/core;
 import std/list;
 import std/math;
 
-import std/libc/math;
 import std/libc/stdlib;
 import std/libc/string;
 
@@ -593,7 +592,7 @@ struct ParsedNumber {
 	}
 
 	func toFloat(this: &ParsedNumber) -> f64 {
-		return this.significant as f64 * pow(this.base as f64, this.exponent as f64);
+		return this.significant as f64 * pow!<f64>(this.base as f64, this.exponent as f64);
 	}
 
 	func isInteger(this: &ParsedNumber) -> bool {

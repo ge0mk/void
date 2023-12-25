@@ -1779,6 +1779,8 @@ enum PrimitiveOp {
 	case Not;
 	case Shl;
 	case Shr;
+	case Rotl;
+	case Rotr;
 
 	case Add;
 	case Sub;
@@ -1796,6 +1798,55 @@ enum PrimitiveOp {
 	case GT;
 	case GE;
 	case Cmp;
+
+	case Abs;
+	case Sign;
+
+	case Min;
+	case Max;
+	case Clamp;	// clamp(x, l, h) == min(max(x, l), h);
+	case Lerp;	// lerp(x, y, a) == x * (1 - a) + y * a == x + (y - x) * a
+
+	case BitwiseReverse;
+	case BytewiseReverse;
+	case PopCount;
+	case CountLeadingZeros;
+	case CountTrailingZeros;
+
+	case Step;
+	case SmoothStep;
+
+	case Sqrt;
+	case ISqrt;
+	case Pow;
+	case Exp;
+	case Exp2;
+	case Exp10;
+	case Log;
+	case Log2;
+	case Log10;
+
+	case Floor;
+	case Ceil;
+	case Fract;
+	case Round;
+	case RoundEven;
+
+	case Sin;
+	case Cos;
+	case Tan;
+	case ASin;
+	case ACos;
+	case ATan;
+	case SinH;
+	case CosH;
+	case TanH;
+	case ASinH;
+	case ACosH;
+	case ATanH;
+
+	case IsInf;
+	case IsNan;
 
 	// flags
 	case Unsigned = 0;

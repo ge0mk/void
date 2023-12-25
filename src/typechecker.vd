@@ -3,7 +3,6 @@ import std/box;
 import std/file;
 import std/format;
 import std/io;
-import std/libc/math;
 import std/list;
 import std/map;
 import std/math;
@@ -2488,14 +2487,14 @@ struct TCContext {
 				if size == 0 {
 					number_of_possible_cases = -1 as uint; // ptr sized max int
 				} else {
-					number_of_possible_cases = pow(2.0, size as f64) as uint;
+					number_of_possible_cases = pow!<f64>(2.0, size as f64) as uint;
 				}
 			}
 			case UInt: size -> {
 				if size == 0 {
 					number_of_possible_cases = -1 as uint; // ptr sized max int
 				} else {
-					number_of_possible_cases = pow(2.0, size as f64) as uint;
+					number_of_possible_cases = pow!<f64>(2.0, size as f64) as uint;
 				}
 			}
 			case Enum -> number_of_possible_cases = value_type_decl.enum_cases.size();
@@ -4204,12 +4203,21 @@ struct TCContext {
 			case Builtin: builtin_function -> match builtin_function {
 				case PrimitiveOp: op -> {
 					const type = (template_parameters[0u] as Type).value();
+					var op2 = op;
+					if op > Cmp {
+						if type.isIntType() && type.isSigned() {
+							op2 = op2 | Signed;
+						} else if type.isFloatType() {
+							op2 = op2 | Float;
+						}
+					}
+
 					instance = this.program.createFunction(
 						base.parent_namespace, base.name,
 						List!<TemplateParameterDecl>(1u, TemplateParameterDecl("Type", this.program.any_concept, false, TemplateParameter::Type(type))),
 						this.program.getPrimitiveOpParameterTypes(op, type),
 						this.program.getPrimitiveOpReturnType(op, type),
-						BuiltinFunction::PrimitiveOp(op, type)
+						BuiltinFunction::PrimitiveOp(op2, type)
 					);
 				}
 				case IntCast

@@ -1,0 +1,15 @@
+import std/core;
+import std/math;
+
+func main() -> void {
+	assert(lerp!<int>(3, 5, -2) == -1);
+	assert(lerp!<int>(3, 5, -1) == 1);
+	assert(lerp!<int>(3, 5, 0) == 3);
+	assert(lerp!<int>(3, 5, 1) == 5);
+	assert(lerp!<int>(3, 5, 2) == 7);
+	assert(lerp!<int>(3, 5, 3) == 9);
+
+	assert(abs!<f64>(lerp!<f64>(1.0, 2.0, 0.5) - 1.5) < 0.00001);
+	assert(abs!<f64>(lerp!<f64>(1.0, 2.0, -0.5) - 0.5) < 0.00001);
+	assert(abs!<f64>(lerp!<f64>(1.0, 2.0, 1.5) - 2.5) < 0.00001);
+}

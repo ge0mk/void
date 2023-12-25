@@ -1,24 +1,6 @@
 import std/core;
 
-template <T: type>
-func min(a: T, b: T) -> T {
-	return a if a < b else b;
-}
-
-template <T: type>
-func max(a: T, b: T) -> T {
-	return a if a > b else b;
-}
-
-template <T: type>
-func clamp(value: T, min: T, max: T) -> T {
-	return min!<T>(max!<T>(value, min), max);
-}
-
-template <T: type>
-func abs(value: T) -> T {
-	return value if value >= 0 else -value;
-}
+pragma generate_std_math_builtins;
 
 template <T: type>
 func gcd(a: T, b: T) -> T {

@@ -1,0 +1,10 @@
+import std/core;
+import std/math;
+
+func main() -> void {
+	assert(clamp!<int>(-5, 0, 10) ==  0);
+	assert(clamp!<int>( 0, 0, 10) ==  0);
+	assert(clamp!<int>( 5, 0, 10) ==  5);
+	assert(clamp!<int>(10, 0, 10) == 10);
+	assert(clamp!<int>(15, 0, 10) == 10);
+}

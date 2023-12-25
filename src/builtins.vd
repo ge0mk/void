@@ -83,6 +83,14 @@ func createBinaryFunction(program: &&Program, type_namespace: SharedHandle!<Name
 	return program.createFunction(type_namespace, name, parameter_types, return_type, body);
 }
 
+func createTernaryFunction(program: &&Program, type_namespace: SharedHandle!<Namespace>, name: String, first: Type, second: Type, third: Type, return_type: Type, body: BuiltinFunction) -> SharedHandle!<FunctionDecl> {
+	var parameter_types: List!<Type>;
+	parameter_types.append(first);
+	parameter_types.append(second);
+	parameter_types.append(third);
+	return program.createFunction(type_namespace, name, parameter_types, return_type, body);
+}
+
 func createBasicFunctions(program: &&Program, type: Type, type_namespace: SharedHandle!<Namespace>) -> void {
 	type.decl.default_constructor = program.createUnaryFunction(type_namespace, "constructor", type.varRef(), program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::ConstNull | Assign, type));
 	type.decl.copy_constructor = program.createBinaryFunction(type_namespace, "constructor", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
@@ -109,6 +117,13 @@ func createBitwiseOperators(program: &&Program, type: Type, type_namespace: Shar
 
 	discard program.createBinaryFunction(type_namespace, "operator <<", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Shl, type));
 	discard program.createBinaryFunction(type_namespace, "operator >>", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Shr | sign_flag, type));
+
+	discard program.createBinaryFunction(type_namespace, "rotl", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Rotl, type));
+	discard program.createBinaryFunction(type_namespace, "rotr", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Rotr, type));
+
+	discard program.createUnaryFunction(type_namespace, "popcnt", type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::PopCount, type));
+	discard program.createUnaryFunction(type_namespace, "cntlz", type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::CountLeadingZeros, type));
+	discard program.createUnaryFunction(type_namespace, "cnttz", type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::CountTrailingZeros, type));
 
 	discard program.createBinaryFunction(type_namespace, "operator &=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::And | Assign, type));
 	discard program.createBinaryFunction(type_namespace, "operator |=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Or | Assign, type));
@@ -708,10 +723,19 @@ func getPrimitiveOpParameterTypes(program: &Program, op: PrimitiveOp, base_type:
 	match op.getOp() {
 		case NoOp | ConstNull -> {};
 		case Swap -> result = List!<Type>(2u, base_type.varRef());
-		case Copy | Neg | Inc | Dec -> result = List!<Type>(1u, base_type);
-		case And | Or | XOr | Not | Shl | Shr
+		case Copy | Neg | Inc | Dec | Abs | Sign
+		| BitwiseReverse | BytewiseReverse
+		| PopCount | CountLeadingZeros | CountTrailingZeros
+		| Sqrt | ISqrt | Exp | Exp2 | Exp10 | Log | Log2 | Log10
+		| Floor | Ceil | Fract | Round | RoundEven
+		| Sin | Cos | Tan | ASin | ACos | ATan
+		| SinH | CosH | TanH | ASinH | ACosH | ATanH
+		| IsInf | IsNan -> result = List!<Type>(1u, base_type);
+		case And | Or | XOr | Not | Shl | Shr | Rotl | Rotr
 		| Add | Sub | Mul | Div | Mod
-		| EQ | NE | LT | LE | GT | GE | Cmp -> result = List!<Type>(2u, base_type);
+		| EQ | NE | LT | LE | GT | GE | Cmp
+		| Min | Max | Pow | Step -> result = List!<Type>(2u, base_type);
+		case Clamp | Lerp | SmoothStep -> result = List!<Type>(3u, base_type);
 		else -> panic("invalid primitive op");
 	}
 
@@ -726,10 +750,20 @@ func getPrimitiveOpReturnType(program: &Program, op: PrimitiveOp, base_type: Typ
 	match op.getOp() {
 		case NoOp | Swap -> return program.void_type;
 		case ConstNull | Copy
-		| And | Or | XOr | Not | Shl | Shr
-		| Add | Sub | Mul | Div | Mod | Neg | Inc | Dec -> return base_type;
-		case EQ | NE | LT | LE | GT | GE -> return program.bool_type;
-		case Cmp -> return program.int_type;
+		| And | Or | XOr | Not | Shl | Shr | Rotl | Rotr
+		| Add | Sub | Mul | Div | Mod | Neg | Inc | Dec
+		| Abs
+		| Min | Max | Clamp | Lerp
+		| BitwiseReverse | BytewiseReverse
+		| PopCount | CountLeadingZeros | CountTrailingZeros
+		| Step | SmoothStep
+		| Sqrt | ISqrt | Pow | Exp | Exp2 | Exp10 | Log | Log2 | Log10
+		| Floor | Ceil | Fract | Round | RoundEven
+		| Sin | Cos | Tan | ASin | ACos | ATan
+		| SinH | CosH | TanH | ASinH | ACosH | ATanH -> return base_type;
+		case EQ | NE | LT | LE | GT | GE
+		| IsInf | IsNan -> return program.bool_type;
+		case Cmp | Sign -> return program.int_type;
 		else -> panic("invalid primitive op");
 	}
 }

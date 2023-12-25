@@ -1,0 +1,46 @@
+import std/core;
+
+func main() -> void {
+	const isize = sizeOf!<int>() as int * 8;
+
+	assert((1 & 2) == 0);
+	assert((2 & 2) == 2);
+	assert((3 & 2) == 2);
+
+	assert((1 | 1) == 1);
+	assert((1 | 2) == 3);
+
+	assert((1 ^ 1) == 0);
+	assert((1 ^ 2) == 3);
+
+	assert((1 << 2) == 4);
+	assert((3 << 2) == 12);
+
+	assert((4 >> 2) == 1);
+	assert((12 >> 2) == 3);
+
+	assert(~0 == -1);
+	assert(~1 == -2);
+	assert(~(-1) == 0);
+
+	assert(1.rotl(1) == 2);
+	assert((1<<(isize - 1)).rotl(1) == 1);
+	assert((3<<(isize - 2)).rotl(1) == ((1<<(isize - 1)) | 1));
+
+	assert(1.rotr(1) == (1<<(isize - 1)));
+	assert(3.rotr(1) == ((1<<(isize - 1)) | 1));
+	assert(1.rotr(3) == (1<<(isize - 3)));
+
+	assert(1.popcnt() == 1);
+	assert(3.popcnt() == 2);
+	assert(127.popcnt() == 7);
+	assert(128.popcnt() == 1);
+	assert((~0).popcnt() == isize);
+
+	assert(1.cntlz() == (isize - 1));
+	assert((1<<(isize - 1)).cntlz() == 0);
+	assert((1<<(isize - 4)).cntlz() == 3);
+
+	assert(1.cnttz() == 0);
+	assert(4.cnttz() == 2);
+}

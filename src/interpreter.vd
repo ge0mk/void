@@ -316,7 +316,7 @@ struct Interpreter {
 			case (PrimitiveOp::Cmp | Unsigned)	-> yield Value::Integer((lhs_int <=> rhs_int), this.program.int_type);
 			case (PrimitiveOp::Cmp | Signed)	-> yield Value::Integer((lhs_uint <=> rhs_uint), this.program.int_type);
 			case (PrimitiveOp::Cmp | Float)		-> yield Value::Integer((lhs_float <=> rhs_float), this.program.int_type);
-			else -> panic("invalid primitive op");
+			else -> return Value::Undefined;
 		}
 
 		if op.isAssignment() {

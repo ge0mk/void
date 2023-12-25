@@ -192,6 +192,33 @@ func main(args: Range!<String, false>) -> int {
 		program.createArrayTypeTemplate(ns);
 	});
 
+	typechecker.registerPragma("generate_std_math_builtins", func (this: &&TCContext, program: &&Program, ns: SharedHandle!<Namespace>, span: Span) -> void {
+		const one_type_template_parameters = List!<TemplateParameterDecl>(1u, TemplateParameterDecl("Type", program.any_concept, false));
+
+		discard program.createFunction(ns, "abs", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Abs, Type::unknown()));
+		discard program.createFunction(ns, "sign", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Sign, Type::unknown()));
+
+		discard program.createFunction(ns, "min", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Min, Type::unknown()));
+		discard program.createFunction(ns, "max", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Max, Type::unknown()));
+		discard program.createFunction(ns, "clamp", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Clamp, Type::unknown()));
+		discard program.createFunction(ns, "lerp", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Lerp, Type::unknown()));
+
+		discard program.createFunction(ns, "sqrt", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Sqrt, Type::unknown()));
+		discard program.createFunction(ns, "isqrt", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::ISqrt, Type::unknown()));
+		discard program.createFunction(ns, "pow", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Pow, Type::unknown()));
+		discard program.createFunction(ns, "exp", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Exp, Type::unknown()));
+		discard program.createFunction(ns, "exp2", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Exp2, Type::unknown()));
+		discard program.createFunction(ns, "exp10", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Exp10, Type::unknown()));
+		discard program.createFunction(ns, "log", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Log, Type::unknown()));
+		discard program.createFunction(ns, "log2", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Log2, Type::unknown()));
+		discard program.createFunction(ns, "log10", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Log10, Type::unknown()));
+
+		discard program.createFunction(ns, "floor", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Floor, Type::unknown()));
+		discard program.createFunction(ns, "ceil", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Ceil, Type::unknown()));
+		discard program.createFunction(ns, "fract", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Fract, Type::unknown()));
+		discard program.createFunction(ns, "round", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Round, Type::unknown()));
+	});
+
 	const root_module_desc = ImportedModule(1u, program.options.root_module_path, program.options.program_name);
 	const module = typechecker.loadModule(root_module_desc) else: error {
 		typechecker.error("couldn't load module " + root_module_desc.path + ": " + String::fromErrorCode(error), Span());

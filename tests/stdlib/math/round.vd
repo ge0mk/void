@@ -1,0 +1,21 @@
+import std/core;
+import std/math;
+
+func main() -> void {
+	assert(floor!<f64>(0.5) == 0.0);
+	assert(abs!<f64>(floor!<f64>(1.5) - 1.0) < 0.0001);
+	assert(abs!<f64>(floor!<f64>(-1.5) - -2.0) < 0.0001);
+
+	assert(ceil!<f64>(-0.5) == 0.0);
+	assert(abs!<f64>(ceil!<f64>(1.5) - 2.0) < 0.0001);
+	assert(abs!<f64>(ceil!<f64>(-1.5) - -1.0) < 0.0001);
+
+	assert(abs!<f64>(fract!<f64>(0.5) - 0.5) < 0.0001);
+	assert(abs!<f64>(fract!<f64>(1.5) - 0.5) < 0.0001);
+	assert(abs!<f64>(fract!<f64>(-0.5) - 0.5) < 0.0001);
+	assert(abs!<f64>(fract!<f64>(-1.5) - 0.5) < 0.0001);
+
+	assert(round!<f64>(0.2) == 0.0);
+	assert(abs!<f64>(round!<f64>(0.5) - 1.0) < 0.0001);
+	assert(abs!<f64>(round!<f64>(0.8) - 1.0) < 0.0001);
+}
