@@ -383,6 +383,30 @@ struct CompilationUnit {
 				this.dump(&&out, expr.destination, false);
 				this.dump(&&out, expr.value, true);
 			}
+			case VectorGetElementExpr: expr -> {
+				this.dump(&&out, expr.vector, false);
+				this.dump(&&out, expr.index, true);
+			}
+			case VectorSetElementExpr: expr -> {
+				this.dump(&&out, expr.vector, false);
+				this.dump(&&out, expr.index, false);
+				this.dump(&&out, expr.value, true);
+			}
+			case VectorGetSwizzleExpr: expr -> {
+				for i in expr.indices {
+					out.value(format(i));
+				}
+
+				this.dump(&&out, expr.vector, true);
+			}
+			case VectorSetSwizzleExpr: expr -> {
+				for i in expr.indices {
+					out.value(format(i));
+				}
+
+				this.dump(&&out, expr.vector, false);
+				this.dump(&&out, expr.value, true);
+			}
 		}
 
 		out.pop();
@@ -1215,6 +1239,11 @@ struct TypeDecl {
 			}
 			case Function -> out.push("FunctionTypeDecl", is_last);
 			case Tuple -> out.push("TupleTypeDecl", is_last);
+			case Vector: vector_type -> {
+				out.push("VectorTypeDecl", is_last);
+				out.value(vector_type.element_type.signature());
+				out.value(format(vector_type.size));
+			}
 			case Array: array_type -> {
 				out.push("ArrayTypeDecl", is_last);
 				out.value(array_type.element_type.signature());
@@ -1597,7 +1626,7 @@ struct Type {
 		return this.decl.isIncompleteTemplate();
 	}
 
-	func isIntType(this: &Type) -> bool {
+	func isIntType(this: &Type, allow_vector_types: bool) -> bool {
 		if this.decl.isEmpty() {
 			return false;
 		}
@@ -1608,11 +1637,12 @@ struct Type {
 			| Int
 			| UInt
 			| Enum -> return true;
+			case Vector: vector_type -> return vector_type.element_type.isIntType(allow_vector_types) && allow_vector_types;
 			else -> return false;
 		}
 	}
 
-	func isSigned(this: &Type) -> bool {
+	func isSigned(this: &Type, allow_vector_types: bool) -> bool {
 		if this.decl.isEmpty() {
 			return false;
 		}
@@ -1620,18 +1650,20 @@ struct Type {
 		match this.decl.body {
 			case Int
 			| Float -> return true;
-			case Enum -> return this.decl.id_type.isSigned();
+			case Enum -> return this.decl.id_type.isSigned(allow_vector_types);
+			case Vector: vector_type -> return vector_type.element_type.isSigned(allow_vector_types) && allow_vector_types;
 			else -> return false;
 		}
 	}
 
-	func isFloatType(this: &Type) -> bool {
+	func isFloatType(this: &Type, allow_vector_types: bool) -> bool {
 		if this.decl.isEmpty() {
 			return false;
 		}
 
 		match this.decl.body {
 			case Float -> return true;
+			case Vector: vector_type -> return vector_type.element_type.isFloatType(allow_vector_types) && allow_vector_types;
 			else -> return false;
 		}
 	}
@@ -1641,10 +1673,7 @@ struct Type {
 			return false;
 		}
 
-		match this.decl.body {
-			case Pointer -> return true;
-			else -> return false;
-		}
+		return this.decl.body is Pointer;
 	}
 
 	func isConstPtrType(this: &Type) -> bool {
@@ -1656,6 +1685,14 @@ struct Type {
 			case Pointer: pointer_type -> return !pointer_type.is_mutable;
 			else -> return false;
 		}
+	}
+
+	func isVectorType(this: &Type) -> bool {
+		if this.decl.isEmpty() {
+			return false;
+		}
+
+		return this.decl.body is Vector;
 	}
 
 	func isPrimitive(this: &Type) -> bool {
@@ -1676,6 +1713,7 @@ struct Type {
 			| Float
 			| Pointer
 			| Function
+			| Vector
 			| Enum -> return true;
 			case Array: array_type -> return array_type.element_type.isPrimitive();
 			else -> return false;
@@ -1743,6 +1781,7 @@ variant TypeBody {
 
 	case Tuple;
 
+	case Vector: (element_type: Type, size: uint);
 	case Array: (element_type: Type, size: uint);
 
 	case Range: (element_type: Type, is_mutable: bool);
@@ -1848,12 +1887,21 @@ enum PrimitiveOp {
 	case IsInf;
 	case IsNan;
 
+	case VectorEQ;
+	case VectorNE;
+	case VectorReduceAdd;
+	case VectorReduceMul;
+	case VectorReduceMin;
+	case VectorReduceMax;
+	case VectorDotProduct;
+
 	// flags
 	case Unsigned = 0;
 	case Signed = 128;
 	case Float = 256;
 
 	case Assign = 512;
+	case RHSToVector = 1024;
 
 	operator |(lhs: PrimitiveOp, rhs: PrimitiveOp) -> PrimitiveOp = default;
 	operator &(lhs: PrimitiveOp, rhs: PrimitiveOp) -> PrimitiveOp = default;
@@ -2073,6 +2121,11 @@ variant Node {
 	case MemberVarInvokeExpr: MemberVarInvokeExpr;
 	case ShallowCopyExpr: ShallowCopyExpr;
 
+	case VectorGetElementExpr: (vector: uint, index: uint);
+	case VectorSetElementExpr: (vector: uint, index: uint, value: uint);
+	case VectorGetSwizzleExpr: (vector: uint, indices: List!<uint>);
+	case VectorSetSwizzleExpr: (vector: uint, indices: List!<uint>, value: uint);
+
 	func name(this: &Node) -> String {
 		match this {
 			case Empty -> return "Empty";
@@ -2131,6 +2184,10 @@ variant Node {
 			case DereferenceExpr -> return "DereferenceExpr";
 			case MemberVarInvokeExpr -> return "MemberVarInvokeExpr";
 			case ShallowCopyExpr -> return "ShallowCopyExpr";
+			case VectorGetElementExpr -> return "VectorGetElementExpr";
+			case VectorSetElementExpr -> return "VectorSetElementExpr";
+			case VectorGetSwizzleExpr -> return "VectorGetSwizzleExpr";
+			case VectorSetSwizzleExpr -> return "VectorSetSwizzleExpr";
 		}
 	}
 

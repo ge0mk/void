@@ -1,0 +1,10 @@
+import std/core;
+import std/math;
+
+func main() -> void {
+	var a = Vector!<int, 4>(1, 2, 3, 4);
+	assert(a[0u] == 1);
+	assert(a[1u] == 2);
+	assert(a[2u] == 3);
+	assert(a[3u] == 4);
+}

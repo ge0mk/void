@@ -176,6 +176,7 @@ struct CGContext {
 				else -> this.error("invalid size for float type: " + format(bits), type.span);
 			}
 			case Pointer | Function -> type.llvm_type = this.ptr_type;
+			case Vector: vector_type -> type.llvm_type = LLVMVectorType(this.getType(vector_type.element_type), vector_type.size);
 			case Array: array_type -> type.llvm_type = LLVMArrayType(this.getType(array_type.element_type), array_type.size);
 			case Range | RangeIterator | NumericRange | NumericIterator | Tuple | Struct -> {
 				type.llvm_type = LLVMStructCreateNamed(this.llvm_context, name);
@@ -288,11 +289,15 @@ struct CGContext {
 					LLVMDIFlags::LLVMDIFlagZero
 				), size_in_bits, alignment_in_bits, 0u, di_name);
 			}
+			case Vector: vector_type -> {
+				type.llvm_di = LLVMDIBuilderCreateReplaceableCompositeType(this.di_builder, DWARFTag::Tag_unspecified_type, di_name, parent_namespace, di_file, line, 0u32, size_in_bits, alignment_in_bits, LLVMDIFlags::LLVMDIFlagZero, type.signature());
+				const di_type = LLVMDIBuilderCreateVectorType(this.di_builder, vector_type.size, alignment_in_bits, this.getDIType(vector_type.element_type), List!<LLVMMetadataRef>());
+				LLVMMetadataReplaceAllUsesWith(type.llvm_di, di_type);
+				type.llvm_di = di_type;
+			}
 			case Array: array_type -> {
 				type.llvm_di = LLVMDIBuilderCreateReplaceableCompositeType(this.di_builder, DWARFTag::Tag_unspecified_type, di_name, parent_namespace, di_file, line, 0u32, size_in_bits, alignment_in_bits, LLVMDIFlags::LLVMDIFlagZero, type.signature());
-
 				const di_type = LLVMDIBuilderCreateArrayType(this.di_builder, array_type.size, alignment_in_bits, this.getDIType(array_type.element_type), List!<LLVMMetadataRef>());
-
 				LLVMMetadataReplaceAllUsesWith(type.llvm_di, di_type);
 				type.llvm_di = di_type;
 			}
@@ -1238,10 +1243,22 @@ struct CGContext {
 
 	func codegenPrimitiveOp(this: &&CGContext, type: Type, op: PrimitiveOp, parameters: &List!<LLVMValueRef>) -> LLVMValueRef {
 		const llvm_type = this.getType(type);
-		var lhs = parameters.at(0u) ?? LLVMValueRef();
-		var rhs = parameters.at(1u) ?? LLVMValueRef();
+		var lhs = parameters.at(0u) ?? LLVMGetPoison(llvm_type);
+		var rhs = parameters.at(1u) ?? LLVMGetPoison(llvm_type);
 		if op.isAssignment() && op.getOp() > Swap {
 			lhs = LLVMBuildLoad2(this.builder, llvm_type, lhs, "");
+		}
+
+		if (op & RHSToVector) == RHSToVector {
+			const vector_type = (type.decl.body as Vector).value();
+			rhs = LLVMGetPoison(llvm_type);
+			for i in 0u..vector_type.size {
+				if parameters.size() > 2 {
+					rhs = LLVMBuildInsertElement(this.builder, rhs, parameters[i + 1], LLVMConstInt(this.int_type, i as int, false), "");
+				} else {
+					rhs = LLVMBuildInsertElement(this.builder, rhs, parameters[1u], LLVMConstInt(this.int_type, i as int, false), "");
+				}
+			}
 		}
 
 		var result: LLVMValueRef;
@@ -1355,6 +1372,52 @@ struct CGContext {
 			case (PrimitiveOp::RoundEven | Float) -> result = this.codegenIntrinsicCall("llvm.roundeven", List!<LLVMTypeRef>(1u, llvm_type), parameters);
 			case (PrimitiveOp::Sin | Float)		-> result = this.codegenIntrinsicCall("llvm.sin", List!<LLVMTypeRef>(1u, llvm_type), parameters);
 			case (PrimitiveOp::Cos | Float)		-> result = this.codegenIntrinsicCall("llvm.cos", List!<LLVMTypeRef>(1u, llvm_type), parameters);
+			case (PrimitiveOp::VectorEQ | Unsigned)
+			| (PrimitiveOp::VectorEQ | Signed)	-> {
+				const tmp = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntEQ, lhs, rhs, "");
+				result = this.codegenIntrinsicCall("llvm.vector.reduce.and", List!<LLVMTypeRef>(1u, LLVMTypeOf(tmp)), List!<LLVMValueRef>(1u, tmp));
+			}
+			case (PrimitiveOp::VectorEQ | Float) -> {
+				const tmp = LLVMBuildFCmp(this.builder, LLVMRealPredicate::LLVMRealOEQ, lhs, rhs, "");
+				result = this.codegenIntrinsicCall("llvm.vector.reduce.and", List!<LLVMTypeRef>(1u, LLVMTypeOf(tmp)), List!<LLVMValueRef>(1u, tmp));
+			}
+			case (PrimitiveOp::VectorNE | Unsigned)
+			| (PrimitiveOp::VectorNE | Signed)	-> {
+				const tmp = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntEQ, lhs, rhs, "");
+				result = this.codegenIntrinsicCall("llvm.vector.reduce.and", List!<LLVMTypeRef>(1u, LLVMTypeOf(tmp)), List!<LLVMValueRef>(1u, tmp));
+			}
+			case (PrimitiveOp::VectorNE | Float) -> {
+				const tmp = LLVMBuildFCmp(this.builder, LLVMRealPredicate::LLVMRealONE, lhs, rhs, "");
+				result = this.codegenIntrinsicCall("llvm.vector.reduce.and", List!<LLVMTypeRef>(1u, LLVMTypeOf(tmp)), List!<LLVMValueRef>(1u, tmp));
+			}
+			case (PrimitiveOp::VectorReduceAdd | Unsigned)
+			| (PrimitiveOp::VectorReduceAdd | Signed)		-> result = this.codegenIntrinsicCall("llvm.vector.reduce.add", List!<LLVMTypeRef>(1u, llvm_type), parameters);
+			case (PrimitiveOp::VectorReduceAdd | Float)		-> {
+				const start = LLVMConstReal(LLVMGetElementType(llvm_type), 1.0);
+				result = this.codegenIntrinsicCall("llvm.vector.reduce.fadd", List!<LLVMTypeRef>(1u, llvm_type), List!<LLVMValueRef>(1u, start) + parameters);
+			}
+			case (PrimitiveOp::VectorReduceMul | Unsigned)
+			| (PrimitiveOp::VectorReduceMul | Signed)		-> result = this.codegenIntrinsicCall("llvm.vector.reduce.mul", List!<LLVMTypeRef>(1u, llvm_type), parameters);
+			case (PrimitiveOp::VectorReduceMul | Float)		-> {
+				const start = LLVMConstReal(LLVMGetElementType(llvm_type), 1.0);
+				result = this.codegenIntrinsicCall("llvm.vector.reduce.fmul", List!<LLVMTypeRef>(1u, llvm_type), List!<LLVMValueRef>(1u, start) + parameters);
+			}
+			case (PrimitiveOp::VectorReduceMin | Unsigned)	-> result = this.codegenIntrinsicCall("llvm.vector.reduce.umin", List!<LLVMTypeRef>(1u, llvm_type), parameters);
+			case (PrimitiveOp::VectorReduceMin | Signed)	-> result = this.codegenIntrinsicCall("llvm.vector.reduce.smin", List!<LLVMTypeRef>(1u, llvm_type), parameters);
+			case (PrimitiveOp::VectorReduceMin | Float)		-> result = this.codegenIntrinsicCall("llvm.vector.reduce.fmin", List!<LLVMTypeRef>(1u, llvm_type), parameters);
+			case (PrimitiveOp::VectorReduceMax | Unsigned)	-> result = this.codegenIntrinsicCall("llvm.vector.reduce.umax", List!<LLVMTypeRef>(1u, llvm_type), parameters);
+			case (PrimitiveOp::VectorReduceMax | Signed)	-> result = this.codegenIntrinsicCall("llvm.vector.reduce.smax", List!<LLVMTypeRef>(1u, llvm_type), parameters);
+			case (PrimitiveOp::VectorReduceMax | Float)		-> result = this.codegenIntrinsicCall("llvm.vector.reduce.fmax", List!<LLVMTypeRef>(1u, llvm_type), parameters);
+			case (PrimitiveOp::VectorDotProduct | Unsigned)
+			| (PrimitiveOp::VectorDotProduct | Signed)		-> {
+				const tmp = LLVMBuildMul(this.builder, parameters[0u], parameters[1u], "");
+				result = this.codegenIntrinsicCall("llvm.vector.reduce.add", List!<LLVMTypeRef>(1u, llvm_type), List!<LLVMValueRef>(1u, tmp));
+			}
+			case (PrimitiveOp::VectorDotProduct | Float)	-> {
+				const tmp = LLVMBuildFMul(this.builder, parameters[0u], parameters[1u], "");
+				const start = LLVMConstReal(LLVMGetElementType(llvm_type), 0.0);
+				result = this.codegenIntrinsicCall("llvm.vector.reduce.fadd", List!<LLVMTypeRef>(1u, llvm_type), List!<LLVMValueRef>(1u, start) + tmp);
+			}
 			else -> panic("invalid primitive op");
 		}
 
@@ -1409,46 +1472,52 @@ struct CGContext {
 			}
 
 			case IntCast: target -> {
-				const source_type = this.getType(function.base_type);
-				const target_type = this.getType(target);
-
-				const source_width = LLVMGetIntTypeWidth(source_type);
-				const target_width = LLVMGetIntTypeWidth(target_type);
+				const source_width = match function.base_type.decl.body {
+					case Vector: vector_type -> yield LLVMGetIntTypeWidth(this.getType(vector_type.element_type));
+					else -> yield LLVMGetIntTypeWidth(this.getType(function.base_type));
+				};
+				const target_width = match target.decl.body {
+					case Vector: vector_type -> yield LLVMGetIntTypeWidth(this.getType(vector_type.element_type));
+					else -> yield LLVMGetIntTypeWidth(this.getType(target));
+				};
 
 				if source_width == target_width {
 					return parameters[0u];
 				} else if source_width > target_width {
-					return LLVMBuildTrunc(this.builder, parameters[0u], target_type, "");
-				} else if function.base_type.isSigned() && target.isSigned() {
-					return LLVMBuildSExt(this.builder, parameters[0u], target_type, "");
+					return LLVMBuildTrunc(this.builder, parameters[0u], this.getType(target), "");
+				} else if function.base_type.isSigned(true) && target.isSigned(true) {
+					return LLVMBuildSExt(this.builder, parameters[0u], this.getType(target), "");
 				} else {
-					return LLVMBuildZExt(this.builder, parameters[0u], target_type, "");
+					return LLVMBuildZExt(this.builder, parameters[0u], this.getType(target), "");
 				}
 			}
 			case FloatCast: target -> {
-				const source_type = this.getType(function.base_type);
-				const target_type = this.getType(target);
-
-				const source_width = LLVMStoreSizeOfType(this.data_layout, source_type);
-				const target_width = LLVMStoreSizeOfType(this.data_layout, target_type);
+				const source_width = match function.base_type.decl.body {
+					case Vector: vector_type -> yield LLVMStoreSizeOfType(this.data_layout, this.getType(vector_type.element_type));
+					else -> yield LLVMStoreSizeOfType(this.data_layout, this.getType(function.base_type));
+				};
+				const target_width = match target.decl.body {
+					case Vector: vector_type -> yield LLVMStoreSizeOfType(this.data_layout, this.getType(vector_type.element_type));
+					else -> yield LLVMStoreSizeOfType(this.data_layout, this.getType(target));
+				};
 
 				if source_width == target_width {
 					return parameters[0u];
 				} else if source_width > target_width {
-					return LLVMBuildFPTrunc(this.builder, parameters[0u], target_type, "");
+					return LLVMBuildFPTrunc(this.builder, parameters[0u], this.getType(target), "");
 				} else {
-					return LLVMBuildFPExt(this.builder, parameters[0u], target_type, "");
+					return LLVMBuildFPExt(this.builder, parameters[0u], this.getType(target), "");
 				}
 			}
 			case IntToFloat: target -> {
-				if function.base_type.isSigned() {
+				if function.base_type.isSigned(true) {
 					return LLVMBuildSIToFP(this.builder, parameters[0u], this.getType(target), "");
 				} else {
 					return LLVMBuildUIToFP(this.builder, parameters[0u], this.getType(target), "");
 				}
 			}
 			case FloatToInt: target -> {
-				if target.isSigned() {
+				if target.isSigned(true) {
 					return LLVMBuildFPToSI(this.builder, parameters[0u], this.getType(target), "");
 				} else {
 					return LLVMBuildFPToUI(this.builder, parameters[0u], this.getType(target), "");
@@ -1535,7 +1604,7 @@ struct CGContext {
 				var value = LLVMConstNull(this.getType(range_type));
 				value = LLVMBuildInsertValue(this.builder, value, parameters[0u], 0u, "");
 				value = LLVMBuildInsertValue(this.builder, value, parameters[1u], 1u, "");
-				if function.base_type.isIntType() {
+				if function.base_type.isIntType(false) {
 					value = LLVMBuildInsertValue(this.builder, value, LLVMConstInt(this.getType(function.base_type), 1, false), 2u, "");
 				} else {
 					value = LLVMBuildInsertValue(this.builder, value, LLVMConstReal(this.getType(function.base_type), 1.0), 2u, "");
@@ -1550,8 +1619,8 @@ struct CGContext {
 				const end = LLVMBuildExtractValue(this.builder, parameters[0u], 1u, "");
 
 				var is_ascending: LLVMValueRef;
-				if numeric_type.isIntType() {
-					const comparison_kind = LLVMIntPredicate::LLVMIntSLT if numeric_type.isSigned() else LLVMIntPredicate::LLVMIntULT;
+				if numeric_type.isIntType(false) {
+					const comparison_kind = LLVMIntPredicate::LLVMIntSLT if numeric_type.isSigned(false) else LLVMIntPredicate::LLVMIntULT;
 					is_ascending = LLVMBuildICmp(this.builder, comparison_kind, start, end, "");
 				} else {
 					is_ascending = LLVMBuildFCmp(this.builder, LLVMRealPredicate::LLVMRealOLT, start, end, "");
@@ -1560,7 +1629,7 @@ struct CGContext {
 				var step = LLVMBuildExtractValue(this.builder, parameters[0u], 2u, "");
 				step = LLVMBuildSelect(
 					this.builder, is_ascending, step,
-					LLVMBuildNeg(this.builder, step, "") if numeric_type.isIntType() else LLVMBuildFNeg(this.builder, step, ""), ""
+					LLVMBuildNeg(this.builder, step, "") if numeric_type.isIntType(false) else LLVMBuildFNeg(this.builder, step, ""), ""
 				);
 
 				var iterator = LLVMConstNull(this.getType(iterator_type));
@@ -1578,9 +1647,9 @@ struct CGContext {
 				var lt: LLVMValueRef;
 				var gt: LLVMValueRef;
 
-				if numeric_type.isIntType() {
-					lt = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntSLT if numeric_type.isSigned() else LLVMIntPredicate::LLVMIntULT, current, end, "");
-					gt = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntSGT if numeric_type.isSigned() else LLVMIntPredicate::LLVMIntUGT, current, end, "");
+				if numeric_type.isIntType(false) {
+					lt = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntSLT if numeric_type.isSigned(false) else LLVMIntPredicate::LLVMIntULT, current, end, "");
+					gt = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntSGT if numeric_type.isSigned(false) else LLVMIntPredicate::LLVMIntUGT, current, end, "");
 				} else {
 					lt = LLVMBuildFCmp(this.builder, LLVMRealPredicate::LLVMRealOLT, current, end, "");
 					gt = LLVMBuildFCmp(this.builder, LLVMRealPredicate::LLVMRealOGT, current, end, "");
@@ -1595,7 +1664,7 @@ struct CGContext {
 				const step = LLVMBuildLoad2(this.builder, this.getType(numeric_type), step_ptr, "");
 
 				var next: LLVMValueRef;
-				if numeric_type.isIntType() {
+				if numeric_type.isIntType(false) {
 					next = LLVMBuildAdd(this.builder, current, step, "");
 				} else {
 					next = LLVMBuildFAdd(this.builder, current, step, "");
@@ -1685,7 +1754,7 @@ struct CGContext {
 				}
 			}
 			case BoolLiteralExpr: value -> result = LLVMConstInt(this.getType(node.type), value as int, false);
-			case IntegerLiteralExpr: value -> result = LLVMConstInt(this.getType(node.type), value, node.type.isSigned());
+			case IntegerLiteralExpr: value -> result = LLVMConstInt(this.getType(node.type), value, node.type.isSigned(false));
 			case FloatLiteralExpr: value -> result = LLVMConstReal(this.getType(node.type), value);
 			case StringLiteralExpr: expr -> {
 				const data_ptr = this.codegenStringGlobal(expr.value);
@@ -1763,6 +1832,79 @@ struct CGContext {
 				discard LLVMBuildStore(this.builder, result, dst);
 			}
 			case FunctionRefExpr: function -> result = this.getFunction(function);
+			case VectorGetElementExpr: expr -> {
+				const vector = this.codegenNode(this.getASTNode(expr.vector));
+				const index = this.codegenNode(this.getASTNode(expr.index));
+				result = LLVMBuildExtractElement(this.builder, vector, index, "");
+			}
+			case VectorSetElementExpr: expr -> {
+				const vector_type = this.getType(this.getASTNode(expr.vector).type.base());
+				const vector = this.codegenNode(this.getASTNode(expr.vector));
+				const index = this.codegenNode(this.getASTNode(expr.index));
+				const value = this.codegenNode(this.getASTNode(expr.value));
+				discard LLVMBuildStore(this.builder,
+					LLVMBuildInsertElement(this.builder,
+						LLVMBuildLoad2(this.builder, vector_type, vector, ""), value, index, ""
+					), vector
+				);
+			}
+			case VectorGetSwizzleExpr: expr -> {
+				const vector = this.codegenNode(this.getASTNode(expr.vector));
+				var mask = LLVMGetPoison(LLVMVectorType(this.int_type, expr.indices.size()));
+				for i in 0u..expr.indices.size() {
+					mask = LLVMBuildInsertElement(
+						this.builder, mask,
+						LLVMConstInt(this.int_type, expr.indices[i] as int, false),
+						LLVMConstInt(this.int_type, i as int, false),
+						""
+					);
+				}
+
+				result = LLVMBuildShuffleVector(this.builder, vector, LLVMGetPoison(LLVMTypeOf(vector)), mask, "");
+			}
+			case VectorSetSwizzleExpr: expr -> {
+				const vector_type = this.getASTNode(expr.vector).type.base();
+				const element_type = (vector_type.decl.body as Vector).value().element_type;
+				const vector_size = (vector_type.decl.body as Vector).value().size;
+				const llvm_type = this.getType(vector_type);
+
+				var value_extend_mask = LLVMGetPoison(LLVMVectorType(this.int_type, vector_size));
+				var mix_mask = LLVMGetPoison(LLVMVectorType(this.int_type, vector_size));
+				for i in 0u..vector_size {
+					value_extend_mask = LLVMBuildInsertElement(
+						this.builder, value_extend_mask,
+						LLVMConstInt(this.int_type, i as int, false) if i < expr.indices.size() else LLVMGetPoison(this.int_type),
+						LLVMConstInt(this.int_type, i as int, false),
+						""
+					);
+
+					var dst = i;
+					if const k = expr.indices.find(i) {
+						dst = vector_size + k;
+					}
+
+					mix_mask = LLVMBuildInsertElement(
+						this.builder, mix_mask,
+						LLVMConstInt(this.int_type, dst as int, false),
+						LLVMConstInt(this.int_type, i as int, false),
+						""
+					);
+				}
+
+				const vector = this.codegenNode(this.getASTNode(expr.vector));
+				const value = this.codegenNode(this.getASTNode(expr.value));
+				const extented_value = LLVMBuildShuffleVector(this.builder, value, LLVMGetPoison(LLVMTypeOf(value)), value_extend_mask, "");
+				discard LLVMBuildStore(
+					this.builder,
+					LLVMBuildShuffleVector(
+						this.builder,
+						LLVMBuildLoad2(this.builder, llvm_type, vector, ""),
+						extented_value,
+						mix_mask, ""
+					),
+					vector
+				);
+			}
 			else -> {
 				this.error("invalid node for codegen '" + node.name() + "'", node.span);
 			}
@@ -1893,8 +2035,8 @@ struct CGContext {
 		if for_stmt.kind == Range {
 			condition = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntULT, phi, end, "");
 		} else {
-			const lt_predicate = LLVMIntPredicate::LLVMIntSLT if enumerator_type.isSigned() else LLVMIntPredicate::LLVMIntULT;
-			const gt_predicate = LLVMIntPredicate::LLVMIntSGT if enumerator_type.isSigned() else LLVMIntPredicate::LLVMIntUGT;
+			const lt_predicate = LLVMIntPredicate::LLVMIntSLT if enumerator_type.isSigned(false) else LLVMIntPredicate::LLVMIntULT;
+			const gt_predicate = LLVMIntPredicate::LLVMIntSGT if enumerator_type.isSigned(false) else LLVMIntPredicate::LLVMIntUGT;
 			const lt = LLVMBuildICmp(this.builder, lt_predicate, phi, end, "");
 			const gt = LLVMBuildICmp(this.builder, gt_predicate, phi, end, "");
 			condition = LLVMBuildSelect(this.builder, is_ascending, lt, gt, "");

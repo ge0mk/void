@@ -1,0 +1,9 @@
+import std/core;
+import std/math;
+
+func main() -> void {
+	var a = Vector!<int, 2>(1, -2);
+	a.yx *= 5;
+	assert(a.x == 5);
+	assert(a.y == -10);
+}

@@ -2167,9 +2167,9 @@ struct TCContext {
 
 	func checkNumberLiteralExpr(this: &&TCContext, id: uint, number_literal: ParsedNumber, postfix: String, expected_type: Type, span: Span) -> uint {
 		if postfix == "" {
-			if expected_type.isIntType() {
+			if expected_type.isIntType(false) {
 				this.replaceASTNode(id, Node::IntegerLiteralExpr(number_literal.toInt(), span, expected_type, false));
-			} else if expected_type.isFloatType() {
+			} else if expected_type.isFloatType(false) {
 				this.replaceASTNode(id, Node::FloatLiteralExpr(number_literal.toFloat(), span, expected_type, false));
 			} else if number_literal.isInteger() && !number_literal.contains_decimal_point {
 				this.replaceASTNode(id, Node::IntegerLiteralExpr(number_literal.toInt(), span, this.program.int_type, false));
@@ -2381,7 +2381,7 @@ struct TCContext {
 		const prev_yield_var = this.yield_var;
 
 		const value_type_decl = this.getASTNodeType(value).decl;
-		if !((value_type_decl.body is Variant) || this.getASTNodeType(value).isIntType()) {
+		if !((value_type_decl.body is Variant) || this.getASTNodeType(value).isIntType(false)) {
 			this.error("value in match statement has invalid type: expected integral type or variant but got '" + this.getASTNodeType(value).signature() + "'", this.getASTNodeSpan(value));
 		}
 
@@ -2559,7 +2559,7 @@ struct TCContext {
 				match template_parameter {
 					case Boolean: value -> result_candidates.append(Node::IntegerLiteralExpr(value as int, span, this.program.bool_type, false));
 					case Integer: value -> {
-						if expected_type.isIntType() {
+						if expected_type.isIntType(false) {
 							result_candidates.append(Node::IntegerLiteralExpr(value, span, expected_type, false));
 						} else {
 							result_candidates.append(Node::IntegerLiteralExpr(value, span, this.program.int_type, false));
@@ -2694,9 +2694,68 @@ struct TCContext {
 				this.replaceASTNode(id, member_access_expr);
 			}
 			else -> {
+				const lhs = this.checkNode(expr.lhs, Type::unknown(), is_comptime);
+
+				if expr.op.isAssignmentOperator() && expr.op != Initialize {
+					match this.getASTNode(lhs) {
+						case VectorGetElementExpr: e -> {
+							const vector = this.removeDereference(e.vector);
+							var rhs = this.checkNode(expr.rhs, this.getASTNodeType(lhs), is_comptime);
+							if expr.op != Assign {
+								var arguments = List!<uint>(2u, lhs);
+								arguments[1u] = rhs;
+								rhs = this.addASTNode(this.checkCall(
+									Name("operator " + format(expr.op.withoutAssignment())),
+									arguments, true, true, CallKind::Operator, is_comptime, span
+								));
+							}
+
+							if this.getASTNodeType(rhs) != this.getASTNodeType(lhs) {
+								this.error("rhs has invalid type for vector element assingment", span);
+							}
+
+							if this.getASTNodeType(vector).reference_kind != Var {
+								this.error("can't assign element to constant vector", span);
+							}
+
+							this.replaceASTNode(id, Node::VectorSetElementExpr((vector: vector, index: e.index, value: rhs), span, this.program.void_type, is_comptime));
+							return id;
+						}
+						case VectorGetSwizzleExpr: e -> {
+							const vector = this.removeDereference(e.vector);
+							var rhs = this.checkNode(expr.rhs, this.getASTNodeType(lhs), is_comptime);
+							if expr.op != Assign {
+								var arguments = List!<uint>(2u, lhs);
+								arguments[1u] = rhs;
+								rhs = this.addASTNode(this.checkCall(
+									Name("operator " + format(expr.op.withoutAssignment())),
+									arguments, true, true, CallKind::Operator, is_comptime, span
+								));
+							}
+
+							const unique_indices = Set!<uint>(e.indices.range());
+							if unique_indices.size() != e.indices.size() {
+								this.error("lhs must not have duplicated vector elements in assignment", span);
+							}
+
+							if this.getASTNodeType(rhs) != this.getASTNodeType(lhs) {
+								this.error("rhs has invalid type for vector element assingment", span);
+							}
+
+							if this.getASTNodeType(vector).reference_kind != Var {
+								this.error("can't assign element to constant vector", span);
+							}
+
+							this.replaceASTNode(id, Node::VectorSetSwizzleExpr((vector: vector, indices: e.indices, value: rhs), span, this.program.void_type, is_comptime));
+							return id;
+						}
+						else -> {}
+					}
+				}
+
 				var arguments: List!<uint>;
 				arguments.grow(2u);
-				arguments.append(this.checkNode(expr.lhs, Type::unknown(), is_comptime));
+				arguments.append(lhs);
 				arguments.append(this.checkNode(expr.rhs, this.getASTNodeType(arguments[0u]), is_comptime));
 
 				const call_expr = this.checkCall(
@@ -2814,6 +2873,21 @@ struct TCContext {
 			return this.getGarbageNode();
 		}
 
+		if const vector_type = this.getASTNodeType(operands[0u]).decl.body as Vector {
+			if operands.size() != 2 {
+				this.error("invalid vector index expr", span);
+				return this.getGarbageNode();
+			}
+
+			if this.getASTNodeType(operands[1u]) != this.program.uint_type {
+				this.error("expected index to be of type " + this.program.uint_type.signature() + " but got " + this.getASTNodeType(operands[1u]).signature(), span);
+				return this.getGarbageNode();
+			}
+
+			this.replaceASTNode(id, Node::VectorGetElementExpr((vector: operands[0u], index: operands[1u]), span, vector_type.element_type, is_comptime));
+			return id;
+		}
+
 		const call = this.checkCall(Name("operator []"), operands, true, true, CallKind::MemberCall, is_comptime, span);
 		if call is Garbage {
 			return this.getGarbageNode();
@@ -2824,12 +2898,43 @@ struct TCContext {
 	}
 
 	func createMemberAccessExpr(this: &&TCContext, object: uint, member_name: String, is_comptime: bool, span: Span) -> Node {
-		object = this.removeDereference(object);
 		if object <= 1 {
 			return Node::Garbage(span, Type::unknown(), false);
 		}
 
 		var type_decl = this.getASTNodeType(object).decl;
+
+		if const vector_type = type_decl.body as Vector {
+			var indices: List!<uint>;
+			for b in member_name.bytes() {
+				const index = match b {
+					case 'x'b -> yield 0u;
+					case 'y'b -> yield 1u;
+					case 'z'b -> yield 2u;
+					case 'w'b -> yield 3u;
+					else -> {
+						this.error("invalid vector field", span);
+						return Node::Garbage(span, Type::unknown(), false);
+					}
+				};
+				indices.append(index);
+
+				if index >= vector_type.size {
+					this.error("vector element out of range for vector type " + type_decl.signature(), span);
+				}
+			}
+
+			if indices.size() == 1 {
+				const index = this.addASTNode(Node::IntegerLiteralExpr(indices[0u] as int, span, this.program.int_type, is_comptime));
+				return Node::VectorGetElementExpr((vector: object, index: index), span, vector_type.element_type, is_comptime);
+			} else {
+				const result_type = this.getVectorType(vector_type.element_type, indices.size(), span);
+				return Node::VectorGetSwizzleExpr((vector: object, indices: indices), span, result_type, is_comptime);
+			}
+		}
+
+		object = this.removeDereference(object);
+
 		if type_decl.getMemberVariable(member_name) is None && !type_decl.unwrapped_type.isEmpty() {
 			if type_decl.unwrapped_type.getMemberVariable(member_name) is Some {
 				const unwrap_call = this.checkCall(
@@ -3072,13 +3177,13 @@ struct TCContext {
 		}
 
 		var cast_name = "";
-		if source_type.isIntType() && target_type.isIntType() {
+		if source_type.isIntType(true) && target_type.isIntType(true) {
 			cast_name = "intCast";
-		} else if source_type.isIntType() && target_type.isFloatType() {
+		} else if source_type.isIntType(true) && target_type.isFloatType(true) {
 			cast_name = "intToFloat";
-		} else if source_type.isFloatType() && target_type.isIntType() {
+		} else if source_type.isFloatType(true) && target_type.isIntType(true) {
 			cast_name = "floatToInt";
-		} else if source_type.isFloatType() && target_type.isFloatType() {
+		} else if source_type.isFloatType(true) && target_type.isFloatType(true) {
 			cast_name = "floatCast";
 		} else if source_type.isPtrType() && target_type.isPtrType() {
 			cast_name = "pointerCast";
@@ -3854,6 +3959,13 @@ struct TCContext {
 		}
 	}
 
+	func getVectorType(this: &&TCContext, element_type: Type, size: uint, span: Span) -> Type {
+		var template_parameters: List!<TemplateParameter>;
+		template_parameters.append(TemplateParameter::Type(element_type));
+		template_parameters.append(TemplateParameter::Integer(size as int));
+		return this.getType(Name("Vector", template_parameters), span);
+	}
+
 	func getFunctionType(this: &&TCContext, parameter_types: &List!<Type>, return_type: Type, span: Span) -> Type {
 		var template_parameters: List!<TemplateParameter>;
 		template_parameters.append(TemplateParameter::Type(return_type));
@@ -4075,6 +4187,17 @@ struct TCContext {
 
 					type_instance = this.program.createFunctionTypeInstance(base.parent, parameter_types, return_type);
 				}
+				case Vector -> {
+					const element_type = (template_parameters[0u] as Type).value();
+					const size = (template_parameters[1u] as Integer).value();
+
+					if size <= 1 {
+						this.error("only vector types with size > 1 are allowed", error_span);
+						return SharedHandle!<Namespace>();
+					}
+
+					type_instance = this.program.createVectorTypeInstance(base.parent, element_type, size as uint);
+				}
 				case Array -> {
 					const element_type = (template_parameters[0u] as Type).value();
 					const size = (template_parameters[1u] as Integer).value();
@@ -4127,7 +4250,7 @@ struct TCContext {
 				}
 				case NumericRange -> {
 					const numeric_type = (template_parameters[0u] as Type).value();
-					if !numeric_type.isIntType() && !numeric_type.isFloatType() {
+					if !numeric_type.isIntType(false) && !numeric_type.isFloatType(false) {
 						this.error("expected numeric type", error_span);
 						this.todo("this should be filtered out using concepts", error_span);
 						return SharedHandle!<Namespace>();
@@ -4138,7 +4261,7 @@ struct TCContext {
 				}
 				case NumericIterator -> {
 					const numeric_type = (template_parameters[0u] as Type).value();
-					if !numeric_type.isIntType() && !numeric_type.isFloatType() {
+					if !numeric_type.isIntType(false) && !numeric_type.isFloatType(false) {
 						this.error("expected numeric type", error_span);
 						this.todo("this should be filtered out using concepts", error_span);
 						return SharedHandle!<Namespace>();
@@ -4205,9 +4328,9 @@ struct TCContext {
 					const type = (template_parameters[0u] as Type).value();
 					var op2 = op;
 					if op > Cmp {
-						if type.isIntType() && type.isSigned() {
+						if type.isIntType(true) && type.isSigned(true) {
 							op2 = op2 | Signed;
-						} else if type.isFloatType() {
+						} else if type.isFloatType(true) {
 							op2 = op2 | Float;
 						}
 					}

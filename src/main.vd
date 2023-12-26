@@ -217,6 +217,8 @@ func main(args: Range!<String, false>) -> int {
 		discard program.createFunction(ns, "ceil", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Ceil, Type::unknown()));
 		discard program.createFunction(ns, "fract", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Fract, Type::unknown()));
 		discard program.createFunction(ns, "round", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Round, Type::unknown()));
+
+		program.createVectorTypeTemplate(ns);
 	});
 
 	const root_module_desc = ImportedModule(1u, program.options.root_module_path, program.options.program_name);

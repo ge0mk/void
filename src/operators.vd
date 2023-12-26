@@ -149,6 +149,23 @@ enum Operator {
 		}
 	}
 
+	func withoutAssignment(this: Operator) -> Operator {
+		match this {
+			case AddAssign -> return Add;
+			case SubAssign -> return Sub;
+			case MulAssign -> return Mul;
+			case DivAssign -> return Div;
+			case ModAssign -> return Mod;
+			case BitwiseAndAssign -> return BitwiseAnd;
+			case BitwiseOrAssign -> return BitwiseOr;
+			case BitwiseXOrAssign -> return BitwiseXOr;
+			case ShiftLeftAssign -> return ShiftLeft;
+			case ShiftRightAssign -> return ShiftRight;
+			case CoalescingAssign -> return Coalescing;
+			else -> return this;
+		}
+	}
+
 	func precedence(this: Operator) -> int {
 		match this {
 			case Namespace -> return 19;

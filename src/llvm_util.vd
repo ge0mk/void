@@ -115,6 +115,10 @@ func LLVMArrayType(element_type: LLVMTypeRef, size: uint) -> LLVMTypeRef {
 	return LLVMArrayType(element_type, size as u32);
 }
 
+func LLVMVectorType(element_type: LLVMTypeRef, size: uint) -> LLVMTypeRef {
+	return LLVMVectorType(element_type, size as u32);
+}
+
 func LLVMFunctionType(return_type: LLVMTypeRef, parameter_types: &List!<LLVMTypeRef>, is_variadic: bool) -> LLVMTypeRef {
 	return LLVMFunctionType(return_type, parameter_types.data, parameter_types.size() as u32, is_variadic as i32);
 }
@@ -426,6 +430,18 @@ func LLVMBuildCall2(builder: LLVMBuilderRef, type: LLVMTypeRef, function: LLVMVa
 
 func LLVMBuildSelect(builder: LLVMBuilderRef, condition: LLVMValueRef, then_value: LLVMValueRef, else_value: LLVMValueRef, name: String) -> LLVMValueRef {
 	return LLVMBuildSelect(builder, condition, then_value, else_value, (name + '\0'b).data());
+}
+
+func LLVMBuildExtractElement(builder: LLVMBuilderRef, vector: LLVMValueRef, index: LLVMValueRef, name: String) -> LLVMValueRef {
+	return LLVMBuildExtractElement(builder, vector, index, (name + '\0'b).data());
+}
+
+func LLVMBuildInsertElement(builder: LLVMBuilderRef, vector: LLVMValueRef, element: LLVMValueRef, index: LLVMValueRef, name: String) -> LLVMValueRef {
+	return LLVMBuildInsertElement(builder, vector, element, index, (name + '\0'b).data());
+}
+
+func LLVMBuildShuffleVector(builder: LLVMBuilderRef, v1: LLVMValueRef, v2: LLVMValueRef, mask: LLVMValueRef, name: String) -> LLVMValueRef {
+	return LLVMBuildShuffleVector(builder, v1, v2, mask, (name + '\0'b).data());
 }
 
 func LLVMBuildExtractValue(builder: LLVMBuilderRef, object: LLVMValueRef, index: uint, name: String) -> LLVMValueRef {

@@ -1,0 +1,15 @@
+import std/core;
+import std/math;
+
+func main() -> void {
+	var a = Vector!<int, 4>(1, 2, 3, 4);
+	assert(a.x == 1);
+	assert(a.y == 2);
+	assert(a.z == 3);
+	assert(a.w == 4);
+	assert(a.xy == Vector!<int, 2>(1, 2));
+	assert(a.yx == Vector!<int, 2>(2, 1));
+	assert(a.xx == Vector!<int, 2>(1, 1));
+	assert(a.yy == Vector!<int, 2>(2, 2));
+	assert(a.xyz == Vector!<int, 3>(1, 2, 3));
+}

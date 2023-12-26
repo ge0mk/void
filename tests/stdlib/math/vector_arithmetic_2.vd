@@ -1,0 +1,16 @@
+import std/core;
+import std/math;
+
+func main() -> void {
+	const a = Vector!<int, 3>(1, 2, 3);
+	const b = Vector!<int, 3>(2, 2, 2);
+	const c = Vector!<int, 3>(1, 0, 0);
+	const d = Vector!<int, 3>(0, 1, 0);
+
+	assert(a.dot(b) == 12);
+	assert(a.sum() == 6);
+	assert(a.min() == 1);
+	assert(a.max() == 3);
+
+	assert(c.cross(d) == Vector!<int, 3>(0, 0, 1));
+}

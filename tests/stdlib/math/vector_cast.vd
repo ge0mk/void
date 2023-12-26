@@ -1,0 +1,7 @@
+import std/core;
+import std/math;
+
+func main() -> void {
+	const a = Vector!<int, 4>(1, 2, 3, 4);
+	assert(a as Vector!<i32, 4> == Vector!<i32, 4>(1i32, 2i32, 3i32, 4i32));
+}

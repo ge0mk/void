@@ -1,0 +1,22 @@
+import std/core;
+import std/math;
+
+func main() -> void {
+	const a = Vector!<int, 4>(1, 2, 3, 4);
+	assert(a == Vector!<int, 4>(1, 2, 3, 4));
+
+	assert(a + 2 == Vector!<int, 4>(3, 4, 5, 6));
+	assert(a - 2 == Vector!<int, 4>(-1, 0, 1, 2));
+	assert(a * 2 == Vector!<int, 4>(2, 4, 6, 8));
+
+	const b = Vector!<int, 4>(1);
+	assert(b == Vector!<int, 4>(1, 1, 1, 1));
+
+	assert(a + b == Vector!<int, 4>(2, 3, 4, 5));
+	assert(a * b == a);
+
+	const c = Vector!<int, 4>(3, 2, 1, 0);
+
+	assert(a + c == Vector!<int, 4>(4, 4, 4, 4));
+	assert(a * c == Vector!<int, 4>(3, 4, 3, 0));
+}

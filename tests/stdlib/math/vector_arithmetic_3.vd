@@ -1,0 +1,9 @@
+import std/core;
+import std/math;
+
+func main() -> void {
+	const a = Vector!<int, 4>(1, 2, 3, 4);
+	const b = Vector!<int, 4>(4, 3, 2, 1);
+	assert(min!<Vector!<int, 4>>(a, b) == Vector!<int, 4>(1, 2, 2, 1));
+	assert(max!<Vector!<int, 4>>(a, b) == Vector!<int, 4>(4, 3, 3, 4));
+}

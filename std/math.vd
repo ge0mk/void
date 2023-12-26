@@ -2,6 +2,46 @@ import std/core;
 
 pragma generate_std_math_builtins;
 
+template <T: type, Size: uint>
+namespace Vector {
+	comptime if Size == 3 {
+		func cross(lhs: Vector!<T, Size>, rhs: Vector!<T, Size>) -> Vector!<T, Size> {
+			return lhs.yzx * rhs.zxy - lhs.zxy * rhs.yzx;
+		}
+	}
+
+	func squareLength(this: Vector!<T, Size>) -> T {
+		return dot(this, this);
+	}
+
+	comptime if T == f32 || T == f64 {
+		func length(this: Vector!<T, Size>) -> T {
+			return sqrt!<T>(dot(this, this));
+		}
+
+		func distance(lhs: Vector!<T, Size>, rhs: Vector!<T, Size>) -> T {
+			return sqrt!<T>(squareLength(lhs - rhs));
+		}
+
+		func normalize(this: Vector!<T, Size>) -> Vector!<T, Size> {
+			return this / length(this);
+		}
+
+		func reflect(v: Vector!<T, Size>, n: Vector!<T, Size>) -> Vector!<T, Size> {
+			return v - n * dot(n, v) * (2 as T);
+		}
+
+		func refract(v: Vector!<T, Size>, n: Vector!<T, Size>, eta: T) -> Vector!<T, Size> {
+			const d = dot(n, v);
+			const k = (1 as T) - eta * eta * (-(d * d) + 1);
+			if k < 0 {
+				return Vector!<T, Size>();
+			}
+			return v * eta - n * (eta * d + sqrt!<T>(k));
+		}
+	}
+}
+
 template <T: type>
 func gcd(a: T, b: T) -> T {
 	while b != 0 {

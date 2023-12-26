@@ -1,0 +1,10 @@
+import std/core;
+import std/math;
+
+func main() -> void {
+	const a = Vector!<f64, 4>(0.0);
+	const b = Vector!<f64, 4>(1.0, 0.0, 0.0, 0.0);
+	assert(a.length() < 0.0001);
+	assert(abs!<f64>(b.length() - 1.0) < 0.0001);
+	assert(abs!<f64>(b.distance(-b) - 2.0) < 0.0001);
+}
