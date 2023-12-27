@@ -2698,29 +2698,6 @@ struct TCContext {
 
 				if expr.op.isAssignmentOperator() && expr.op != Initialize {
 					match this.getASTNode(lhs) {
-						case VectorGetElementExpr: e -> {
-							const vector = this.removeDereference(e.vector);
-							var rhs = this.checkNode(expr.rhs, this.getASTNodeType(lhs), is_comptime);
-							if expr.op != Assign {
-								var arguments = List!<uint>(2u, lhs);
-								arguments[1u] = rhs;
-								rhs = this.addASTNode(this.checkCall(
-									Name("operator " + format(expr.op.withoutAssignment())),
-									arguments, true, true, CallKind::Operator, is_comptime, span
-								));
-							}
-
-							if this.getASTNodeType(rhs) != this.getASTNodeType(lhs) {
-								this.error("rhs has invalid type for vector element assingment", span);
-							}
-
-							if this.getASTNodeType(vector).reference_kind != Var {
-								this.error("can't assign element to constant vector", span);
-							}
-
-							this.replaceASTNode(id, Node::VectorSetElementExpr((vector: vector, index: e.index, value: rhs), span, this.program.void_type, is_comptime));
-							return id;
-						}
 						case VectorGetSwizzleExpr: e -> {
 							const vector = this.removeDereference(e.vector);
 							var rhs = this.checkNode(expr.rhs, this.getASTNodeType(lhs), is_comptime);
@@ -2733,11 +2710,6 @@ struct TCContext {
 								));
 							}
 
-							const unique_indices = Set!<uint>(e.indices.range());
-							if unique_indices.size() != e.indices.size() {
-								this.error("lhs must not have duplicated vector elements in assignment", span);
-							}
-
 							if this.getASTNodeType(rhs) != this.getASTNodeType(lhs) {
 								this.error("rhs has invalid type for vector element assingment", span);
 							}
@@ -2746,7 +2718,11 @@ struct TCContext {
 								this.error("can't assign element to constant vector", span);
 							}
 
-							this.replaceASTNode(id, Node::VectorSetSwizzleExpr((vector: vector, indices: e.indices, value: rhs), span, this.program.void_type, is_comptime));
+							this.replaceASTNode(id, Node::VectorSetSwizzleExpr(
+								(vector: vector, offset: e.offset, offset_scale: e.offset_scale, indices: e.indices, value: rhs),
+								span, this.program.void_type, is_comptime
+							));
+
 							return id;
 						}
 						else -> {}
@@ -2758,10 +2734,45 @@ struct TCContext {
 				arguments.append(lhs);
 				arguments.append(this.checkNode(expr.rhs, this.getASTNodeType(arguments[0u]), is_comptime));
 
-				const call_expr = this.checkCall(
-					Name("operator " + format(expr.op)),
-					arguments, true, true, CallKind::Operator, is_comptime, span
-				);
+				const lhs_type = this.getASTNodeType(arguments[0u]);
+				const rhs_type = this.getASTNodeType(arguments[1u]);
+
+				var call_expr = Node::Garbage(Span(), Type::unknown(), false);
+
+				if expr.op == Mul && lhs_type.isMatrixType() && (rhs_type.isMatrixType() || rhs_type.isVectorType()) {
+					const lhs_matrix_type = (lhs_type.decl.body as Matrix).value();
+					const rhs_matrix_type = match rhs_type.decl.body {
+						case Vector: vector_type -> yield (element_type: vector_type.element_type, columns: 1u, rows: vector_type.size);
+						case Matrix: matrix_type -> yield matrix_type;
+						else -> panic("unreachable");
+					}
+
+					if lhs_matrix_type.element_type != rhs_matrix_type.element_type {
+						this.error("invalid matrix multiplication: element types are not identical", span);
+						return this.getGarbageNode();
+					}
+
+					if lhs_matrix_type.columns != rhs_matrix_type.rows {
+						this.error("invalid matrix multiplication: lhs must have the same number of columns as rhs has rows (" + format(lhs_matrix_type.columns) + " != " + format(rhs_matrix_type.rows) + ")", span);
+						return this.getGarbageNode();
+					}
+
+					var template_parameters: List!<TemplateParameter>;
+					template_parameters.append(TemplateParameter::Type(lhs_matrix_type.element_type));
+					template_parameters.append(TemplateParameter::Integer(lhs_matrix_type.columns as int));
+					template_parameters.append(TemplateParameter::Integer(lhs_matrix_type.rows as int));
+					template_parameters.append(TemplateParameter::Integer(rhs_matrix_type.columns as int));
+
+					call_expr = this.checkCall(
+						Name("matmul", template_parameters),
+						arguments, true, true, CallKind::Operator, is_comptime, span
+					);
+				} else {
+					call_expr = this.checkCall(
+						Name("operator " + format(expr.op)),
+						arguments, true, true, CallKind::Operator, is_comptime, span
+					);
+				}
 
 				if call_expr is Garbage {
 					return this.getGarbageNode();
@@ -2869,32 +2880,89 @@ struct TCContext {
 	}
 
 	func checkIndexExpr(this: &&TCContext, id: uint, operands: List!<uint>, expected_type: Type, is_comptime: bool, span: Span) -> uint {
-		if !this.checkExprList(&&operands, is_comptime) {
+		operands[0u] = this.checkNode(operands[0u], Type::unknown(), is_comptime);
+		if operands[0u] <= 1 {
 			return this.getGarbageNode();
 		}
 
-		if const vector_type = this.getASTNodeType(operands[0u]).decl.body as Vector {
-			if operands.size() != 2 {
-				this.error("invalid vector index expr", span);
-				return this.getGarbageNode();
+		match this.getASTNodeType(operands[0u]).decl.body {
+			case Vector: vector_type -> {
+				if operands.size() != 2 {
+					this.error("invalid vector index expr", span);
+					return this.getGarbageNode();
+				}
+
+				operands[1u] = this.checkNode(operands[1u], this.program.uint_type, is_comptime);
+				if operands[1u] <= 1 {
+					return this.getGarbageNode();
+				}
+
+				if this.getASTNodeType(operands[1u]) != this.program.uint_type {
+					this.error("expected index to be of type " + this.program.uint_type.signature() + " but got " + this.getASTNodeType(operands[1u]).signature(), span);
+					return this.getGarbageNode();
+				}
+
+				this.replaceASTNode(id, Node::VectorGetSwizzleExpr(
+					(vector: operands[0u], offset: this.getEmptyNode(), offset_scale: 0u, indices: List!<uint>(1u, operands[1u]), indices_are_sequential: false),
+					span, vector_type.element_type, is_comptime
+				));
+
+				return id;
 			}
+			case Matrix: matrix_type -> {
+				if operands.size() > 3 || operands.size() < 2 {
+					this.error("invalid matrix index expr", span);
+					return this.getGarbageNode();
+				}
 
-			if this.getASTNodeType(operands[1u]) != this.program.uint_type {
-				this.error("expected index to be of type " + this.program.uint_type.signature() + " but got " + this.getASTNodeType(operands[1u]).signature(), span);
-				return this.getGarbageNode();
+				for i in 1u..operands.size() {
+					operands[i] = this.checkNode(operands[i], this.program.uint_type, is_comptime);
+					if operands[i] <= 1 {
+						return this.getGarbageNode();
+					}
+
+					if this.getASTNodeType(operands[i]) != this.program.uint_type {
+						this.error("expected index to be of type " + this.program.uint_type.signature() + " but got " + this.getASTNodeType(operands[i]).signature(), this.getASTNodeSpan(operands[i]));
+						return this.getGarbageNode();
+					}
+				}
+
+				var indices: List!<uint>;
+				var result_type: Type;
+				var indices_are_sequential = false;
+
+				if operands.size() == 3 {
+					indices.append(operands[2u]);
+					result_type = matrix_type.element_type;
+				} else {
+					for i in 0u..matrix_type.rows {
+						indices.append(this.addASTNode(Node::IntegerLiteralExpr(i as int, span, this.program.uint_type, false)));
+					}
+					result_type = this.getVectorType(matrix_type.element_type, matrix_type.rows, span);
+					indices_are_sequential = true;
+				}
+
+				this.replaceASTNode(id, Node::VectorGetSwizzleExpr(
+					(vector: operands[0u], offset: operands[1u], offset_scale: matrix_type.rows, indices: indices, indices_are_sequential: indices_are_sequential),
+					span, result_type, is_comptime
+				));
+
+				return id;
 			}
+			else -> {
+				for i in 1u..operands.size() {
+					operands[i] = this.checkNode(operands[i], Type::unknown(), is_comptime);
+				}
 
-			this.replaceASTNode(id, Node::VectorGetElementExpr((vector: operands[0u], index: operands[1u]), span, vector_type.element_type, is_comptime));
-			return id;
+				const call = this.checkCall(Name("operator []"), operands, true, true, CallKind::MemberCall, is_comptime, span);
+				if call is Garbage {
+					return this.getGarbageNode();
+				}
+
+				this.replaceASTNode(id, call);
+				return id;
+			}
 		}
-
-		const call = this.checkCall(Name("operator []"), operands, true, true, CallKind::MemberCall, is_comptime, span);
-		if call is Garbage {
-			return this.getGarbageNode();
-		}
-
-		this.replaceASTNode(id, call);
-		return id;
 	}
 
 	func createMemberAccessExpr(this: &&TCContext, object: uint, member_name: String, is_comptime: bool, span: Span) -> Node {
@@ -2906,6 +2974,7 @@ struct TCContext {
 
 		if const vector_type = type_decl.body as Vector {
 			var indices: List!<uint>;
+			var raw_indices: List!<uint>;
 			for b in member_name.bytes() {
 				const index = match b {
 					case 'x'b -> yield 0u;
@@ -2917,20 +2986,33 @@ struct TCContext {
 						return Node::Garbage(span, Type::unknown(), false);
 					}
 				};
-				indices.append(index);
+				raw_indices.append(index);
+				indices.append(this.addASTNode(Node::IntegerLiteralExpr(index as int, span, this.program.int_type, false)));
 
 				if index >= vector_type.size {
 					this.error("vector element out of range for vector type " + type_decl.signature(), span);
 				}
 			}
 
-			if indices.size() == 1 {
-				const index = this.addASTNode(Node::IntegerLiteralExpr(indices[0u] as int, span, this.program.int_type, is_comptime));
-				return Node::VectorGetElementExpr((vector: object, index: index), span, vector_type.element_type, is_comptime);
-			} else {
-				const result_type = this.getVectorType(vector_type.element_type, indices.size(), span);
-				return Node::VectorGetSwizzleExpr((vector: object, indices: indices), span, result_type, is_comptime);
+			var indices_are_sequential = true;
+			for i in 0u..raw_indices.size() {
+				indices_are_sequential &= raw_indices[i] == i;
 			}
+
+			const result_type = vector_type.element_type if indices.size() == 1 else this.getVectorType(vector_type.element_type, indices.size(), span);
+
+			if var tmp = this.getASTNode(object) as VectorGetSwizzleExpr {
+				if tmp.indices_are_sequential {
+					tmp.indices = indices;
+					tmp.indices_are_sequential = indices_are_sequential;
+					return Node::VectorGetSwizzleExpr(tmp, span, result_type, is_comptime);
+				}
+			}
+
+			return Node::VectorGetSwizzleExpr(
+				(vector: object, offset: this.getEmptyNode(), offset_scale: 0u, indices: indices, indices_are_sequential: indices_are_sequential),
+				span, result_type, is_comptime
+			);
 		}
 
 		object = this.removeDereference(object);
@@ -3966,6 +4048,20 @@ struct TCContext {
 		return this.getType(Name("Vector", template_parameters), span);
 	}
 
+	func getMatrixType(this: &&TCContext, element_type: Type, columns: uint, rows: uint, span: Span) -> Type {
+		if rows == 1 {
+			return this.getVectorType(element_type, columns, span);
+		} else if columns == 1 {
+			return this.getVectorType(element_type, rows, span);
+		} else {
+			var template_parameters: List!<TemplateParameter>;
+			template_parameters.append(TemplateParameter::Type(element_type));
+			template_parameters.append(TemplateParameter::Integer(columns as int));
+			template_parameters.append(TemplateParameter::Integer(rows as int));
+			return this.getType(Name("Matrix", template_parameters), span);
+		}
+	}
+
 	func getFunctionType(this: &&TCContext, parameter_types: &List!<Type>, return_type: Type, span: Span) -> Type {
 		var template_parameters: List!<TemplateParameter>;
 		template_parameters.append(TemplateParameter::Type(return_type));
@@ -4198,6 +4294,18 @@ struct TCContext {
 
 					type_instance = this.program.createVectorTypeInstance(base.parent, element_type, size as uint);
 				}
+				case Matrix -> {
+					const element_type = (template_parameters[0u] as Type).value();
+					const columns = (template_parameters[1u] as Integer).value();
+					const rows = (template_parameters[2u] as Integer).value();
+
+					if columns <= 1 || rows <= 1 {
+						this.error("only matrix types with columns & rows > 1 are allowed", error_span);
+						return SharedHandle!<Namespace>();
+					}
+
+					type_instance = this.program.createMatrixTypeInstance(base.parent, element_type, columns as uint, rows as uint);
+				}
 				case Array -> {
 					const element_type = (template_parameters[0u] as Type).value();
 					const size = (template_parameters[1u] as Integer).value();
@@ -4366,6 +4474,21 @@ struct TCContext {
 					}
 
 					instance = this.program.createPrimitiveCastInstance(base.parent_namespace, cast_name, source, target);
+				}
+				case MatrixMultiply -> {
+					const element_type = (template_parameters[0u] as Type).value();
+					const a_columns = (template_parameters[1u] as Integer).value() as uint;
+					const a_rows = (template_parameters[2u] as Integer).value() as uint;
+					const b_columns = (template_parameters[3u] as Integer).value() as uint;
+
+					var parameter_types: List!<Type>;
+					parameter_types.append(this.getMatrixType(element_type, a_columns, a_rows, error_span));
+					parameter_types.append(this.getMatrixType(element_type, b_columns, a_columns, error_span));
+					var return_type = this.getMatrixType(element_type, b_columns, a_rows, error_span);
+
+					const body = FunctionBody::Builtin(BuiltinFunction::MatrixMultiply((a_columns: a_columns, a_rows: a_rows, b_columns: b_columns), element_type));
+					instance = this.program.createFunction(base.parent_namespace, base.name, parameter_types, return_type, body);
+					instance.template_parameters = getTemplateParameterDecls(base.template_parameters, template_parameters);
 				}
 				case SizeOf
 				| AlignmentOf

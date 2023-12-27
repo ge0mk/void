@@ -1,0 +1,22 @@
+import std/core;
+import std/math;
+
+func main() -> void {
+	const a = Matrix!<int, 2, 2>(
+		1, 2,
+		3, 4
+	);
+
+	const b = Matrix!<int, 2, 2>(
+		4, 3,
+		2, 1
+	);
+
+	assert(a * Matrix!<int, 2, 2>() == a);
+	assert(a * Matrix!<int, 2, 2>(0) == Matrix!<int, 2, 2>(0));
+
+	assert(a * b == Matrix!<int, 2, 2>(
+		8, 5,
+		20, 13
+	));
+}

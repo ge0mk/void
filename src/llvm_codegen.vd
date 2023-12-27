@@ -177,6 +177,7 @@ struct CGContext {
 			}
 			case Pointer | Function -> type.llvm_type = this.ptr_type;
 			case Vector: vector_type -> type.llvm_type = LLVMVectorType(this.getType(vector_type.element_type), vector_type.size);
+			case Matrix: matrix_type -> type.llvm_type = LLVMVectorType(this.getType(matrix_type.element_type), matrix_type.columns * matrix_type.rows);
 			case Array: array_type -> type.llvm_type = LLVMArrayType(this.getType(array_type.element_type), array_type.size);
 			case Range | RangeIterator | NumericRange | NumericIterator | Tuple | Struct -> {
 				type.llvm_type = LLVMStructCreateNamed(this.llvm_context, name);
@@ -292,6 +293,12 @@ struct CGContext {
 			case Vector: vector_type -> {
 				type.llvm_di = LLVMDIBuilderCreateReplaceableCompositeType(this.di_builder, DWARFTag::Tag_unspecified_type, di_name, parent_namespace, di_file, line, 0u32, size_in_bits, alignment_in_bits, LLVMDIFlags::LLVMDIFlagZero, type.signature());
 				const di_type = LLVMDIBuilderCreateVectorType(this.di_builder, vector_type.size, alignment_in_bits, this.getDIType(vector_type.element_type), List!<LLVMMetadataRef>());
+				LLVMMetadataReplaceAllUsesWith(type.llvm_di, di_type);
+				type.llvm_di = di_type;
+			}
+			case Matrix: matrix_type -> {
+				type.llvm_di = LLVMDIBuilderCreateReplaceableCompositeType(this.di_builder, DWARFTag::Tag_unspecified_type, di_name, parent_namespace, di_file, line, 0u32, size_in_bits, alignment_in_bits, LLVMDIFlags::LLVMDIFlagZero, type.signature());
+				const di_type = LLVMDIBuilderCreateVectorType(this.di_builder, matrix_type.columns * matrix_type.rows, alignment_in_bits, this.getDIType(matrix_type.element_type), List!<LLVMMetadataRef>());
 				LLVMMetadataReplaceAllUsesWith(type.llvm_di, di_type);
 				type.llvm_di = di_type;
 			}
@@ -1250,9 +1257,14 @@ struct CGContext {
 		}
 
 		if (op & RHSToVector) == RHSToVector {
-			const vector_type = (type.decl.body as Vector).value();
+			const vector_size = match type.decl.body {
+				case Vector: vector_type -> yield vector_type.size;
+				case Matrix: matrix_type -> yield matrix_type.columns * matrix_type.rows;
+				else -> panic("invalid primitive op (RHSToVector for non-vector type)");
+			}
+
 			rhs = LLVMGetPoison(llvm_type);
-			for i in 0u..vector_type.size {
+			for i in 0u..vector_size {
 				if parameters.size() > 2 {
 					rhs = LLVMBuildInsertElement(this.builder, rhs, parameters[i + 1], LLVMConstInt(this.int_type, i as int, false), "");
 				} else {
@@ -1418,6 +1430,104 @@ struct CGContext {
 				const start = LLVMConstReal(LLVMGetElementType(llvm_type), 0.0);
 				result = this.codegenIntrinsicCall("llvm.vector.reduce.fadd", List!<LLVMTypeRef>(1u, llvm_type), List!<LLVMValueRef>(1u, start) + tmp);
 			}
+			case (PrimitiveOp::MatrixIdentity | Unsigned)
+			| (PrimitiveOp::MatrixIdentity | Signed)		-> {
+				const matrix_type = (type.decl.body as Matrix).value();
+				result = LLVMGetPoison(llvm_type);
+				for x in 0u..matrix_type.columns {
+					for y in 0u..matrix_type.rows {
+						result = LLVMBuildInsertElement(this.builder, result,
+							LLVMConstInt(this.getType(matrix_type.element_type), (x == y) as int, false),
+							LLVMConstInt(this.int_type, (x * matrix_type.rows + y) as int, false), ""
+						);
+					}
+				}
+			}
+			case (PrimitiveOp::MatrixIdentity | Float)		-> {
+				const matrix_type = (type.decl.body as Matrix).value();
+				result = LLVMGetPoison(llvm_type);
+				for x in 0u..matrix_type.columns {
+					for y in 0u..matrix_type.rows {
+						result = LLVMBuildInsertElement(this.builder, result,
+							LLVMConstReal(this.getType(matrix_type.element_type), (x == y) as f64),
+							LLVMConstInt(this.int_type, (x * matrix_type.rows + y) as int, false), ""
+						);
+					}
+				}
+			}
+			case MatrixFromValues							-> {
+				const matrix_type = (type.decl.body as Matrix).value();
+				result = LLVMGetPoison(llvm_type);
+				for x in 0u..matrix_type.columns {
+					for y in 0u..matrix_type.rows {
+						result = LLVMBuildInsertElement(this.builder, result,
+							parameters[(y * matrix_type.columns + x) + 1],
+							LLVMConstInt(this.int_type, (x * matrix_type.rows + y) as int, false), ""
+						);
+					}
+				}
+			}
+			case MatrixFromColumns							-> {
+				const matrix_type = (type.decl.body as Matrix).value();
+				var extend_mask = LLVMGetPoison(llvm_type);
+				for i in 0u..matrix_type.rows {
+					extend_mask = LLVMBuildInsertElement(this.builder, extend_mask, LLVMConstInt(this.int_type, i as int, false), LLVMConstInt(this.int_type, i as int, false), "");
+				}
+
+				result = LLVMGetPoison(llvm_type);
+				for i in 0u..matrix_type.columns {
+					var extented_column = LLVMBuildShuffleVector(this.builder, parameters[i], LLVMGetPoison(LLVMTypeOf(parameters[i])), extend_mask, "");
+
+					var shuffle_mask = LLVMGetPoison(llvm_type);
+					for x in 0u..matrix_type.columns {
+						for y in 0u..matrix_type.rows {
+							const dst = x * matrix_type.rows + y;
+							const src = (matrix_type.columns * matrix_type.rows + y) if x == i else (x * matrix_type.rows + y);
+							shuffle_mask = LLVMBuildInsertElement(this.builder, shuffle_mask, LLVMConstInt(this.int_type, src as int, false), LLVMConstInt(this.int_type, dst as int, false), "");
+						}
+					}
+
+					result = LLVMBuildShuffleVector(this.builder, result, extented_column, shuffle_mask, "");
+				}
+			}
+			case MatrixFromRows								-> {
+				const matrix_type = (type.decl.body as Matrix).value();
+				var extend_mask = LLVMGetPoison(llvm_type);
+				for i in 0u..matrix_type.columns {
+					extend_mask = LLVMBuildInsertElement(this.builder, extend_mask, LLVMConstInt(this.int_type, i as int, false), LLVMConstInt(this.int_type, i as int, false), "");
+				}
+
+				result = LLVMGetPoison(llvm_type);
+				for i in 0u..matrix_type.rows {
+					var extented_row = LLVMBuildShuffleVector(this.builder, parameters[i], LLVMGetPoison(LLVMTypeOf(parameters[i])), extend_mask, "");
+
+					var shuffle_mask = LLVMGetPoison(llvm_type);
+					for x in 0u..matrix_type.columns {
+						for y in 0u..matrix_type.rows {
+							const dst = x * matrix_type.rows + y;
+							const src = (matrix_type.columns * matrix_type.rows + x) if y == i else (x * matrix_type.rows + y);
+							shuffle_mask = LLVMBuildInsertElement(this.builder, shuffle_mask, LLVMConstInt(this.int_type, src as int, false), LLVMConstInt(this.int_type, dst as int, false), "");
+						}
+					}
+
+					result = LLVMBuildShuffleVector(this.builder, result, extented_row, shuffle_mask, "");
+				}
+			}
+			case MatrixTranspose							-> {
+				const matrix_type = (type.decl.body as Matrix).value();
+
+				var shuffle_mask = LLVMGetPoison(llvm_type);
+				for x in 0u..matrix_type.columns {
+					for y in 0u..matrix_type.rows {
+						shuffle_mask = LLVMBuildInsertElement(this.builder, shuffle_mask,
+							LLVMConstInt(this.int_type, (x * matrix_type.rows + y) as int, false),
+							LLVMConstInt(this.int_type, (y * matrix_type.rows + x) as int, false), ""
+						);
+					}
+				}
+
+				result = LLVMBuildShuffleVector(this.builder, parameters[0u], LLVMGetPoison(llvm_type), shuffle_mask, "");
+			}
 			else -> panic("invalid primitive op");
 		}
 
@@ -1522,6 +1632,70 @@ struct CGContext {
 				} else {
 					return LLVMBuildFPToUI(this.builder, parameters[0u], this.getType(target), "");
 				}
+			}
+
+			case MatrixMultiply: m -> {
+				// for (int c = 0; c < rhs.cols; c++) {
+				//   for (int k = 0; k < lhs.cols; k++) {
+				//     res[c] += lhs[k] * rhs[c][k];
+				//   }
+				// }
+
+				const element_type = this.getType(function.base_type);
+
+				var lhs_cols: List!<LLVMValueRef>;
+				for i in 0u..m.a_columns {
+					var shuffle_mask = LLVMGetPoison(LLVMVectorType(element_type, m.a_rows as u32));
+					for k in 0u..m.a_rows {
+						shuffle_mask = LLVMBuildInsertElement(this.builder, shuffle_mask,
+							LLVMConstInt(this.int_type, (i * m.a_rows + k) as int, false),
+							LLVMConstInt(this.int_type, k as int, false), ""
+						);
+					}
+
+					lhs_cols.append(LLVMBuildShuffleVector(this.builder, parameters[0u], LLVMGetPoison(LLVMTypeOf(parameters[0u])), shuffle_mask, ""));
+				}
+
+				var result = LLVMGetPoison(LLVMVectorType(element_type, (m.a_rows * m.b_columns) as u32));
+				for c in 0u..m.b_columns {
+					var column: LLVMValueRef;
+					for k in 0u..m.a_columns {
+						const rhs_element_vector = LLVMBuildShuffleVector(this.builder, parameters[1u], LLVMGetPoison(LLVMTypeOf(parameters[1u])),
+							LLVMConstVector(List!<LLVMValueRef>(m.a_rows, LLVMConstInt(this.int_type, (c * m.a_columns + k) as int, false))), ""
+						);
+
+						if column == LLVMValueRef() {
+							column = LLVMBuildMul(this.builder, lhs_cols[k], rhs_element_vector, "");
+						} else {
+							column = LLVMBuildAdd(this.builder, column, LLVMBuildMul(this.builder, lhs_cols[k], rhs_element_vector, ""), "");
+						}
+					}
+
+					var extend_mask = LLVMGetPoison(LLVMVectorType(this.int_type, m.a_rows * m.b_columns));
+					for i in 0u..m.a_rows {
+						extend_mask = LLVMBuildInsertElement(this.builder, extend_mask, LLVMConstInt(this.int_type, i as int, false), LLVMConstInt(this.int_type, i as int, false), "");
+					}
+
+					column = LLVMBuildShuffleVector(this.builder, column, LLVMGetPoison(LLVMTypeOf(column)), extend_mask, "");
+
+					if c == 0 {
+						result = column;
+					} else {
+						var shuffle_mask = LLVMConstNull(LLVMVectorType(this.int_type, m.a_rows * m.b_columns));
+						for x in 0u..m.a_rows {
+							for y in 0u..m.b_columns {
+								const i = x * m.b_columns + y;
+								const k = (m.a_rows * m.b_columns + y) if x == c else i;
+								shuffle_mask = LLVMBuildInsertElement(this.builder, shuffle_mask,
+									LLVMConstInt(this.int_type, k as int, false),
+									LLVMConstInt(this.int_type, i as int, false), ""
+								);
+							}
+						}
+						result = LLVMBuildShuffleVector(this.builder, result, column, shuffle_mask, "");
+					}
+				}
+				return result;
 			}
 
 			case SizeOf -> {
@@ -1832,78 +2006,100 @@ struct CGContext {
 				discard LLVMBuildStore(this.builder, result, dst);
 			}
 			case FunctionRefExpr: function -> result = this.getFunction(function);
-			case VectorGetElementExpr: expr -> {
-				const vector = this.codegenNode(this.getASTNode(expr.vector));
-				const index = this.codegenNode(this.getASTNode(expr.index));
-				result = LLVMBuildExtractElement(this.builder, vector, index, "");
-			}
-			case VectorSetElementExpr: expr -> {
-				const vector_type = this.getType(this.getASTNode(expr.vector).type.base());
-				const vector = this.codegenNode(this.getASTNode(expr.vector));
-				const index = this.codegenNode(this.getASTNode(expr.index));
-				const value = this.codegenNode(this.getASTNode(expr.value));
-				discard LLVMBuildStore(this.builder,
-					LLVMBuildInsertElement(this.builder,
-						LLVMBuildLoad2(this.builder, vector_type, vector, ""), value, index, ""
-					), vector
-				);
-			}
 			case VectorGetSwizzleExpr: expr -> {
 				const vector = this.codegenNode(this.getASTNode(expr.vector));
-				var mask = LLVMGetPoison(LLVMVectorType(this.int_type, expr.indices.size()));
-				for i in 0u..expr.indices.size() {
-					mask = LLVMBuildInsertElement(
-						this.builder, mask,
-						LLVMConstInt(this.int_type, expr.indices[i] as int, false),
-						LLVMConstInt(this.int_type, i as int, false),
-						""
-					);
+				var offset = LLVMValueRef();
+				if expr.offset_scale > 0 {
+					offset = this.codegenNode(this.getASTNode(expr.offset));
+					if expr.offset_scale != 1 {
+						offset = LLVMBuildMul(this.builder, offset, LLVMConstInt(this.int_type, expr.offset_scale as int, false), "");
+					}
 				}
 
-				result = LLVMBuildShuffleVector(this.builder, vector, LLVMGetPoison(LLVMTypeOf(vector)), mask, "");
-			}
-			case VectorSetSwizzleExpr: expr -> {
-				const vector_type = this.getASTNode(expr.vector).type.base();
-				const element_type = (vector_type.decl.body as Vector).value().element_type;
-				const vector_size = (vector_type.decl.body as Vector).value().size;
-				const llvm_type = this.getType(vector_type);
-
-				var value_extend_mask = LLVMGetPoison(LLVMVectorType(this.int_type, vector_size));
-				var mix_mask = LLVMGetPoison(LLVMVectorType(this.int_type, vector_size));
-				for i in 0u..vector_size {
-					value_extend_mask = LLVMBuildInsertElement(
-						this.builder, value_extend_mask,
-						LLVMConstInt(this.int_type, i as int, false) if i < expr.indices.size() else LLVMGetPoison(this.int_type),
-						LLVMConstInt(this.int_type, i as int, false),
-						""
-					);
-
-					var dst = i;
-					if const k = expr.indices.find(i) {
-						dst = vector_size + k;
+				if expr.indices.size() == 1 {
+					var index = this.codegenNode(this.getASTNode(expr.indices[0u]));
+					if offset != LLVMValueRef() {
+						index = LLVMBuildAdd(this.builder, index, offset, "");
 					}
 
-					mix_mask = LLVMBuildInsertElement(
-						this.builder, mix_mask,
-						LLVMConstInt(this.int_type, dst as int, false),
-						LLVMConstInt(this.int_type, i as int, false),
-						""
-					);
+					result = LLVMBuildExtractElement(this.builder, vector, index, "");
+				} else {
+					var mask = LLVMGetPoison(LLVMVectorType(this.int_type, expr.indices.size()));
+					for i in 0u..expr.indices.size() {
+						var index = this.codegenNode(this.getASTNode(expr.indices[i]));
+						if offset != LLVMValueRef() {
+							index = LLVMBuildAdd(this.builder, index, offset, "");
+						}
+
+						mask = LLVMBuildInsertElement(this.builder, mask, index, LLVMConstInt(this.int_type, i as int, false), "");
+					}
+
+					result = LLVMBuildShuffleVector(this.builder, vector, LLVMGetPoison(LLVMTypeOf(vector)), mask, "");
+				}
+			}
+			case VectorSetSwizzleExpr: expr -> {
+				const vector_type = this.getType(this.getASTNode(expr.vector).type.base());
+				const vector_size = LLVMGetVectorSize(vector_type) as uint;
+				const value = this.codegenNode(this.getASTNode(expr.value));
+				const vector = this.codegenNode(this.getASTNode(expr.vector));
+
+				var offset = LLVMValueRef();
+				if expr.offset_scale > 0 {
+					offset = this.codegenNode(this.getASTNode(expr.offset));
+					if expr.offset_scale != 1 {
+						offset = LLVMBuildMul(this.builder, offset, LLVMConstInt(this.int_type, expr.offset_scale as int, false), "");
+					}
 				}
 
-				const vector = this.codegenNode(this.getASTNode(expr.vector));
-				const value = this.codegenNode(this.getASTNode(expr.value));
-				const extented_value = LLVMBuildShuffleVector(this.builder, value, LLVMGetPoison(LLVMTypeOf(value)), value_extend_mask, "");
-				discard LLVMBuildStore(
-					this.builder,
-					LLVMBuildShuffleVector(
+				if expr.indices.size() == 1 {
+					var index = this.codegenNode(this.getASTNode(expr.indices[0u]));
+					if offset != LLVMValueRef() {
+						index = LLVMBuildAdd(this.builder, index, offset, "");
+					}
+
+					discard LLVMBuildStore(this.builder,
+						LLVMBuildInsertElement(this.builder,
+							LLVMBuildLoad2(this.builder, vector_type, vector, ""), value, index, ""
+						), vector
+					);
+				} else {
+					var value_extend_mask = LLVMGetPoison(LLVMVectorType(this.int_type, vector_size));
+					var mix_mask = LLVMGetPoison(LLVMVectorType(this.int_type, vector_size));
+					for i in 0u..vector_size {
+						const i2 = LLVMConstInt(this.int_type, i as int, false);
+						value_extend_mask = LLVMBuildInsertElement(
+							this.builder, value_extend_mask,
+							i2 if i < expr.indices.size() else LLVMGetPoison(this.int_type),
+							i2,
+							""
+						);
+
+						// initialize with <0, 1, 2, ...> to copy the original vector
+						mix_mask = LLVMBuildInsertElement(this.builder, mix_mask, i2, i2, "");
+					}
+
+					// overwrite used indices with vector_size + 1 to use the new value
+					for i in 0u..expr.indices.size() {
+						var index = this.codegenNode(this.getASTNode(expr.indices[i]));
+						if offset != LLVMValueRef() {
+							index = LLVMBuildAdd(this.builder, index, offset, "");
+						}
+
+						mix_mask = LLVMBuildInsertElement(this.builder, mix_mask, LLVMConstInt(this.int_type, (vector_size + i) as int, false), index, "");
+					}
+
+					const extented_value = LLVMBuildShuffleVector(this.builder, value, LLVMGetPoison(LLVMTypeOf(value)), value_extend_mask, "");
+					discard LLVMBuildStore(
 						this.builder,
-						LLVMBuildLoad2(this.builder, llvm_type, vector, ""),
-						extented_value,
-						mix_mask, ""
-					),
-					vector
-				);
+						LLVMBuildShuffleVector(
+							this.builder,
+							LLVMBuildLoad2(this.builder, vector_type, vector, ""),
+							extented_value,
+							mix_mask, ""
+						),
+						vector
+					);
+				}
 			}
 			else -> {
 				this.error("invalid node for codegen '" + node.name() + "'", node.span);

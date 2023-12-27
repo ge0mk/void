@@ -404,6 +404,59 @@ func createVectorTypeInstance(program: &&Program, dest_namespace: SharedHandle!<
 	return type_decl;
 }
 
+func createMatrixTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>) -> void {
+	var template_parameters: List!<TemplateParameterDecl>;
+	template_parameters.append(TemplateParameterDecl("T", program.any_concept, false));
+	template_parameters.append(TemplateParameterDecl("Columns", program.uint_concept, false));
+	template_parameters.append(TemplateParameterDecl("Rows", program.uint_concept, false));
+	discard program.createType(dest_namespace, "Matrix", template_parameters, TypeBody::Matrix((element_type: Type::unknown(), columns: 0u, rows: 0u)));
+}
+
+func createMatrixTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, element_type: Type, columns: uint, rows: uint) -> SharedHandle!<TypeDecl> {
+	var template_parameters: List!<TemplateParameterDecl>;
+	template_parameters.append(TemplateParameterDecl("T", program.any_concept, false, TemplateParameter::Type(element_type)));
+	template_parameters.append(TemplateParameterDecl("Columns", program.uint_concept, false, TemplateParameter::Integer(columns as int)));
+	template_parameters.append(TemplateParameterDecl("Rows", program.uint_concept, false, TemplateParameter::Integer(rows as int)));
+	var type_decl = program.createType(dest_namespace, "Matrix", template_parameters, TypeBody::Matrix((element_type: element_type, columns: columns, rows: rows)));
+	const type = Type(type_decl, ReferenceKind::None);
+
+	type_decl.addContainedType(element_type);
+	const type_namespace = type_decl.linked_namespace;
+
+	const flags = match element_type.decl.body {
+		case Int -> yield PrimitiveOp::Signed;
+		case UInt -> yield PrimitiveOp::Unsigned;
+		case Float -> yield PrimitiveOp::Float;
+		else -> panic("invalid matrix element type");
+	};
+
+	var value_constructor_parameter_types: List!<Type>;
+	value_constructor_parameter_types.append(type.varRef());
+	value_constructor_parameter_types.append(List!<Type>(columns * rows, element_type));
+	discard program.createFunction(type_namespace, "constructor", value_constructor_parameter_types, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::MatrixFromValues | Assign, type));
+
+	discard program.createBinaryFunction(type_namespace, "constructor", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | RHSToVector | Assign, type));
+	type_decl.default_constructor = program.createUnaryFunction(type_namespace, "constructor", type.varRef(), program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::MatrixIdentity | Assign | flags, type));
+	type_decl.copy_constructor = program.createBinaryFunction(type_namespace, "constructor", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
+	type_decl.destructor = program.createUnaryFunction(type_namespace, "destructor", type.varRef(), program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::NoOp, type));
+	type_decl.op_assign = program.createBinaryFunction(type_namespace, "operator =", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
+
+	type.decl.op_equal = program.createBinaryFunction(type_namespace, "operator ==", type, type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::VectorEQ, type));
+	discard program.createBinaryFunction(type_namespace, "operator !=", type, type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::VectorNE, type));
+
+	discard program.createBinaryFunction(type_namespace, "operator +", type, element_type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Add | RHSToVector | flags, type));
+	discard program.createBinaryFunction(type_namespace, "operator -", type, element_type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Sub | RHSToVector | flags, type));
+	discard program.createBinaryFunction(type_namespace, "operator *", type, element_type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Mul | RHSToVector | flags, type));
+	discard program.createBinaryFunction(type_namespace, "operator /", type, element_type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Div | RHSToVector | flags, type));
+
+	discard program.createBinaryFunction(type_namespace, "operator +=", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Add | Assign | RHSToVector | flags, type));
+	discard program.createBinaryFunction(type_namespace, "operator -=", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Sub | Assign | RHSToVector | flags, type));
+	discard program.createBinaryFunction(type_namespace, "operator *=", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Mul | Assign | RHSToVector | flags, type));
+	discard program.createBinaryFunction(type_namespace, "operator /=", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Div | Assign | RHSToVector | flags, type));
+
+	return type_decl;
+}
+
 func createArrayTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>) -> void {
 	var template_parameters: List!<TemplateParameterDecl>;
 	template_parameters.append(TemplateParameterDecl("T", program.any_concept, false));

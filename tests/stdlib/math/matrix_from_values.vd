@@ -1,0 +1,22 @@
+import std/core;
+import std/math;
+
+func main() -> void {
+	var a = Matrix!<int, 4, 4>(
+		00, 10, 20, 30,
+		01, 11, 21, 31,
+		02, 12, 22, 32,
+		03, 13, 23, 33,
+	);
+
+	assert(a[0, 0] == 00);
+	assert(a[1, 0] == 10);
+	assert(a[0, 1] == 01);
+	assert(a[2, 3] == 23);
+
+	for x in 0u..4u {
+		for y in 0u..4u {
+			assert(a[x, y] == (x * 10 + y) as int);
+		}
+	}
+}

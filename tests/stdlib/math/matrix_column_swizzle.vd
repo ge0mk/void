@@ -1,0 +1,13 @@
+import std/core;
+import std/math;
+
+func main() -> void {
+	var a = Matrix!<int, 4, 4>();
+	assert(a[0].xzx == Vector!<int, 3>(1, 0, 1));
+	assert(a[1].xy == Vector!<int, 2>(0, 1));
+
+	a[1].x = 1;
+	a[1].zyw = Vector!<int, 3>(3, 2, 4);
+
+	assert(a[1] == Vector!<int, 4>(1, 2, 3, 4));
+}

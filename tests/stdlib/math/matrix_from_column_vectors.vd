@@ -1,0 +1,20 @@
+import std/core;
+import std/math;
+
+func main() -> void {
+	var a = Matrix!<int, 4, 4>(
+		00, 10, 20, 30,
+		01, 11, 21, 31,
+		02, 12, 22, 32,
+		03, 13, 23, 33,
+	);
+
+	var b = Matrix!<int, 4, 4>::fromColumns(
+		Vector!<int, 4>(00, 01, 02, 03),
+		Vector!<int, 4>(10, 11, 12, 13),
+		Vector!<int, 4>(20, 21, 22, 23),
+		Vector!<int, 4>(30, 31, 32, 33),
+	);
+
+	assert(a == b);
+}

@@ -460,6 +460,10 @@ func LLVMConstInt(type: LLVMTypeRef, value: int, sign_extend: bool) -> LLVMValue
 	return LLVMConstInt(type, value as u32, sign_extend as i32);
 }
 
+func LLVMConstVector(elements: List!<LLVMValueRef>) -> LLVMValueRef {
+	return LLVMConstVector(elements.data(), elements.size() as u32);
+}
+
 func LLVMConstGEP2(type: LLVMTypeRef, pointer: LLVMValueRef, indices: &List!<LLVMValueRef>) -> LLVMValueRef {
 	return LLVMConstGEP2(type, pointer, indices.data, indices.size() as u32);
 }

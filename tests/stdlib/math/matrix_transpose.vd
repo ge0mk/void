@@ -1,0 +1,22 @@
+import std/core;
+import std/math;
+
+func main() -> void {
+	const a = Matrix!<int, 4, 4>(
+		0, 0, 2, 0,
+		0, 1, 0, 0,
+		5, 4, 3, 2,
+		0, 0, 0, 0
+	);
+
+	assert(a.transpose().transpose() == a);
+
+	assert(a.transpose() == Matrix!<int, 4, 4>(
+		0, 0, 5, 0,
+		0, 1, 4, 0,
+		2, 0, 3, 0,
+		0, 0, 2, 0
+	));
+
+	assert(Matrix!<int, 4, 4>().transpose() == Matrix!<int, 4, 4>());
+}

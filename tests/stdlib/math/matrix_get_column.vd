@@ -1,0 +1,10 @@
+import std/core;
+import std/math;
+
+func main() -> void {
+	var a = Matrix!<int, 4, 4>();
+	assert(a[0] == Vector!<int, 4>(1, 0, 0, 0));
+	assert(a[1] == Vector!<int, 4>(0, 1, 0, 0));
+	assert(a[2] == Vector!<int, 4>(0, 0, 1, 0));
+	assert(a[3] == Vector!<int, 4>(0, 0, 0, 1));
+}

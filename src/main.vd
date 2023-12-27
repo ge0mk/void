@@ -219,6 +219,27 @@ func main(args: Range!<String, false>) -> int {
 		discard program.createFunction(ns, "round", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Round, Type::unknown()));
 
 		program.createVectorTypeTemplate(ns);
+		program.createMatrixTypeTemplate(ns);
+
+		var matmul_template_parameters: List!<TemplateParameterDecl>;
+		matmul_template_parameters.append(TemplateParameterDecl("Type", program.any_concept, false));
+		matmul_template_parameters.append(TemplateParameterDecl("AColumns", program.uint_concept, false));
+		matmul_template_parameters.append(TemplateParameterDecl("ARows", program.uint_concept, false));
+		matmul_template_parameters.append(TemplateParameterDecl("BColumns", program.uint_concept, false));
+		discard program.createFunction(ns, "matmul", matmul_template_parameters, BuiltinFunction::MatrixMultiply((a_columns: 0u, a_rows: 0u, b_columns: 0u), Type::unknown()));
+	});
+
+	typechecker.registerPragma("finalize_matrix_type", func (this: &&TCContext, program: &&Program, ns: SharedHandle!<Namespace>, span: Span) -> void {
+		const type = Type(ns.linked_type);
+		const matrix_type = (ns.linked_type.body as Matrix).value();
+		const transposed_type = this.getMatrixType(matrix_type.element_type, matrix_type.rows, matrix_type.columns, span);
+		const column_vector_type = this.getVectorType(matrix_type.element_type, matrix_type.rows, span);
+		const row_vector_type = this.getVectorType(matrix_type.element_type, matrix_type.columns, span);
+
+		discard program.createFunction(ns, "fromColumns", List!<Type>(matrix_type.columns, column_vector_type), type, BuiltinFunction::PrimitiveOp(PrimitiveOp::MatrixFromColumns, type));
+		discard program.createFunction(ns, "fromRows", List!<Type>(matrix_type.rows, row_vector_type), type, BuiltinFunction::PrimitiveOp(PrimitiveOp::MatrixFromRows, type));
+
+		discard program.createFunction(ns, "transpose", List!<Type>(1u, type), transposed_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::MatrixTranspose, type));
 	});
 
 	const root_module_desc = ImportedModule(1u, program.options.root_module_path, program.options.program_name);

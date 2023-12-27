@@ -383,28 +383,21 @@ struct CompilationUnit {
 				this.dump(&&out, expr.destination, false);
 				this.dump(&&out, expr.value, true);
 			}
-			case VectorGetElementExpr: expr -> {
-				this.dump(&&out, expr.vector, false);
-				this.dump(&&out, expr.index, true);
-			}
-			case VectorSetElementExpr: expr -> {
-				this.dump(&&out, expr.vector, false);
-				this.dump(&&out, expr.index, false);
-				this.dump(&&out, expr.value, true);
-			}
 			case VectorGetSwizzleExpr: expr -> {
-				for i in expr.indices {
-					out.value(format(i));
+				out.value(format(expr.offset_scale));
+				this.dump(&&out, expr.vector, false);
+				this.dump(&&out, expr.offset, false);
+				for i in 0u..expr.indices.size() {
+					this.dump(&&out, expr.indices[i], i == expr.indices.size() - 1);
 				}
-
-				this.dump(&&out, expr.vector, true);
 			}
 			case VectorSetSwizzleExpr: expr -> {
-				for i in expr.indices {
-					out.value(format(i));
-				}
-
+				out.value(format(expr.offset_scale));
 				this.dump(&&out, expr.vector, false);
+				this.dump(&&out, expr.offset, false);
+				for i in 0u..expr.indices.size() {
+					this.dump(&&out, expr.indices[i], false);
+				}
 				this.dump(&&out, expr.value, true);
 			}
 		}
@@ -1244,6 +1237,12 @@ struct TypeDecl {
 				out.value(vector_type.element_type.signature());
 				out.value(format(vector_type.size));
 			}
+			case Matrix: matrix_type -> {
+				out.push("MatricTypeDecl", is_last);
+				out.value(matrix_type.element_type.signature());
+				out.value(format(matrix_type.columns));
+				out.value(format(matrix_type.rows));
+			}
 			case Array: array_type -> {
 				out.push("ArrayTypeDecl", is_last);
 				out.value(array_type.element_type.signature());
@@ -1638,6 +1637,7 @@ struct Type {
 			| UInt
 			| Enum -> return true;
 			case Vector: vector_type -> return vector_type.element_type.isIntType(allow_vector_types) && allow_vector_types;
+			case Matrix: matrix_type -> return matrix_type.element_type.isIntType(allow_vector_types) && allow_vector_types;
 			else -> return false;
 		}
 	}
@@ -1652,6 +1652,7 @@ struct Type {
 			| Float -> return true;
 			case Enum -> return this.decl.id_type.isSigned(allow_vector_types);
 			case Vector: vector_type -> return vector_type.element_type.isSigned(allow_vector_types) && allow_vector_types;
+			case Matrix: matrix_type -> return matrix_type.element_type.isSigned(allow_vector_types) && allow_vector_types;
 			else -> return false;
 		}
 	}
@@ -1664,6 +1665,7 @@ struct Type {
 		match this.decl.body {
 			case Float -> return true;
 			case Vector: vector_type -> return vector_type.element_type.isFloatType(allow_vector_types) && allow_vector_types;
+			case Matrix: matrix_type -> return matrix_type.element_type.isFloatType(allow_vector_types) && allow_vector_types;
 			else -> return false;
 		}
 	}
@@ -1695,6 +1697,14 @@ struct Type {
 		return this.decl.body is Vector;
 	}
 
+	func isMatrixType(this: &Type) -> bool {
+		if this.decl.isEmpty() {
+			return false;
+		}
+
+		return this.decl.body is Matrix;
+	}
+
 	func isPrimitive(this: &Type) -> bool {
 		if this.reference_kind != None {
 			return true; // reference types are always primitive
@@ -1714,6 +1724,7 @@ struct Type {
 			| Pointer
 			| Function
 			| Vector
+			| Matrix
 			| Enum -> return true;
 			case Array: array_type -> return array_type.element_type.isPrimitive();
 			else -> return false;
@@ -1782,6 +1793,7 @@ variant TypeBody {
 	case Tuple;
 
 	case Vector: (element_type: Type, size: uint);
+	case Matrix: (element_type: Type, columns: uint, rows: uint);
 	case Array: (element_type: Type, size: uint);
 
 	case Range: (element_type: Type, is_mutable: bool);
@@ -1895,6 +1907,12 @@ enum PrimitiveOp {
 	case VectorReduceMax;
 	case VectorDotProduct;
 
+	case MatrixIdentity;
+	case MatrixFromValues;
+	case MatrixFromColumns;
+	case MatrixFromRows;
+	case MatrixTranspose;
+
 	// flags
 	case Unsigned = 0;
 	case Signed = 128;
@@ -1936,6 +1954,8 @@ variant BuiltinFunction {
 	case FloatCast: Type;
 	case IntToFloat: Type;
 	case FloatToInt: Type;
+
+	case MatrixMultiply: (a_columns: uint, a_rows: uint, b_columns: uint); // b_rows == a_columns
 
 	// base type is first template parameter
 	case SizeOf;
@@ -2008,6 +2028,7 @@ variant BuiltinFunction {
 			| PointerOffset
 			| PointerOpIndex
 			| FunctionPointerCall
+			| MatrixMultiply
 			| IntCast
 			| FloatCast
 			| IntToFloat
@@ -2121,10 +2142,8 @@ variant Node {
 	case MemberVarInvokeExpr: MemberVarInvokeExpr;
 	case ShallowCopyExpr: ShallowCopyExpr;
 
-	case VectorGetElementExpr: (vector: uint, index: uint);
-	case VectorSetElementExpr: (vector: uint, index: uint, value: uint);
-	case VectorGetSwizzleExpr: (vector: uint, indices: List!<uint>);
-	case VectorSetSwizzleExpr: (vector: uint, indices: List!<uint>, value: uint);
+	case VectorGetSwizzleExpr: (vector: uint, offset: uint, offset_scale: uint, indices: List!<uint>, indices_are_sequential: bool);
+	case VectorSetSwizzleExpr: (vector: uint, offset: uint, offset_scale: uint, indices: List!<uint>, value: uint);
 
 	func name(this: &Node) -> String {
 		match this {
@@ -2184,8 +2203,6 @@ variant Node {
 			case DereferenceExpr -> return "DereferenceExpr";
 			case MemberVarInvokeExpr -> return "MemberVarInvokeExpr";
 			case ShallowCopyExpr -> return "ShallowCopyExpr";
-			case VectorGetElementExpr -> return "VectorGetElementExpr";
-			case VectorSetElementExpr -> return "VectorSetElementExpr";
 			case VectorGetSwizzleExpr -> return "VectorGetSwizzleExpr";
 			case VectorSetSwizzleExpr -> return "VectorSetSwizzleExpr";
 		}
