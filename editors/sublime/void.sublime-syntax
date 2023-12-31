@@ -324,97 +324,32 @@ contexts:
         - include: expect_type
 
     - match: \(
-      pop: 1
-      branch_point: paren_type
-      branch:
-        - named_tuple_type
-        - unnamed_tuple_type
-        - function_type
+      set:
+        - match: '\s*(\w+)\s*:'
+          captures:
+            1: variable.other.member
+          push: type
 
-  unnamed_tuple_type:
-    - match: \)\s*->
-      fail: paren_type
+        - match: ([a-zA-Z_]\w*)!<
+          captures:
+            1: storage.type
+          push: [template_parameter_list, template_parameter]
 
-    - match: \)
-      pop: true
+        - match: '([a-zA-Z_]\w*)(::)'
+          captures:
+            1: entity.name.namespace
+            2: punctuation.accessor
 
-    - match: ''
-      set: [unnamed_tuple_type_middle, unnamed_typle_type_element]
+        - match: '[a-zA-Z_]\w*'
+          scope: storage.type
 
-  unnamed_typle_type_element:
-    - match: '(\s*[a-zA-Z_]\w*)(::)'
-      captures:
-        1: entity.name.namespace
-        2: punctuation.accessor
+        - match: \)\s*->
+          set: type
 
-    - match: '\s*\w+\s*:'
-      fail: paren_type
+        - match: \)
+          pop: true
 
-    - include: type
-
-  unnamed_tuple_type_middle:
-    - match: ','
-      scope: punctuation.separator
-      push: unnamed_typle_type_element
-
-    - include: tuple_type_end
-
-  named_tuple_type:
-    - match: \)\s*->
-      fail: paren_type
-
-    - match: \)
-      pop: true
-
-    - match: ''
-      set: [named_tuple_type_middle, named_typle_type_element]
-
-  named_typle_type_element:
-    - match: '\s*(\w+)\s*:'
-      captures:
-        1: variable.other.member
-      set: type
-
-    - match: '\N'
-      fail: paren_type
-
-  named_tuple_type_middle:
-    - match: ','
-      scope: punctuation.separator
-      push: named_typle_type_element
-
-    - include: tuple_type_end
-
-  tuple_type_end:
-    - match: \)\s*->
-      fail: paren_type
-
-    - match: \)
-      pop: true
-
-    - match: '\N'
-      fail: paren_type
-
-  function_type:
-    - match: \)\s*->
-      set: type
-
-    - match: ''
-      set: [function_type_middle, type]
-
-  function_type_middle:
-    - match: ','
-      scope: punctuation.separator
-      push: type
-
-    - include: function_type_end
-
-  function_type_end:
-    - match: \)\s*->
-      set: type
-
-    - match: ''
-      fail: paren_type
+        - include: expr_stmt
 
   template_parameter_list:
     - match: ','
