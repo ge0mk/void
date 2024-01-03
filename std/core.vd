@@ -419,6 +419,8 @@ namespace Range {
 
 template <T: type, Size: uint>
 namespace Array {
+	pragma finalize_std_core_array_instance;
+
 	func iterator(this: &Array!<T, Size>) -> RangeIterator!<T, false> {
 		return RangeIterator!<T, false>(this.data() as ptr!<T, false>, this.data() as ptr!<T, false> + Size);
 	}

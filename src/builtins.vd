@@ -464,7 +464,7 @@ func createArrayTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<N
 	discard program.createType(dest_namespace, "Array", template_parameters, TypeBody::Array((element_type: Type::unknown(), size: 0u)));
 }
 
-func createArrayTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, element_type: Type, size: uint, element_cptr_type: Type, element_vptr_type: Type) -> SharedHandle!<TypeDecl> {
+func createArrayTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, element_type: Type, size: uint) -> SharedHandle!<TypeDecl> {
 	var template_parameters: List!<TemplateParameterDecl>;
 	template_parameters.append(TemplateParameterDecl("T", program.any_concept, false, TemplateParameter::Type(element_type)));
 	template_parameters.append(TemplateParameterDecl("Size", program.uint_concept, false, TemplateParameter::Integer(size as int)));
@@ -484,8 +484,6 @@ func createArrayTypeInstance(program: &&Program, dest_namespace: SharedHandle!<N
 	}
 
 	type_decl.op_equal = program.createBinaryFunction(type_namespace, "operator ==", type, type, program.bool_type, BuiltinFunction::ArrayOpEqual(type));
-	discard program.createUnaryFunction(type_namespace, "data", type.constRef(), element_cptr_type, BuiltinFunction::ArrayGetDataPointer(type));
-	discard program.createUnaryFunction(type_namespace, "data", type.varRef(), element_vptr_type, BuiltinFunction::ArrayGetDataPointer(type));
 	discard program.createUnaryFunction(type_namespace, "size", type.constRef(), program.uint_type, BuiltinFunction::ArrayGetSize(type));
 
 	return type_decl;

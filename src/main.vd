@@ -229,7 +229,20 @@ func main(args: Range!<String, false>) -> int {
 		discard program.createFunction(ns, "matmul", matmul_template_parameters, BuiltinFunction::MatrixMultiply((a_columns: 0u, a_rows: 0u, b_columns: 0u), Type::unknown()));
 	});
 
-	typechecker.registerPragma("finalize_matrix_type", func (this: &&TCContext, program: &&Program, ns: SharedHandle!<Namespace>, span: Span) -> void {
+	typechecker.registerPragma("finalize_std_core_array_instance", func (this: &&TCContext, program: &&Program, ns: SharedHandle!<Namespace>, span: Span) -> void {
+		const type = Type(ns.linked_type);
+		const element_type = (ns.linked_type.body as Array).value().element_type;
+
+		const element_ptr_type_template_parameters = List!<TemplateParameter>(1u, TemplateParameter::Type(element_type));
+
+		const element_cptr_type = this.getType(Name("ptr", element_ptr_type_template_parameters + TemplateParameter::Boolean(false)), Span(), false);
+		const element_vptr_type = this.getType(Name("ptr", element_ptr_type_template_parameters + TemplateParameter::Boolean(true)), Span(), false);
+
+		discard program.createUnaryFunction(ns, "data", type.constRef(), element_cptr_type, BuiltinFunction::ArrayGetDataPointer(type));
+		discard program.createUnaryFunction(ns, "data", type.varRef(), element_vptr_type, BuiltinFunction::ArrayGetDataPointer(type));
+	});
+
+	typechecker.registerPragma("finalize_std_math_matrix_instance", func (this: &&TCContext, program: &&Program, ns: SharedHandle!<Namespace>, span: Span) -> void {
 		const type = Type(ns.linked_type);
 		const matrix_type = (ns.linked_type.body as Matrix).value();
 		const transposed_type = this.getMatrixType(matrix_type.element_type, matrix_type.rows, matrix_type.columns, span);

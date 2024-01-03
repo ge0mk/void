@@ -44,7 +44,7 @@ namespace Vector {
 
 template <T: type, Columns: uint, Rows: uint>
 namespace Matrix {
-	pragma finalize_matrix_type;
+	pragma finalize_std_math_matrix_instance;
 
 	comptime const e1: T = 1;
 	comptime const e0: T = 0;
