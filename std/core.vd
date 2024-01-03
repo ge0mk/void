@@ -229,25 +229,6 @@ variant Result {
 		return this is Error;
 	}
 
-	func value(this: Result!<Tok, Terr>) -> Tok {
-		comptime if referenceKindOf!<Tok>() == ReferenceKind::Var {
-			match this {
-				case Ok: &&value -> return &&value;
-				else -> abort();
-			}
-		} else if referenceKindOf!<Tok>() == ReferenceKind::Const {
-			match this {
-				case Ok: &value -> return &value;
-				else -> abort();
-			}
-		} else {
-			match this {
-				case Ok: value -> return value;
-				else -> abort();
-			}
-		}
-	}
-
 	func error(this: Result!<Tok, Terr>) -> Terr {
 		match this {
 			case Error: error -> return error;
@@ -255,45 +236,43 @@ variant Result {
 		}
 	}
 
-	operator ??(this: Result!<Tok, Terr>, other: Tok) -> Tok {
-		comptime if referenceKindOf!<Tok>() == ReferenceKind::Var {
-			match this {
-				case Ok: &&value -> return &&value;
-				else -> return &&other;
-			}
-		} else if referenceKindOf!<Tok>() == ReferenceKind::Const {
-			match this {
-				case Ok: &value -> return &value;
-				else -> return &other;
-			}
-		} else {
-			match this {
-				case Ok: value -> return value;
-				else -> return other;
+	comptime if Tok != void {
+		func value(this: Result!<Tok, Terr>) -> Tok {
+			comptime if referenceKindOf!<Tok>() == ReferenceKind::Var {
+				match this {
+					case Ok: &&value -> return &&value;
+					else -> abort();
+				}
+			} else if referenceKindOf!<Tok>() == ReferenceKind::Const {
+				match this {
+					case Ok: &value -> return &value;
+					else -> abort();
+				}
+			} else {
+				match this {
+					case Ok: value -> return value;
+					else -> abort();
+				}
 			}
 		}
-	}
-}
 
-template <Tok: type = void, Terr: type>
-variant Result {
-	case Ok;
-	case Error: Terr;
-
-	func hasValue(this: Result!<Tok, Terr>) -> bool {
-		return this is Ok;
-	}
-
-	func hasError(this: Result!<Tok, Terr>) -> bool {
-		return this is Error;
-	}
-
-	func value(this: Result!<Tok, Terr>) -> void {}
-
-	func error(this: Result!<Tok, Terr>) -> Terr {
-		match this {
-			case Error: error -> return error;
-			else -> abort();
+		operator ??(this: Result!<Tok, Terr>, other: Tok) -> Tok {
+			comptime if referenceKindOf!<Tok>() == ReferenceKind::Var {
+				match this {
+					case Ok: &&value -> return &&value;
+					else -> return &&other;
+				}
+			} else if referenceKindOf!<Tok>() == ReferenceKind::Const {
+				match this {
+					case Ok: &value -> return &value;
+					else -> return &other;
+				}
+			} else {
+				match this {
+					case Ok: value -> return value;
+					else -> return other;
+				}
+			}
 		}
 	}
 }
@@ -311,25 +290,6 @@ variant Result {
 		return this is Error;
 	}
 
-	func value(this: Result!<Tok>) -> Tok {
-		comptime if referenceKindOf!<Tok>() == ReferenceKind::Var {
-			match this {
-				case Ok: &&value -> return &&value;
-				else -> abort();
-			}
-		} else if referenceKindOf!<Tok>() == ReferenceKind::Const {
-			match this {
-				case Ok: &value -> return &value;
-				else -> abort();
-			}
-		} else {
-			match this {
-				case Ok: value -> return value;
-				else -> abort();
-			}
-		}
-	}
-
 	func error(this: Result!<Tok>) -> Error {
 		match this {
 			case Error: error -> return error;
@@ -337,45 +297,43 @@ variant Result {
 		}
 	}
 
-	operator ??(this: Result!<Tok>, other: Tok) -> Tok {
-		comptime if referenceKindOf!<Tok>() == ReferenceKind::Var {
-			match this {
-				case Ok: &&value -> return &&value;
-				else -> return &&other;
-			}
-		} else if referenceKindOf!<Tok>() == ReferenceKind::Const {
-			match this {
-				case Ok: &value -> return &value;
-				else -> return &other;
-			}
-		} else {
-			match this {
-				case Ok: value -> return value;
-				else -> return other;
+	comptime if Tok != void {
+		func value(this: Result!<Tok>) -> Tok {
+			comptime if referenceKindOf!<Tok>() == ReferenceKind::Var {
+				match this {
+					case Ok: &&value -> return &&value;
+					else -> abort();
+				}
+			} else if referenceKindOf!<Tok>() == ReferenceKind::Const {
+				match this {
+					case Ok: &value -> return &value;
+					else -> abort();
+				}
+			} else {
+				match this {
+					case Ok: value -> return value;
+					else -> abort();
+				}
 			}
 		}
-	}
-}
 
-template <Tok: type = void>
-variant Result {
-	case Ok;
-	case Error: Error;
-
-	func hasValue(this: Result!<Tok>) -> bool {
-		return this is Ok;
-	}
-
-	func hasError(this: Result!<Tok>) -> bool {
-		return this is Error;
-	}
-
-	func value(this: Result!<Tok>) -> void {}
-
-	func error(this: Result!<Tok>) -> Error {
-		match this {
-			case Error: error -> return error;
-			else -> abort();
+		operator ??(this: Result!<Tok>, other: Tok) -> Tok {
+			comptime if referenceKindOf!<Tok>() == ReferenceKind::Var {
+				match this {
+					case Ok: &&value -> return &&value;
+					else -> return &&other;
+				}
+			} else if referenceKindOf!<Tok>() == ReferenceKind::Const {
+				match this {
+					case Ok: &value -> return &value;
+					else -> return &other;
+				}
+			} else {
+				match this {
+					case Ok: value -> return value;
+					else -> return other;
+				}
+			}
 		}
 	}
 }
