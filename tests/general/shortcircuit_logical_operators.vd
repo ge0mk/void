@@ -1,0 +1,20 @@
+import std/core;
+
+func fail() -> bool {
+	abort();
+}
+
+func main() -> void {
+	assert((true && true) == true);
+	assert((false && true) == false);
+	assert((true && false) == false);
+	assert((false && false) == false);
+
+	assert((true || true) == true);
+	assert((false || true) == true);
+	assert((true || false) == true);
+	assert((false || false) == false);
+
+	assert((true || fail()) == true);
+	assert((false && fail()) == false);
+}

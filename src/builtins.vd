@@ -166,11 +166,12 @@ func createBoolType(program: &&Program, dest_namespace: SharedHandle!<Namespace>
 	type.decl.op_equal = program.createBinaryFunction(type_namespace, "operator ==", type, type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::EQ, type));
 	discard program.createBinaryFunction(type_namespace, "operator !=", type, type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::NE, type));
 
-	discard program.createBinaryFunction(type_namespace, "operator &&", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::And, type));
-	discard program.createBinaryFunction(type_namespace, "operator ||", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Or, type));
+	discard program.createBinaryFunction(type_namespace, "operator &", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::And, type));
+	discard program.createBinaryFunction(type_namespace, "operator |", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Or, type));
 	discard program.createBinaryFunction(type_namespace, "operator ^", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::XOr, type));
 
 	discard program.createUnaryFunction(type_namespace, "operator !", type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Not, type));
+	discard program.createUnaryFunction(type_namespace, "operator ~", type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Not, type));
 
 	discard program.createBinaryFunction(type_namespace, "operator &=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::And | Assign, type));
 	discard program.createBinaryFunction(type_namespace, "operator |=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Or | Assign, type));

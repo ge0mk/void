@@ -2673,6 +2673,7 @@ struct TCContext {
 			}
 			case Is -> return this.checkOperatorIsExpr(id, expr.lhs, expr.rhs, is_comptime, span);
 			case As -> return this.checkOperatorAsExpr(id, expr.lhs, expr.rhs, is_comptime, span);
+			case LogicalAnd | LogicalOr -> return this.checkShortCircuitBooleanOperator(id, expr.lhs, expr.rhs, expr.op, is_comptime, span);
 			case MemberAccess -> {
 				const object = this.checkNode(expr.lhs, Type::unknown(), is_comptime);
 
@@ -3346,6 +3347,51 @@ struct TCContext {
 		)));
 
 		return this.createMatchExpr(value, this.addASTNode(Node::CompoundStmt(cases, span, Type::unknown(), is_comptime)), yield_type, is_comptime, span);
+	}
+
+	func checkShortCircuitBooleanOperator(this: &&TCContext, id: uint, lhs: uint, rhs: uint, op: Operator, is_comptime: bool, span: Span) -> uint {
+		// a ?? b
+		// ->
+		// match a {
+		//   case true -> yield b;
+		//   case false -> yield false;
+		// }
+
+		// a || b
+		// ->
+		// match a {
+		//   case true -> yield true;
+		//   case false -> yield b;
+		// }
+
+		const lhs_span = this.getASTNodeSpan(lhs);
+		const rhs_span = this.getASTNodeSpan(rhs);
+
+		var cases = List!<uint>();
+		cases.append(this.addASTNode(Node::CaseStmt(CaseStmt(
+			List!<uint>(1u, this.addASTNode(Node::BoolLiteralExpr(op == LogicalAnd, rhs_span, Type::unknown(), false))),
+			"", ReferenceKind::None,
+			this.addASTNode(Node::YieldStmt(rhs, rhs_span, Type::unknown(), false))
+		), rhs_span, Type::unknown(), false)));
+
+		cases.append(this.addASTNode(Node::CaseStmt(CaseStmt(
+			List!<uint>(1u, this.addASTNode(Node::BoolLiteralExpr(op != LogicalAnd, lhs_span, Type::unknown(), false))),
+			"", ReferenceKind::None,
+			this.addASTNode(Node::YieldStmt(
+				this.addASTNode(Node::BoolLiteralExpr(op != LogicalAnd, lhs_span, Type::unknown(), false)),
+				lhs_span, Type::unknown(), false
+			))
+		), lhs_span, Type::unknown(), false)));
+
+		lhs = this.checkNode(lhs, this.program.bool_type, is_comptime);
+		const match_expr = this.createMatchExpr(lhs, this.addASTNode(Node::CompoundStmt(cases, span, Type::unknown(), false)), this.program.bool_type, is_comptime, span);
+
+		if match_expr is Garbage {
+			return this.getGarbageNode();
+		} else {
+			this.replaceASTNode(id, match_expr);
+			return id;
+		}
 	}
 
 	func checkName(this: &&TCContext, id: uint) -> Name {
