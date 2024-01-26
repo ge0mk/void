@@ -1395,12 +1395,12 @@ struct CGContext {
 			}
 			case (PrimitiveOp::VectorNE | Unsigned)
 			| (PrimitiveOp::VectorNE | Signed)	-> {
-				const tmp = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntEQ, lhs, rhs, "");
-				result = this.codegenIntrinsicCall("llvm.vector.reduce.and", List!<LLVMTypeRef>(1u, LLVMTypeOf(tmp)), List!<LLVMValueRef>(1u, tmp));
+				const tmp = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntNE, lhs, rhs, "");
+				result = this.codegenIntrinsicCall("llvm.vector.reduce.or", List!<LLVMTypeRef>(1u, LLVMTypeOf(tmp)), List!<LLVMValueRef>(1u, tmp));
 			}
 			case (PrimitiveOp::VectorNE | Float) -> {
 				const tmp = LLVMBuildFCmp(this.builder, LLVMRealPredicate::LLVMRealONE, lhs, rhs, "");
-				result = this.codegenIntrinsicCall("llvm.vector.reduce.and", List!<LLVMTypeRef>(1u, LLVMTypeOf(tmp)), List!<LLVMValueRef>(1u, tmp));
+				result = this.codegenIntrinsicCall("llvm.vector.reduce.or", List!<LLVMTypeRef>(1u, LLVMTypeOf(tmp)), List!<LLVMValueRef>(1u, tmp));
 			}
 			case (PrimitiveOp::VectorReduceAdd | Unsigned)
 			| (PrimitiveOp::VectorReduceAdd | Signed)		-> result = this.codegenIntrinsicCall("llvm.vector.reduce.add", List!<LLVMTypeRef>(1u, llvm_type), parameters);
