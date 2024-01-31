@@ -1731,15 +1731,20 @@ struct Type {
 		}
 	}
 
+	func isEnum(this: &Type) -> bool {
+		if this.decl.isEmpty() {
+			return false;
+		}
+
+		return this.decl.body is Enum;
+	}
+
 	func isVariant(this: &Type) -> bool {
 		if this.decl.isEmpty() {
 			return false;
 		}
 
-		match this.decl.body {
-			case Variant -> return true;
-			else -> return false;
-		}
+		return this.decl.body is Variant;
 	}
 
 	func getPrimitiveSizeInBits(this: &Type) -> uint {

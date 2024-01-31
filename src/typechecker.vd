@@ -1312,7 +1312,7 @@ struct TCContext {
 		if this.getASTNode(parsed_decl.id) is Empty {
 			id = type_decl.getNextCaseId();
 		} else {
-			id = this.interpret(this.checkNode(parsed_decl.id, type_decl.id_type, true)).toInt();
+			id = this.interpret(this.checkNode(parsed_decl.id, Type(type_decl), true)).toInt();
 		}
 
 		var payload_type = this.program.void_type;
@@ -2167,7 +2167,9 @@ struct TCContext {
 
 	func checkNumberLiteralExpr(this: &&TCContext, id: uint, number_literal: ParsedNumber, postfix: String, expected_type: Type, span: Span) -> uint {
 		if postfix == "" {
-			if expected_type.isIntType(false) {
+			if expected_type.isEnum() {
+				this.replaceASTNode(id, Node::IntegerLiteralExpr(number_literal.toInt(), span, expected_type.decl.id_type, false));
+			} else if expected_type.isIntType(false) {
 				this.replaceASTNode(id, Node::IntegerLiteralExpr(number_literal.toInt(), span, expected_type, false));
 			} else if expected_type.isFloatType(false) {
 				this.replaceASTNode(id, Node::FloatLiteralExpr(number_literal.toFloat(), span, expected_type, false));
