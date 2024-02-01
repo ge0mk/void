@@ -1,7 +1,0 @@
-//> error "non comptime variable declared outside of type / function"
-
-import std/core;
-
-var x: int;
-
-func main() -> void {}

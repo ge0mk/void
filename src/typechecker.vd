@@ -606,7 +606,7 @@ struct TCContext {
 				} else if this.current_namespace.linked_type.isAlive() {
 					this.checkMemberVarDecl(parsed_var_decl, span);
 				} else {
-					this.error("non comptime variable declared outside of type / function", span);
+					this.checkGlobalVarDecl(parsed_var_decl, span);
 				}
 				return this.getEmptyNode();
 			}
@@ -1325,6 +1325,28 @@ struct TCContext {
 		} else {
 			type_decl.createVariantCase(span, id, parsed_decl.name, payload_type);
 		}
+	}
+
+	func checkGlobalVarDecl(this: &&TCContext, parsed_decl: &ParsedVarDecl, span: Span) -> void {
+		var type = this.checkTypeUsage(parsed_decl.type, false);
+		var is_extern_initialized = false;
+		var initializer = Value::Undefined();
+
+		if this.getASTNode(parsed_decl.initializer) is ExternFunctionBody {
+			is_extern_initialized = true;
+		} else {
+			initializer = this.interpret(this.checkNode(parsed_decl.initializer, type, false));
+		}
+		if type.isUnknown() {
+			type = initializer.type;
+		}
+
+		if type.isUnknown() {
+			this.error("global variables must have a type specified or be initialized", span);
+			return;
+		}
+
+		discard this.program.createGlobalVariable(this.current_namespace, parsed_decl.name, type, initializer, parsed_decl.is_const, is_extern_initialized, span);
 	}
 
 	func checkVarDecl(this: &&TCContext, id: uint, parsed_stmt: &ParsedVarDecl, is_comptime: bool, span: Span) -> uint {
@@ -2169,7 +2191,7 @@ struct TCContext {
 		if postfix == "" {
 			if expected_type.isEnum() {
 				this.replaceASTNode(id, Node::IntegerLiteralExpr(number_literal.toInt(), span, expected_type.decl.id_type, false));
-			} else if expected_type.isIntType(false) {
+			} else if expected_type.isIntType(false) && expected_type != this.program.bool_type {
 				this.replaceASTNode(id, Node::IntegerLiteralExpr(number_literal.toInt(), span, expected_type, false));
 			} else if expected_type.isFloatType(false) {
 				this.replaceASTNode(id, Node::FloatLiteralExpr(number_literal.toFloat(), span, expected_type, false));
@@ -2561,7 +2583,7 @@ struct TCContext {
 				match template_parameter {
 					case Boolean: value -> result_candidates.append(Node::IntegerLiteralExpr(value as int, span, this.program.bool_type, false));
 					case Integer: value -> {
-						if expected_type.isIntType(false) {
+						if expected_type.isIntType(false) && expected_type != this.program.bool_type {
 							result_candidates.append(Node::IntegerLiteralExpr(value, span, expected_type, false));
 						} else {
 							result_candidates.append(Node::IntegerLiteralExpr(value, span, this.program.int_type, false));
@@ -2697,7 +2719,7 @@ struct TCContext {
 				this.replaceASTNode(id, member_access_expr);
 			}
 			else -> {
-				const lhs = this.checkNode(expr.lhs, Type::unknown(), is_comptime);
+				const lhs = this.checkNode(expr.lhs, expected_type, is_comptime);
 
 				if expr.op.isAssignmentOperator() && expr.op != Initialize {
 					match this.getASTNode(lhs) {
@@ -4050,7 +4072,7 @@ struct TCContext {
 
 		var result: List!<SharedHandle!<VarDecl>>;
 		for n in this.getNamespacesToSearch(name, SharedHandle!<TypeDecl>(), span) {
-			if const variable = n.comptime_variables_by_name.get(last_segment.name) {
+			if const variable = n.variables_by_name.get(last_segment.name) {
 				result.append(variable);
 			}
 		}

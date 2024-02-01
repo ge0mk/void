@@ -333,8 +333,13 @@ struct Parser {
 		const start = this.currentSpan();
 
 		const first_node_id = this.file.nodes.size();
-		var annotations = this.parseAnnotations();
-		var template_parameters = this.parseTemplateParameterDecl();
+		const annotations = this.parseAnnotations();
+
+		if this.current() == KeywordVar || this.current() == KeywordConst {
+			return this.parseVarDecl(annotations, false);
+		}
+
+		const template_parameters = this.parseTemplateParameterDecl();
 
 		match this.current() {
 			case KeywordNamespace -> return this.parseNamespace(start, first_node_id, annotations, template_parameters);
@@ -604,11 +609,13 @@ struct Parser {
 	}
 
 	func parseVarDecl(this: &&Parser, is_parameter: bool) -> uint {
+		return this.parseVarDecl(this.parseAnnotations(), is_parameter);
+	}
+
+	func parseVarDecl(this: &&Parser, annotations: &List!<Annotation>, is_parameter: bool) -> uint {
 		const start = this.currentSpan();
 		var is_comptime = false;
 		var is_const = false;
-
-		const annotations = this.parseAnnotations();
 
 		if !is_parameter {
 			is_comptime = this.accept(TokenType::KeywordComptime);
@@ -637,7 +644,11 @@ struct Parser {
 
 		var initializer = this.file.getEmptyNode();
 		if this.accept(TokenType::Assign) {
-			initializer = this.parseExpr();
+			if !is_parameter && this.accept(TokenType::KeywordExtern) {
+				initializer = this.file.addASTNode(Node::ExternFunctionBody(this.previousSpan(), Type::unknown(), false));
+			} else {
+				initializer = this.parseExpr();
+			}
 		}
 
 		const variable = ParsedVarDecl(annotations, name, type, initializer, is_const, is_parameter);

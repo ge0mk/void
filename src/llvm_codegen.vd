@@ -27,6 +27,8 @@ struct CGContext {
 	var int_type: LLVMTypeRef;
 	var ptr_type: LLVMTypeRef;
 
+	var global_variables: Map!<SharedHandle!<VarDecl>, LLVMValueRef>;
+
 	var builder: LLVMBuilderRef;
 	var current_function: LLVMValueRef;
 	var current_function_decl: SharedHandle!<FunctionDecl>;
@@ -115,7 +117,24 @@ struct CGContext {
 		return function.llvm_func;
 	}
 
-	func getVariable(this: &CGContext, variable: SharedHandle!<VarDecl>) -> LLVMValueRef {
+	func getVariable(this: &&CGContext, variable: SharedHandle!<VarDecl>) -> LLVMValueRef {
+		if variable.is_global {
+			if !this.global_variables.contains(variable) {
+				const impl = LLVMAddGlobal(this.llvm_module, this.getType(variable.type), variable.name);
+				if !(variable.value is Undefined) {
+					LLVMSetInitializer(impl, this.codegenValue(variable.value));
+				}
+
+				LLVMSetExternallyInitialized(impl, variable.is_extern_initialized as i32);
+				LLVMSetGlobalConstant(impl, variable.is_const as i32);
+
+				this.global_variables.set(variable, impl);
+				return impl;
+			}
+
+			return this.global_variables.get(variable).value();
+		}
+
 		const impl = this.variables.get(variable) else {
 			panic("invalid codegen for variable '" + variable.name + "'");
 		}
@@ -1874,6 +1893,20 @@ struct CGContext {
 				return LLVMBuildGEP2(this.builder, this.getType(function.base_type), parameters[0u], indices, "");
 			}
 			else -> panic("builtin function is not inlineable");
+		}
+	}
+
+	func codegenValue(this: &&CGContext, value: &Value) -> LLVMValueRef {
+		match value {
+			case Undefined | Void -> return LLVMValueRef();
+			case Integer: v -> return LLVMConstInt(this.getType(value.type), v, value.type.isSigned(false));
+			case Float: v -> return LLVMConstReal(this.getType(value.type), v);
+			case String -> panic("todo: codegen string constants");
+			case Pointer -> panic("can't use pointer from compile time at runtime");
+			case Aggregate -> panic("todo: codegen aggregate constants");
+			case Type -> panic("can't use type reference at runtime");
+			case Function: f -> return this.getFunction(f);
+			case Variable -> panic("can't use variable reference at runtime");
 		}
 	}
 

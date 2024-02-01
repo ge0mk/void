@@ -66,6 +66,9 @@ contexts:
     - match: \b(comptime|do|while|for|in|defer|continue|break|discard|return|throw|yield)\b
       scope: keyword.control
 
+    - match: \b(default|extern)\b
+      scope: keyword.control
+
     - match: \{
       scope: punctuation.section.block.begin
       push: compound_stmt

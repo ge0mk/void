@@ -821,6 +821,15 @@ struct Program {
 		return this.createFunction(parent_namespace, name, List!<TemplateParameterDecl>(), parameter_types, return_type, FunctionBody::Builtin(body));
 	}
 
+	func createGlobalVariable(this: &&Program, ns: SharedHandle!<Namespace>, name: String, type: Type, initializer: Value, is_const: bool, is_extern_initialized: bool, span: Span) -> SharedHandle!<VarDecl> {
+		const variable = ns.global_variables.append(VarDecl(span, 0u, name, type, is_const, false, false));
+		variable.is_global = true;
+		variable.is_extern_initialized = is_extern_initialized;
+		variable.value = initializer;
+		ns.variables_by_name.set(name, variable);
+		return variable;
+	}
+
 	func printLLVMIRToFile(this: &Program) -> Optional!<String> {
 		const output_path = this.options.getOutputCodePath(".ll");
 		if printModuleToFile(this.llvm_module, output_path) {
@@ -980,7 +989,8 @@ struct Namespace {
 	var functions_by_name: Map!<String, List!<SharedHandle!<FunctionDecl>>>;
 
 	var comptime_variables: SharedList!<VarDecl>;
-	var comptime_variables_by_name: Map!<String, SharedHandle!<VarDecl>>;
+	var global_variables: SharedList!<VarDecl>;
+	var variables_by_name: Map!<String, SharedHandle!<VarDecl>>;
 
 	var state: NamespaceState;
 	var unchecked_bodies: List!<ParsedNamespaceDecl>;
@@ -1052,19 +1062,23 @@ struct Namespace {
 		}
 
 		for i in 0u..this.children.size() {
-			this.children[i].dump(&&out, (i == this.children.size() - 1) && this.types.isEmpty() && this.functions.isEmpty()&& this.comptime_variables.isEmpty());
+			this.children[i].dump(&&out, (i == this.children.size() - 1) && this.types.isEmpty() && this.functions.isEmpty()&& this.comptime_variables.isEmpty() && this.global_variables.isEmpty());
 		}
 
 		for i in 0u..this.types.size() {
-			this.types[i].dump(&&out, (i == this.types.size() - 1) && this.functions.isEmpty()&& this.comptime_variables.isEmpty());
+			this.types[i].dump(&&out, (i == this.types.size() - 1) && this.functions.isEmpty()&& this.comptime_variables.isEmpty() && this.global_variables.isEmpty());
 		}
 
 		for i in 0u..this.functions.size() {
-			this.functions[i].dump(&&out, (i == this.functions.size() - 1) && this.comptime_variables.isEmpty());
+			this.functions[i].dump(&&out, (i == this.functions.size() - 1) && this.comptime_variables.isEmpty() && this.global_variables.isEmpty());
 		}
 
 		for i in 0u..this.comptime_variables.size() {
-			this.file.dump(&&out, this.comptime_variables[i], i == this.comptime_variables.size() - 1);
+			this.file.dump(&&out, this.comptime_variables[i], (i == this.comptime_variables.size() - 1) && this.global_variables.isEmpty());
+		}
+
+		for i in 0u..this.global_variables.size() {
+			this.file.dump(&&out, this.global_variables[i], i == this.global_variables.size() - 1);
 		}
 
 		out.pop();
@@ -1140,7 +1154,7 @@ struct Namespace {
 
 	func createComptimeVariable(this: &&Namespace, span: Span, name: String, type: Type, is_const: bool) -> SharedHandle!<VarDecl> {
 		const variable = this.comptime_variables.append(VarDecl(span, 0u, name, type, is_const, false, true));
-		this.comptime_variables_by_name.set(name, variable);
+		this.variables_by_name.set(name, variable);
 		return variable;
 	}
 }
@@ -1520,6 +1534,8 @@ struct VarDecl {
 	var type: Type;
 
 	var is_const: bool;
+	var is_extern_initialized: bool;
+	var is_global: bool;
 	var is_parameter: bool;
 	var is_comptime: bool;
 	var is_unused: bool;
