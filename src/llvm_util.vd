@@ -120,11 +120,11 @@ func LLVMVectorType(element_type: LLVMTypeRef, size: uint) -> LLVMTypeRef {
 }
 
 func LLVMFunctionType(return_type: LLVMTypeRef, parameter_types: &List!<LLVMTypeRef>, is_variadic: bool) -> LLVMTypeRef {
-	return LLVMFunctionType(return_type, parameter_types.data, parameter_types.size() as u32, is_variadic as i32);
+	return LLVMFunctionType(return_type, parameter_types.data, parameter_types.size() as u32, is_variadic as LLVMBool);
 }
 
 func LLVMStructTypeInContext(ctx: LLVMContextRef, element_types: &List!<LLVMTypeRef>, is_packed: bool) -> LLVMTypeRef {
-	return LLVMStructTypeInContext(ctx, element_types.data, element_types.size() as u32, is_packed as i32);
+	return LLVMStructTypeInContext(ctx, element_types.data, element_types.size() as u32, is_packed as LLVMBool);
 }
 
 func LLVMStructCreateNamed(ctx: LLVMContextRef, name: String) -> LLVMTypeRef {
@@ -136,7 +136,7 @@ func LLVMAppendBasicBlockInContext(ctx: LLVMContextRef, function: LLVMValueRef, 
 }
 
 func LLVMConstStringInContext(ctx: LLVMContextRef, value: String, dont_null_terminate: bool) -> LLVMValueRef {
-	return LLVMConstStringInContext(ctx, value.data(), value.size() as u32, dont_null_terminate as i32);
+	return LLVMConstStringInContext(ctx, value.data(), value.size() as u32, dont_null_terminate as LLVMBool);
 }
 
 func LLVMIntrinsicGetType(ctx: LLVMContextRef, id: u32, parameter_types: &List!<LLVMTypeRef>) -> LLVMTypeRef {
@@ -196,7 +196,7 @@ func LLVMGetIntrinsicDeclaration(module: LLVMModuleRef, id: u32, parameter_types
 }
 
 func LLVMStructSetBody(type: LLVMTypeRef, element_types: &List!<LLVMTypeRef>, is_packed: bool) -> void {
-	LLVMStructSetBody(type, element_types.data, element_types.size() as u32, is_packed as i32);
+	LLVMStructSetBody(type, element_types.data, element_types.size() as u32, is_packed as LLVMBool);
 }
 
 func LLVMStructGetTypeAtIndex(type: LLVMTypeRef, index: uint) -> LLVMTypeRef {
@@ -208,7 +208,7 @@ func LLVMGetParam(value: LLVMValueRef, index: uint) -> LLVMValueRef {
 }
 
 func LLVMSetUnnamedAddr(value: LLVMValueRef, unnamed_address: bool) -> void {
-	LLVMSetUnnamedAddr(value, unnamed_address as i32);
+	LLVMSetUnnamedAddr(value, unnamed_address as LLVMBool);
 }
 
 func LLVMSetAlignment(value: LLVMValueRef, alignment: uint) -> void {
@@ -216,7 +216,7 @@ func LLVMSetAlignment(value: LLVMValueRef, alignment: uint) -> void {
 }
 
 func LLVMSetGlobalConstant(value: LLVMValueRef, state: bool) -> void {
-	LLVMSetGlobalConstant(value, state as i32);
+	LLVMSetGlobalConstant(value, state as LLVMBool);
 }
 
 func LLVMAddIncoming(phi_node: LLVMValueRef, values: &List!<LLVMValueRef>, blocks: &List!<LLVMBasicBlockRef>) -> void {
@@ -457,7 +457,7 @@ func LLVMBuildPtrDiff2(builder: LLVMBuilderRef, type: LLVMTypeRef, lhs: LLVMValu
 }
 
 func LLVMConstInt(type: LLVMTypeRef, value: int, sign_extend: bool) -> LLVMValueRef {
-	return LLVMConstInt(type, value as u32, sign_extend as i32);
+	return LLVMConstInt(type, value as u64, sign_extend as LLVMBool);
 }
 
 func LLVMConstVector(elements: List!<LLVMValueRef>) -> LLVMValueRef {
@@ -473,7 +473,7 @@ func LLVMDIBuilderCreateFile(di_builder: LLVMDIBuilderRef, file_name: String, di
 }
 
 func LLVMDIBuilderCreateCompileUnit(di_builder: LLVMDIBuilderRef, lang: LLVMDWARFSourceLanguage, file: LLVMMetadataRef, producer: String, is_optimized: bool, flags: String, runtime_version: uint, split_name: String, kind: LLVMDWARFEmissionKind, dwo_id: uint, split_debug_inlining: bool, debug_info_for_profiling: bool, sys_root: String, sdk: String) -> LLVMMetadataRef {
-	return LLVMDIBuilderCreateCompileUnit(di_builder, lang, file, producer.data(), producer.size(), is_optimized as i32, flags.data(), flags.size(), runtime_version as u32, split_name.data(), split_name.size(), kind, dwo_id as u32, split_debug_inlining as i32, debug_info_for_profiling as i32, sys_root.data(), sys_root.size(), sdk.data(), sdk.size());
+	return LLVMDIBuilderCreateCompileUnit(di_builder, lang, file, producer.data(), producer.size(), is_optimized as LLVMBool, flags.data(), flags.size(), runtime_version as u32, split_name.data(), split_name.size(), kind, dwo_id as u32, split_debug_inlining as LLVMBool, debug_info_for_profiling as LLVMBool, sys_root.data(), sys_root.size(), sdk.data(), sdk.size());
 }
 
 func LLVMDIBuilderCreateModule(di_builder: LLVMDIBuilderRef, cu: LLVMMetadataRef, name: String, config_macros: String, include_path: String, api_notes_file: String) -> LLVMMetadataRef {
@@ -481,11 +481,11 @@ func LLVMDIBuilderCreateModule(di_builder: LLVMDIBuilderRef, cu: LLVMMetadataRef
 }
 
 func LLVMDIBuilderCreateNameSpace(di_builder: LLVMDIBuilderRef, parent: LLVMMetadataRef, name: String, export_symbols: bool) -> LLVMMetadataRef {
-	return LLVMDIBuilderCreateNameSpace(di_builder, parent, name.data(), name.size(), export_symbols as i32);
+	return LLVMDIBuilderCreateNameSpace(di_builder, parent, name.data(), name.size(), export_symbols as LLVMBool);
 }
 
 func LLVMDIBuilderCreateFunction(di_builder: LLVMDIBuilderRef, scope: LLVMMetadataRef, name: String, linkage_name: String, file: LLVMMetadataRef, line: uint, type: LLVMMetadataRef, is_local_to_unit: bool, is_definition: bool, scope_line: uint, flags: LLVMDIFlags, is_optimized: bool) -> LLVMMetadataRef {
-	return LLVMDIBuilderCreateFunction(di_builder, scope, name.data(), name.size(), linkage_name.data(), linkage_name.size(), file, line as u32, type, is_local_to_unit as i32, is_definition as i32, scope_line as u32, flags, is_optimized as i32);
+	return LLVMDIBuilderCreateFunction(di_builder, scope, name.data(), name.size(), linkage_name.data(), linkage_name.size(), file, line as u32, type, is_local_to_unit as LLVMBool, is_definition as LLVMBool, scope_line as u32, flags, is_optimized as LLVMBool);
 }
 
 func LLVMDIBuilderCreateSubroutineType(di_builder: LLVMDIBuilderRef, file: LLVMMetadataRef, parameter_types: &List!<LLVMMetadataRef>, flags: LLVMDIFlags) -> LLVMMetadataRef {
@@ -493,7 +493,7 @@ func LLVMDIBuilderCreateSubroutineType(di_builder: LLVMDIBuilderRef, file: LLVMM
 }
 
 func LLVMDIBuilderCreateEnumerator(di_builder: LLVMDIBuilderRef, name: String, value: int, is_unsigned: bool) -> LLVMMetadataRef {
-	return LLVMDIBuilderCreateEnumerator(di_builder, name.data(), name.size(), value as i64, is_unsigned as i32);
+	return LLVMDIBuilderCreateEnumerator(di_builder, name.data(), name.size(), value as i64, is_unsigned as LLVMBool);
 }
 
 func LLVMDIBuilderCreateEnumerationType(di_builder: LLVMDIBuilderRef, scope: LLVMMetadataRef, name: String, file: LLVMMetadataRef, line: uint, size_in_bits: uint, alignment_in_bits: uint, elements: &List!<LLVMMetadataRef>, class_type: LLVMMetadataRef) -> LLVMMetadataRef {
@@ -541,11 +541,11 @@ func LLVMDIBuilderCreateReplaceableCompositeType(di_builder: LLVMDIBuilderRef, t
 }
 
 func LLVMDIBuilderCreateAutoVariable(di_builder: LLVMDIBuilderRef, scope: LLVMMetadataRef, name: String, file: LLVMMetadataRef, line: uint, type: LLVMMetadataRef, always_preserve: bool, flags: LLVMDIFlags, alignment_in_bits: uint) -> LLVMMetadataRef {
-	return LLVMDIBuilderCreateAutoVariable(di_builder, scope, name.data(), name.size(), file, line as u32, type, always_preserve as i32, flags, alignment_in_bits as u32);
+	return LLVMDIBuilderCreateAutoVariable(di_builder, scope, name.data(), name.size(), file, line as u32, type, always_preserve as LLVMBool, flags, alignment_in_bits as u32);
 }
 
 func LLVMDIBuilderCreateParameterVariable(di_builder: LLVMDIBuilderRef, scope: LLVMMetadataRef, name: String, arg_no: uint, file: LLVMMetadataRef, line: uint, type: LLVMMetadataRef, always_preserve: bool, flags: LLVMDIFlags) -> LLVMMetadataRef {
-	return LLVMDIBuilderCreateParameterVariable(di_builder, scope, name.data(), name.size(), arg_no as u32, file, line as u32, type, always_preserve as i32, flags);
+	return LLVMDIBuilderCreateParameterVariable(di_builder, scope, name.data(), name.size(), arg_no as u32, file, line as u32, type, always_preserve as LLVMBool, flags);
 }
 
 func LLVMRunFunctionAsMain(ee: LLVMExecutionEngineRef, function: LLVMValueRef, args: List!<String>, env: List!<String>) -> int {
