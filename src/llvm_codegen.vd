@@ -1652,6 +1652,9 @@ struct CGContext {
 					return LLVMBuildFPToUI(this.builder, parameters[0u], this.getType(target), "");
 				}
 			}
+			case BitCast: target -> {
+				return LLVMBuildBitCast(this.builder, parameters[0u], this.getType(target), "");
+			}
 
 			case MatrixMultiply: m -> {
 				// for (int c = 0; c < rhs.cols; c++) {

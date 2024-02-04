@@ -1977,6 +1977,7 @@ variant BuiltinFunction {
 	case FloatCast: Type;
 	case IntToFloat: Type;
 	case FloatToInt: Type;
+	case BitCast: Type;
 
 	case MatrixMultiply: (a_columns: uint, a_rows: uint, b_columns: uint); // b_rows == a_columns
 
@@ -2056,6 +2057,7 @@ variant BuiltinFunction {
 			| FloatCast
 			| IntToFloat
 			| FloatToInt
+			| BitCast
 			| SizeOf
 			| AlignmentOf
 			| ReferenceKindOf

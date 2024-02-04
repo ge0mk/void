@@ -16,6 +16,7 @@ func createPrimitiveCastTemplates(program: &&Program, dest_namespace: SharedHand
 	discard program.createFunction(dest_namespace, "floatCast", cast_template_parameters, BuiltinFunction::FloatCast(Type::unknown(), Type::unknown()));
 	discard program.createFunction(dest_namespace, "intToFloat", cast_template_parameters, BuiltinFunction::IntToFloat(Type::unknown(), Type::unknown()));
 	discard program.createFunction(dest_namespace, "floatToInt", cast_template_parameters, BuiltinFunction::FloatToInt(Type::unknown(), Type::unknown()));
+	discard program.createFunction(dest_namespace, "bitCast", cast_template_parameters, BuiltinFunction::BitCast(Type::unknown(), Type::unknown()));
 	discard program.createFunction(dest_namespace, "pointerCast", cast_template_parameters, BuiltinFunction::PointerCast(Type::unknown()));
 }
 
@@ -36,6 +37,8 @@ func createPrimitiveCastInstance(program: &&Program, dest_namespace: SharedHandl
 		body = FunctionBody::Builtin(BuiltinFunction::IntToFloat(target, source));
 	} else if name == "floatToInt" {
 		body = FunctionBody::Builtin(BuiltinFunction::FloatToInt(target, source));
+	} else if name == "bitCast" {
+		body = FunctionBody::Builtin(BuiltinFunction::BitCast(target, source));
 	} else if name == "pointerCast" {
 		body = FunctionBody::Builtin(BuiltinFunction::PointerCast(target));
 	} else {

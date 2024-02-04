@@ -1,0 +1,6 @@
+import std/core;
+
+func main() -> void {
+	assert(bitCast!<f64, i64>(0f64) == 0);
+	assert(bitCast!<i64, u64>(3i64) == 3u64);
+}

@@ -4530,6 +4530,7 @@ struct TCContext {
 				| FloatCast
 				| IntToFloat
 				| FloatToInt
+				| BitCast
 				| PointerCast -> {
 					const source = (template_parameters[0u] as Type).value();
 					const target = (template_parameters[1u] as Type).value();
@@ -4540,6 +4541,7 @@ struct TCContext {
 						case FloatCast -> cast_name = "floatCast";
 						case IntToFloat -> cast_name = "intToFloat";
 						case FloatToInt -> cast_name = "floatToInt";
+						case BitCast -> cast_name = "bitCast";
 						case PointerCast -> cast_name = "pointerCast";
 						else -> panic("unreachable");
 					}

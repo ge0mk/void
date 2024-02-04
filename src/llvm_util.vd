@@ -412,6 +412,10 @@ func LLVMBuildFPExt(builder: LLVMBuilderRef, value: LLVMValueRef, type: LLVMType
 	return LLVMBuildFPExt(builder, value, type, (name + '\0'b).data());
 }
 
+func LLVMBuildBitCast(builder: LLVMBuilderRef, value: LLVMValueRef, type: LLVMTypeRef, name: String) -> LLVMValueRef {
+	return LLVMBuildBitCast(builder, value, type, (name + '\0'b).data());
+}
+
 func LLVMBuildICmp(builder: LLVMBuilderRef, op: LLVMIntPredicate, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
 	return LLVMBuildICmp(builder, op, lhs, rhs, (name + '\0'b).data());
 }
