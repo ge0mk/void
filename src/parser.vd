@@ -199,6 +199,7 @@ struct Parser {
 			| KeywordStruct
 			| KeywordEnum
 			| KeywordVariant
+			| KeywordPrivate
 			| KeywordTemplate
 			| AtSign -> return this.parseDecl();
 			case KeywordAlias -> return this.parseAlias();
@@ -341,7 +342,12 @@ struct Parser {
 
 		const template_parameters = this.parseTemplateParameterDecl();
 
-		match this.current() {
+		var decl_kind = this.current();
+		if decl_kind == KeywordPrivate {
+			decl_kind = this.peek();
+		}
+
+		match decl_kind {
 			case KeywordNamespace -> return this.parseNamespace(start, first_node_id, annotations, template_parameters);
 			case KeywordStruct
 			| KeywordEnum
@@ -474,6 +480,8 @@ struct Parser {
 	}
 
 	func parseNamespace(this: &&Parser, start: Span, first_node_id: uint, annotations: List!<Annotation>, template_parameters: List!<ParsedTemplateParameterDecl>) -> uint {
+		const is_private = this.accept(TokenType::KeywordPrivate);
+
 		if !this.expect(TokenType::KeywordNamespace) {
 			return this.file.getGarbageNode();
 		}
@@ -490,12 +498,14 @@ struct Parser {
 
 		const last_node_id = this.file.nodes.size();
 		return this.file.addASTNode(Node::NamespaceDecl(
-			ParsedNamespaceDecl(first_node_id, last_node_id, name_span, annotations, template_parameters, name, body),
+			ParsedNamespaceDecl(first_node_id, last_node_id, name_span, annotations, template_parameters, is_private, name, body),
 			start..this.previousSpan(), Type::unknown(), false
 		));
 	}
 
 	func parseTypeDecl(this: &&Parser, start: Span, first_node_id: uint, annotations: List!<Annotation>, template_parameters: List!<ParsedTemplateParameterDecl>) -> uint {
+		const is_private = this.accept(TokenType::KeywordPrivate);
+
 		const kind = match this.current() {
 			case KeywordStruct -> yield TypeDeclKind::Struct;
 			case KeywordEnum -> yield TypeDeclKind::Enum;
@@ -526,12 +536,13 @@ struct Parser {
 
 		const last_node_id = this.file.nodes.size();
 		return this.file.addASTNode(Node::TypeDecl(
-			ParsedTypeDecl(first_node_id, last_node_id, name_span, annotations, template_parameters, kind, name, id_type, body),
+			ParsedTypeDecl(first_node_id, last_node_id, name_span, annotations, template_parameters, is_private, kind, name, id_type, body),
 			start..this.previousSpan(), Type::unknown(), false
 		));
 	}
 
 	func parseFunctionDecl(this: &&Parser, start: Span, first_node_id: uint, annotations: List!<Annotation>, template_parameters: List!<ParsedTemplateParameterDecl>) -> uint {
+		const is_private = this.accept(TokenType::KeywordPrivate);
 		const is_comptime = this.accept(TokenType::KeywordComptime);
 
 		const signature = this.parseFunctionSignature() else {
@@ -556,7 +567,7 @@ struct Parser {
 		const span = start..this.previousSpan();
 		const last_node_id = this.file.nodes.size();
 		return this.file.addASTNode(Node::FunctionDecl(
-			ParsedFunctionDecl(first_node_id, last_node_id, span, annotations, template_parameters, is_comptime, signature, body),
+			ParsedFunctionDecl(first_node_id, last_node_id, span, annotations, template_parameters, is_private, is_comptime, signature, body),
 			span, Type::unknown(), true
 		));
 	}
@@ -1487,7 +1498,7 @@ struct Parser {
 			const function = this.file.addASTNode(Node::FunctionDecl(ParsedFunctionDecl(
 				first_node_id, last_node_id, span,
 				List!<Annotation>(), List!<ParsedTemplateParameterDecl>(),
-				false, signature, body
+				false, false, signature, body
 			), span, Type::unknown(), false));
 
 			return this.file.addASTNode(Node::AnonymousFunctionExpr(function, span, Type::unknown(), false));

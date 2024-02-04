@@ -974,6 +974,7 @@ struct Namespace {
 	var children: List!<SharedHandle!<Namespace>>;
 	var children_by_name: Map!<String, List!<SharedHandle!<Namespace>>>;
 	var aliases: Map!<String, SharedHandle!<Namespace>>;
+	var is_private: bool;
 
 	var imported_namespaces: Set!<SharedHandle!<Namespace>>;
 	var visible_namespaces: Set!<SharedHandle!<Namespace>>;
@@ -1416,6 +1417,7 @@ struct FunctionDecl {
 	var body: FunctionBody;
 
 	var is_comptime: bool;
+	var is_private: bool;
 
 	var parent_namespace: SharedHandle!<Namespace>;
 
@@ -2519,6 +2521,7 @@ alias ParsedNamespaceDecl = (
 	name_span: Span,
 	annotations: List!<Annotation>,
 	template_parameters: List!<ParsedTemplateParameterDecl>,
+	is_private: bool,
 	name: String,
 	body: uint
 );
@@ -2529,6 +2532,7 @@ alias ParsedTypeDecl = (
 	name_span: Span,
 	annotations: List!<Annotation>,
 	template_parameters: List!<ParsedTemplateParameterDecl>,
+	is_private: bool,
 	kind: TypeDeclKind,
 	name: String,
 	id_type: uint,
@@ -2542,6 +2546,7 @@ alias ParsedFunctionDecl = (
 	span: Span,
 	annotations: List!<Annotation>,
 	template_parameters: List!<ParsedTemplateParameterDecl>,
+	is_private: bool,
 	is_comptime: bool,
 	signature: ParsedFunctionSignature,
 	body: uint

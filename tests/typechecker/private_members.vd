@@ -1,0 +1,13 @@
+import std/core;
+
+namespace N {
+	private func foo() -> void {}
+
+	func bar() -> void {
+		foo();
+	}
+}
+
+func main() -> void {
+	N::bar();
+}

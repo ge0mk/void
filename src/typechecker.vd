@@ -698,6 +698,7 @@ struct TCContext {
 	func checkNamespaceDecl(this: &&TCContext, parsed_decl: &ParsedNamespaceDecl, span: Span) -> SharedHandle!<Namespace> {
 		const template_parameters = this.checkTemplateParameterDecl(parsed_decl.template_parameters);
 		var namespace_decl = this.program.getOrCreateChildNamespace(parsed_decl.name, template_parameters, this.current_namespace, this.current_namespace.file);
+		namespace_decl.is_private = parsed_decl.is_private;
 		namespace_decl.addUncheckedBody(parsed_decl);
 		return namespace_decl;
 	}
@@ -720,6 +721,7 @@ struct TCContext {
 
 		type.span = span;
 		type.name_span = parsed_decl.name_span;
+		type.linked_namespace.is_private = parsed_decl.is_private;
 
 		if add_to_unchecked_list {
 			this.current_namespace.addUncheckedType(type);
@@ -813,6 +815,7 @@ struct TCContext {
 		const function = this.program.createFunction(this.current_namespace, parsed_decl.signature.name, template_parameters, FunctionBody::Unchecked(parsed_decl));
 		function.span = parsed_decl.span;
 		function.signature_span = parsed_decl.signature.span;
+		function.is_private = parsed_decl.is_private;
 		function.is_comptime |= parsed_decl.is_comptime;
 
 		if add_to_unchecked_list {
@@ -3880,6 +3883,10 @@ struct TCContext {
 
 			result.grow(result.size() + matching_children.size());
 			for child in matching_children {
+				if child.is_private && this.current_namespace != child.parent {
+					continue;
+				}
+
 				if child.isIncompleteTemplate() {
 					result.add(this.createTemplateInstance(child, name.template_parameters, span));
 				} else {
@@ -4019,6 +4026,10 @@ struct TCContext {
 			}
 
 			for function in functions_with_matching_template_parameters {
+				if function.is_private && this.current_namespace != function.parent_namespace {
+					continue;
+				}
+
 				if function.isIncompleteTemplate() {
 					candidates.append(this.createTemplateInstance(function, last_segment.template_parameters, span));
 				} else {

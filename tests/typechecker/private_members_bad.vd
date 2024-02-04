@@ -1,0 +1,11 @@
+//> error "no matching function found"
+
+import std/core;
+
+namespace N {
+	private func foo() -> void {}
+}
+
+func main() -> void {
+	N::foo();
+}

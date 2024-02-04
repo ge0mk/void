@@ -87,6 +87,9 @@ contexts:
         1: keyword.declaration
       push: template_parameter_decl
 
+    - match: private
+      scope: keyword.control
+
     - match: \b(func|operator)\b
       scope: keyword.declaration.function
       branch_point: function_decl
