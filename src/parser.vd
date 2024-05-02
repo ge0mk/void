@@ -576,13 +576,22 @@ struct Parser {
 		const start = this.currentSpan();
 
 		var name = "";
-		match this.current() {
-			case KeywordFunc -> {
-				this.next();
+		if this.accept(TokenType::KeywordFunc) {
+			if this.current() == Identifier {
 				name = this.expectIdentifier();
+			} else {
+				name = this.parseOperatorName();
 			}
-			case KeywordOperator -> name = this.parseOperatorName();
-			else -> return None;
+		} else if this.accept(TokenType::KeywordOperator) {
+			name = this.parseOperatorName();
+		}
+
+		if name.isEmpty() {
+			return None;
+		}
+
+		if name == "unwrap" {
+			name = "operator unwrap";
 		}
 
 		return this.parseFunctionSignature(name, start);
@@ -941,7 +950,7 @@ struct Parser {
 		var name = "";
 		if this.current() is Identifier {
 			name = this.expectIdentifier();
-		} else if this.current() is KeywordOperator {
+		} else if this.accept(TokenType::KeywordOperator) {
 			name = this.parseOperatorName();
 		} else {
 			return this.file.getEmptyNode();
@@ -953,12 +962,9 @@ struct Parser {
 
 	func parseOperatorName(this: &&Parser) -> String {
 		const start = this.currentSpan();
-		if !this.expect(TokenType::KeywordOperator) {
-			return "";
-		}
 
-		if this.accept(TokenType::KeywordUnwrap) {
-			return "operator unwrap";
+		if this.current() == Identifier {
+			return "operator " + this.expectIdentifier();
 		}
 
 		const op = this.parseOperator() else {
@@ -1062,24 +1068,31 @@ struct Parser {
 				}
 				lhs = this.file.addASTNode(Node::IndexExpr(operands, start..this.previousSpan(), Type::unknown(), false));
 			} else if op == InlineIf {
-				if this.accept(TokenType::KeywordVar) || this.accept(TokenType::KeywordConst) {
-					// expression followed by an if-var stmt
-					this.index = prev_index;
-					break;
+				if this.tokens[this.index - 1].type() == QuestionMark {
+					const then_value = this.parseExpr();
+					discard this.expect(TokenType::Colon);
+					const else_value = this.parseExpr();
+					lhs = this.file.addASTNode(Node::InlineIfExpr(InlineIfExpr(lhs, then_value, else_value), start..this.previousSpan(), Type::unknown(), false));
+				} else {
+					if this.accept(TokenType::KeywordVar) || this.accept(TokenType::KeywordConst) {
+						// expression followed by an if-var stmt
+						this.index = prev_index;
+						break;
+					}
+
+					const prev_node_count = this.file.nodes.size();
+					const condition = this.parseExpr();
+
+					if !this.accept(TokenType::KeywordElse) {
+						// expression followed by an if stmt
+						this.index = prev_index;
+						this.file.nodes.remove(prev_node_count..this.file.nodes.size());
+						break;
+					}
+
+					const else_value = this.parseExpr();
+					lhs = this.file.addASTNode(Node::InlineIfExpr(InlineIfExpr(condition, lhs, else_value), start..this.previousSpan(), Type::unknown(), false));
 				}
-
-				const prev_node_count = this.file.nodes.size();
-				const condition = this.parseExpr();
-
-				if !this.accept(TokenType::KeywordElse) {
-					// expression followed by an if stmt
-					this.index = prev_index;
-					this.file.nodes.remove(prev_node_count..this.file.nodes.size());
-					break;
-				}
-
-				const else_value = this.parseExpr();
-				lhs = this.file.addASTNode(Node::InlineIfExpr(InlineIfExpr(condition, lhs, else_value), start..this.previousSpan(), Type::unknown(), false));
 			} else if op.isBinaryOperator() {
 				const rhs = this.parseExpr(op.precedence());
 				lhs = this.file.addASTNode(Node::BinaryOperatorExpr(
@@ -1271,6 +1284,10 @@ struct Parser {
 				return Some(Operator::As);
 			}
 			case KeywordIf -> {
+				this.next();
+				return Some(Operator::InlineIf);
+			}
+			case QuestionMark -> {
 				this.next();
 				return Some(Operator::InlineIf);
 			}
