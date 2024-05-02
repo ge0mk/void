@@ -233,8 +233,8 @@ struct Token {
 	func constructor(this: &&Token, other: Token) -> void = default;
 	func destructor(this: &&Token) -> void = default;
 
-	operator =(this: &&Token, other: Token) -> void = default;
-	operator ==(this: Token, other: Token) -> bool = default;
+	func =(this: &&Token, other: Token) -> void = default;
+	func ==(this: Token, other: Token) -> bool = default;
 
 	func type(this: &Token) -> TokenType {
 		return (this.data & 0xFF) as TokenType;

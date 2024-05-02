@@ -68,7 +68,7 @@ struct Map {
 		}
 	}
 
-	operator =(this: &&Map!<Tkey, Tvalue>, other: Map!<Tkey, Tvalue>) -> void {
+	func =(this: &&Map!<Tkey, Tvalue>, other: Map!<Tkey, Tvalue>) -> void {
 		this.clear();
 
 		this.grow(other.size());
@@ -99,7 +99,7 @@ struct Map {
 		return MapIterator!<Tkey, Tvalue>(this.keys as ptr!<Tkey, false>, this.values as ptr!<Tvalue, false>, this.keys as ptr!<Tkey, false> + this.size());
 	}
 
-	operator ==(@[shallow] this: Map!<Tkey, Tvalue>, @[shallow] other: Map!<Tkey, Tvalue>) -> bool {
+	func ==(@[shallow] this: Map!<Tkey, Tvalue>, @[shallow] other: Map!<Tkey, Tvalue>) -> bool {
 		if this.size() != other.size() {
 			return false;
 		}
@@ -198,7 +198,7 @@ struct Map {
 		memmove!<Tvalue>(this.values + index, this.values as ptr!<Tvalue, false> + index + 1, this.size - index);
 	}
 
-	operator [](this: &&Map!<Tkey, Tvalue>, @[shallow] key: Tkey) -> &&Tvalue {
+	func [](this: &&Map!<Tkey, Tvalue>, @[shallow] key: Tkey) -> &&Tvalue {
 		var exact_match = false;
 		const index = this.getInsertPos(key, &&exact_match);
 		if exact_match {

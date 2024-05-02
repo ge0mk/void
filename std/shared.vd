@@ -64,19 +64,19 @@ struct SharedPtr {
 		this.data[0u].strong_count++;
 	}
 
-	operator =(this: &&SharedPtr!<T>, other: SharedPtr!<T>) -> void {
+	func =(this: &&SharedPtr!<T>, other: SharedPtr!<T>) -> void {
 		this.destructor();
 		this.constructor(other);
 	}
 
-	operator ==(this: SharedPtr!<T>, other: SharedPtr!<T>) -> bool = default;
-	operator <=>(this: SharedPtr!<T>, other: SharedPtr!<T>) -> int = default;
+	func ==(this: SharedPtr!<T>, other: SharedPtr!<T>) -> bool = default;
+	func <=>(this: SharedPtr!<T>, other: SharedPtr!<T>) -> int = default;
 
-	operator unwrap(this: &SharedPtr!<T>) -> &T {
+	func unwrap(this: &SharedPtr!<T>) -> &T {
 		return &this.data[0u].value;
 	}
 
-	operator unwrap(this: &&SharedPtr!<T>) -> &&T {
+	func unwrap(this: &&SharedPtr!<T>) -> &&T {
 		return &&this.data[0u].value;
 	}
 }
@@ -114,7 +114,7 @@ struct WeakPtr {
 		}
 	}
 
-	operator =(this: &&WeakPtr!<T>, other: WeakPtr!<T>) -> void {
+	func =(this: &&WeakPtr!<T>, other: WeakPtr!<T>) -> void {
 		this.destructor();
 		this.constructor(other);
 	}
@@ -154,6 +154,6 @@ struct WeakPtr {
 		return SharedPtr!<T>(this);
 	}
 
-	operator ==(this: WeakPtr!<T>, other: WeakPtr!<T>) -> bool = default;
-	operator <=>(this: WeakPtr!<T>, other: WeakPtr!<T>) -> int = default;
+	func ==(this: WeakPtr!<T>, other: WeakPtr!<T>) -> bool = default;
+	func <=>(this: WeakPtr!<T>, other: WeakPtr!<T>) -> int = default;
 }

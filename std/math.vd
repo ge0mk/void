@@ -66,9 +66,9 @@ namespace Matrix {
 	comptime if Columns == Rows {
 		func cofactor(this: Matrix!<T, Columns, Rows>, column: uint, row: uint) -> T {
 			comptime if Columns == 2 {
-				return this[(column + 1) % 2, (row + 1) % 2] * (-1 if (column + row) % 2 == 1 else 1);
+				return this[(column + 1) % 2, (row + 1) % 2] * ((column + row) % 2 == 1 ? -1 : 1);
 			} else {
-				return this.submatrix(column, row).determinant() * (-1 if (column + row) % 2 == 1 else 1);
+				return this.submatrix(column, row).determinant() * ((column + row) % 2 == 1 ? -1 : 1);
 			}
 		}
 

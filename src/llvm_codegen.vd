@@ -404,7 +404,7 @@ struct CGContext {
 
 					const member_size_in_bits = LLVMStoreSizeOfType(this.data_layout, llvm_type) as uint * 8;
 					const member_alignment_in_bits = LLVMPreferredAlignmentOfType(this.data_layout, llvm_type) as uint * 8;
-					const member_offset_in_bits = LLVMOffsetOfElement(this.data_layout, llvm_type, i + (2u if type.body is Variant else 0u)) * 8;
+					const member_offset_in_bits = LLVMOffsetOfElement(this.data_layout, llvm_type, i + (type.body is Variant ? 2u : 0u)) * 8;
 
 					members.append(LLVMDIBuilderCreateMemberType(
 						this.di_builder,
@@ -1108,7 +1108,7 @@ struct CGContext {
 					LLVMPositionBuilderAtEnd(this.builder, cont_block);
 				}
 
-				const member_var_offset = 2u if function is VariantOpEqual else 0u;
+				const member_var_offset = function is VariantOpEqual ? 2u : 0u;
 				for i in 0u..decl.member_variables.size() {
 					const lhs = LLVMBuildExtractValue(this.builder, param0, i + member_var_offset, "");
 					const rhs = LLVMBuildExtractValue(this.builder, param1, i + member_var_offset, "");
@@ -1501,7 +1501,7 @@ struct CGContext {
 					for x in 0u..matrix_type.columns {
 						for y in 0u..matrix_type.rows {
 							const dst = x * matrix_type.rows + y;
-							const src = (matrix_type.columns * matrix_type.rows + y) if x == i else (x * matrix_type.rows + y);
+							const src = x == i ? (matrix_type.columns * matrix_type.rows + y) : (x * matrix_type.rows + y);
 							shuffle_mask = LLVMBuildInsertElement(this.builder, shuffle_mask, LLVMConstInt(this.int_type, src as int, false), LLVMConstInt(this.int_type, dst as int, false), "");
 						}
 					}
@@ -1524,7 +1524,7 @@ struct CGContext {
 					for x in 0u..matrix_type.columns {
 						for y in 0u..matrix_type.rows {
 							const dst = x * matrix_type.rows + y;
-							const src = (matrix_type.columns * matrix_type.rows + x) if y == i else (x * matrix_type.rows + y);
+							const src = y == i ? (matrix_type.columns * matrix_type.rows + x) : (x * matrix_type.rows + y);
 							shuffle_mask = LLVMBuildInsertElement(this.builder, shuffle_mask, LLVMConstInt(this.int_type, src as int, false), LLVMConstInt(this.int_type, dst as int, false), "");
 						}
 					}
@@ -1707,7 +1707,7 @@ struct CGContext {
 						for x in 0u..m.a_rows {
 							for y in 0u..m.b_columns {
 								const i = x * m.b_columns + y;
-								const k = (m.a_rows * m.b_columns + y) if x == c else i;
+								const k = x == c ? (m.a_rows * m.b_columns + y) : i;
 								shuffle_mask = LLVMBuildInsertElement(this.builder, shuffle_mask,
 									LLVMConstInt(this.int_type, k as int, false),
 									LLVMConstInt(this.int_type, i as int, false), ""
@@ -1816,7 +1816,7 @@ struct CGContext {
 
 				var is_ascending: LLVMValueRef;
 				if numeric_type.isIntType(false) {
-					const comparison_kind = LLVMIntPredicate::LLVMIntSLT if numeric_type.isSigned(false) else LLVMIntPredicate::LLVMIntULT;
+					const comparison_kind = numeric_type.isSigned(false) ? LLVMIntPredicate::LLVMIntSLT : LLVMIntPredicate::LLVMIntULT;
 					is_ascending = LLVMBuildICmp(this.builder, comparison_kind, start, end, "");
 				} else {
 					is_ascending = LLVMBuildFCmp(this.builder, LLVMRealPredicate::LLVMRealOLT, start, end, "");
@@ -1825,7 +1825,8 @@ struct CGContext {
 				var step = LLVMBuildExtractValue(this.builder, parameters[0u], 2u, "");
 				step = LLVMBuildSelect(
 					this.builder, is_ascending, step,
-					LLVMBuildNeg(this.builder, step, "") if numeric_type.isIntType(false) else LLVMBuildFNeg(this.builder, step, ""), ""
+					numeric_type.isIntType(false) ? LLVMBuildNeg(this.builder, step, "") : LLVMBuildFNeg(this.builder, step, ""),
+					""
 				);
 
 				var iterator = LLVMConstNull(this.getType(iterator_type));
@@ -1844,8 +1845,8 @@ struct CGContext {
 				var gt: LLVMValueRef;
 
 				if numeric_type.isIntType(false) {
-					lt = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntSLT if numeric_type.isSigned(false) else LLVMIntPredicate::LLVMIntULT, current, end, "");
-					gt = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntSGT if numeric_type.isSigned(false) else LLVMIntPredicate::LLVMIntUGT, current, end, "");
+					lt = LLVMBuildICmp(this.builder, numeric_type.isSigned(false) ? LLVMIntPredicate::LLVMIntSLT : LLVMIntPredicate::LLVMIntULT, current, end, "");
+					gt = LLVMBuildICmp(this.builder, numeric_type.isSigned(false) ? LLVMIntPredicate::LLVMIntSGT : LLVMIntPredicate::LLVMIntUGT, current, end, "");
 				} else {
 					lt = LLVMBuildFCmp(this.builder, LLVMRealPredicate::LLVMRealOLT, current, end, "");
 					gt = LLVMBuildFCmp(this.builder, LLVMRealPredicate::LLVMRealOGT, current, end, "");
@@ -2105,7 +2106,7 @@ struct CGContext {
 						const i2 = LLVMConstInt(this.int_type, i as int, false);
 						value_extend_mask = LLVMBuildInsertElement(
 							this.builder, value_extend_mask,
-							i2 if i < expr.indices.size() else LLVMGetPoison(this.int_type),
+							i < expr.indices.size() ? i2 : LLVMGetPoison(this.int_type),
 							i2,
 							""
 						);
@@ -2254,8 +2255,8 @@ struct CGContext {
 		const iterator = this.codegenNode(this.getASTNode(for_stmt.iterator));
 		const begin = LLVMBuildExtractValue(this.builder, iterator, 0u, "");
 		const end = LLVMBuildExtractValue(this.builder, iterator, 1u, "");
-		const step = LLVMBuildExtractValue(this.builder, iterator, 2u, "") if for_stmt.kind is Count else LLVMValueRef();
-		const is_ascending = LLVMBuildExtractValue(this.builder, iterator, 3u, "") if for_stmt.kind is Count else LLVMValueRef();
+		const step = for_stmt.kind is Count ? LLVMBuildExtractValue(this.builder, iterator, 2u, "") : LLVMValueRef();
+		const is_ascending = for_stmt.kind is Count ? LLVMBuildExtractValue(this.builder, iterator, 3u, "") : LLVMValueRef();
 
 		discard LLVMBuildBr(this.builder, header_block);
 
@@ -2267,8 +2268,8 @@ struct CGContext {
 		if for_stmt.kind == Range {
 			condition = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntULT, phi, end, "");
 		} else {
-			const lt_predicate = LLVMIntPredicate::LLVMIntSLT if enumerator_type.isSigned(false) else LLVMIntPredicate::LLVMIntULT;
-			const gt_predicate = LLVMIntPredicate::LLVMIntSGT if enumerator_type.isSigned(false) else LLVMIntPredicate::LLVMIntUGT;
+			const lt_predicate = enumerator_type.isSigned(false) ? LLVMIntPredicate::LLVMIntSLT : LLVMIntPredicate::LLVMIntULT;
+			const gt_predicate = enumerator_type.isSigned(false) ? LLVMIntPredicate::LLVMIntSGT : LLVMIntPredicate::LLVMIntUGT;
 			const lt = LLVMBuildICmp(this.builder, lt_predicate, phi, end, "");
 			const gt = LLVMBuildICmp(this.builder, gt_predicate, phi, end, "");
 			condition = LLVMBuildSelect(this.builder, is_ascending, lt, gt, "");

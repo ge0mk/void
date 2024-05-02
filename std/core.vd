@@ -189,7 +189,7 @@ variant Optional {
 		}
 	}
 
-	operator ??(this: Optional!<T>, other: T) -> T {
+	func ??(this: Optional!<T>, other: T) -> T {
 		comptime if referenceKindOf!<T>() == ReferenceKind::Var {
 			match this {
 				case Some: &&value -> return &&value;
@@ -208,7 +208,7 @@ variant Optional {
 		}
 	}
 
-	operator ??(this: Optional!<T>, other: Optional!<T>) -> Optional!<T> {
+	func ??(this: Optional!<T>, other: Optional!<T>) -> Optional!<T> {
 		match this {
 			case Some -> return this;
 			else -> return other;
@@ -256,7 +256,7 @@ variant Result {
 			}
 		}
 
-		operator ??(this: Result!<Tok, Terr>, other: Tok) -> Tok {
+		func ??(this: Result!<Tok, Terr>, other: Tok) -> Tok {
 			comptime if referenceKindOf!<Tok>() == ReferenceKind::Var {
 				match this {
 					case Ok: &&value -> return &&value;
@@ -317,7 +317,7 @@ variant Result {
 			}
 		}
 
-		operator ??(this: Result!<Tok>, other: Tok) -> Tok {
+		func ??(this: Result!<Tok>, other: Tok) -> Tok {
 			comptime if referenceKindOf!<Tok>() == ReferenceKind::Var {
 				match this {
 					case Ok: &&value -> return &&value;
@@ -349,12 +349,12 @@ namespace Range {
 	}
 
 	comptime if Mutable {
-		operator [](this: &Range!<Type, Mutable>, index: uint) -> &&Type {
+		func [](this: &Range!<Type, Mutable>, index: uint) -> &&Type {
 			assert(index < this.size, Error::EINVAL);
 			return &&this.data[index];
 		}
 	} else {
-		operator [](this: &Range!<Type, Mutable>, index: uint) -> &Type {
+		func [](this: &Range!<Type, Mutable>, index: uint) -> &Type {
 			assert(index < this.size, Error::EINVAL);
 			return &this.data[index];
 		}
@@ -395,23 +395,23 @@ namespace Array {
 		return Some(&this.data()[index]);
 	}
 
-	operator [](this: &Array!<T, Size>, index: uint) -> &T {
+	func [](this: &Array!<T, Size>, index: uint) -> &T {
 		assert(index < Size, Error::EBOUNDS);
 		return &this.data()[index];
 	}
 
-	operator [](this: &&Array!<T, Size>, index: uint) -> &&T {
+	func [](this: &&Array!<T, Size>, index: uint) -> &&T {
 		assert(index < Size, Error::EBOUNDS);
 		return &&this.data()[index];
 	}
 
-	operator [](this: &Array!<T, Size>, range: NumericRange!<uint>) -> Range!<T, false> {
+	func [](this: &Array!<T, Size>, range: NumericRange!<uint>) -> Range!<T, false> {
 		assert(range.end <= Size, Error::EBOUNDS);
 		assert(range.start <= range.end && range.step == 1, Error::EINVAL);
 		return Range!<T, false>(this.data() + range.start, range.end - range.start);
 	}
 
-	operator [](this: &&Array!<T, Size>, range: NumericRange!<uint>) -> Range!<T, true> {
+	func [](this: &&Array!<T, Size>, range: NumericRange!<uint>) -> Range!<T, true> {
 		assert(range.end <= Size, Error::EBOUNDS);
 		assert(range.start <= range.end && range.step == 1, Error::EINVAL);
 		return Range!<T, true>(this.data() + range.start, range.end - range.start);

@@ -59,9 +59,9 @@ struct Scope {
 	func constructor(this: &&Scope, other: Scope) -> void = default;
 	func destructor(this: &&Scope) -> void = default;
 
-	operator =(this: &&Scope, other: Scope) -> void = default;
+	func =(this: &&Scope, other: Scope) -> void = default;
 
-	operator ==(this: Scope, other: Scope) -> bool = default;
+	func ==(this: Scope, other: Scope) -> bool = default;
 }
 
 struct TCContext {
@@ -1784,7 +1784,7 @@ struct TCContext {
 				}
 				this.popScope();
 
-				const kind = ForStmtKind::Range if iterator_type.body is RangeIterator else ForStmtKind::Count;
+				const kind = iterator_type.body is RangeIterator ? ForStmtKind::Range : ForStmtKind::Count;
 
 				var result: List!<uint>;
 				result.append(this.addASTNode(Node::ForStmt(ForStmt(this.addASTNode(iterator), enumerator_var, body, kind), span, this.program.void_type, false)));
@@ -2635,7 +2635,7 @@ struct TCContext {
 					return this.getGarbageNode();
 				}
 
-				base_type.reference_kind = Const if parsed_expr.op is ConstRef else Var;
+				base_type.reference_kind = parsed_expr.op is ConstRef ? Const : Var;
 				this.setASTNodeType(base, base_type);
 				return base;
 			}
@@ -3027,7 +3027,7 @@ struct TCContext {
 				indices_are_sequential &= raw_indices[i] == i;
 			}
 
-			const result_type = vector_type.element_type if indices.size() == 1 else this.getVectorType(vector_type.element_type, indices.size(), span);
+			const result_type = indices.size() == 1 ? vector_type.element_type : this.getVectorType(vector_type.element_type, indices.size(), span);
 
 			if var tmp = this.getASTNode(object) as VectorGetSwizzleExpr {
 				if tmp.indices_are_sequential {
@@ -3174,11 +3174,11 @@ struct TCContext {
 	}
 
 	func checkInlineIfExpr(this: &&TCContext, id: uint, expr: &InlineIfExpr, expected_type: Type, is_comptime: bool, span: Span) -> uint {
-		// x if y else z
+		// cond ? a : b
 		// ->
-		// match y {
-		//     true -> yield x;
-		//     false -> yield z;
+		// match cond {
+		//     true -> yield a;
+		//     false -> yield b;
 		// }
 
 		var cases = List!<uint>();
@@ -3490,7 +3490,7 @@ struct TCContext {
 
 						return Type::unknown();
 					}
-					return checked_base.constRef() if operator_expr.op is ConstRef else checked_base.varRef();
+					return operator_expr.op is ConstRef ? checked_base.constRef() : checked_base.varRef();
 				}
 				else -> {}
 			}

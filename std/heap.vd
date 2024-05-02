@@ -9,8 +9,8 @@ struct Heap {
 	func constructor(this: &&Heap!<T>, other: Heap!<T>) -> void = default;
 	func destructor(this: &&Heap!<T>) -> void = default;
 
-	operator =(this: &&Heap!<T>, other: Heap!<T>) -> void = default;
-	operator ==(this: Heap!<T>, other: Heap!<T>) -> bool = default;
+	func =(this: &&Heap!<T>, other: Heap!<T>) -> void = default;
+	func ==(this: Heap!<T>, other: Heap!<T>) -> bool = default;
 
 	func size(this: &Heap!<T>) -> uint {
 		return this.elements.size();

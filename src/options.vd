@@ -35,8 +35,8 @@ struct ImportedModule {
 	func constructor(this: &&ImportedModule, other: ImportedModule) -> void = default;
 	func destructor(this: &&ImportedModule) -> void = default;
 
-	operator =(this: &&ImportedModule, other: ImportedModule) -> void = default;
-	operator ==(this: ImportedModule, other: ImportedModule) -> bool = default;
+	func =(this: &&ImportedModule, other: ImportedModule) -> void = default;
+	func ==(this: ImportedModule, other: ImportedModule) -> bool = default;
 }
 
 struct CompilerOptions {
@@ -82,8 +82,8 @@ struct CompilerOptions {
 	func constructor(this: &&CompilerOptions, other: CompilerOptions) -> void = default;
 	func destructor(this: &&CompilerOptions) -> void = default;
 
-	operator =(this: &&CompilerOptions, other: CompilerOptions) -> void = default;
-	operator ==(this: CompilerOptions, other: CompilerOptions) -> bool = default;
+	func =(this: &&CompilerOptions, other: CompilerOptions) -> void = default;
+	func ==(this: CompilerOptions, other: CompilerOptions) -> bool = default;
 
 	func getImportPaths(this: &CompilerOptions, module: &String) -> List!<ImportedModule> {
 		var result: List!<ImportedModule>;

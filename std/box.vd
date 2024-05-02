@@ -22,27 +22,27 @@ struct Box {
 		free!<T>(this.data);
 	}
 
-	operator =(this: &&Box!<T>, @[shallow] other: Box!<T>) -> void {
+	func =(this: &&Box!<T>, @[shallow] other: Box!<T>) -> void {
 		this.data[0u] = other.data[0u];
 	}
 
-	operator =(this: &&Box!<T>, @[shallow] value: T) -> void {
+	func =(this: &&Box!<T>, @[shallow] value: T) -> void {
 		this.data[0u] = value;
 	}
 
-	operator ==(@[shallow] this: Box!<T>, @[shallow] other: Box!<T>) -> bool {
+	func ==(@[shallow] this: Box!<T>, @[shallow] other: Box!<T>) -> bool {
 		return this.data[0u] == other.data[0u];
 	}
 
-	operator ==(@[shallow] this: Box!<T>, @[shallow] value: T) -> bool {
+	func ==(@[shallow] this: Box!<T>, @[shallow] value: T) -> bool {
 		return this.data[0u] == value;
 	}
 
-	operator unwrap(this: &Box!<T>) -> &T {
+	func unwrap(this: &Box!<T>) -> &T {
 		return &this.data[0u];
 	}
 
-	operator unwrap(this: &&Box!<T>) -> &&T {
+	func unwrap(this: &&Box!<T>) -> &&T {
 		return &&this.data[0u];
 	}
 }

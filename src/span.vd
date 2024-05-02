@@ -23,10 +23,10 @@ struct Span {
 	func constructor(this: &&Span, other: Span) -> void = default;
 	func destructor(this: &&Span) -> void = default;
 
-	operator =(this: &&Span, other: Span) -> void = default;
-	operator ==(this: Span, other: Span) -> bool = default;
+	func =(this: &&Span, other: Span) -> void = default;
+	func ==(this: Span, other: Span) -> bool = default;
 
-	operator ..(this: Span, other: Span) -> Span {
+	func ..(this: Span, other: Span) -> Span {
 		assert(this.file == other.file);
 
 		return Span(

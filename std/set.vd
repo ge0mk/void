@@ -34,7 +34,7 @@ struct Set {
 		this.size = other.size();
 	}
 
-	operator =(this: &&Set!<T>, other: Set!<T>) -> void {
+	func =(this: &&Set!<T>, other: Set!<T>) -> void {
 		this.clear();
 		this.grow(other.size());
 
@@ -157,7 +157,7 @@ struct Set {
 		this.size = 0u;
 	}
 
-	operator ==(@[shallow] this: Set!<T>, @[shallow] other: Set!<T>) -> bool {
+	func ==(@[shallow] this: Set!<T>, @[shallow] other: Set!<T>) -> bool {
 		if this.size() != other.size() {
 			return false;
 		}
@@ -172,7 +172,7 @@ struct Set {
 	}
 
 	// union
-	operator |(lhs: Set!<T>, @[shallow] rhs: Set!<T>) -> Set!<T> {
+	func |(lhs: Set!<T>, @[shallow] rhs: Set!<T>) -> Set!<T> {
 		for element in rhs {
 			lhs.add(element);
 		}
@@ -181,7 +181,7 @@ struct Set {
 	}
 
 	// intersection
-	operator &(@[shallow] lhs: Set!<T>, @[shallow] rhs: Set!<T>) -> Set!<T> {
+	func &(@[shallow] lhs: Set!<T>, @[shallow] rhs: Set!<T>) -> Set!<T> {
 		var result = Set!<T>();
 
 		for element in lhs {
@@ -194,7 +194,7 @@ struct Set {
 	}
 
 	// difference
-	operator -(@[shallow] lhs: Set!<T>, @[shallow] rhs: Set!<T>) -> Set!<T> {
+	func -(@[shallow] lhs: Set!<T>, @[shallow] rhs: Set!<T>) -> Set!<T> {
 		var result = Set!<T>();
 
 		for element in lhs {
@@ -207,7 +207,7 @@ struct Set {
 	}
 
 	// symetric difference
-	operator ^(@[shallow] lhs: Set!<T>, @[shallow] rhs: Set!<T>) -> Set!<T> {
+	func ^(@[shallow] lhs: Set!<T>, @[shallow] rhs: Set!<T>) -> Set!<T> {
 		var result = Set!<T>();
 
 		for element in lhs {

@@ -15,10 +15,10 @@ struct SharedHandle {
 	func constructor(this: &&SharedHandle!<T>, other: SharedHandle!<T>) -> void = default;
 	func destructor(this: &&SharedHandle!<T>) -> void = default;
 
-	operator =(this: &&SharedHandle!<T>, other: SharedHandle!<T>) -> void = default;
+	func =(this: &&SharedHandle!<T>, other: SharedHandle!<T>) -> void = default;
 
-	operator ==(this: SharedHandle!<T>, other: SharedHandle!<T>) -> bool = default;
-	operator <=>(this: SharedHandle!<T>, other: SharedHandle!<T>) -> int = default;
+	func ==(this: SharedHandle!<T>, other: SharedHandle!<T>) -> bool = default;
+	func <=>(this: SharedHandle!<T>, other: SharedHandle!<T>) -> int = default;
 
 	func isAlive(this: SharedHandle!<T>) -> bool {
 		return this.data != ptr!<T, true>::null();
@@ -28,17 +28,17 @@ struct SharedHandle {
 		return this.data == ptr!<T, true>::null();
 	}
 
-	operator unwrap(this: SharedHandle!<T>) -> &&T {
+	func unwrap(this: SharedHandle!<T>) -> &&T {
 		assert(this.data != ptr!<T, true>::null(), Error::EOPTNONE);
 		return &&this.data[0u];
 	}
 
-	operator unwrap(this: &SharedHandle!<T>) -> &&T {
+	func unwrap(this: &SharedHandle!<T>) -> &&T {
 		assert(this.data != ptr!<T, true>::null(), Error::EOPTNONE);
 		return &&this.data[0u];
 	}
 
-	operator unwrap(this: &&SharedHandle!<T>) -> &&T {
+	func unwrap(this: &&SharedHandle!<T>) -> &&T {
 		assert(this.data != ptr!<T, true>::null(), Error::EOPTNONE);
 		return &&this.data[0u];
 	}
@@ -80,7 +80,7 @@ struct SharedList {
 		return this.elements.isEmpty();
 	}
 
-	operator [](this: &SharedList!<T>, index: uint) -> SharedHandle!<T> {
+	func [](this: &SharedList!<T>, index: uint) -> SharedHandle!<T> {
 		return this.elements[index];
 	}
 }

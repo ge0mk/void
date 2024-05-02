@@ -17,7 +17,7 @@ struct StackFrame {
 	func constructor(this: &&StackFrame, other: StackFrame) -> void = default;
 	func destructor(this: &&StackFrame) -> void = default;
 
-	operator ==(this: StackFrame, other: StackFrame) -> bool = default;
+	func ==(this: StackFrame, other: StackFrame) -> bool = default;
 }
 
 enum ControlFlow {

@@ -157,21 +157,21 @@ struct Path {
 		this.segments := segments;
 	}
 
-	operator =(this: &&Path, other: Path) -> void = default;
+	func =(this: &&Path, other: Path) -> void = default;
 
 	func destructor(this: &&Path) -> void = default;
 
-	operator ==(this: Path, other: Path) -> bool = default;
+	func ==(this: Path, other: Path) -> bool = default;
 
 	func toString(this: &Path) -> String {
 		return "/".join(this.segments);
 	}
 
-	operator /(this: Path, other: String) -> Path {
+	func /(this: Path, other: String) -> Path {
 		return Path(this.segments + other);
 	}
 
-	operator /(this: Path, other: Path) -> Path {
+	func /(this: Path, other: Path) -> Path {
 		return Path(this.segments + other.segments);
 	}
 
@@ -197,7 +197,7 @@ struct Path {
 	func extension(this: &Path) -> String {
 		const filename = this.filename();
 		const pos = filename.rfind('.'b);
-		const extension_start = pos.value() + 1 if pos.hasValue() else filename.size();
+		const extension_start = pos.hasValue() ? pos.value() + 1 : filename.size();
 		return filename.substring(extension_start..filename.size());
 	}
 

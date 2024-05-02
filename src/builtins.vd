@@ -182,8 +182,8 @@ func createBoolType(program: &&Program, dest_namespace: SharedHandle!<Namespace>
 }
 
 func createIntTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>, is_signed: bool) -> SharedHandle!<Namespace> {
-	const name = "int" if is_signed else "uint";
-	const body = TypeBody::Int(0u) if is_signed else TypeBody::UInt(0u);
+	const name = is_signed ? "int" : "uint";
+	const body = is_signed ? TypeBody::Int(0u) : TypeBody::UInt(0u);
 
 	var template_parameters: List!<TemplateParameterDecl>;
 	template_parameters.append(TemplateParameterDecl("Size", program.uint_concept, false));
@@ -192,8 +192,8 @@ func createIntTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Nam
 }
 
 func createIntTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, is_signed: bool, size: int) -> Type {
-	const name = "int" if is_signed else "uint";
-	const body = TypeBody::Int(size as uint) if is_signed else TypeBody::UInt(size as uint);
+	const name = is_signed ? "int" : "uint";
+	const body = is_signed ? TypeBody::Int(size as uint) : TypeBody::UInt(size as uint);
 
 	var template_parameters: List!<TemplateParameterDecl>;
 	template_parameters.append(TemplateParameterDecl("Size", program.uint_concept, false, TemplateParameter::Integer(size)));
@@ -209,7 +209,7 @@ func createIntTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Nam
 		}
 	}
 
-	const flags = (PrimitiveOp::Signed if is_signed else PrimitiveOp::Unsigned);
+	const flags = (is_signed ? PrimitiveOp::Signed : PrimitiveOp::Unsigned);
 	createBasicFunctions(&&program, type, type_namespace);
 	createComparisonOperators(&&program, type, type_namespace, flags);
 	createArithmeticOperators(&&program, type, type_namespace, flags);
@@ -268,7 +268,7 @@ func createPtrTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Nam
 	discard program.createFunction(type_namespace, "null", empty_parameter_types, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::ConstNull, type));
 
 	if pointee_type != program.void_type && pointee_type != program.never_type {
-		const pointee_reference_type = pointee_type.varRef() if is_mutable else pointee_type.constRef();
+		const pointee_reference_type = is_mutable ? pointee_type.varRef() : pointee_type.constRef();
 
 		discard program.createUnaryFunction(type_namespace, "value", type, pointee_reference_type, BuiltinFunction::PointerToRef(type));
 		discard program.createUnaryFunction(type_namespace, "addressOf", pointee_reference_type, type, BuiltinFunction::RefToPointer(type));
@@ -278,8 +278,8 @@ func createPtrTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Nam
 		discard program.createBinaryFunction(type_namespace, "+", type, program.int_type, type, BuiltinFunction::PointerOffset(type));
 		discard program.createBinaryFunction(type_namespace, "+", type, program.uint_type, type, BuiltinFunction::PointerOffset(type));
 
-		discard program.createBinaryFunction(type_namespace, "[]", type, program.int_type, pointee_type.varRef() if is_mutable else pointee_type.constRef(), BuiltinFunction::PointerOpIndex(type));
-		discard program.createBinaryFunction(type_namespace, "[]", type, program.uint_type, pointee_type.varRef() if is_mutable else pointee_type.constRef(), BuiltinFunction::PointerOpIndex(type));
+		discard program.createBinaryFunction(type_namespace, "[]", type, program.int_type, is_mutable ? pointee_type.varRef() : pointee_type.constRef(), BuiltinFunction::PointerOpIndex(type));
+		discard program.createBinaryFunction(type_namespace, "[]", type, program.uint_type, is_mutable ? pointee_type.varRef() : pointee_type.constRef(), BuiltinFunction::PointerOpIndex(type));
 	}
 
 	return type;
@@ -564,7 +564,7 @@ func createRangeIteratorTypeInstance(program: &&Program, dest_namespace: SharedH
 	type_decl.op_equal = program.createBinaryFunction(type_namespace, "==", type, type, program.bool_type, BuiltinFunction::StructOpEqual(type));
 
 	discard program.createUnaryFunction(type_namespace, "hasNext", type, program.bool_type, BuiltinFunction::RangeIteratorHasNext(type));
-	discard program.createUnaryFunction(type_namespace, "getNext", type.varRef(), element_type.varRef() if is_mutable else element_type.constRef(), BuiltinFunction::RangeIteratorGetNext(type));
+	discard program.createUnaryFunction(type_namespace, "getNext", type.varRef(), is_mutable ? element_type.varRef() : element_type.constRef(), BuiltinFunction::RangeIteratorGetNext(type));
 
 	return type_decl;
 }

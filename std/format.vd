@@ -2,21 +2,24 @@ import std/core;
 import std/string;
 
 func format(value: bool) -> String {
-	return "true" if value else "false";
+	match value {
+		case true -> return "true";
+		case false -> return "false";
+	}
 }
 
 func format(value: int) -> String {
 	if value < 0 {
 		return "-" + format(-value);
 	} else {
-		var tmp = format(value / 10) if value >= 10 else "";
+		const tmp = value >= 10 ? format(value / 10) : "";
 		const digit = '0'u8 + (value % 10) as u8;
 		return tmp + digit as byte;
 	}
 }
 
 func format(value: uint) -> String {
-	var tmp = format(value / 10) if value >= 10 else "";
+	const tmp = value >= 10 ? format(value / 10) : "";
 	const digit = '0'u8 + (value % 10) as u8;
 	return tmp + digit as byte;
 }

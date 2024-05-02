@@ -12,8 +12,8 @@ enum OpenMode {
 	case trunc  = 4;
 	case append = 8;
 
-	operator |(this: OpenMode, other: OpenMode) -> OpenMode = default;
-	operator &(this: OpenMode, other: OpenMode) -> OpenMode = default;
+	func |(this: OpenMode, other: OpenMode) -> OpenMode = default;
+	func &(this: OpenMode, other: OpenMode) -> OpenMode = default;
 
 	func toStringForFOpen(this: OpenMode) -> Result!<String> {
 		var str: String;
@@ -97,8 +97,8 @@ enum FilePermissions {
 	case setgid = 0o2000;
 	case sticky = 0o1000;
 
-	operator |(this: FilePermissions, other: FilePermissions) -> FilePermissions = default;
-	operator &(this: FilePermissions, other: FilePermissions) -> FilePermissions = default;
+	func |(this: FilePermissions, other: FilePermissions) -> FilePermissions = default;
+	func &(this: FilePermissions, other: FilePermissions) -> FilePermissions = default;
 }
 
 struct File {
@@ -121,7 +121,7 @@ struct File {
 		}
 	}
 
-	operator =(this: &&File, other: File) -> void {
+	func =(this: &&File, other: File) -> void {
 		this.destructor();
 		this.constructor(other);
 	}
@@ -138,7 +138,7 @@ struct File {
 		}
 	}
 
-	operator ==(this: File, other: File) -> bool {
+	func ==(this: File, other: File) -> bool {
 		return this.c_file == other.c_file;
 	}
 

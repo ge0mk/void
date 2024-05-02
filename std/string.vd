@@ -67,7 +67,7 @@ struct String {
 		return String::fromCString(strerror(error));
 	}
 
-	operator =(this: &&String, other: String) -> void {
+	func =(this: &&String, other: String) -> void {
 		this.grow(other.size());
 		this._copy(0u, other.data(), other.size());
 		this._setSize(other.size());
@@ -131,17 +131,17 @@ struct String {
 		return Range!<byte, false>(this.data(), this.size());
 	}
 
-	operator [](this: &String, index: uint) -> &byte {
+	func [](this: &String, index: uint) -> &byte {
 		assert(index < this.size(), Error::EBOUNDS);
 		return &this.data()[index];
 	}
 
-	operator [](this: &&String, index: uint) -> &&byte {
+	func [](this: &&String, index: uint) -> &&byte {
 		assert(index < this.size(), Error::EBOUNDS);
 		return &&this.vdata()[index];
 	}
 
-	operator [](this: &String, range: NumericRange!<uint>) -> Range!<byte, false> {
+	func [](this: &String, range: NumericRange!<uint>) -> Range!<byte, false> {
 		assert(range.end <= this.size(), Error::EBOUNDS);
 		assert(range.start <= range.end && range.step == 1, Error::EINVAL);
 		return Range!<byte, false>(this.data() + range.start, range.end - range.start);
@@ -299,7 +299,7 @@ struct String {
 		assert(range.start <= range.end && range.step == 1u, Error::EINVAL);
 
 		const difference = with.size() as int - (range.end - range.start) as int;
-		const count = (difference if difference >= 0 else -difference) as uint;
+		const count = (difference >= 0 ? difference : -difference) as uint;
 		if difference > 0 {
 			this.grow(this.size() + count);
 		}
@@ -412,7 +412,7 @@ struct String {
 		return this._cmp(offset, other.data(), other.size()) == 0;
 	}
 
-	operator ==(@[shallow] lhs: String, @[shallow] rhs: String) -> bool {
+	func ==(@[shallow] lhs: String, @[shallow] rhs: String) -> bool {
 		if lhs.size() != rhs.size() {
 			return false;
 		}
@@ -420,7 +420,7 @@ struct String {
 		return lhs._cmp(0u, rhs.data(), lhs.size()) == 0;
 	}
 
-	operator <=>(@[shallow] lhs: String, @[shallow] rhs: String) -> int {
+	func <=>(@[shallow] lhs: String, @[shallow] rhs: String) -> int {
 		const r = lhs._cmp(0u, rhs.data(), min!<uint>(lhs.size(), rhs.size()));
 		if r == 0 {
 			return lhs.size() <=> rhs.size();
@@ -429,21 +429,21 @@ struct String {
 		}
 	}
 
-	operator +(lhs: String, rhs: byte) -> String {
+	func +(lhs: String, rhs: byte) -> String {
 		lhs.append(rhs);
 		return lhs;
 	}
 
-	operator +(lhs: String, @[shallow] rhs: String) -> String {
+	func +(lhs: String, @[shallow] rhs: String) -> String {
 		lhs.append(rhs);
 		return lhs;
 	}
 
-	operator +=(this: &&String, value: byte) -> void {
+	func +=(this: &&String, value: byte) -> void {
 		this.append(value);
 	}
 
-	operator +=(this: &&String, @[shallow] other: String) -> void {
+	func +=(this: &&String, @[shallow] other: String) -> void {
 		this.append(other);
 	}
 
@@ -558,9 +558,9 @@ struct ParsedNumber {
 	func constructor(this: &&ParsedNumber, other: ParsedNumber) -> void = default;
 	func destructor(this: &&ParsedNumber) -> void = default;
 
-	operator =(this: &&ParsedNumber, other: ParsedNumber) -> void = default;
+	func =(this: &&ParsedNumber, other: ParsedNumber) -> void = default;
 
-	operator ==(this: ParsedNumber, other: ParsedNumber) -> bool = default;
+	func ==(this: ParsedNumber, other: ParsedNumber) -> bool = default;
 
 	// remove trailing zeros in the significant: 100 * 10^0 -> 1 * 10^2
 	func normalize(this: &&ParsedNumber) -> void {
@@ -575,7 +575,7 @@ struct ParsedNumber {
 	}
 
 	func toInt(this: &ParsedNumber) -> int {
-		const power = this.exponent if this.exponent > 0 else -this.exponent;
+		const power = this.exponent > 0 ? this.exponent : -this.exponent;
 		var result = this.significant;
 		var i = 0;
 

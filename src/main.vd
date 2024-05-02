@@ -275,7 +275,7 @@ func main(args: Range!<String, false>) -> int {
 	}
 
 	if program.options.mode == Check || program.has_errors {
-		return 1 if program.has_errors else 0;
+		return program.has_errors as int;
 	}
 
 	if program.main_function.isEmpty() {

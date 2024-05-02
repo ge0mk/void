@@ -69,7 +69,7 @@ struct List {
 		this.size = size;
 	}
 
-	operator =(this: &&List!<T>, other: List!<T>) -> void {
+	func =(this: &&List!<T>, other: List!<T>) -> void {
 		this.clear();
 		this.grow(other.size());
 
@@ -111,23 +111,23 @@ struct List {
 		return Some(this.data[index]);
 	}
 
-	operator [](this: &List!<T>, index: uint) -> &T {
+	func [](this: &List!<T>, index: uint) -> &T {
 		assert(index < this.size(), Error::EBOUNDS);
 		return &this.data[index];
 	}
 
-	operator [](this: &&List!<T>, index: uint) -> &&T {
+	func [](this: &&List!<T>, index: uint) -> &&T {
 		assert(index < this.size(), Error::EBOUNDS);
 		return &&this.data[index];
 	}
 
-	operator [](this: &List!<T>, range: NumericRange!<uint>) -> Range!<T, false> {
+	func [](this: &List!<T>, range: NumericRange!<uint>) -> Range!<T, false> {
 		assert(range.end <= this.size(), Error::EBOUNDS);
 		assert(range.start <= range.end && range.step == 1, Error::EINVAL);
 		return Range!<T, false>(this.data as ptr!<T, false> + range.start, range.end - range.start);
 	}
 
-	operator [](this: &&List!<T>, range: NumericRange!<uint>) -> Range!<T, true> {
+	func [](this: &&List!<T>, range: NumericRange!<uint>) -> Range!<T, true> {
 		assert(range.end <= this.size(), Error::EBOUNDS);
 		assert(range.start <= range.end && range.step == 1, Error::EINVAL);
 		return Range!<T, true>(this.data + range.start, range.end - range.start);
@@ -287,7 +287,7 @@ struct List {
 		this.size = 0u;
 	}
 
-	operator ==(@[shallow] this: List!<T>, @[shallow] other: List!<T>) -> bool {
+	func ==(@[shallow] this: List!<T>, @[shallow] other: List!<T>) -> bool {
 		if this.size() != other.size() {
 			return false;
 		}
@@ -301,21 +301,21 @@ struct List {
 		return true;
 	}
 
-	operator +(lhs: List!<T>, @[shallow] rhs: T) -> List!<T> {
+	func +(lhs: List!<T>, @[shallow] rhs: T) -> List!<T> {
 		lhs.append(rhs);
 		return lhs;
 	}
 
-	operator +(lhs: List!<T>, @[shallow] rhs: List!<T>) -> List!<T> {
+	func +(lhs: List!<T>, @[shallow] rhs: List!<T>) -> List!<T> {
 		lhs.append(rhs);
 		return lhs;
 	}
 
-	operator +=(this: &&List!<T>, @[shallow] value: T) -> void {
+	func +=(this: &&List!<T>, @[shallow] value: T) -> void {
 		this.append(value);
 	}
 
-	operator +=(this: &&List!<T>, @[shallow] other: List!<T>) -> void {
+	func +=(this: &&List!<T>, @[shallow] other: List!<T>) -> void {
 		this.append(other);
 	}
 

@@ -48,9 +48,9 @@ struct CompilationUnit {
 	func constructor(this: &&CompilationUnit, other: CompilationUnit) -> void = default;
 	func destructor(this: &&CompilationUnit) -> void = default;
 
-	operator =(this: &&CompilationUnit, other: CompilationUnit) -> void = default;
+	func =(this: &&CompilationUnit, other: CompilationUnit) -> void = default;
 
-	operator ==(this: CompilationUnit, other: CompilationUnit) -> bool {
+	func ==(this: CompilationUnit, other: CompilationUnit) -> bool {
 		return this.path == other.path;
 	}
 
@@ -210,7 +210,7 @@ struct CompilationUnit {
 			}
 			case VarDecl: &decl -> {
 				if !decl.is_parameter {
-					out.attribute("const" if decl.is_const else "var");
+					out.attribute(decl.is_const ? "const" : "var");
 				}
 				out.value(this.name);
 
@@ -429,14 +429,14 @@ struct CompilationUnit {
 	}
 
 	func dump(this: &CompilationUnit, out: &&TreeFormatter, variable: SharedHandle!<VarDecl>, is_last: bool) -> void {
-		out.push("ParameterDecl" if variable.is_parameter else "VarDecl", is_last);
+		out.push(variable.is_parameter ? "ParameterDecl" : "VarDecl", is_last);
 
 		if variable.is_comptime {
 			out.value("comptime");
 		}
 
-		out.value("const" if variable.is_const else "var");
-		out.attribute(("#" if variable.is_parameter else "") + variable.name);
+		out.value(variable.is_const ? "const" : "var");
+		out.attribute((variable.is_parameter ? "#" : "") + variable.name);
 		out.value(format(variable.id));
 		out.text(" :");
 		out.value(variable.type.signature());
@@ -882,7 +882,7 @@ variant Concept {
 		match this {
 			case Any -> out.value("Any");
 			case Boolean -> out.value("Boolean");
-			case Integer: is_signed -> out.value("Integer " + ("signed" if is_signed else "unsigned"));
+			case Integer: is_signed -> out.value("Integer " + (is_signed ? "signed" : "unsigned"));
 			case String -> out.value("String");
 		}
 
@@ -915,13 +915,13 @@ struct TemplateParameterDecl {
 	func constructor(this: &&TemplateParameterDecl, other: TemplateParameterDecl) -> void = default;
 	func destructor(this: &&TemplateParameterDecl) -> void = default;
 
-	operator =(this: &&TemplateParameterDecl, other: TemplateParameterDecl) -> void = default;
+	func =(this: &&TemplateParameterDecl, other: TemplateParameterDecl) -> void = default;
 
-	operator ==(this: TemplateParameterDecl, other: TemplateParameterDecl) -> bool = default;
+	func ==(this: TemplateParameterDecl, other: TemplateParameterDecl) -> bool = default;
 
 	func signature(this: &TemplateParameterDecl) -> String {
 		var result = this.name + ": ";
-		result += ("..." if this.is_variadic else "");
+		result += (this.is_variadic ? "..." : "");
 		result += this.concept.name;
 
 		if !(this.value is None) {
@@ -955,7 +955,7 @@ enum NamespaceState {
 	case UncheckedFunctionBodies;
 	case Done;
 
-	operator +(this: NamespaceState, delta: uint) -> NamespaceState {
+	func +(this: NamespaceState, delta: uint) -> NamespaceState {
 		return (this as uint + delta) as NamespaceState;
 	}
 }
@@ -1242,7 +1242,7 @@ struct TypeDecl {
 			}
 			case Pointer: pointer_type -> {
 				out.push("PointerTypeDecl", is_last);
-				out.attribute("var" if pointer_type.is_mutable else "const");
+				out.attribute(pointer_type.is_mutable ? "var" : "const");
 				out.value(pointer_type.pointee_type.signature());
 			}
 			case Function -> out.push("FunctionTypeDecl", is_last);
@@ -1569,14 +1569,14 @@ struct VarDecl {
 	func constructor(this: &&VarDecl, other: VarDecl) -> void = default;
 	func destructor(this: &&VarDecl) -> void = default;
 
-	operator =(this: &&VarDecl, other: VarDecl) -> void = default;
+	func =(this: &&VarDecl, other: VarDecl) -> void = default;
 
-	operator ==(@[shallow] this: VarDecl, @[shallow] other: VarDecl) -> bool {
+	func ==(@[shallow] this: VarDecl, @[shallow] other: VarDecl) -> bool {
 		return this.id == other.id;
 	}
 
 	func signature(this: &VarDecl) -> String {
-		return ("const " if this.is_const else "var ") + ("#" if this.is_parameter else "") + this.name + ": " + this.type.signature();
+		return (this.is_const ? "const " : "var ") + (this.is_parameter ? "#" : "") + this.name + ": " + this.type.signature();
 	}
 }
 
@@ -1598,10 +1598,10 @@ struct Type {
 	func constructor(this: &&Type, other: Type) -> void = default;
 	func destructor(this: &&Type) -> void = default;
 
-	operator =(this: &&Type, other: Type) -> void = default;
+	func =(this: &&Type, other: Type) -> void = default;
 
-	operator ==(this: Type, other: Type) -> bool = default;
-	operator <=>(this: Type, other: Type) -> int = default;
+	func ==(this: Type, other: Type) -> bool = default;
+	func <=>(this: Type, other: Type) -> int = default;
 
 	func unknown() -> Type {
 		return Type(SharedHandle!<TypeDecl>(), ReferenceKind::None);
@@ -1944,8 +1944,8 @@ enum PrimitiveOp {
 	case Assign = 512;
 	case RHSToVector = 1024;
 
-	operator |(lhs: PrimitiveOp, rhs: PrimitiveOp) -> PrimitiveOp = default;
-	operator &(lhs: PrimitiveOp, rhs: PrimitiveOp) -> PrimitiveOp = default;
+	func |(lhs: PrimitiveOp, rhs: PrimitiveOp) -> PrimitiveOp = default;
+	func &(lhs: PrimitiveOp, rhs: PrimitiveOp) -> PrimitiveOp = default;
 
 	func isAssignment(op: PrimitiveOp) -> bool {
 		return (op & Assign) != NoOp;
@@ -2487,16 +2487,16 @@ struct Name {
 	func constructor(this: &&Name, other: Name) -> void = default;
 	func destructor(this: &&Name) -> void = default;
 
-	operator =(this: &&Name, other: Name) -> void = default;
-	operator ==(@[shallow] this: Name, @[shallow] other: Name) -> bool = default;
+	func =(this: &&Name, other: Name) -> void = default;
+	func ==(@[shallow] this: Name, @[shallow] other: Name) -> bool = default;
 
-	operator +(@[shallow] this: Name, @[shallow] segment: NameSegment) -> Name {
+	func +(@[shallow] this: Name, @[shallow] segment: NameSegment) -> Name {
 		var result = this;
 		result.segments.append(segment);
 		return result;
 	}
 
-	operator ..(@[shallow] lhs: Name, @[shallow] rhs: Name) -> Name {
+	func ..(@[shallow] lhs: Name, @[shallow] rhs: Name) -> Name {
 		return Name(lhs.span..rhs.span, lhs.segments + rhs.segments);
 	}
 

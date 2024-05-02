@@ -35,9 +35,9 @@ struct CompilationError {
 
 	func destructor(this: &&CompilationError) -> void = default;
 
-	operator =(this: &&CompilationError, other: CompilationError) -> void = default;
+	func =(this: &&CompilationError, other: CompilationError) -> void = default;
 
-	operator ==(this: CompilationError, other: CompilationError) -> bool = default;
+	func ==(this: CompilationError, other: CompilationError) -> bool = default;
 
 	func toString(this: CompilationError, file_name: String) -> String {
 		var result = "";

@@ -31,7 +31,7 @@ struct ArgsParser {
 		}
 
 		var is_short = arg[1u] != '-'b;
-		var cursor = 1u if is_short else 2u;
+		var cursor = is_short ? 1u : 2u;
 
 		const key_start = cursor;
 		while cursor < arg.size() {
@@ -71,7 +71,7 @@ struct ArgsParser {
 				break;
 			}
 
-			if arg.key != (short if arg.is_short else long) {
+			if arg.key != (arg.is_short ? short : long) {
 				continue;
 			}
 
@@ -97,7 +97,7 @@ struct ArgsParser {
 				break;
 			}
 
-			if arg.key != (short if arg.is_short else long) {
+			if arg.key != (arg.is_short ? short : long) {
 				continue;
 			}
 
