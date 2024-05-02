@@ -944,27 +944,27 @@ struct TCContext {
 				if function.parameter_types[0u] == type.varRef() {
 					parent_type.destructor = function;
 				}
-			} else if function.name == "operator =" && function.parameter_types.size() == 2 {
+			} else if function.name == "=" && function.parameter_types.size() == 2 {
 				if function.parameter_types[0u] == type.varRef() && function.parameter_types[1u] == type {
 					parent_type.op_assign = function;
 				}
-			} else if function.name == "operator ==" && function.parameter_types.size() == 2 {
+			} else if function.name == "==" && function.parameter_types.size() == 2 {
 				if function.parameter_types[0u] == type && function.parameter_types[1u] == type {
 					parent_type.op_equal = function;
 				}
-			} else if function.name == "operator <=>" && function.parameter_types.size() == 2 {
+			} else if function.name == "<=>" && function.parameter_types.size() == 2 {
 				if function.parameter_types[0u] == type && function.parameter_types[1u] == type {
 					parent_type.op_compare = function;
 				}
-			} else if function.name == "operator unwrap" && function.parameter_types.size() == 1 {
+			} else if function.name == "unwrap" && function.parameter_types.size() == 1 {
 				if parent_type.unwrapped_type.isEmpty() {
 					parent_type.unwrapped_type = function.return_type.decl;
 				} else if parent_type.unwrapped_type != function.return_type.decl {
-					this.error("operator unwrap redeclared with different return type", function.signature_span);
+					this.error("unwrap() redeclared with different return type", function.signature_span);
 				}
 
 				if function.return_type.reference_kind < function.parameter_types[0u].reference_kind {
-					this.error("invalid operator unwrap declaration", function.signature_span);
+					this.error("invalid unwrap() declaration", function.signature_span);
 				}
 			}
 		}
@@ -1005,7 +1005,7 @@ struct TCContext {
 						this.validateBuiltinFunctionDecl(function, builtin_function);
 					}
 				}
-				else -> this.checkFunctionBody(&&function.operator unwrap(), parsed_function.body);
+				else -> this.checkFunctionBody(&&function.unwrap(), parsed_function.body);
 			}
 		}
 
@@ -1946,7 +1946,7 @@ struct TCContext {
 			capture_init_template_parameters.append(TemplateParameter::Integer(case_id));
 
 			var capture_init = this.addASTNode(this.checkCall(
-				Name("operator unsafe as", capture_init_template_parameters),
+				Name("unsafeAs", capture_init_template_parameters),
 				List!<uint>(1u, this.match_value),
 				false, false, CallKind::MemberCall, false, span
 			));
@@ -2048,7 +2048,7 @@ struct TCContext {
 		if value_type.decl.isAlive() {
 			const type_decl = value_type.decl;
 			if value_type != this.current_return_type && type_decl.unwrapped_type == this.current_return_type.decl && value_type.reference_kind == this.current_return_type.reference_kind {
-				value = this.addASTNode(this.checkCall(Name("operator unwrap"), List!<uint>(1u, value), false, false, CallKind::MemberCall, false, span));
+				value = this.addASTNode(this.checkCall(Name("unwrap"), List!<uint>(1u, value), false, false, CallKind::MemberCall, false, span));
 				if this.current_return_type.reference_kind != None {
 					value = this.removeDereference(value);
 					this.setASTNodeType(value, this.current_return_type);
@@ -2642,7 +2642,7 @@ struct TCContext {
 			case Try | Must -> return this.checkValidateExpr(id, parsed_expr.operand, parsed_expr.op, is_comptime, span);
 			else -> {
 				this.replaceASTNode(id, this.checkCall(
-					Name("operator " + format(parsed_expr.op)),
+					Name(format(parsed_expr.op)),
 					List!<uint>(1u, this.checkNode(parsed_expr.operand, Type::unknown(), is_comptime)),
 					true, true, CallKind::Operator, is_comptime, span
 				));
@@ -2733,7 +2733,7 @@ struct TCContext {
 								var arguments = List!<uint>(2u, lhs);
 								arguments[1u] = rhs;
 								rhs = this.addASTNode(this.checkCall(
-									Name("operator " + format(expr.op.withoutAssignment())),
+									Name(format(expr.op.withoutAssignment())),
 									arguments, true, true, CallKind::Operator, is_comptime, span
 								));
 							}
@@ -2797,7 +2797,7 @@ struct TCContext {
 					);
 				} else {
 					call_expr = this.checkCall(
-						Name("operator " + format(expr.op)),
+						Name(format(expr.op)),
 						arguments, true, true, CallKind::Operator, is_comptime, span
 					);
 				}
@@ -2840,7 +2840,7 @@ struct TCContext {
 					result = this.createTemporaryVariable(matching_types[0u], List!<TemplateParameter>(), arguments, is_comptime, span);
 				} else if matching_variables.size() == 1 {
 					arguments.insert(0u, this.checkNode(call_expr.callee, Type::unknown(), is_comptime));
-					result = this.checkCall(Name("operator ()"), arguments, true, true, CallKind::MemberCall, is_comptime, span);
+					result = this.checkCall(Name("()"), arguments, true, true, CallKind::MemberCall, is_comptime, span);
 				} else if matching_case_decls.size() == 1 {
 					if const index = matching_case_decls[0u] as VariantCase {
 						const parent_type = matching_case_decls[0u].parent_type;
@@ -2879,7 +2879,7 @@ struct TCContext {
 							}
 
 							arguments[0u] = this.addASTNode(member_access_expr);
-							result = this.checkCall(Name("operator ()"), arguments, true, true, CallKind::MemberCall, is_comptime, span);
+							result = this.checkCall(Name("()"), arguments, true, true, CallKind::MemberCall, is_comptime, span);
 						}
 					}
 
@@ -2896,7 +2896,7 @@ struct TCContext {
 
 		if result is Empty {
 			arguments.insert(0u, this.checkNode(call_expr.callee, Type::unknown(), is_comptime));
-			result = this.checkCall(Name("operator ()"), arguments, true, true, CallKind::MemberCall, is_comptime, span);
+			result = this.checkCall(Name("()"), arguments, true, true, CallKind::MemberCall, is_comptime, span);
 		}
 
 		if result is Garbage {
@@ -2982,7 +2982,7 @@ struct TCContext {
 					operands[i] = this.checkNode(operands[i], Type::unknown(), is_comptime);
 				}
 
-				const call = this.checkCall(Name("operator []"), operands, true, true, CallKind::MemberCall, is_comptime, span);
+				const call = this.checkCall(Name("[]"), operands, true, true, CallKind::MemberCall, is_comptime, span);
 				if call is Garbage {
 					return this.getGarbageNode();
 				}
@@ -3048,7 +3048,7 @@ struct TCContext {
 		if type_decl.getMemberVariable(member_name) is None && !type_decl.unwrapped_type.isEmpty() {
 			if type_decl.unwrapped_type.getMemberVariable(member_name) is Some {
 				const unwrap_call = this.checkCall(
-					Name("operator unwrap"), List!<uint>(1u, object),
+					Name("unwrap"), List!<uint>(1u, object),
 					false, false, CallKind::MemberCall, is_comptime, span
 				);
 
@@ -3226,7 +3226,7 @@ struct TCContext {
 			arguments.append(lhs);
 			arguments.append(rhs);
 
-			this.replaceASTNode(id, this.checkCall(Name("operator =="), arguments, false, false, CallKind::MemberCall, is_comptime, span));
+			this.replaceASTNode(id, this.checkCall(Name("=="), arguments, false, false, CallKind::MemberCall, is_comptime, span));
 			return id;
 		} else if lhs_type_decl.body is Variant {
 			var arguments: List!<uint>;
@@ -3250,7 +3250,7 @@ struct TCContext {
 			var template_parameters: List!<TemplateParameter>;
 			template_parameters.append(TemplateParameter::Integer(case_decl.id));
 
-			this.replaceASTNode(id, this.checkCall(Name("operator is", template_parameters), arguments, false, false, CallKind::MemberCall, is_comptime, span));
+			this.replaceASTNode(id, this.checkCall(Name("is", template_parameters), arguments, false, false, CallKind::MemberCall, is_comptime, span));
 			return id;
 		} else {
 			this.error("'operator is' requires lhs to be an enum or a variant instance", span);
@@ -3302,10 +3302,10 @@ struct TCContext {
 		var cast_template_parameters: List!<TemplateParameter>;
 
 		var call = Node::Garbage(Span(), Type::unknown(), false);
-		if cast_name == "" { // lhs.operator as!<target_type>()
+		if cast_name == "" { // lhs.as!<target_type>()
 			cast_template_parameters.append(TemplateParameter::Type(target_type));
 			call = this.checkCall(
-				Name("operator as", cast_template_parameters),
+				Name("as", cast_template_parameters),
 				List!<uint>(1u, lhs),
 				false, false, CallKind::MemberCall, is_comptime, span
 			);
@@ -3559,16 +3559,16 @@ struct TCContext {
 		var compare_result_zero = false;
 		const name_str = format(name);
 		if candidates.isEmpty() && kind == Operator {
-			if name_str == "operator ==" {
-				candidates = this.lookupFunction(Name("operator !="), parent_type, argument_types, allow_unwrapping_this, allow_unwrapping, span);
+			if name_str == "==" {
+				candidates = this.lookupFunction(Name("!="), parent_type, argument_types, allow_unwrapping_this, allow_unwrapping, span);
 				negate_result = true;
-			} else if name_str == "operator !=" {
-				candidates = this.lookupFunction(Name("operator =="), parent_type, argument_types, allow_unwrapping_this, allow_unwrapping, span);
+			} else if name_str == "!=" {
+				candidates = this.lookupFunction(Name("=="), parent_type, argument_types, allow_unwrapping_this, allow_unwrapping, span);
 				negate_result = true;
 			}
 
 			if candidates.isEmpty() && isComparisonOperator(name_str) {
-				candidates = this.lookupFunction(Name("operator <=>"), parent_type, argument_types, allow_unwrapping_this, allow_unwrapping, span);
+				candidates = this.lookupFunction(Name("<=>"), parent_type, argument_types, allow_unwrapping_this, allow_unwrapping, span);
 				compare_result_zero = true;
 			}
 		}
@@ -3589,23 +3589,23 @@ struct TCContext {
 			return this.checkCall(Name(name_str), cmp_arguments, false, false, CallKind::Operator, is_comptime, span);
 		} else if negate_result {
 			const not_arguments = List!<uint>(1u, this.addASTNode(result));
-			return this.checkCall(Name("operator !"), not_arguments, false, false, CallKind::Operator, is_comptime, span);
+			return this.checkCall(Name("!"), not_arguments, false, false, CallKind::Operator, is_comptime, span);
 		} else {
 			return result;
 		}
 	}
 
 	func isComparisonOperator(name: String) -> bool {
-		return name == "operator ==" || name == "operator !="
-			|| name == "operator <" || name == "operator <="
-			|| name == "operator >" || name == "operator >=";
+		return name == "==" || name == "!="
+			|| name == "<" || name == "<="
+			|| name == ">" || name == ">=";
 	}
 
 	func unwrapArguments(this: &&TCContext, arguments: &&List!<uint>, required_parameter_types: &List!<Type>, is_comptime: bool) -> void {
 		for i in 0u..arguments.size() {
 			if this.getASTNodeType(arguments[i]).decl != required_parameter_types[i].decl {
 				arguments[i] = this.addASTNode(this.checkCall(
-					Name("operator unwrap"),
+					Name("unwrap"),
 					List!<uint>(1u, arguments[i]),
 					false, false,
 					CallKind::MemberCall,
@@ -4348,7 +4348,7 @@ struct TCContext {
 
 					const type = Type(type_instance);
 					const range_type = this.getType(Name("NumericRange", List!<TemplateParameter>(1u, TemplateParameter::Type(type))), error_span);
-					discard this.program.createBinaryFunction(type_instance.linked_namespace, "operator ..", type, type, range_type, BuiltinFunction::NumericTypeRangeOperator(range_type, type));
+					discard this.program.createBinaryFunction(type_instance.linked_namespace, "..", type, type, range_type, BuiltinFunction::NumericTypeRangeOperator(range_type, type));
 				}
 				case Pointer: pointer_type -> {
 					const pointee_type = (template_parameters[0u] as Type).value();

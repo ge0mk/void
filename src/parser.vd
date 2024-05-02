@@ -575,23 +575,19 @@ struct Parser {
 	func parseFunctionSignature(this: &&Parser) -> Optional!<ParsedFunctionSignature> {
 		const start = this.currentSpan();
 
+		if !(this.accept(TokenType::KeywordOperator) || this.accept(TokenType::KeywordFunc)) {
+			return None;
+		}
+
 		var name = "";
-		if this.accept(TokenType::KeywordFunc) {
-			if this.current() == Identifier {
-				name = this.expectIdentifier();
-			} else {
-				name = this.parseOperatorName();
-			}
-		} else if this.accept(TokenType::KeywordOperator) {
+		if this.current() == Identifier {
+			name = this.expectIdentifier();
+		} else {
 			name = this.parseOperatorName();
 		}
 
 		if name.isEmpty() {
 			return None;
-		}
-
-		if name == "unwrap" {
-			name = "operator unwrap";
 		}
 
 		return this.parseFunctionSignature(name, start);
@@ -963,10 +959,6 @@ struct Parser {
 	func parseOperatorName(this: &&Parser) -> String {
 		const start = this.currentSpan();
 
-		if this.current() == Identifier {
-			return "operator " + this.expectIdentifier();
-		}
-
 		const op = this.parseOperator() else {
 			this.error("invalid operator name is not an operator", start);
 			return "";
@@ -980,7 +972,7 @@ struct Parser {
 			this.error("invalid operator name \"" + format(op) + "\"", start..this.previousSpan());
 		}
 
-		return "operator " + format(op);
+		return format(op);
 	}
 
 	func parseTemplateParameters(this: &&Parser) -> List!<uint> {

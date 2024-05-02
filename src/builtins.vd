@@ -69,8 +69,8 @@ func createTypeRefTypeDecl(program: &&Program, dest_namespace: SharedHandle!<Nam
 
 	type_decl.copy_constructor = program.createBinaryFunction(type_namespace, "constructor", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
 	type_decl.destructor = program.createUnaryFunction(type_namespace, "destructor", type.varRef(), program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::NoOp, type));
-	type_decl.op_assign = program.createBinaryFunction(type_namespace, "operator =", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
-	type_decl.op_equal = program.createBinaryFunction(type_namespace, "operator ==", type, type, program.bool_type, BuiltinFunction::TypeRefOpEqual(type));
+	type_decl.op_assign = program.createBinaryFunction(type_namespace, "=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
+	type_decl.op_equal = program.createBinaryFunction(type_namespace, "==", type, type, program.bool_type, BuiltinFunction::TypeRefOpEqual(type));
 }
 
 func createUnaryFunction(program: &&Program, type_namespace: SharedHandle!<Namespace>, name: String, obj: Type, return_type: Type, body: BuiltinFunction) -> SharedHandle!<FunctionDecl> {
@@ -98,28 +98,28 @@ func createBasicFunctions(program: &&Program, type: Type, type_namespace: Shared
 	type.decl.default_constructor = program.createUnaryFunction(type_namespace, "constructor", type.varRef(), program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::ConstNull | Assign, type));
 	type.decl.copy_constructor = program.createBinaryFunction(type_namespace, "constructor", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
 	type.decl.destructor = program.createUnaryFunction(type_namespace, "destructor", type.varRef(), program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::NoOp, type));
-	type.decl.op_assign = program.createBinaryFunction(type_namespace, "operator =", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
+	type.decl.op_assign = program.createBinaryFunction(type_namespace, "=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
 }
 
 func createComparisonOperators(program: &&Program, type: Type, type_namespace: SharedHandle!<Namespace>, flags: PrimitiveOp) -> void {
-	type.decl.op_equal = program.createBinaryFunction(type_namespace, "operator ==", type, type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::EQ | flags, type));
-	discard program.createBinaryFunction(type_namespace, "operator !=", type, type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::NE | flags, type));
-	discard program.createBinaryFunction(type_namespace, "operator <", type, type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::LT | flags, type));
-	discard program.createBinaryFunction(type_namespace, "operator <=", type, type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::LE | flags, type));
-	discard program.createBinaryFunction(type_namespace, "operator >", type, type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::GT | flags, type));
-	discard program.createBinaryFunction(type_namespace, "operator >=", type, type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::GE | flags, type));
-	type.decl.op_compare = program.createBinaryFunction(type_namespace, "operator <=>", type, type, program.int_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Cmp | flags, type));
+	type.decl.op_equal = program.createBinaryFunction(type_namespace, "==", type, type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::EQ | flags, type));
+	discard program.createBinaryFunction(type_namespace, "!=", type, type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::NE | flags, type));
+	discard program.createBinaryFunction(type_namespace, "<", type, type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::LT | flags, type));
+	discard program.createBinaryFunction(type_namespace, "<=", type, type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::LE | flags, type));
+	discard program.createBinaryFunction(type_namespace, ">", type, type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::GT | flags, type));
+	discard program.createBinaryFunction(type_namespace, ">=", type, type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::GE | flags, type));
+	type.decl.op_compare = program.createBinaryFunction(type_namespace, "<=>", type, type, program.int_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Cmp | flags, type));
 }
 
 func createBitwiseOperators(program: &&Program, type: Type, type_namespace: SharedHandle!<Namespace>, sign_flag: PrimitiveOp) -> void {
-	discard program.createBinaryFunction(type_namespace, "operator &", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::And, type));
-	discard program.createBinaryFunction(type_namespace, "operator |", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Or, type));
-	discard program.createBinaryFunction(type_namespace, "operator ^", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::XOr, type));
+	discard program.createBinaryFunction(type_namespace, "&", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::And, type));
+	discard program.createBinaryFunction(type_namespace, "|", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Or, type));
+	discard program.createBinaryFunction(type_namespace, "^", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::XOr, type));
 
-	discard program.createUnaryFunction(type_namespace, "operator ~", type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Not, type));
+	discard program.createUnaryFunction(type_namespace, "~", type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Not, type));
 
-	discard program.createBinaryFunction(type_namespace, "operator <<", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Shl, type));
-	discard program.createBinaryFunction(type_namespace, "operator >>", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Shr | sign_flag, type));
+	discard program.createBinaryFunction(type_namespace, "<<", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Shl, type));
+	discard program.createBinaryFunction(type_namespace, ">>", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Shr | sign_flag, type));
 
 	discard program.createBinaryFunction(type_namespace, "rotl", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Rotl, type));
 	discard program.createBinaryFunction(type_namespace, "rotr", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Rotr, type));
@@ -128,34 +128,34 @@ func createBitwiseOperators(program: &&Program, type: Type, type_namespace: Shar
 	discard program.createUnaryFunction(type_namespace, "cntlz", type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::CountLeadingZeros, type));
 	discard program.createUnaryFunction(type_namespace, "cnttz", type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::CountTrailingZeros, type));
 
-	discard program.createBinaryFunction(type_namespace, "operator &=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::And | Assign, type));
-	discard program.createBinaryFunction(type_namespace, "operator |=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Or | Assign, type));
-	discard program.createBinaryFunction(type_namespace, "operator ^=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::XOr | Assign, type));
+	discard program.createBinaryFunction(type_namespace, "&=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::And | Assign, type));
+	discard program.createBinaryFunction(type_namespace, "|=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Or | Assign, type));
+	discard program.createBinaryFunction(type_namespace, "^=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::XOr | Assign, type));
 
-	discard program.createBinaryFunction(type_namespace, "operator <<=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Shl | Assign, type));
-	discard program.createBinaryFunction(type_namespace, "operator >>=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Shr | Assign | sign_flag, type));
+	discard program.createBinaryFunction(type_namespace, "<<=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Shl | Assign, type));
+	discard program.createBinaryFunction(type_namespace, ">>=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Shr | Assign | sign_flag, type));
 }
 
 func createArithmeticOperators(program: &&Program, type: Type, type_namespace: SharedHandle!<Namespace>, flags: PrimitiveOp) -> void {
-	discard program.createBinaryFunction(type_namespace, "operator +", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Add | flags, type));
-	discard program.createBinaryFunction(type_namespace, "operator -", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Sub | flags, type));
-	discard program.createBinaryFunction(type_namespace, "operator *", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Mul | flags, type));
-	discard program.createBinaryFunction(type_namespace, "operator /", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Div | flags, type));
-	discard program.createBinaryFunction(type_namespace, "operator %", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Mod | flags, type));
+	discard program.createBinaryFunction(type_namespace, "+", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Add | flags, type));
+	discard program.createBinaryFunction(type_namespace, "-", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Sub | flags, type));
+	discard program.createBinaryFunction(type_namespace, "*", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Mul | flags, type));
+	discard program.createBinaryFunction(type_namespace, "/", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Div | flags, type));
+	discard program.createBinaryFunction(type_namespace, "%", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Mod | flags, type));
 
 	if (flags & Float) == Float {
-		discard program.createUnaryFunction(type_namespace, "operator -", type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Neg | Float, type));
+		discard program.createUnaryFunction(type_namespace, "-", type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Neg | Float, type));
 	} else {
 		if (flags & Signed) == Signed {
-			discard program.createUnaryFunction(type_namespace, "operator -", type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Neg, type));
+			discard program.createUnaryFunction(type_namespace, "-", type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Neg, type));
 		}
 	}
 
-	discard program.createBinaryFunction(type_namespace, "operator +=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Add | Assign | flags, type));
-	discard program.createBinaryFunction(type_namespace, "operator -=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Sub | Assign | flags, type));
-	discard program.createBinaryFunction(type_namespace, "operator *=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Mul | Assign | flags, type));
-	discard program.createBinaryFunction(type_namespace, "operator /=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Div | Assign | flags, type));
-	discard program.createBinaryFunction(type_namespace, "operator %=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Mod | Assign | flags, type));
+	discard program.createBinaryFunction(type_namespace, "+=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Add | Assign | flags, type));
+	discard program.createBinaryFunction(type_namespace, "-=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Sub | Assign | flags, type));
+	discard program.createBinaryFunction(type_namespace, "*=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Mul | Assign | flags, type));
+	discard program.createBinaryFunction(type_namespace, "/=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Div | Assign | flags, type));
+	discard program.createBinaryFunction(type_namespace, "%=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Mod | Assign | flags, type));
 }
 
 func createBoolType(program: &&Program, dest_namespace: SharedHandle!<Namespace>) -> void {
@@ -166,19 +166,19 @@ func createBoolType(program: &&Program, dest_namespace: SharedHandle!<Namespace>
 
 	createBasicFunctions(&&program, type, type_namespace);
 
-	type.decl.op_equal = program.createBinaryFunction(type_namespace, "operator ==", type, type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::EQ, type));
-	discard program.createBinaryFunction(type_namespace, "operator !=", type, type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::NE, type));
+	type.decl.op_equal = program.createBinaryFunction(type_namespace, "==", type, type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::EQ, type));
+	discard program.createBinaryFunction(type_namespace, "!=", type, type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::NE, type));
 
-	discard program.createBinaryFunction(type_namespace, "operator &", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::And, type));
-	discard program.createBinaryFunction(type_namespace, "operator |", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Or, type));
-	discard program.createBinaryFunction(type_namespace, "operator ^", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::XOr, type));
+	discard program.createBinaryFunction(type_namespace, "&", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::And, type));
+	discard program.createBinaryFunction(type_namespace, "|", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Or, type));
+	discard program.createBinaryFunction(type_namespace, "^", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::XOr, type));
 
-	discard program.createUnaryFunction(type_namespace, "operator !", type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Not, type));
-	discard program.createUnaryFunction(type_namespace, "operator ~", type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Not, type));
+	discard program.createUnaryFunction(type_namespace, "!", type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Not, type));
+	discard program.createUnaryFunction(type_namespace, "~", type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Not, type));
 
-	discard program.createBinaryFunction(type_namespace, "operator &=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::And | Assign, type));
-	discard program.createBinaryFunction(type_namespace, "operator |=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Or | Assign, type));
-	discard program.createBinaryFunction(type_namespace, "operator ^=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::XOr | Assign, type));
+	discard program.createBinaryFunction(type_namespace, "&=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::And | Assign, type));
+	discard program.createBinaryFunction(type_namespace, "|=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Or | Assign, type));
+	discard program.createBinaryFunction(type_namespace, "^=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::XOr | Assign, type));
 }
 
 func createIntTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>, is_signed: bool) -> SharedHandle!<Namespace> {
@@ -214,8 +214,8 @@ func createIntTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Nam
 	createComparisonOperators(&&program, type, type_namespace, flags);
 	createArithmeticOperators(&&program, type, type_namespace, flags);
 
-	discard program.createUnaryFunction(type_namespace, "operator ++", type.varRef(), program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Inc | Assign, type));
-	discard program.createUnaryFunction(type_namespace, "operator --", type.varRef(), program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Dec | Assign, type));
+	discard program.createUnaryFunction(type_namespace, "++", type.varRef(), program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Inc | Assign, type));
+	discard program.createUnaryFunction(type_namespace, "--", type.varRef(), program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Dec | Assign, type));
 
 	createBitwiseOperators(&&program, type, type_namespace, flags);
 
@@ -273,13 +273,13 @@ func createPtrTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Nam
 		discard program.createUnaryFunction(type_namespace, "value", type, pointee_reference_type, BuiltinFunction::PointerToRef(type));
 		discard program.createUnaryFunction(type_namespace, "addressOf", pointee_reference_type, type, BuiltinFunction::RefToPointer(type));
 
-		discard program.createBinaryFunction(type_namespace, "operator -", type, type, program.int_type, BuiltinFunction::PointerDiff(type));
+		discard program.createBinaryFunction(type_namespace, "-", type, type, program.int_type, BuiltinFunction::PointerDiff(type));
 
-		discard program.createBinaryFunction(type_namespace, "operator +", type, program.int_type, type, BuiltinFunction::PointerOffset(type));
-		discard program.createBinaryFunction(type_namespace, "operator +", type, program.uint_type, type, BuiltinFunction::PointerOffset(type));
+		discard program.createBinaryFunction(type_namespace, "+", type, program.int_type, type, BuiltinFunction::PointerOffset(type));
+		discard program.createBinaryFunction(type_namespace, "+", type, program.uint_type, type, BuiltinFunction::PointerOffset(type));
 
-		discard program.createBinaryFunction(type_namespace, "operator []", type, program.int_type, pointee_type.varRef() if is_mutable else pointee_type.constRef(), BuiltinFunction::PointerOpIndex(type));
-		discard program.createBinaryFunction(type_namespace, "operator []", type, program.uint_type, pointee_type.varRef() if is_mutable else pointee_type.constRef(), BuiltinFunction::PointerOpIndex(type));
+		discard program.createBinaryFunction(type_namespace, "[]", type, program.int_type, pointee_type.varRef() if is_mutable else pointee_type.constRef(), BuiltinFunction::PointerOpIndex(type));
+		discard program.createBinaryFunction(type_namespace, "[]", type, program.uint_type, pointee_type.varRef() if is_mutable else pointee_type.constRef(), BuiltinFunction::PointerOpIndex(type));
 	}
 
 	return type;
@@ -306,12 +306,12 @@ func createFunctionTypeInstance(program: &&Program, dest_namespace: SharedHandle
 
 	type.decl.copy_constructor = program.createBinaryFunction(type_namespace, "constructor", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
 	type.decl.destructor = program.createUnaryFunction(type_namespace, "destructor", type.varRef(), program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::NoOp, type));
-	type.decl.op_assign = program.createBinaryFunction(type_namespace, "operator =", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
+	type.decl.op_assign = program.createBinaryFunction(type_namespace, "=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
 	createComparisonOperators(&&program, type, type_namespace, PrimitiveOp::Unsigned);
 
 	var call_operator_parameter_types = parameter_types;
 	call_operator_parameter_types.insert(0u, type);
-	discard program.createFunction(type_namespace, "operator ()", call_operator_parameter_types, return_type, BuiltinFunction::FunctionPointerCall(type));
+	discard program.createFunction(type_namespace, "()", call_operator_parameter_types, return_type, BuiltinFunction::FunctionPointerCall(type));
 
 	return type_decl;
 }
@@ -367,37 +367,37 @@ func createVectorTypeInstance(program: &&Program, dest_namespace: SharedHandle!<
 	discard program.createBinaryFunction(type_namespace, "constructor", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | RHSToVector | Assign, type));
 	createBasicFunctions(&&program, type, type_namespace);
 
-	type.decl.op_equal = program.createBinaryFunction(type_namespace, "operator ==", type, type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::VectorEQ, type));
-	discard program.createBinaryFunction(type_namespace, "operator !=", type, type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::VectorNE, type));
+	type.decl.op_equal = program.createBinaryFunction(type_namespace, "==", type, type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::VectorEQ, type));
+	discard program.createBinaryFunction(type_namespace, "!=", type, type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::VectorNE, type));
 
 	createArithmeticOperators(&&program, type, type_namespace, flags);
 
-	discard program.createBinaryFunction(type_namespace, "operator +", type, element_type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Add | RHSToVector | flags, type));
-	discard program.createBinaryFunction(type_namespace, "operator -", type, element_type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Sub | RHSToVector | flags, type));
-	discard program.createBinaryFunction(type_namespace, "operator *", type, element_type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Mul | RHSToVector | flags, type));
-	discard program.createBinaryFunction(type_namespace, "operator /", type, element_type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Div | RHSToVector | flags, type));
-	discard program.createBinaryFunction(type_namespace, "operator %", type, element_type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Mod | RHSToVector | flags, type));
+	discard program.createBinaryFunction(type_namespace, "+", type, element_type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Add | RHSToVector | flags, type));
+	discard program.createBinaryFunction(type_namespace, "-", type, element_type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Sub | RHSToVector | flags, type));
+	discard program.createBinaryFunction(type_namespace, "*", type, element_type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Mul | RHSToVector | flags, type));
+	discard program.createBinaryFunction(type_namespace, "/", type, element_type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Div | RHSToVector | flags, type));
+	discard program.createBinaryFunction(type_namespace, "%", type, element_type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Mod | RHSToVector | flags, type));
 
-	discard program.createBinaryFunction(type_namespace, "operator +=", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Add | Assign | RHSToVector | flags, type));
-	discard program.createBinaryFunction(type_namespace, "operator -=", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Sub | Assign | RHSToVector | flags, type));
-	discard program.createBinaryFunction(type_namespace, "operator *=", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Mul | Assign | RHSToVector | flags, type));
-	discard program.createBinaryFunction(type_namespace, "operator /=", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Div | Assign | RHSToVector | flags, type));
-	discard program.createBinaryFunction(type_namespace, "operator %=", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Mod | Assign | RHSToVector | flags, type));
+	discard program.createBinaryFunction(type_namespace, "+=", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Add | Assign | RHSToVector | flags, type));
+	discard program.createBinaryFunction(type_namespace, "-=", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Sub | Assign | RHSToVector | flags, type));
+	discard program.createBinaryFunction(type_namespace, "*=", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Mul | Assign | RHSToVector | flags, type));
+	discard program.createBinaryFunction(type_namespace, "/=", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Div | Assign | RHSToVector | flags, type));
+	discard program.createBinaryFunction(type_namespace, "%=", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Mod | Assign | RHSToVector | flags, type));
 
 	if element_type.isIntType(true) {
 		createBitwiseOperators(&&program, type, type_namespace, flags);
 
-		discard program.createBinaryFunction(type_namespace, "operator &", type, element_type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::And | RHSToVector, type));
-		discard program.createBinaryFunction(type_namespace, "operator |", type, element_type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Or | RHSToVector, type));
-		discard program.createBinaryFunction(type_namespace, "operator ^", type, element_type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::XOr | RHSToVector, type));
-		discard program.createBinaryFunction(type_namespace, "operator <<", type, element_type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Shl | RHSToVector, type));
-		discard program.createBinaryFunction(type_namespace, "operator >>", type, element_type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Shr | RHSToVector | flags, type));
+		discard program.createBinaryFunction(type_namespace, "&", type, element_type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::And | RHSToVector, type));
+		discard program.createBinaryFunction(type_namespace, "|", type, element_type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Or | RHSToVector, type));
+		discard program.createBinaryFunction(type_namespace, "^", type, element_type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::XOr | RHSToVector, type));
+		discard program.createBinaryFunction(type_namespace, "<<", type, element_type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Shl | RHSToVector, type));
+		discard program.createBinaryFunction(type_namespace, ">>", type, element_type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Shr | RHSToVector | flags, type));
 
-		discard program.createBinaryFunction(type_namespace, "operator &=", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::And | Assign | RHSToVector, type));
-		discard program.createBinaryFunction(type_namespace, "operator |=", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Or | Assign | RHSToVector, type));
-		discard program.createBinaryFunction(type_namespace, "operator ^=", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::XOr | Assign | RHSToVector, type));
-		discard program.createBinaryFunction(type_namespace, "operator <<=", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Shl | Assign | RHSToVector, type));
-		discard program.createBinaryFunction(type_namespace, "operator >>=", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Shr | Assign | RHSToVector | flags, type));
+		discard program.createBinaryFunction(type_namespace, "&=", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::And | Assign | RHSToVector, type));
+		discard program.createBinaryFunction(type_namespace, "|=", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Or | Assign | RHSToVector, type));
+		discard program.createBinaryFunction(type_namespace, "^=", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::XOr | Assign | RHSToVector, type));
+		discard program.createBinaryFunction(type_namespace, "<<=", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Shl | Assign | RHSToVector, type));
+		discard program.createBinaryFunction(type_namespace, ">>=", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Shr | Assign | RHSToVector | flags, type));
 	}
 
 	discard program.createBinaryFunction(type_namespace, "dot", type, type, element_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::VectorDotProduct | flags, type));
@@ -443,20 +443,20 @@ func createMatrixTypeInstance(program: &&Program, dest_namespace: SharedHandle!<
 	type_decl.default_constructor = program.createUnaryFunction(type_namespace, "constructor", type.varRef(), program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::MatrixIdentity | Assign | flags, type));
 	type_decl.copy_constructor = program.createBinaryFunction(type_namespace, "constructor", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
 	type_decl.destructor = program.createUnaryFunction(type_namespace, "destructor", type.varRef(), program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::NoOp, type));
-	type_decl.op_assign = program.createBinaryFunction(type_namespace, "operator =", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
+	type_decl.op_assign = program.createBinaryFunction(type_namespace, "=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
 
-	type.decl.op_equal = program.createBinaryFunction(type_namespace, "operator ==", type, type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::VectorEQ, type));
-	discard program.createBinaryFunction(type_namespace, "operator !=", type, type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::VectorNE, type));
+	type.decl.op_equal = program.createBinaryFunction(type_namespace, "==", type, type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::VectorEQ, type));
+	discard program.createBinaryFunction(type_namespace, "!=", type, type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::VectorNE, type));
 
-	discard program.createBinaryFunction(type_namespace, "operator +", type, element_type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Add | RHSToVector | flags, type));
-	discard program.createBinaryFunction(type_namespace, "operator -", type, element_type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Sub | RHSToVector | flags, type));
-	discard program.createBinaryFunction(type_namespace, "operator *", type, element_type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Mul | RHSToVector | flags, type));
-	discard program.createBinaryFunction(type_namespace, "operator /", type, element_type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Div | RHSToVector | flags, type));
+	discard program.createBinaryFunction(type_namespace, "+", type, element_type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Add | RHSToVector | flags, type));
+	discard program.createBinaryFunction(type_namespace, "-", type, element_type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Sub | RHSToVector | flags, type));
+	discard program.createBinaryFunction(type_namespace, "*", type, element_type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Mul | RHSToVector | flags, type));
+	discard program.createBinaryFunction(type_namespace, "/", type, element_type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Div | RHSToVector | flags, type));
 
-	discard program.createBinaryFunction(type_namespace, "operator +=", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Add | Assign | RHSToVector | flags, type));
-	discard program.createBinaryFunction(type_namespace, "operator -=", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Sub | Assign | RHSToVector | flags, type));
-	discard program.createBinaryFunction(type_namespace, "operator *=", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Mul | Assign | RHSToVector | flags, type));
-	discard program.createBinaryFunction(type_namespace, "operator /=", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Div | Assign | RHSToVector | flags, type));
+	discard program.createBinaryFunction(type_namespace, "+=", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Add | Assign | RHSToVector | flags, type));
+	discard program.createBinaryFunction(type_namespace, "-=", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Sub | Assign | RHSToVector | flags, type));
+	discard program.createBinaryFunction(type_namespace, "*=", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Mul | Assign | RHSToVector | flags, type));
+	discard program.createBinaryFunction(type_namespace, "/=", type.varRef(), element_type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Div | Assign | RHSToVector | flags, type));
 
 	return type_decl;
 }
@@ -484,10 +484,10 @@ func createArrayTypeInstance(program: &&Program, dest_namespace: SharedHandle!<N
 		type_decl.default_constructor = program.createUnaryFunction(type_namespace, "constructor", type.varRef(), program.void_type, BuiltinFunction::ArrayDefaultConstructor(type));
 		type_decl.copy_constructor = program.createBinaryFunction(type_namespace, "constructor", type.varRef(), type, program.void_type, BuiltinFunction::ArrayCopyConstructor(type));
 		type_decl.destructor = program.createUnaryFunction(type_namespace, "destructor", type.varRef(), program.void_type, BuiltinFunction::ArrayDestructor(type));
-		type_decl.op_assign = program.createBinaryFunction(type_namespace, "operator =", type.varRef(), type, program.void_type, BuiltinFunction::ArrayOpAssign(type));
+		type_decl.op_assign = program.createBinaryFunction(type_namespace, "=", type.varRef(), type, program.void_type, BuiltinFunction::ArrayOpAssign(type));
 	}
 
-	type_decl.op_equal = program.createBinaryFunction(type_namespace, "operator ==", type, type, program.bool_type, BuiltinFunction::ArrayOpEqual(type));
+	type_decl.op_equal = program.createBinaryFunction(type_namespace, "==", type, type, program.bool_type, BuiltinFunction::ArrayOpEqual(type));
 	discard program.createUnaryFunction(type_namespace, "size", type.constRef(), program.uint_type, BuiltinFunction::ArrayGetSize(type));
 
 	return type_decl;
@@ -524,8 +524,8 @@ func createRangeTypeInstance(program: &&Program, dest_namespace: SharedHandle!<N
 	}
 
 	type.decl.destructor = program.createUnaryFunction(type_namespace, "destructor", type.varRef(), program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::NoOp, type));
-	type.decl.op_assign = program.createBinaryFunction(type_namespace, "operator =", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
-	type_decl.op_equal = program.createBinaryFunction(type_namespace, "operator ==", type, type, program.bool_type, BuiltinFunction::StructOpEqual(type));
+	type.decl.op_assign = program.createBinaryFunction(type_namespace, "=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
+	type_decl.op_equal = program.createBinaryFunction(type_namespace, "==", type, type, program.bool_type, BuiltinFunction::StructOpEqual(type));
 
 	discard program.createUnaryFunction(type_namespace, "data", type, element_ptr_type, BuiltinFunction::RangeGetData(type));
 	discard program.createUnaryFunction(type_namespace, "size", type, program.uint_type, BuiltinFunction::RangeGetSize(type));
@@ -560,8 +560,8 @@ func createRangeIteratorTypeInstance(program: &&Program, dest_namespace: SharedH
 
 	type.decl.copy_constructor = program.createBinaryFunction(type_namespace, "constructor", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
 	type.decl.destructor = program.createUnaryFunction(type_namespace, "destructor", type.varRef(), program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::NoOp, type));
-	type.decl.op_assign = program.createBinaryFunction(type_namespace, "operator =", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
-	type_decl.op_equal = program.createBinaryFunction(type_namespace, "operator ==", type, type, program.bool_type, BuiltinFunction::StructOpEqual(type));
+	type.decl.op_assign = program.createBinaryFunction(type_namespace, "=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
+	type_decl.op_equal = program.createBinaryFunction(type_namespace, "==", type, type, program.bool_type, BuiltinFunction::StructOpEqual(type));
 
 	discard program.createUnaryFunction(type_namespace, "hasNext", type, program.bool_type, BuiltinFunction::RangeIteratorHasNext(type));
 	discard program.createUnaryFunction(type_namespace, "getNext", type.varRef(), element_type.varRef() if is_mutable else element_type.constRef(), BuiltinFunction::RangeIteratorGetNext(type));
@@ -592,10 +592,10 @@ func createNumericRangeTypeInstance(program: &&Program, dest_namespace: SharedHa
 
 	type.decl.copy_constructor = program.createBinaryFunction(type_namespace, "constructor", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
 	type.decl.destructor = program.createUnaryFunction(type_namespace, "destructor", type.varRef(), program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::NoOp, type));
-	type.decl.op_assign = program.createBinaryFunction(type_namespace, "operator =", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
-	type_decl.op_equal = program.createBinaryFunction(type_namespace, "operator ==", type, type, program.bool_type, BuiltinFunction::StructOpEqual(type));
+	type.decl.op_assign = program.createBinaryFunction(type_namespace, "=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
+	type_decl.op_equal = program.createBinaryFunction(type_namespace, "==", type, type, program.bool_type, BuiltinFunction::StructOpEqual(type));
 
-	discard program.createBinaryFunction(type_namespace, "operator |", type, numeric_type, type, BuiltinFunction::NumericRangeSetStep(numeric_type, type));
+	discard program.createBinaryFunction(type_namespace, "|", type, numeric_type, type, BuiltinFunction::NumericRangeSetStep(numeric_type, type));
 	discard program.createUnaryFunction(type_namespace, "iterator", type, iterator_type, BuiltinFunction::NumericRangeGetIterator(iterator_type, type));
 
 	return type_decl;
@@ -626,8 +626,8 @@ func createNumericIteratorTypeInstance(program: &&Program, dest_namespace: Share
 
 	type.decl.copy_constructor = program.createBinaryFunction(type_namespace, "constructor", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
 	type.decl.destructor = program.createUnaryFunction(type_namespace, "destructor", type.varRef(), program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::NoOp, type));
-	type.decl.op_assign = program.createBinaryFunction(type_namespace, "operator =", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
-	type_decl.op_equal = program.createBinaryFunction(type_namespace, "operator ==", type, type, program.bool_type, BuiltinFunction::StructOpEqual(type));
+	type.decl.op_assign = program.createBinaryFunction(type_namespace, "=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
+	type_decl.op_equal = program.createBinaryFunction(type_namespace, "==", type, type, program.bool_type, BuiltinFunction::StructOpEqual(type));
 
 	discard program.createUnaryFunction(type_namespace, "hasNext", type, program.bool_type, BuiltinFunction::NumericIteratorHasNext(numeric_type, type));
 	discard program.createUnaryFunction(type_namespace, "getNext", type.varRef(), numeric_type, BuiltinFunction::NumericIteratorGetNext(numeric_type, type));
@@ -664,8 +664,8 @@ func createTupleTypeInstance(program: &&Program, dest_namespace: SharedHandle!<N
 
 	type_decl.copy_constructor = program.createBinaryFunction(type_namespace, "constructor", type.varRef(), type, program.void_type, BuiltinFunction::StructCopyConstructor(type));
 	type_decl.destructor = program.createUnaryFunction(type_namespace, "destructor", type.varRef(), program.void_type, BuiltinFunction::StructDestructor(type));
-	type_decl.op_assign = program.createBinaryFunction(type_namespace, "operator =", type.varRef(), type, program.void_type, BuiltinFunction::StructOpAssign(type));
-	type_decl.op_equal = program.createBinaryFunction(type_namespace, "operator ==", type, type, program.bool_type, BuiltinFunction::StructOpEqual(type));
+	type_decl.op_assign = program.createBinaryFunction(type_namespace, "=", type.varRef(), type, program.void_type, BuiltinFunction::StructOpAssign(type));
+	type_decl.op_equal = program.createBinaryFunction(type_namespace, "==", type, type, program.bool_type, BuiltinFunction::StructOpEqual(type));
 
 	return type_decl;
 }
@@ -677,14 +677,14 @@ func createDefaultFunctions(program: &&Program, type: Type) -> void {
 	if type_decl.body is Enum {
 		type_decl.copy_constructor = program.createBinaryFunction(type_namespace, "constructor", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
 		type_decl.destructor = program.createUnaryFunction(type_namespace, "destructor", type.varRef(), program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::NoOp, type));
-		type_decl.op_assign = program.createBinaryFunction(type_namespace, "operator =", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
-		type_decl.op_equal = program.createBinaryFunction(type_namespace, "operator ==", type, type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::EQ, type));
-		type_decl.op_compare = program.createBinaryFunction(type_namespace, "operator <=>", type, type, program.int_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Cmp, type));
+		type_decl.op_assign = program.createBinaryFunction(type_namespace, "=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
+		type_decl.op_equal = program.createBinaryFunction(type_namespace, "==", type, type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::EQ, type));
+		type_decl.op_compare = program.createBinaryFunction(type_namespace, "<=>", type, type, program.int_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Cmp, type));
 	} else if type_decl.body is Variant {
 		type_decl.copy_constructor = program.createBinaryFunction(type_namespace, "constructor", type.varRef(), type, program.void_type, BuiltinFunction::VariantCopyConstructor(type));
 		type_decl.destructor = program.createUnaryFunction(type_namespace, "destructor", type.varRef(), program.void_type, BuiltinFunction::VariantDestructor(type));
-		type_decl.op_assign = program.createBinaryFunction(type_namespace, "operator =", type.varRef(), type, program.void_type, BuiltinFunction::VariantOpAssign(type));
-		type_decl.op_equal = program.createBinaryFunction(type_namespace, "operator ==", type, type, program.bool_type, BuiltinFunction::VariantOpEqual(type));
+		type_decl.op_assign = program.createBinaryFunction(type_namespace, "=", type.varRef(), type, program.void_type, BuiltinFunction::VariantOpAssign(type));
+		type_decl.op_equal = program.createBinaryFunction(type_namespace, "==", type, type, program.bool_type, BuiltinFunction::VariantOpEqual(type));
 	}
 }
 
@@ -722,7 +722,7 @@ func createVariantOpIs(program: &&Program, type: SharedHandle!<TypeDecl>, case_i
 
 	discard program.createFunction(
 		type.linked_namespace,
-		"operator is",
+		"is",
 		template_parameters,
 		parameter_types,
 		program.bool_type,
@@ -745,7 +745,7 @@ func createVariantOpUnsafeAs(program: &&Program, type: SharedHandle!<TypeDecl>, 
 
 	discard program.createFunction(
 		type.linked_namespace,
-		"operator unsafe as",
+		"unsafeAs",
 		template_parameters,
 		parameter_types,
 		result_type,
@@ -786,7 +786,7 @@ func getDefaultFunctionBody(this: &FunctionDecl) -> BuiltinFunction {
 				else -> {}
 			}
 		}
-	} else if this.name == "operator =" && this.parameter_types.size() == 2 {
+	} else if this.name == "=" && this.parameter_types.size() == 2 {
 		if this.parameter_types[0u] == parent_type.varRef() && this.parameter_types[1u] == parent_type {
 			match type_body {
 				case Struct -> return BuiltinFunction::StructOpAssign(parent_type);
@@ -795,7 +795,7 @@ func getDefaultFunctionBody(this: &FunctionDecl) -> BuiltinFunction {
 				else -> {}
 			}
 		}
-	} else if this.name == "operator ==" && this.parameter_types.size() == 2 {
+	} else if this.name == "==" && this.parameter_types.size() == 2 {
 		if this.parameter_types[0u] == parent_type && this.parameter_types[1u] == parent_type {
 			match type_body {
 				case Struct -> return BuiltinFunction::StructOpEqual(parent_type);
@@ -804,7 +804,7 @@ func getDefaultFunctionBody(this: &FunctionDecl) -> BuiltinFunction {
 				else -> {}
 			}
 		}
-	} else if this.name == "operator <=>" && this.parameter_types.size() == 2 {
+	} else if this.name == "<=>" && this.parameter_types.size() == 2 {
 		if this.parameter_types[0u] == parent_type && this.parameter_types[1u] == parent_type {
 			match type_body {
 				case Struct -> return BuiltinFunction::StructOpCmp(parent_type);
@@ -812,28 +812,28 @@ func getDefaultFunctionBody(this: &FunctionDecl) -> BuiltinFunction {
 				else -> {}
 			}
 		}
-	} else if this.name == "operator &" && this.parameter_types.size() == 2 {
+	} else if this.name == "&" && this.parameter_types.size() == 2 {
 		if this.parameter_types[0u] == parent_type && this.parameter_types[1u] == parent_type {
 			match type_body {
 				case Enum -> return BuiltinFunction::PrimitiveOp(PrimitiveOp::And, parent_type);
 				else -> {}
 			}
 		}
-	} else if this.name == "operator |" && this.parameter_types.size() == 2 {
+	} else if this.name == "|" && this.parameter_types.size() == 2 {
 		if this.parameter_types[0u] == parent_type && this.parameter_types[1u] == parent_type {
 			match type_body {
 				case Enum -> return BuiltinFunction::PrimitiveOp(PrimitiveOp::Or, parent_type);
 				else -> {}
 			}
 		}
-	} else if this.name == "operator &=" && this.parameter_types.size() == 2 {
+	} else if this.name == "&=" && this.parameter_types.size() == 2 {
 		if this.parameter_types[0u] == parent_type.varRef() && this.parameter_types[1u] == parent_type {
 			match type_body {
 				case Enum -> return BuiltinFunction::PrimitiveOp(PrimitiveOp::And | Assign, parent_type);
 				else -> {}
 			}
 		}
-	} else if this.name == "operator |=" && this.parameter_types.size() == 2 {
+	} else if this.name == "|=" && this.parameter_types.size() == 2 {
 		if this.parameter_types[0u] == parent_type.varRef() && this.parameter_types[1u] == parent_type {
 			match type_body {
 				case Enum -> return BuiltinFunction::PrimitiveOp(PrimitiveOp::Or | Assign, parent_type);
@@ -849,7 +849,7 @@ func getPrimitiveOpParameterTypes(program: &Program, op: PrimitiveOp, base_type:
 	var result: List!<Type>;
 
 	match op.getOp() {
-		case NoOp | ConstNull -> {};
+		case NoOp | ConstNull -> {}
 		case Swap -> result = List!<Type>(2u, base_type.varRef());
 		case Copy | Neg | Inc | Dec | Abs | Sign
 		| BitwiseReverse | BytewiseReverse
