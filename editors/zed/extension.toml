@@ -1,0 +1,11 @@
+id = "void"
+name = "Void"
+description = "Void support."
+version = "0.0.1"
+schema_version = 1
+authors = ["ge0mk"]
+repository = "https://github.com/ge0mk/void"
+
+[grammars.void]
+repository = "https://github.com/ge0mk/tree-sitter-void"
+commit = "2ad1ec93fd594e164c4d6b2b99222a3690fdd2c3"
