@@ -1,0 +1,3 @@
+[submodule "tree-sitter-void"]
+	path = tree-sitter-void
+	url = git@github.com:ge0mk/tree-sitter-void.git
