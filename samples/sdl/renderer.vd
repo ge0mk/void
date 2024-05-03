@@ -8,7 +8,7 @@ enum RendererFlags {
 	case PresentVSync  = 0x00000004;
 	case TargetTexture = 0x00000008;
 
-	operator |(this: RendererFlags, other: RendererFlags) -> RendererFlags = default;
+	func |(this: RendererFlags, other: RendererFlags) -> RendererFlags = default;
 }
 
 struct Renderer {}
@@ -59,6 +59,6 @@ struct Rect {
 	func constructor(this: &&Rect, other: Rect) -> void = default;
 	func destructor(this: &&Rect) -> void = default;
 
-	operator =(this: &&Rect, other: Rect) -> void = default;
-	operator ==(this: Rect, other: Rect) -> bool = default;
+	func =(this: &&Rect, other: Rect) -> void = default;
+	func ==(this: Rect, other: Rect) -> bool = default;
 }

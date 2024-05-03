@@ -7,7 +7,7 @@ struct Application {
 	var window: ptr!<Window, true>;
 	var renderer: ptr!<Renderer, true>;
 
-	var tetrominos: Array!<Array!<bool, 16>, 28>;
+	var tetrominos: Array!<Array!<int, 16>, 28>;
 	var colors: Array!<Array!<int, 4>, 8>;
 	var field: Array!<Array!<int, 10>, 20>;
 

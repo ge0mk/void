@@ -5,7 +5,7 @@ enum Foo {
 	case B;
 	case C;
 
-	operator |(this: Foo, other: Foo) -> Foo = default;
+	func |(this: Foo, other: Foo) -> Foo = default;
 }
 
 func main() -> void {

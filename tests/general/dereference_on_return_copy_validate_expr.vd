@@ -17,7 +17,7 @@ struct Foo {
 		print("-");
 	}
 
-	operator ==(this: Foo, other: Foo) -> bool {
+	func ==(this: Foo, other: Foo) -> bool {
 		return true;
 	}
 }

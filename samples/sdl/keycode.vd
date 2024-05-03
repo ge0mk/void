@@ -267,9 +267,9 @@ enum Keymod: u16 {
 	case GUI = 0x0C00;		// LGUI | RGUI,
 	case RESERVED = 0x8000;	// SCROLL
 
-	operator |(a: Keymod, b: Keymod) -> Keymod = default;
-	operator &(a: Keymod, b: Keymod) -> Keymod = default;
+	func |(a: Keymod, b: Keymod) -> Keymod = default;
+	func &(a: Keymod, b: Keymod) -> Keymod = default;
 
-	operator |=(a: &&Keymod, b: Keymod) -> void = default;
-	operator &=(a: &&Keymod, b: Keymod) -> void = default;
+	func |=(a: &&Keymod, b: Keymod) -> void = default;
+	func &=(a: &&Keymod, b: Keymod) -> void = default;
 }

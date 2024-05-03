@@ -8,7 +8,7 @@ struct Foo {
 	func constructor(this: &&Foo!<T>, other: Foo!<T>) -> void = default;
 	func destructor(this: &&Foo!<T>) -> void = default;
 
-	operator == (this: Foo!<T>, other: Foo!<T>) -> bool {
+	func ==(this: Foo!<T>, other: Foo!<T>) -> bool {
 		return true;
 	}
 }

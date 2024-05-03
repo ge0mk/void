@@ -5,15 +5,15 @@ struct Foo {
 	func constructor(this: &&Foo, other: Foo) -> void = default;
 	func destructor(this: &&Foo) -> void = default;
 
-	operator =(this: &&Foo, other: Foo) -> void = default;
+	func =(this: &&Foo, other: Foo) -> void = default;
 
 	template <T: type>
-	operator as(this: Foo) -> int {
+	func as(this: Foo) -> int {
 		return 0;
 	}
 
 	template <T: type = int>
-	operator as(this: Foo) -> int {
+	func as(this: Foo) -> int {
 		return 42;
 	}
 }

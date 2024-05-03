@@ -12,7 +12,7 @@ struct Foo {
 	func constructor(this: &&Foo, other: Foo) -> void = default;
 	func destructor(this: &&Foo) -> void = default;
 
-	operator <=>(this: Foo, other: Foo) -> int = default;
+	func <=>(this: Foo, other: Foo) -> int = default;
 }
 
 func main() -> void {

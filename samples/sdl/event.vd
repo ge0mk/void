@@ -22,8 +22,8 @@ struct KeyboardEvent {
 	func constructor(this: &&KeyboardEvent, other: KeyboardEvent) -> void = default;
 	func destructor(this: &&KeyboardEvent) -> void = default;
 
-	operator =(this: &&KeyboardEvent, other: KeyboardEvent) -> void = default;
-	operator ==(this: KeyboardEvent, other: KeyboardEvent) -> bool = default;
+	func =(this: &&KeyboardEvent, other: KeyboardEvent) -> void = default;
+	func ==(this: KeyboardEvent, other: KeyboardEvent) -> bool = default;
 }
 
 @[packed]

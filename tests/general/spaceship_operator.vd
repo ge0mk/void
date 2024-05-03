@@ -10,7 +10,7 @@ struct Foo {
 	func constructor(this: &&Foo, other: Foo) -> void = default;
 	func destructor(this: &&Foo) -> void = default;
 
-	operator <=>(this: Foo, other: Foo) -> int {
+	func <=>(this: Foo, other: Foo) -> int {
 		return this.value - other.value;
 	}
 }

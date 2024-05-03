@@ -1,7 +1,7 @@
 import std/core;
 
 func abs(x: f64) -> f64 {
-	return -x if x < 0.0 else x;
+	return x < 0.0 ? -x : x;
 }
 
 func eq(a: f64, b: f64) -> bool {

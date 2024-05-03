@@ -31,7 +31,7 @@ struct vec2 {
 		println("vec2::destructor");
 	}
 
-	operator +(this: vec2, other: vec2) -> vec2 {
+	func +(this: vec2, other: vec2) -> vec2 {
 		return vec2(this.x + other.x, this.y + other.y);
 	}
 }

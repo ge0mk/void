@@ -17,8 +17,8 @@ struct Bar {
 		this.counter--;
 	}
 
-	operator =(this: &&Bar, other: Bar) -> void = default;
-	operator ==(this: Bar, other: Bar) -> bool = default;
+	func =(this: &&Bar, other: Bar) -> void = default;
+	func ==(this: Bar, other: Bar) -> bool = default;
 }
 
 func main() -> void {
