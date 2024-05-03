@@ -194,7 +194,6 @@ struct Parser {
 			case KeywordPragma -> return this.parsePragma();
 			case KeywordImport -> return this.parseImport();
 			case KeywordFunc
-			| KeywordOperator
 			| KeywordNamespace
 			| KeywordStruct
 			| KeywordEnum
@@ -276,8 +275,7 @@ struct Parser {
 				return this.file.addASTNode(Node::DiscardStmt(value, start..this.previousSpan(), Type::unknown(), false));
 			}
 			case KeywordComptime -> match this.peek() {
-				case KeywordFunc
-				| KeywordOperator -> return this.parseDecl();
+				case KeywordFunc -> return this.parseDecl();
 				case KeywordIf -> return this.parseIfStmt(true);
 				case KeywordWhile -> return this.parseWhileStmt();
 				case KeywordDo -> return this.parseDoWhileStmt();
@@ -353,7 +351,6 @@ struct Parser {
 			| KeywordEnum
 			| KeywordVariant -> return this.parseTypeDecl(start, first_node_id, annotations, template_parameters);
 			case KeywordFunc
-			| KeywordOperator
 			| KeywordComptime -> return this.parseFunctionDecl(start, first_node_id, annotations, template_parameters);
 			else -> {
 				this.error("expected decl", this.currentSpan());
@@ -575,7 +572,7 @@ struct Parser {
 	func parseFunctionSignature(this: &&Parser) -> Optional!<ParsedFunctionSignature> {
 		const start = this.currentSpan();
 
-		if !(this.accept(TokenType::KeywordOperator) || this.accept(TokenType::KeywordFunc)) {
+		if !this.expect(TokenType::KeywordFunc) {
 			return None;
 		}
 
@@ -1060,31 +1057,10 @@ struct Parser {
 				}
 				lhs = this.file.addASTNode(Node::IndexExpr(operands, start..this.previousSpan(), Type::unknown(), false));
 			} else if op == InlineIf {
-				if this.tokens[this.index - 1].type() == QuestionMark {
-					const then_value = this.parseExpr();
-					discard this.expect(TokenType::Colon);
-					const else_value = this.parseExpr();
-					lhs = this.file.addASTNode(Node::InlineIfExpr(InlineIfExpr(lhs, then_value, else_value), start..this.previousSpan(), Type::unknown(), false));
-				} else {
-					if this.accept(TokenType::KeywordVar) || this.accept(TokenType::KeywordConst) {
-						// expression followed by an if-var stmt
-						this.index = prev_index;
-						break;
-					}
-
-					const prev_node_count = this.file.nodes.size();
-					const condition = this.parseExpr();
-
-					if !this.accept(TokenType::KeywordElse) {
-						// expression followed by an if stmt
-						this.index = prev_index;
-						this.file.nodes.remove(prev_node_count..this.file.nodes.size());
-						break;
-					}
-
-					const else_value = this.parseExpr();
-					lhs = this.file.addASTNode(Node::InlineIfExpr(InlineIfExpr(condition, lhs, else_value), start..this.previousSpan(), Type::unknown(), false));
-				}
+				const then_value = this.parseExpr();
+				discard this.expect(TokenType::Colon);
+				const else_value = this.parseExpr();
+				lhs = this.file.addASTNode(Node::InlineIfExpr(InlineIfExpr(lhs, then_value, else_value), start..this.previousSpan(), Type::unknown(), false));
 			} else if op.isBinaryOperator() {
 				const rhs = this.parseExpr(op.precedence());
 				lhs = this.file.addASTNode(Node::BinaryOperatorExpr(
@@ -1274,10 +1250,6 @@ struct Parser {
 			case KeywordAs -> {
 				this.next();
 				return Some(Operator::As);
-			}
-			case KeywordIf -> {
-				this.next();
-				return Some(Operator::InlineIf);
 			}
 			case QuestionMark -> {
 				this.next();
@@ -1512,10 +1484,12 @@ struct Parser {
 
 			return this.file.addASTNode(Node::AnonymousFunctionExpr(function, span, Type::unknown(), false));
 		} else {
-			if this.current() != TokenType::KeywordOperator {
-				if !this.expect(TokenType::KeywordFunc) {
-					return this.file.getGarbageNode();
-				}
+			if !this.expect(TokenType::KeywordFunc) {
+				return this.file.getGarbageNode();
+			}
+
+			if !this.expect(TokenType::Ampersand) {
+				return this.file.getGarbageNode();
 			}
 
 			const name = this.parseExpr(19);
