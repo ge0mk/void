@@ -78,7 +78,7 @@ func parseArguments(arguments: Range!<String, false>) -> Optional!<CompilerOptio
 
 	match args_parser.anonymous("path to the root module file") {
 		case Some: value -> options.root_module_path = value;
-		else -> {
+		default -> {
 			eprintln("no root module specified");
 			return None;
 		}
@@ -96,7 +96,7 @@ func parseArguments(arguments: Range!<String, false>) -> Optional!<CompilerOptio
 		var name_begin: uint;
 		match path.rfind('/'b) {
 			case Some: index -> name_begin = index + 1;
-			else -> name_begin = 0;
+			default -> name_begin = 0;
 		}
 
 		const name_end = path.rfind('.'b) ?? path.size();
@@ -290,7 +290,7 @@ func main(args: Range!<String, false>) -> int {
 
 	match program.llvm_context.loadModuleFromFile(program.options.install_path + "/rt.ll") {
 		case Some: rt_module -> discard LLVMLinkModules2(program.llvm_module, rt_module);
-		else -> program.has_errors = true;
+		default -> program.has_errors = true;
 	}
 
 	program.finalizeDI();

@@ -10,7 +10,7 @@ variant Foo {
 func main() -> int {
 	match Foo::A {
 		case A -> return 0;
-		else -> {}
+		default -> {}
 	}
 
 	return 1;

@@ -9,7 +9,7 @@ func main() -> void {
 	var counter = 0;
 	match foo(&&counter) {
 		case Ok: value -> {}
-		else -> {}
+		default -> {}
 	}
 
 	assert(counter == 1);

@@ -28,7 +28,7 @@ func main() -> void {
 		case B: v -> {
 			assert(v);
 		}
-		else -> {
+		default -> {
 			assert(false);
 		}
 	}

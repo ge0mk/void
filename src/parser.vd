@@ -210,23 +210,22 @@ struct Parser {
 			} else {
 				return this.parseCaseDecl();
 			}
-			case KeywordElse -> if this.peek() is Arrow
-								&& this.countScope(ParserScope::MatchExpr) != this.countScope(ParserScope::CaseStmt) {
-				this.index += 2;
+			case KeywordDefault -> {
+				this.next();
+				if !this.expect(TokenType::Arrow) {
+					return this.file.getGarbageNode();
+				}
 
 				this.pushScope(ParserScope::CaseStmt);
 				const body = this.parseStmt(false);
 				this.popScope();
 
-				return this.file.addASTNode(Node::ElseCaseStmt(body, start..this.previousSpan(), Type::unknown(), false));
-			} else {
-				this.next();
-				return this.file.getGarbageNode();
+				return this.file.addASTNode(Node::DefaultCaseStmt(body, start..this.previousSpan(), Type::unknown(), false));
 			}
 			case KeywordIf -> match this.peek() {
 				case KeywordVar
 				| KeywordConst -> return this.parseIfVarStmt();
-				else -> return this.parseIfStmt(is_comptime);
+				default -> return this.parseIfStmt(is_comptime);
 			}
 			case KeywordWhile -> return this.parseWhileStmt();
 			case KeywordDo -> return this.parseDoWhileStmt();
@@ -281,13 +280,13 @@ struct Parser {
 				case KeywordDo -> return this.parseDoWhileStmt();
 				case KeywordFor -> return this.parseForStmt();
 				case KeywordVar | KeywordConst -> return this.parseVarDecl(false);
-				else -> {
+				default -> {
 					this.next();
 					this.error("invalid comptime stmt", this.previousSpan());
 					return this.file.getGarbageNode();
 				}
 			}
-			else -> return this.parseExpr();
+			default -> return this.parseExpr();
 		}
 	}
 
@@ -352,7 +351,7 @@ struct Parser {
 			| KeywordVariant -> return this.parseTypeDecl(start, first_node_id, annotations, template_parameters);
 			case KeywordFunc
 			| KeywordComptime -> return this.parseFunctionDecl(start, first_node_id, annotations, template_parameters);
-			else -> {
+			default -> {
 				this.error("expected decl", this.currentSpan());
 				return this.file.getGarbageNode();
 			}
@@ -398,7 +397,7 @@ struct Parser {
 						this.next();
 						annotations.append(Annotation::Number(value, start..end, name));
 					}
-					else -> {
+					default -> {
 						error = true;
 						break;
 					}
@@ -507,7 +506,7 @@ struct Parser {
 			case KeywordStruct -> yield TypeDeclKind::Struct;
 			case KeywordEnum -> yield TypeDeclKind::Enum;
 			case KeywordVariant -> yield TypeDeclKind::Variant;
-			else -> {
+			default -> {
 				return this.file.getGarbageNode();
 			}
 		}
@@ -1014,7 +1013,7 @@ struct Parser {
 				const rhs = this.parseExpr(op.precedence());
 				lhs = this.file.addASTNode(Node::UnaryOperatorExpr(UnaryOperatorExpr(op, rhs), start..this.previousSpan(), Type::unknown(), false));
 			}
-			else -> lhs = this.parseOperand();
+			default -> lhs = this.parseOperand();
 		}
 
 		while true {
@@ -1111,7 +1110,7 @@ struct Parser {
 				this.next();
 				return Some(Operator::Must);
 			}
-			else -> return None;
+			default -> return None;
 		}
 	}
 
@@ -1133,7 +1132,7 @@ struct Parser {
 				this.next();
 				return Some(Operator::Index);
 			}
-			else -> return None;
+			default -> return None;
 		}
 	}
 
@@ -1295,7 +1294,7 @@ struct Parser {
 				this.next();
 				return Some(Operator::Namespace);
 			}
-			else -> return None;
+			default -> return None;
 		}
 	}
 
@@ -1549,7 +1548,7 @@ struct Parser {
 			case LCurly -> return this.parseDictExpr();
 			case KeywordMatch -> return this.parseMatchExpr();
 			case KeywordFunc -> return this.parseFunctionExpr();
-			else -> {
+			default -> {
 				this.index++;
 				this.error("invalid expr operand", start);
 				return this.file.getGarbageNode();

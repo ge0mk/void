@@ -12,11 +12,11 @@ func main() -> int {
 
 	match a {
 		case B: &&x -> { x = 5; }
-		else -> {}
+		default -> {}
 	}
 
 	match a {
 		case B: x -> return x;
-		else -> return 0;
+		default -> return 0;
 	}
 }

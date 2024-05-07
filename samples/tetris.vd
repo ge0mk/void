@@ -114,9 +114,9 @@ struct Application {
 					case A -> this.move(-1);
 					case D -> this.move( 1);
 					case S -> discard this.drop();
-					else -> {}
+					default -> {}
 				}
-				else -> {}
+				default -> {}
 			}
 		}
 

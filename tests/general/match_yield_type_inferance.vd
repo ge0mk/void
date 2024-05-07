@@ -3,7 +3,7 @@ import std/core;
 func foo(x: int) -> Optional!<int> {
 	return match x {
 		case 0 -> yield None;
-		else -> yield Some(x + 2);
+		default -> yield Some(x + 2);
 	}
 }
 

@@ -130,7 +130,7 @@ struct CompilerOptions {
 			case 3 -> return "-O3";
 			case 4 -> return "-Os";
 			case 5 -> return "-Oz";
-			else -> return "-O0";
+			default -> return "-O0";
 		}
 	}
 }

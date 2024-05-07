@@ -159,7 +159,7 @@ struct TCContext {
 
 		match this.interpreter.interpret(node) {
 			case Ok: value -> return value;
-			else -> {
+			default -> {
 				this.error("unexpected control flow in comptime expression", node.span);
 				return Value::Undefined;
 			}
@@ -217,14 +217,14 @@ struct TCContext {
 	func addChildToFrontOfCompoundStmt(this: &&TCContext, id: uint, additional_child: uint) -> void {
 		match this.current_namespace.file.nodes[id] {
 			case CompoundStmt: &&children -> children.insert(0u, additional_child);
-			else -> panic(Error::EINVAL);
+			default -> panic(Error::EINVAL);
 		}
 	}
 
 	func addChildrenToCompoundStmt(this: &&TCContext, id: uint, additional_children: &List!<uint>) -> void {
 		match this.current_namespace.file.nodes[id] {
 			case CompoundStmt: &&children -> children.append(additional_children);
-			else -> panic(Error::EINVAL);
+			default -> panic(Error::EINVAL);
 		}
 	}
 
@@ -640,7 +640,7 @@ struct TCContext {
 				));
 			}
 			case CaseStmt: case_stmt -> return this.checkCaseStmt(id, case_stmt, span);
-			case ElseCaseStmt: body -> return this.checkElseCaseStmt(id, body, span);
+			case DefaultCaseStmt: body -> return this.checkDefaultCaseStmt(id, body, span);
 			case DeferStmt: body -> return this.checkDeferStmt(id, body, span);
 			case ThrowStmt: value -> return this.checkThrowStmt(id, value, span);
 			case ReturnStmt: value -> return this.checkReturnStmt(id, value, span);
@@ -687,7 +687,7 @@ struct TCContext {
 				this.replaceASTNode(id, Node::FunctionRefExpr(function, span, this.getFunctionType(function.parameter_types, function.return_type, span), is_comptime));
 				return id;
 			}
-			else -> {
+			default -> {
 				this.error("invalid unchecked node '" + this.getASTNode(id).name() + "'", span);
 				return this.getGarbageNode();
 			}
@@ -757,7 +757,7 @@ struct TCContext {
 			if annotation.name == "packed" {
 				match annotation {
 					case Flag -> type.is_packed = true;
-					else -> this.error("invalid annotation", annotation.span);
+					default -> this.error("invalid annotation", annotation.span);
 				}
 			} else {
 				this.error("invalid annotation name '" + annotation.name + "'", annotation.span);
@@ -826,7 +826,7 @@ struct TCContext {
 			if annotation.name == "extern_name" {
 				match annotation {
 					case String: value -> function.extern_name = value;
-					else -> this.error("invalid annotation", annotation.span);
+					default -> this.error("invalid annotation", annotation.span);
 				}
 			} else {
 				this.error("invalid annotation name '" + annotation.name + "'", annotation.span);
@@ -854,7 +854,7 @@ struct TCContext {
 
 		const signature = match function.body {
 			case Unchecked: &parsed_body -> yield parsed_body.signature;
-			else -> return;
+			default -> return;
 		}
 
 		const prev_namespace = this.current_namespace;
@@ -882,7 +882,7 @@ struct TCContext {
 							this.error("invalid function parameter annotation", annotation.span);
 						}
 					}
-					else -> {
+					default -> {
 						this.error("invalid function parameter annotation", annotation.span);
 					}
 				}
@@ -1005,7 +1005,7 @@ struct TCContext {
 						this.validateBuiltinFunctionDecl(function, builtin_function);
 					}
 				}
-				else -> this.checkFunctionBody(&&function.unwrap(), parsed_function.body);
+				default -> this.checkFunctionBody(&&function.unwrap(), parsed_function.body);
 			}
 		}
 
@@ -1016,7 +1016,7 @@ struct TCContext {
 						this.cg_context.codegenFunctionBody(function);
 					}
 				}
-				else -> this.cg_context.codegenFunctionBody(function);
+				default -> this.cg_context.codegenFunctionBody(function);
 			}
 		}
 
@@ -1075,7 +1075,7 @@ struct TCContext {
 						this.info("required by " + function.signature(), function.signature_span);
 					}
 				}
-				else -> {}
+				default -> {}
 			}
 		}
 
@@ -1122,7 +1122,7 @@ struct TCContext {
 						this.info("required by " + function.signature(), function.signature_span);
 					}
 				}
-				else -> {}
+				default -> {}
 			}
 		}
 	}
@@ -1536,7 +1536,7 @@ struct TCContext {
 		// ->
 		// match y {
 		//    Ok | Some: #value -> { var x = #value; ... }
-		//    else -> {}
+		//    default -> {}
 		// }
 
 		var var_decl_node = this.getASTNode(parsed_stmt.var_decl);
@@ -1580,8 +1580,8 @@ struct TCContext {
 					parsed_stmt.body
 				), value_span, Type::unknown(), false)));
 
-				// else -> {}
-				cases.append(this.addASTNode(Node::ElseCaseStmt(
+				// default -> {}
+				cases.append(this.addASTNode(Node::DefaultCaseStmt(
 					this.addASTNode(Node::CompoundStmt(List!<uint>(), value_span, Type::unknown(), false)),
 					value_span, Type::unknown(), false
 				)));
@@ -1597,7 +1597,7 @@ struct TCContext {
 				this.replaceASTNode(id, Node::CompoundStmt(result, span, this.program.void_type, false));
 				return id;
 			}
-			else -> panic("invalid if var stmt");
+			default -> panic("invalid if var stmt");
 		};
 	}
 
@@ -1646,7 +1646,7 @@ struct TCContext {
 		match value_type.reference_kind {
 			case Var -> value_invoke_expr = this.addASTNode(Node::UnaryOperatorExpr(UnaryOperatorExpr(Operator::VarRef, value_invoke_expr), var_decl_span, Type::unknown(), false));
 			case Const -> value_invoke_expr = this.addASTNode(Node::UnaryOperatorExpr(UnaryOperatorExpr(Operator::ConstRef, value_invoke_expr), var_decl_span, Type::unknown(), false));
-			else -> {}
+			default -> {}
 		}
 
 		var cases: List!<uint>;
@@ -1809,10 +1809,10 @@ struct TCContext {
 		match iterator_call {
 			case DereferenceExpr: base -> match this.getASTNode(base) {
 				case CallExpr: &call_expr -> iterator_var = call_expr.result_var;
-				else -> return Node::Garbage(Span(), Type::unknown(), false);
+				default -> return Node::Garbage(Span(), Type::unknown(), false);
 			}
 			case CallExpr: &call_expr -> iterator_var = call_expr.result_var;
-			else -> return Node::Garbage(Span(), Type::unknown(), false);
+			default -> return Node::Garbage(Span(), Type::unknown(), false);
 		};
 
 		const iterator_var_expr = this.addASTNode(Node::DereferenceExpr(
@@ -1979,7 +1979,7 @@ struct TCContext {
 		return id;
 	}
 
-	func checkElseCaseStmt(this: &&TCContext, id: uint, body: uint, span: Span) -> uint {
+	func checkDefaultCaseStmt(this: &&TCContext, id: uint, body: uint, span: Span) -> uint {
 		this.pushScope(ScopeKind::Compound);
 		defer this.popScope();
 
@@ -1995,7 +1995,7 @@ struct TCContext {
 		}
 
 		body = this.addASTNode(Node::CompoundStmt(result, span, this.program.void_type, false));
-		this.replaceASTNode(id, Node::ElseCaseStmt(body, span, this.program.void_type, false));
+		this.replaceASTNode(id, Node::DefaultCaseStmt(body, span, this.program.void_type, false));
 		return id;
 	}
 
@@ -2221,7 +2221,7 @@ struct TCContext {
 				case 'i'b -> yield "int";
 				case 'u'b -> yield "uint";
 				case 'f'b -> yield "float";
-				else -> {
+				default -> {
 					this.error("invalid number literal postfix", span);
 					return this.getGarbageNode();
 				}
@@ -2247,7 +2247,7 @@ struct TCContext {
 			const name = match postfix[0u] {
 				case 'i'b -> yield "int";
 				case 'u'b -> yield "uint";
-				else -> {
+				default -> {
 					this.error("invalid char literal postfix", span);
 					return this.getGarbageNode();
 				}
@@ -2382,15 +2382,15 @@ struct TCContext {
 				}
 			}
 			case CaseStmt -> match_expr.cases.append(stmt);
-			case ElseCaseStmt: body -> {
-				if match_expr.else_case == 0 {
-					match_expr.else_case = body;
+			case DefaultCaseStmt: body -> {
+				if match_expr.default_case == 0 {
+					match_expr.default_case = body;
 				} else {
 					this.error("mutiple definitions of an else case in the same match expr", this.getASTNodeSpan(stmt));
-					this.info("else case first declared here:", this.getASTNodeSpan(match_expr.else_case));
+					this.info("else case first declared here:", this.getASTNodeSpan(match_expr.default_case));
 				}
 			}
-			else -> {
+			default -> {
 				this.error("expected case statement but got '" + this.getASTNode(stmt).name() + "'", this.getASTNodeSpan(stmt));
 				this.info("", this.getASTNodeSpan(this.match_value));
 			}
@@ -2419,7 +2419,7 @@ struct TCContext {
 			match this.getASTNode(value) {
 				case CallExpr: &call_expr -> match_value_var = call_expr.result_var;
 				case MatchExpr: &match_expr -> match_value_var = match_expr.yield_var;
-				else -> {}
+				default -> {}
 			}
 
 			if !match_value_var.isAlive() && !(this.getASTNode(value) is VarInvokeExpr) {
@@ -2433,17 +2433,17 @@ struct TCContext {
 
 				match temporary_variable {
 					case DereferenceExpr: base -> value = base;
-					else -> value = this.addASTNode(temporary_variable);
+					default -> value = this.addASTNode(temporary_variable);
 				}
 
 				match this.getASTNode(value) {
 					case CallExpr: &call_expr -> match_value_var = call_expr.result_var;
 					case ShallowCopyExpr: &shallow_copy_expr -> match this.getASTNode(shallow_copy_expr.destination) {
 						case VarInvokeExpr: variable -> match_value_var = variable;
-						else -> panic("invalid temporary variable");
+						default -> panic("invalid temporary variable");
 					}
 					case Garbage -> return Node::Garbage(span, Type::unknown(), false);
-					else -> panic("invalid temporary variable");
+					default -> panic("invalid temporary variable");
 				}
 			}
 		}
@@ -2452,7 +2452,7 @@ struct TCContext {
 			const var_invoke_expr = this.createVarInvokeExpr(match_value_var, this.getASTNodeSpan(this.match_value));
 			match var_invoke_expr {
 				case DereferenceExpr: base -> this.match_value = base;
-				else -> this.match_value = this.addASTNode(var_invoke_expr);
+				default -> this.match_value = this.addASTNode(var_invoke_expr);
 			}
 		} else {
 			this.match_value = value;
@@ -2480,8 +2480,8 @@ struct TCContext {
 			all_cases_are_terminators &= this.isASTNodeTerminator((this.getASTNode(case_stmt) as CaseStmt).value().body, false);
 		}
 
-		if match_expr.else_case > 1 {
-			all_cases_are_terminators &= this.isASTNodeTerminator(match_expr.else_case, false);
+		if match_expr.default_case > 1 {
+			all_cases_are_terminators &= this.isASTNodeTerminator(match_expr.default_case, false);
 		}
 
 		if all_cases_are_terminators && !does_yield {
@@ -2499,7 +2499,7 @@ struct TCContext {
 							covered_cases.add(value);
 						}
 					}
-					else -> {
+					default -> {
 						this.todo("check match completeness for non-int expressions (" + this.getASTNodeType(pattern).signature() + ")", this.getASTNodeSpan(pattern));
 					}
 				}
@@ -2526,13 +2526,13 @@ struct TCContext {
 			}
 			case Enum -> number_of_possible_cases = value_type_decl.enum_cases.size();
 			case Variant -> number_of_possible_cases = value_type_decl.variant_cases.size();
-			else -> {}
+			default -> {}
 		}
 
-		if covered_cases.size() < number_of_possible_cases && match_expr.else_case == 0 {
+		if covered_cases.size() < number_of_possible_cases && match_expr.default_case == 0 {
 			this.error("match stmt doesn't cover all possible cases", this.getASTNodeSpan(value));
-		} else if covered_cases.size() == number_of_possible_cases && match_expr.else_case > 1 {
-			this.error("else branch is unreachable", this.getASTNodeSpan(match_expr.else_case));
+		} else if covered_cases.size() == number_of_possible_cases && match_expr.default_case > 1 {
+			this.error("else branch is unreachable", this.getASTNodeSpan(match_expr.default_case));
 		}
 
 		match_expr.yield_var = this.yield_var;
@@ -2592,7 +2592,7 @@ struct TCContext {
 							result_candidates.append(Node::IntegerLiteralExpr(value, span, this.program.int_type, false));
 						}
 					}
-					else -> {}
+					default -> {}
 				}
 			}
 		}
@@ -2640,7 +2640,7 @@ struct TCContext {
 				return base;
 			}
 			case Try | Must -> return this.checkValidateExpr(id, parsed_expr.operand, parsed_expr.op, is_comptime, span);
-			else -> {
+			default -> {
 				this.replaceASTNode(id, this.checkCall(
 					Name(format(parsed_expr.op)),
 					List!<uint>(1u, this.checkNode(parsed_expr.operand, Type::unknown(), is_comptime)),
@@ -2721,7 +2721,7 @@ struct TCContext {
 
 				this.replaceASTNode(id, member_access_expr);
 			}
-			else -> {
+			default -> {
 				const lhs = this.checkNode(expr.lhs, expected_type, is_comptime);
 
 				if expr.op.isAssignmentOperator() && expr.op != Initialize {
@@ -2753,7 +2753,7 @@ struct TCContext {
 
 							return id;
 						}
-						else -> {}
+						default -> {}
 					}
 				}
 
@@ -2772,7 +2772,7 @@ struct TCContext {
 					const rhs_matrix_type = match rhs_type.decl.body {
 						case Vector: vector_type -> yield (element_type: vector_type.element_type, columns: 1u, rows: vector_type.size);
 						case Matrix: matrix_type -> yield matrix_type;
-						else -> panic("unreachable");
+						default -> panic("unreachable");
 					}
 
 					if lhs_matrix_type.element_type != rhs_matrix_type.element_type {
@@ -2977,7 +2977,7 @@ struct TCContext {
 
 				return id;
 			}
-			else -> {
+			default -> {
 				for i in 1u..operands.size() {
 					operands[i] = this.checkNode(operands[i], Type::unknown(), is_comptime);
 				}
@@ -3009,7 +3009,7 @@ struct TCContext {
 					case 'y'b -> yield 1u;
 					case 'z'b -> yield 2u;
 					case 'w'b -> yield 3u;
-					else -> {
+					default -> {
 						this.error("invalid vector field", span);
 						return Node::Garbage(span, Type::unknown(), false);
 					}
@@ -3054,7 +3054,7 @@ struct TCContext {
 
 				match unwrap_call {
 					case DereferenceExpr: base -> object = base;
-					else -> object = this.addASTNode(unwrap_call);
+					default -> object = this.addASTNode(unwrap_call);
 				}
 
 				type_decl = type_decl.unwrapped_type;
@@ -3126,7 +3126,7 @@ struct TCContext {
 			match ok_case_decl.type.reference_kind {
 				case Var -> value_invoke_expr = this.addASTNode(Node::UnaryOperatorExpr(UnaryOperatorExpr(Operator::VarRef, value_invoke_expr), span, Type::unknown(), false));
 				case Const -> value_invoke_expr = this.addASTNode(Node::UnaryOperatorExpr(UnaryOperatorExpr(Operator::ConstRef, value_invoke_expr), span, Type::unknown(), false));
-				else -> {}
+				default -> {}
 			}
 
 			cases.append(this.addASTNode(Node::CaseStmt(CaseStmt(
@@ -3140,7 +3140,7 @@ struct TCContext {
 		match error_case_decl.type.reference_kind {
 			case Var -> error_invoke_expr = this.addASTNode(Node::UnaryOperatorExpr(UnaryOperatorExpr(Operator::VarRef, error_invoke_expr), span, Type::unknown(), false));
 			case Const -> error_invoke_expr = this.addASTNode(Node::UnaryOperatorExpr(UnaryOperatorExpr(Operator::ConstRef, error_invoke_expr), span, Type::unknown(), false));
-			else -> {}
+			default -> {}
 		}
 
 		if op == Try {
@@ -3331,7 +3331,7 @@ struct TCContext {
 		// ->
 		// match x {
 		//     case Foo: val -> yield Some(val);
-		//     else -> yield None;
+		//     default -> yield None;
 		// }
 
 		const type_decl = this.getASTNodeType(value).decl;
@@ -3348,7 +3348,7 @@ struct TCContext {
 		match case_decl.type.reference_kind {
 			case Var -> value_invoke_expr = this.addASTNode(Node::UnaryOperatorExpr(UnaryOperatorExpr(Operator::VarRef, value_invoke_expr), span, Type::unknown(), false));
 			case Const -> value_invoke_expr = this.addASTNode(Node::UnaryOperatorExpr(UnaryOperatorExpr(Operator::ConstRef, value_invoke_expr), span, Type::unknown(), false));
-			else -> {}
+			default -> {}
 		}
 
 		var cases: List!<uint>;
@@ -3364,8 +3364,8 @@ struct TCContext {
 			))
 		), span, Type::unknown(), false)));
 
-		// else -> yield None
-		cases.append(this.addASTNode(Node::ElseCaseStmt(
+		// default -> yield None
+		cases.append(this.addASTNode(Node::DefaultCaseStmt(
 			this.addASTNode(Node::YieldStmt(
 				this.addASTNode(Node::Name(ParsedName("None", List!<uint>()), span, Type::unknown(), false)),
 				span, Type::unknown(), false
@@ -3437,7 +3437,7 @@ struct TCContext {
 					return this.checkName(operator_expr.lhs)..this.checkName(operator_expr.rhs);
 				}
 			}
-			else -> {}
+			default -> {}
 		}
 
 		return Name(this.getASTNodeSpan(id));
@@ -3465,7 +3465,7 @@ struct TCContext {
 			}
 			case String: val -> return TemplateParameter::String(val);
 			case Type: type -> return TemplateParameter::Type(type);
-			else -> this.error("invalid template parameter", this.getASTNodeSpan(id));
+			default -> this.error("invalid template parameter", this.getASTNodeSpan(id));
 		}
 
 		return TemplateParameter::Garbage;
@@ -3492,7 +3492,7 @@ struct TCContext {
 					}
 					return operator_expr.op is ConstRef ? checked_base.constRef() : checked_base.varRef();
 				}
-				else -> {}
+				default -> {}
 			}
 			case TupleExpr: &elements -> {
 				var names: List!<String>;
@@ -3529,7 +3529,7 @@ struct TCContext {
 				const return_type = this.checkTypeUsage(function_type.return_type, quiet);
 				return this.getFunctionType(parameter_types, return_type, this.getASTNodeSpan(id));
 			}
-			else -> {}
+			default -> {}
 		}
 
 		if !quiet {
@@ -3829,7 +3829,7 @@ struct TCContext {
 					}
 				}
 			}
-			else -> {}
+			default -> {}
 		}
 	}
 
@@ -3855,7 +3855,7 @@ struct TCContext {
 						types.append(Type(base_type.decl, ReferenceKind::Const));
 					}
 				}
-				else -> types.append(this.getASTNodeType(arguments[i]));
+				default -> types.append(this.getASTNodeType(arguments[i]));
 			}
 		}
 
@@ -3983,7 +3983,7 @@ struct TCContext {
 					case 'i'b -> yield "int";
 					case 'u'b -> yield "uint";
 					case 'f'b -> yield "float";
-					else -> panic("invalid numeric type");
+					default -> panic("invalid numeric type");
 				}
 
 				for n in this.lookupNamespace(namespaces_to_search, NameSegment(numeric_type_name, numeric_type_template_parameters), span) {
@@ -3998,7 +3998,7 @@ struct TCContext {
 			for template_parameter in this.lookupTemplateParameter(last_segment.name) {
 				match template_parameter {
 					case Type: type -> result.append(type);
-					else -> {}
+					default -> {}
 				}
 			}
 		}
@@ -4343,7 +4343,7 @@ struct TCContext {
 						case Int -> type_instance = this.program.createIntTypeInstance(base.parent, true, bits).decl;
 						case UInt -> type_instance = this.program.createIntTypeInstance(base.parent, false, bits).decl;
 						case Float -> type_instance = this.program.createFloatTypeInstance(base.parent, bits).decl;
-						else -> panic("unreachable");
+						default -> panic("unreachable");
 					}
 
 					const type = Type(type_instance);
@@ -4459,7 +4459,7 @@ struct TCContext {
 					this.current_target_state <= UncheckedTypeBodies,
 					true
 				);
-				else -> {
+				default -> {
 					this.error("can't create template instance of type " + base.signature(), base.name_span);
 					abort();
 				}
@@ -4543,7 +4543,7 @@ struct TCContext {
 						case FloatToInt -> cast_name = "floatToInt";
 						case BitCast -> cast_name = "bitCast";
 						case PointerCast -> cast_name = "pointerCast";
-						else -> panic("unreachable");
+						default -> panic("unreachable");
 					}
 
 					if cast_name == "pointerCast" && source.isConstPtrType() && !target.isConstPtrType() {
@@ -4585,7 +4585,7 @@ struct TCContext {
 						case ReferenceKindOf -> name = "referenceKindOf";
 						case HasDefaultConstructor -> name = "hasDefaultConstructor";
 						case HasCopyConstructor -> name = "hasCopyConstructor";
-						else -> panic(Error::EINVAL);
+						default -> panic(Error::EINVAL);
 					}
 
 					match builtin_function {
@@ -4594,13 +4594,13 @@ struct TCContext {
 						case ReferenceKindOf -> return_type = this.getType(Name("ReferenceKind"), error_span);
 						case HasDefaultConstructor
 						| HasCopyConstructor -> return_type = this.program.bool_type;
-						else -> panic(Error::EINVAL);
+						default -> panic(Error::EINVAL);
 					}
 
 					instance = this.program.createFunction(base.parent_namespace, name, parameter_types, return_type, FunctionBody::Builtin(body));
 					instance.template_parameters.append(TemplateParameterDecl("Type", this.program.any_concept, false, template_parameters[0u]));
 				}
-				else -> this.error("cannot create template instance of builtin function " + base.signature(), base.signature_span);
+				default -> this.error("cannot create template instance of builtin function " + base.signature(), base.signature_span);
 			}
 			case Unchecked: parsed_function -> {
 				if this.current_target_state > UncheckedFunctionSignatures {
@@ -4610,7 +4610,7 @@ struct TCContext {
 					instance = this.checkFunctionDecl(parsed_function, getTemplateParameterDecls(base.template_parameters, template_parameters), true, true);
 				}
 			}
-			else -> this.error("cannot create template instance of this function", base.signature_span);
+			default -> this.error("cannot create template instance of this function", base.signature_span);
 		}
 
 		this.current_namespace = prev_namespace;

@@ -357,7 +357,7 @@ func createVectorTypeInstance(program: &&Program, dest_namespace: SharedHandle!<
 		case Int -> yield PrimitiveOp::Signed;
 		case UInt -> yield PrimitiveOp::Unsigned;
 		case Float -> yield PrimitiveOp::Float;
-		else -> panic("invalid vector element type");
+		default -> panic("invalid vector element type");
 	};
 
 	var value_constructor_parameter_types: List!<Type>;
@@ -431,7 +431,7 @@ func createMatrixTypeInstance(program: &&Program, dest_namespace: SharedHandle!<
 		case Int -> yield PrimitiveOp::Signed;
 		case UInt -> yield PrimitiveOp::Unsigned;
 		case Float -> yield PrimitiveOp::Float;
-		else -> panic("invalid matrix element type");
+		default -> panic("invalid matrix element type");
 	};
 
 	var value_constructor_parameter_types: List!<Type>;
@@ -765,7 +765,7 @@ func getDefaultFunctionBody(this: &FunctionDecl) -> BuiltinFunction {
 		if this.parameter_types[0u] == parent_type.varRef() {
 			match type_body {
 				case Struct -> return BuiltinFunction::StructDefaultConstructor(parent_type);
-				else -> {}
+				default -> {}
 			}
 		}
 	} else if this.name == "constructor" && this.parameter_types.size() == 2 {
@@ -774,7 +774,7 @@ func getDefaultFunctionBody(this: &FunctionDecl) -> BuiltinFunction {
 				case Struct -> return BuiltinFunction::StructCopyConstructor(parent_type);
 				case Enum -> return BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, parent_type);
 				case Variant -> return BuiltinFunction::VariantCopyConstructor(parent_type);
-				else -> {}
+				default -> {}
 			}
 		}
 	} else if this.name == "destructor" && this.parameter_types.size() == 1 {
@@ -783,7 +783,7 @@ func getDefaultFunctionBody(this: &FunctionDecl) -> BuiltinFunction {
 				case Struct -> return BuiltinFunction::StructDestructor(parent_type);
 				case Enum -> return BuiltinFunction::PrimitiveOp(PrimitiveOp::NoOp, parent_type);
 				case Variant -> return BuiltinFunction::VariantDestructor(parent_type);
-				else -> {}
+				default -> {}
 			}
 		}
 	} else if this.name == "=" && this.parameter_types.size() == 2 {
@@ -792,7 +792,7 @@ func getDefaultFunctionBody(this: &FunctionDecl) -> BuiltinFunction {
 				case Struct -> return BuiltinFunction::StructOpAssign(parent_type);
 				case Enum -> return BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, parent_type);
 				case Variant -> return BuiltinFunction::VariantOpAssign(parent_type);
-				else -> {}
+				default -> {}
 			}
 		}
 	} else if this.name == "==" && this.parameter_types.size() == 2 {
@@ -801,7 +801,7 @@ func getDefaultFunctionBody(this: &FunctionDecl) -> BuiltinFunction {
 				case Struct -> return BuiltinFunction::StructOpEqual(parent_type);
 				case Enum -> return BuiltinFunction::PrimitiveOp(PrimitiveOp::EQ, parent_type);
 				case Variant -> return BuiltinFunction::VariantOpEqual(parent_type);
-				else -> {}
+				default -> {}
 			}
 		}
 	} else if this.name == "<=>" && this.parameter_types.size() == 2 {
@@ -809,35 +809,35 @@ func getDefaultFunctionBody(this: &FunctionDecl) -> BuiltinFunction {
 			match type_body {
 				case Struct -> return BuiltinFunction::StructOpCmp(parent_type);
 				case Enum -> return BuiltinFunction::PrimitiveOp(PrimitiveOp::Cmp, parent_type);
-				else -> {}
+				default -> {}
 			}
 		}
 	} else if this.name == "&" && this.parameter_types.size() == 2 {
 		if this.parameter_types[0u] == parent_type && this.parameter_types[1u] == parent_type {
 			match type_body {
 				case Enum -> return BuiltinFunction::PrimitiveOp(PrimitiveOp::And, parent_type);
-				else -> {}
+				default -> {}
 			}
 		}
 	} else if this.name == "|" && this.parameter_types.size() == 2 {
 		if this.parameter_types[0u] == parent_type && this.parameter_types[1u] == parent_type {
 			match type_body {
 				case Enum -> return BuiltinFunction::PrimitiveOp(PrimitiveOp::Or, parent_type);
-				else -> {}
+				default -> {}
 			}
 		}
 	} else if this.name == "&=" && this.parameter_types.size() == 2 {
 		if this.parameter_types[0u] == parent_type.varRef() && this.parameter_types[1u] == parent_type {
 			match type_body {
 				case Enum -> return BuiltinFunction::PrimitiveOp(PrimitiveOp::And | Assign, parent_type);
-				else -> {}
+				default -> {}
 			}
 		}
 	} else if this.name == "|=" && this.parameter_types.size() == 2 {
 		if this.parameter_types[0u] == parent_type.varRef() && this.parameter_types[1u] == parent_type {
 			match type_body {
 				case Enum -> return BuiltinFunction::PrimitiveOp(PrimitiveOp::Or | Assign, parent_type);
-				else -> {}
+				default -> {}
 			}
 		}
 	}
@@ -864,7 +864,7 @@ func getPrimitiveOpParameterTypes(program: &Program, op: PrimitiveOp, base_type:
 		| EQ | NE | LT | LE | GT | GE | Cmp
 		| Min | Max | Pow | Step -> result = List!<Type>(2u, base_type);
 		case Clamp | Lerp | SmoothStep -> result = List!<Type>(3u, base_type);
-		else -> panic("invalid primitive op");
+		default -> panic("invalid primitive op");
 	}
 
 	return result;
@@ -892,6 +892,6 @@ func getPrimitiveOpReturnType(program: &Program, op: PrimitiveOp, base_type: Typ
 		case EQ | NE | LT | LE | GT | GE
 		| IsInf | IsNan -> return program.bool_type;
 		case Cmp | Sign -> return program.int_type;
-		else -> panic("invalid primitive op");
+		default -> panic("invalid primitive op");
 	}
 }

@@ -361,7 +361,7 @@ struct Lexer {
 						break;
 					}
 				}
-				else -> break;
+				default -> break;
 			}
 		}
 	}
@@ -469,7 +469,7 @@ struct Lexer {
 			case '!'b -> this.tokens.append(this.lexExclamationMark());
 			case '\''b -> this.lexCharLiteral();
 			case '"'b -> this.lexStringLiteral();
-			else -> if isDigit(this.src[this.index]) {
+			default -> if isDigit(this.src[this.index]) {
 				this.lexNumber();
 			} else if isAlpha(this.src[this.index]) || this.src[this.index] == '_'b || this.src[this.index] > 127 {
 				this.lexName();
@@ -687,7 +687,7 @@ struct Lexer {
 					case '\''b -> result += '\''b;
 					case '\"'b -> result += '\"'b;
 					case '\?'b -> result += '\?'b;
-					else -> panic("unknown escape sequence: '" + this.src[this.index] + "'");
+					default -> panic("unknown escape sequence: '" + this.src[this.index] + "'");
 				}
 
 				this.index++;
@@ -784,7 +784,7 @@ struct Lexer {
 
 		match this.keywords.get(name) {
 			case Some: keyword_id -> this.tokens.append(Token(keyword_id, span));
-			else -> {
+			default -> {
 				this.tokens.append(Token(TokenType::Identifier, this.strings.size(), span));
 				this.strings.append(name);
 			}

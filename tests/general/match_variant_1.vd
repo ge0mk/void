@@ -9,6 +9,6 @@ variant Foo {
 func main() -> int {
 	match Foo::A {
 		case A -> return 0;
-		else -> return 1;
+		default -> return 1;
 	}
 }

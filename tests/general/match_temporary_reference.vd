@@ -19,11 +19,11 @@ func main() -> void {
 	var y: Bar = ();
 	match &&y.x {
 		case A: &&z -> z = 10;
-		else -> {}
+		default -> {}
 	}
 
 	match y.x {
 		case A: z -> assert(z == 10);
-		else -> assert(false);
+		default -> assert(false);
 	}
 }

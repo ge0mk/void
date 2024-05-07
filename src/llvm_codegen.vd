@@ -87,7 +87,7 @@ struct CGContext {
 
 				return type.decl.llvm_type;
 			}
-			else -> return this.ptr_type;
+			default -> return this.ptr_type;
 		}
 	}
 
@@ -192,7 +192,7 @@ struct CGContext {
 			case Float: bits -> match bits {
 				case 32 -> type.llvm_type = LLVMFloatTypeInContext(this.llvm_context);
 				case 64 -> type.llvm_type = LLVMDoubleTypeInContext(this.llvm_context);
-				else -> this.error("invalid size for float type: " + format(bits), type.span);
+				default -> this.error("invalid size for float type: " + format(bits), type.span);
 			}
 			case Pointer | Function -> type.llvm_type = this.ptr_type;
 			case Vector: vector_type -> type.llvm_type = LLVMVectorType(this.getType(vector_type.element_type), vector_type.size);
@@ -504,7 +504,7 @@ struct CGContext {
 				this.error("unchecked function: " + function.signature(), function.signature_span);
 				return;
 			}
-			else -> {}
+			default -> {}
 		}
 
 		if function.llvm_func == LLVMValueRef::null() {
@@ -649,7 +649,7 @@ struct CGContext {
 		match function.body {
 			case Builtin: builtin_function -> this.codegenBuiltinFunction(builtin_function, function.signature_span);
 			case Stmt: &stmt -> discard this.codegenNode(this.getASTNode(stmt));
-			else -> panic("invalid function body for codegen");
+			default -> panic("invalid function body for codegen");
 		}
 
 		if !LLVMHasBasicBlockTerminator(LLVMGetInsertBlock(this.builder)) {
@@ -1256,7 +1256,7 @@ struct CGContext {
 				LLVMPositionBuilderAtEnd(this.builder, uneq_block);
 				discard LLVMBuildRet(this.builder, LLVMConstInt(this.bool_type, 0, false));
 			}
-			else -> {
+			default -> {
 				var parameters: List!<LLVMValueRef>;
 				for i in 0u32..LLVMCountParams(this.current_function) {
 					parameters.append(LLVMGetParam(this.current_function, i));
@@ -1279,7 +1279,7 @@ struct CGContext {
 			const vector_size = match type.decl.body {
 				case Vector: vector_type -> yield vector_type.size;
 				case Matrix: matrix_type -> yield matrix_type.columns * matrix_type.rows;
-				else -> panic("invalid primitive op (RHSToVector for non-vector type)");
+				default -> panic("invalid primitive op (RHSToVector for non-vector type)");
 			}
 
 			rhs = LLVMGetPoison(llvm_type);
@@ -1547,7 +1547,7 @@ struct CGContext {
 
 				result = LLVMBuildShuffleVector(this.builder, parameters[0u], LLVMGetPoison(llvm_type), shuffle_mask, "");
 			}
-			else -> panic("invalid primitive op");
+			default -> panic("invalid primitive op");
 		}
 
 		if op.isAssignment() {
@@ -1603,11 +1603,11 @@ struct CGContext {
 			case IntCast: target -> {
 				const source_width = match function.base_type.decl.body {
 					case Vector: vector_type -> yield LLVMGetIntTypeWidth(this.getType(vector_type.element_type));
-					else -> yield LLVMGetIntTypeWidth(this.getType(function.base_type));
+					default -> yield LLVMGetIntTypeWidth(this.getType(function.base_type));
 				};
 				const target_width = match target.decl.body {
 					case Vector: vector_type -> yield LLVMGetIntTypeWidth(this.getType(vector_type.element_type));
-					else -> yield LLVMGetIntTypeWidth(this.getType(target));
+					default -> yield LLVMGetIntTypeWidth(this.getType(target));
 				};
 
 				if source_width == target_width {
@@ -1623,11 +1623,11 @@ struct CGContext {
 			case FloatCast: target -> {
 				const source_width = match function.base_type.decl.body {
 					case Vector: vector_type -> yield LLVMStoreSizeOfType(this.data_layout, this.getType(vector_type.element_type));
-					else -> yield LLVMStoreSizeOfType(this.data_layout, this.getType(function.base_type));
+					default -> yield LLVMStoreSizeOfType(this.data_layout, this.getType(function.base_type));
 				};
 				const target_width = match target.decl.body {
 					case Vector: vector_type -> yield LLVMStoreSizeOfType(this.data_layout, this.getType(vector_type.element_type));
-					else -> yield LLVMStoreSizeOfType(this.data_layout, this.getType(target));
+					default -> yield LLVMStoreSizeOfType(this.data_layout, this.getType(target));
 				};
 
 				if source_width == target_width {
@@ -1896,7 +1896,7 @@ struct CGContext {
 				indices.append(LLVMConstInt(this.int_type, 0, false));
 				return LLVMBuildGEP2(this.builder, this.getType(function.base_type), parameters[0u], indices, "");
 			}
-			else -> panic("builtin function is not inlineable");
+			default -> panic("builtin function is not inlineable");
 		}
 	}
 
@@ -2034,7 +2034,7 @@ struct CGContext {
 
 						dst = LLVMBuildStructGEP2(this.builder, this.getType(object_type.base()), object, member_var_invoke_expr.id, "");
 					}
-					else -> panic("invalid shallow copy expr");
+					default -> panic("invalid shallow copy expr");
 				}
 
 				result = this.codegenNode(this.getASTNode(shallow_copy_expr.value));
@@ -2138,7 +2138,7 @@ struct CGContext {
 					);
 				}
 			}
-			else -> {
+			default -> {
 				this.error("invalid node for codegen '" + node.name() + "'", node.span);
 			}
 		}
@@ -2332,7 +2332,7 @@ struct CGContext {
 	func codegenStringGlobal(this: &&CGContext, value: String) -> LLVMValueRef {
 		match this.program.string_globals.get(value) {
 			case Some: result -> return result;
-			else -> {}
+			default -> {}
 		}
 
 		const string_value = LLVMConstStringInContext(this.llvm_context, value, true);
@@ -2368,7 +2368,7 @@ struct CGContext {
 					yield LLVMBuildCall2(this.builder, function.llvm_type, llvm_func, parameters, "");
 				}
 			}
-			else -> {
+			default -> {
 				const llvm_func = this.getFunction(function);
 				yield LLVMBuildCall2(this.builder, function.llvm_type, llvm_func, parameters, "");
 			}
@@ -2416,7 +2416,7 @@ struct CGContext {
 			case_blocks.append(LLVMAppendBasicBlockInContext(this.llvm_context, this.current_function, "case"));
 		}
 
-		const else_block = LLVMAppendBasicBlockInContext(this.llvm_context, this.current_function, "else");
+		const default_block = LLVMAppendBasicBlockInContext(this.llvm_context, this.current_function, "default");
 		const cont_block = LLVMAppendBasicBlockInContext(this.llvm_context, this.current_function, "cont");
 
 		const prev_yield_target = this.yield_target;
@@ -2424,7 +2424,7 @@ struct CGContext {
 
 		this.setCurrentDebugLocation(span);
 
-		var switch_instr = LLVMBuildSwitch(this.builder, value, else_block, case_blocks.size());
+		var switch_instr = LLVMBuildSwitch(this.builder, value, default_block, case_blocks.size());
 
 		for i in 0u..match_expr.cases.size() {
 			const case_stmt = (this.getASTNode(match_expr.cases[i]) as CaseStmt).value();
@@ -2443,9 +2443,9 @@ struct CGContext {
 			}
 		}
 
-		LLVMPositionBuilderAtEnd(this.builder, else_block);
-		if match_expr.else_case > 1 {
-			discard this.codegenNode(this.getASTNode(match_expr.else_case));
+		LLVMPositionBuilderAtEnd(this.builder, default_block);
+		if match_expr.default_case > 1 {
+			discard this.codegenNode(this.getASTNode(match_expr.default_case));
 			if !LLVMHasBasicBlockTerminator(LLVMGetInsertBlock(this.builder)) {
 				discard LLVMBuildBr(this.builder, cont_block);
 			}

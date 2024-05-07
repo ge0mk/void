@@ -107,25 +107,25 @@ struct CompilationUnit {
 			case WhileStmt: while_stmt -> return while_stmt.kind == DoWhile && this.isTerminator(while_stmt.body, never_type, yield_is_terminator);
 			case ForStmt: for_stmt -> return false;
 			case CaseStmt: case_stmt -> return false;
-			case ElseCaseStmt: body -> return this.isTerminator(body, never_type, yield_is_terminator);
+			case DefaultCaseStmt: body -> return this.isTerminator(body, never_type, yield_is_terminator);
 			case BreakStmt | ContinueStmt | ReturnStmt -> return true;
 			case YieldStmt -> return yield_is_terminator;
 			case LifeTimeStart | LifeTimeEnd -> return false;
-			else -> return this.nodes[node_id].type == never_type;
+			default -> return this.nodes[node_id].type == never_type;
 		}
 	}
 
 	func addDereference(this: &&CompilationUnit, node_id: uint) -> uint {
 		match this.nodes[node_id].type.reference_kind {
 			case None -> return node_id;
-			else -> return this.addASTNode(Node::DereferenceExpr(node_id, this.nodes[node_id].span, this.nodes[node_id].type.base(), false));
+			default -> return this.addASTNode(Node::DereferenceExpr(node_id, this.nodes[node_id].span, this.nodes[node_id].type.base(), false));
 		}
 	}
 
 	func removeDereference(this: &CompilationUnit, node_id: uint) -> uint {
 		match this.nodes[node_id] {
 			case DereferenceExpr: base -> return base;
-			else -> return node_id;
+			default -> return node_id;
 		}
 	}
 
@@ -268,7 +268,7 @@ struct CompilationUnit {
 				}
 				this.dump(&&out, case_stmt.body, true);
 			}
-			case ElseCaseStmt: body -> this.dump(&&out, body, true);
+			case DefaultCaseStmt: body -> this.dump(&&out, body, true);
 			case BreakStmt | ContinueStmt -> {}
 			case DeferStmt: body -> this.dump(&&out, body, true);
 			case ThrowStmt: expr -> this.dump(&&out, expr, true);
@@ -355,7 +355,7 @@ struct CompilationUnit {
 					for c in match_expr.cases {
 						this.dump(&&out, c, false);
 					}
-					this.dump(&&out, match_expr.else_case, true);
+					this.dump(&&out, match_expr.default_case, true);
 				}
 			}
 			case TypeRefExpr: type -> out.value(type.signature());
@@ -1656,7 +1656,7 @@ struct Type {
 			| Enum -> return true;
 			case Vector: vector_type -> return vector_type.element_type.isIntType(allow_vector_types) && allow_vector_types;
 			case Matrix: matrix_type -> return matrix_type.element_type.isIntType(allow_vector_types) && allow_vector_types;
-			else -> return false;
+			default -> return false;
 		}
 	}
 
@@ -1671,7 +1671,7 @@ struct Type {
 			case Enum -> return this.decl.id_type.isSigned(allow_vector_types);
 			case Vector: vector_type -> return vector_type.element_type.isSigned(allow_vector_types) && allow_vector_types;
 			case Matrix: matrix_type -> return matrix_type.element_type.isSigned(allow_vector_types) && allow_vector_types;
-			else -> return false;
+			default -> return false;
 		}
 	}
 
@@ -1684,7 +1684,7 @@ struct Type {
 			case Float -> return true;
 			case Vector: vector_type -> return vector_type.element_type.isFloatType(allow_vector_types) && allow_vector_types;
 			case Matrix: matrix_type -> return matrix_type.element_type.isFloatType(allow_vector_types) && allow_vector_types;
-			else -> return false;
+			default -> return false;
 		}
 	}
 
@@ -1703,7 +1703,7 @@ struct Type {
 
 		match this.decl.body {
 			case Pointer: pointer_type -> return !pointer_type.is_mutable;
-			else -> return false;
+			default -> return false;
 		}
 	}
 
@@ -1745,7 +1745,7 @@ struct Type {
 			| Matrix
 			| Enum -> return true;
 			case Array: array_type -> return array_type.element_type.isPrimitive();
-			else -> return false;
+			default -> return false;
 		}
 	}
 
@@ -1783,7 +1783,7 @@ struct Type {
 			case Float: bits -> return bits;
 			case Pointer -> return sizeOf!<ptr!<byte, false>>() * 8;
 			case Enum -> return this.decl.id_type.getPrimitiveSizeInBits();
-			else -> return 0;
+			default -> return 0;
 		}
 	}
 
@@ -2079,7 +2079,7 @@ variant BuiltinFunction {
 			| VariantOpIs
 			| ArrayGetSize
 			| ArrayGetDataPointer -> return true;
-			else -> return false;
+			default -> return false;
 		}
 	}
 }
@@ -2117,7 +2117,7 @@ variant Node {
 	case ForStmt: ForStmt;
 
 	case CaseStmt: CaseStmt;
-	case ElseCaseStmt: uint;
+	case DefaultCaseStmt: uint;
 
 	case BreakStmt;
 	case ContinueStmt;
@@ -2192,7 +2192,7 @@ variant Node {
 			case ParsedForStmt -> return "ParsedForStmt";
 			case ForStmt -> return "ForStmt";
 			case CaseStmt -> return "CaseStmt";
-			case ElseCaseStmt -> return "ElseCaseStmt";
+			case DefaultCaseStmt -> return "DefaultCaseStmt";
 			case DeferStmt -> return "DeferStmt";
 			case BreakStmt -> return "BreakStmt";
 			case ContinueStmt -> return "ContinueStmt";
@@ -2242,7 +2242,7 @@ variant Node {
 				}
 				return is_anonymous;
 			}
-			else -> return false;
+			default -> return false;
 		}
 	}
 
@@ -2326,7 +2326,7 @@ variant Node {
 				}
 				if stmt.body > 1 { stmt.body += offset; }
 			}
-			case ElseCaseStmt: &&body -> {
+			case DefaultCaseStmt: &&body -> {
 				if body > 1 { body += offset; }
 			}
 			case DeferStmt: &&body -> {
@@ -2407,7 +2407,7 @@ variant Node {
 					if parameter > 1 { parameter += offset; }
 				}
 			}
-			else -> {}
+			default -> {}
 		}
 	}
 }
@@ -2590,7 +2590,7 @@ alias InlineIfExpr = (condition: uint, then_value: uint, else_value: uint);
 alias TupleElement = (span: Span, name: String, value: uint);
 alias DictElement = (span: Span, key: uint, value: uint);
 
-alias MatchExpr = (value: uint, body: uint, cases: List!<uint>, else_case: uint, yield_var: SharedHandle!<VarDecl>);
+alias MatchExpr = (value: uint, body: uint, cases: List!<uint>, default_case: uint, yield_var: SharedHandle!<VarDecl>);
 alias ParsedFunctionRefExpr = (name: uint, parameter_types: List!<uint>);
 
 alias FunctionType = (parameter_types: List!<uint>, return_type: uint);
@@ -2624,35 +2624,35 @@ variant Value {
 	func toBool(this: &Value) -> bool {
 		match this {
 			case Integer: value -> return (value & this.type.getBitMask()) != 0;
-			else -> return false;
+			default -> return false;
 		}
 	}
 
 	func toInt(this: &Value) -> int {
 		match this {
 			case Integer: value -> return (value & this.type.getBitMask());
-			else -> return 0;
+			default -> return 0;
 		}
 	}
 
 	func toUInt(this: &Value) -> uint {
 		match this {
 			case Integer: value -> return (value & this.type.getBitMask()) as uint;
-			else -> return 0;
+			default -> return 0;
 		}
 	}
 
 	func toFloat(this: &Value) -> f64 {
 		match this {
 			case Float: value -> return value;
-			else -> return 0;
+			default -> return 0;
 		}
 	}
 
 	func toType(this: &Value) -> Type {
 		match this {
 			case Type: value -> return value;
-			else -> return Type::unknown();
+			default -> return Type::unknown();
 		}
 	}
 }

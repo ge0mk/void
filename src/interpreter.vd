@@ -112,7 +112,7 @@ struct Interpreter {
 							match control_flow {
 								case Break -> break;
 								case Continue -> {}
-								else -> throw control_flow;
+								default -> throw control_flow;
 							}
 						}
 
@@ -124,7 +124,7 @@ struct Interpreter {
 							match control_flow {
 								case Break -> break;
 								case Continue -> {}
-								else -> throw control_flow;
+								default -> throw control_flow;
 							}
 						}
 
@@ -180,9 +180,9 @@ struct Interpreter {
 			}
 			case DereferenceExpr: base -> match try this.interpret(this.getASTNode(base)) {
 				case Variable: variable -> result = this.getVariable(variable);
-				else -> {}
+				default -> {}
 			}
-			else -> {}
+			default -> {}
 		}
 
 		if result is Undefined {
@@ -212,7 +212,7 @@ struct Interpreter {
 				this.current_namespace = prev_namespace;
 				return this.popStackFrame();
 			}
-			else -> {
+			default -> {
 				this.error("function can't be interpreted: " + function.signature(), error_span);
 				return Value::Undefined;
 			}
@@ -232,7 +232,7 @@ struct Interpreter {
 			case HasDefaultConstructor -> return Value::Integer(function.base_type.decl.default_constructor.isAlive() as int, return_type);
 			case HasCopyConstructor -> return Value::Integer(function.base_type.decl.copy_constructor.isAlive() as int, return_type);
 			case TypeRefOpEqual -> return Value::Integer((args[0u].toType() == args[1u].toType()) as int, return_type);
-			else -> {
+			default -> {
 				this.todo("finish interpretation of builtin functions", span);
 				return Value::Undefined;
 			}
@@ -316,7 +316,7 @@ struct Interpreter {
 			case (PrimitiveOp::Cmp | Unsigned)	-> yield Value::Integer((lhs_int <=> rhs_int), this.program.int_type);
 			case (PrimitiveOp::Cmp | Signed)	-> yield Value::Integer((lhs_uint <=> rhs_uint), this.program.int_type);
 			case (PrimitiveOp::Cmp | Float)		-> yield Value::Integer((lhs_float <=> rhs_float), this.program.int_type);
-			else -> return Value::Undefined;
+			default -> return Value::Undefined;
 		}
 
 		if op.isAssignment() {

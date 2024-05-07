@@ -12,6 +12,6 @@ func main() -> int {
 	match Foo::B(10) {
 		case A -> return 0;
 		case B: val -> return val;
-		else -> return 1;
+		default -> return 1;
 	}
 }

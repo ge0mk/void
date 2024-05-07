@@ -637,7 +637,7 @@ func isDigit(val: byte, base: int) -> bool {
 		case 16 -> return (val >= '0'b && val <= '9'b)
 						|| (val >= 'A'b && val <= 'F'b)
 						|| (val >= 'a'b && val <= 'f'b);
-		else -> return val >= '0'b && val <= '9'b;
+		default -> return val >= '0'b && val <= '9'b;
 	}
 }
 
@@ -654,7 +654,7 @@ func parseDigit(val: byte, base: int) -> int {
 				return -1;
 			}
 		}
-		else -> return val as int - '0'b as int;
+		default -> return val as int - '0'b as int;
 	}
 }
 
@@ -689,7 +689,7 @@ func parseNumber(str: String, start: uint) -> ParsedNumber {
 				case 'o'b -> base = 8;
 				case 'd'b -> base = 10;
 				case 'x'b -> base = 16;
-				else -> return ParsedNumber(0, 10, 0, 1u, false, false);
+				default -> return ParsedNumber(0, 10, 0, 1u, false, false);
 			}
 
 			if isDigit(str[index + 2], base) {

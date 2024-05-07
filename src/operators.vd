@@ -82,7 +82,7 @@ enum Operator {
 			| VarRef
 			| Try
 			| Must -> return true;
-			else -> return false;
+			default -> return false;
 		}
 	}
 
@@ -119,14 +119,14 @@ enum Operator {
 			| Is | As
 			| MemberAccess
 			| Namespace -> return true;
-			else -> return false;
+			default -> return false;
 		}
 	}
 
 	func isTernaryOperator(this: Operator) -> bool {
 		match this {
 			case InlineIf -> return true;
-			else -> return false;
+			default -> return false;
 		}
 	}
 
@@ -145,7 +145,7 @@ enum Operator {
 			| ShiftLeftAssign
 			| ShiftRightAssign
 			| CoalescingAssign -> return true;
-			else -> return false;
+			default -> return false;
 		}
 	}
 
@@ -162,7 +162,7 @@ enum Operator {
 			case ShiftLeftAssign -> return ShiftLeft;
 			case ShiftRightAssign -> return ShiftRight;
 			case CoalescingAssign -> return Coalescing;
-			else -> return this;
+			default -> return this;
 		}
 	}
 

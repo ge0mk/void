@@ -174,17 +174,17 @@ variant Optional {
 		comptime if referenceKindOf!<T>() == ReferenceKind::Var {
 			match this {
 				case Some: &&value -> return &&value;
-				else -> panic(Error::EOPTNONE);
+				default -> panic(Error::EOPTNONE);
 			}
 		} else if referenceKindOf!<T>() == ReferenceKind::Const {
 			match this {
 				case Some: &value -> return &value;
-				else -> panic(Error::EOPTNONE);
+				default -> panic(Error::EOPTNONE);
 			}
 		} else {
 			match this {
 				case Some: value -> return value;
-				else -> panic(Error::EOPTNONE);
+				default -> panic(Error::EOPTNONE);
 			}
 		}
 	}
@@ -193,17 +193,17 @@ variant Optional {
 		comptime if referenceKindOf!<T>() == ReferenceKind::Var {
 			match this {
 				case Some: &&value -> return &&value;
-				else -> return &&other;
+				default -> return &&other;
 			}
 		} else if referenceKindOf!<T>() == ReferenceKind::Const {
 			match this {
 				case Some: &value -> return &value;
-				else -> return &other;
+				default -> return &other;
 			}
 		} else {
 			match this {
 				case Some: value -> return value;
-				else -> return other;
+				default -> return other;
 			}
 		}
 	}
@@ -211,7 +211,7 @@ variant Optional {
 	func ??(this: Optional!<T>, other: Optional!<T>) -> Optional!<T> {
 		match this {
 			case Some -> return this;
-			else -> return other;
+			default -> return other;
 		}
 	}
 }
@@ -232,7 +232,7 @@ variant Result {
 	func error(this: Result!<Tok, Terr>) -> Terr {
 		match this {
 			case Error: error -> return error;
-			else -> abort();
+			default -> abort();
 		}
 	}
 
@@ -241,17 +241,17 @@ variant Result {
 			comptime if referenceKindOf!<Tok>() == ReferenceKind::Var {
 				match this {
 					case Ok: &&value -> return &&value;
-					else -> abort();
+					default -> abort();
 				}
 			} else if referenceKindOf!<Tok>() == ReferenceKind::Const {
 				match this {
 					case Ok: &value -> return &value;
-					else -> abort();
+					default -> abort();
 				}
 			} else {
 				match this {
 					case Ok: value -> return value;
-					else -> abort();
+					default -> abort();
 				}
 			}
 		}
@@ -260,17 +260,17 @@ variant Result {
 			comptime if referenceKindOf!<Tok>() == ReferenceKind::Var {
 				match this {
 					case Ok: &&value -> return &&value;
-					else -> return &&other;
+					default -> return &&other;
 				}
 			} else if referenceKindOf!<Tok>() == ReferenceKind::Const {
 				match this {
 					case Ok: &value -> return &value;
-					else -> return &other;
+					default -> return &other;
 				}
 			} else {
 				match this {
 					case Ok: value -> return value;
-					else -> return other;
+					default -> return other;
 				}
 			}
 		}
@@ -293,7 +293,7 @@ variant Result {
 	func error(this: Result!<Tok>) -> Error {
 		match this {
 			case Error: error -> return error;
-			else -> abort();
+			default -> abort();
 		}
 	}
 
@@ -302,17 +302,17 @@ variant Result {
 			comptime if referenceKindOf!<Tok>() == ReferenceKind::Var {
 				match this {
 					case Ok: &&value -> return &&value;
-					else -> abort();
+					default -> abort();
 				}
 			} else if referenceKindOf!<Tok>() == ReferenceKind::Const {
 				match this {
 					case Ok: &value -> return &value;
-					else -> abort();
+					default -> abort();
 				}
 			} else {
 				match this {
 					case Ok: value -> return value;
-					else -> abort();
+					default -> abort();
 				}
 			}
 		}
@@ -321,17 +321,17 @@ variant Result {
 			comptime if referenceKindOf!<Tok>() == ReferenceKind::Var {
 				match this {
 					case Ok: &&value -> return &&value;
-					else -> return &&other;
+					default -> return &&other;
 				}
 			} else if referenceKindOf!<Tok>() == ReferenceKind::Const {
 				match this {
 					case Ok: &value -> return &value;
-					else -> return &other;
+					default -> return &other;
 				}
 			} else {
 				match this {
 					case Ok: value -> return value;
-					else -> return other;
+					default -> return other;
 				}
 			}
 		}

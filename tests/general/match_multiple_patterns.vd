@@ -3,7 +3,7 @@ import std/core;
 func foo(val: byte) -> bool {
 	match val {
 		case 'a'b | 'b'b | 'c'b -> return true;
-		else -> return false;
+		default -> return false;
 	}
 }
 

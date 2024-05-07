@@ -70,7 +70,7 @@ func parse(str: &String, index: &&uint) -> Result!<Value> {
 				var name = "";
 				match try parse(&str, &&index) {
 					case String: value -> name = value;
-					else -> throw Error::EINVAL;
+					default -> throw Error::EINVAL;
 				}
 
 				skipWhitespace(&str, &&index);
@@ -112,7 +112,7 @@ func parse(str: &String, index: &&uint) -> Result!<Value> {
 			const val = str.substring(start..end);
 			return Ok(Value::String(val));
 		}
-		else -> {
+		default -> {
 			if isAlpha(str[index]) {
 				const start = index;
 				while index < str.size() {

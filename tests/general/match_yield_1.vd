@@ -5,6 +5,6 @@ import std/core;
 func main() -> int {
 	return match 2 {
 		case 2 -> yield 0;
-		else -> yield 1;
+		default -> yield 1;
 	}
 }

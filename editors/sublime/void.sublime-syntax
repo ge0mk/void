@@ -56,7 +56,7 @@ contexts:
       scope: keyword.declaration
       push: case_stmt
 
-    - match: \b(else)\s*->
+    - match: \b(default)\s*->
       captures:
         1: keyword.control.conditional
 
@@ -64,9 +64,6 @@ contexts:
       scope: keyword.control.conditional
 
     - match: \b(comptime|do|while|for|in|defer|continue|break|discard|return|throw|yield)\b
-      scope: keyword.control
-
-    - match: \b(default|extern)\b
       scope: keyword.control
 
     - match: \{
