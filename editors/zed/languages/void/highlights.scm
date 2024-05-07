@@ -1,64 +1,125 @@
-"alias" @keyword
-"as" @keyword
-"break" @keyword
-"case" @keyword
-"comptime" @keyword
-"const" @keyword
-"continue" @keyword
-"default" @keyword
-"defer" @keyword
-"discard" @keyword
-"do" @keyword
-"else" @keyword
-"enum" @keyword
-"extern" @keyword
-"false" @keyword
-"for" @keyword
-"func" @keyword
-"if" @keyword
-"import" @keyword
-"in" @keyword
-"is" @keyword
-"match" @keyword
-"must" @keyword
-"namespace" @keyword
-"operator" @keyword
-"pragma" @keyword
-"private" @keyword
-"return" @keyword
-"struct" @keyword
-"template" @keyword
-"throw" @keyword
-"true" @keyword
-"try" @keyword
-"var" @keyword
-"variant" @keyword
-"while" @keyword
-"yield" @keyword
+[
+	"alias"
+	"break"
+	"case"
+	"comptime"
+	"const"
+	"continue"
+	"default"
+	"defer"
+	"discard"
+	"do"
+	"else"
+	"enum"
+	"extern"
+	"false"
+	"for"
+	"func"
+	"if"
+	"import"
+	"in"
+	"match"
+	"must"
+	"namespace"
+	"operator"
+	"pragma"
+	"private"
+	"return"
+	"struct"
+	"template"
+	"throw"
+	"true"
+	"try"
+	"var"
+	"variant"
+	"while"
+	"yield"
+] @keyword
 
-"." @delimiter
-";" @delimiter
+[ "::" ":" "." "," ";" "->" ] @punctuation.delimiter
 
-"true" @constant
-"false" @constant
+[ "(" ")" "[" "]" "{" "}" ] @punctuation.bracket
 
+[
+	"&" "|" "^" "~" "<<" ">>"
+	"+" "-" "*" "/" "%"
+	"++" "--"
+	".."
+	"=" ":="
+	"&=" "|=" "^=" "~=" "<<=" ">>="
+	"+=" "-=" "*=" "/=" "%="
+	"==" "!=" "<" "<=" ">" ">=" "<=>"
+	"||" "&&" "!"
+	"as" "is"
+] @operator
+
+["true" "false"] @constant.builtin
+
+(name "<" @punctuation.bracket ">" @punctuation.bracket)
+
+(template_parameter (identifier) @type)
 (function_decl (identifier) @function)
+(function_decl (operator_name) @function)
 (type_decl (identifier) @type)
 
 (import_stmt (identifier) @string)
 
-(type (name)) @type
+(type (operand (name (identifier) @type)))
+(name (operand (name (identifier) @type)))
+(named_tuple_expr (identifier) @property)
 
 (parameter_decl (identifier) @variable.parameter)
 (var_decl (identifier) @variable)
+(type_decl (compound_stmt (var_decl (identifier) @property)))
+(for_stmt (identifier) @variable)
 
 (variant_case_decl (identifier) @constant)
+(match_case_decl (operand (name (identifier) @constant)))
 
-(bin_literal) @number
-(oct_literal) @number
-(dec_literal) @number
-(hex_literal) @number
-(char_literal) @string
-(string_literal) @string
+[
+	(bin_literal)
+	(oct_literal)
+	(dec_literal)
+	(hex_literal)
+] @number
+
+(char_literal) @string.quoted.double
+(string_literal) @string.quoted.single
+(escape_sequence) @escape
+
+(bin_literal (identifier) @type)
+(oct_literal (identifier) @type)
+(dec_literal (identifier) @type)
+(hex_literal (identifier) @type)
+(char_literal (identifier) @type)
+(string_literal (identifier) @type)
+
+(call_expr callee: (operand
+	(name (identifier) @function)
+))
+
+(operand
+	(member_access_expr rhs: (operand
+		(name (identifier) @property)
+	))
+)
+
+(call_expr callee: (operand
+	(member_access_expr rhs: (operand
+		(name (identifier) @function)
+	))
+))
+
+(operand
+	(namespace_expr (operand
+		(name (identifier) @type)
+	))
+)
+
+(call_expr callee: (operand
+	(namespace_expr rhs: (operand
+		(name (identifier) @function)
+	))
+))
 
 (comment) @comment
