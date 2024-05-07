@@ -77,6 +77,11 @@ install: stage0 rt.ll std/*.vd
 	-@cp -f rt.ll $(INSTALL_DIR)/rt.ll
 	-@cp -rf std $(INSTALL_DIR)/std
 
+samples: stage0 samples/*.vd
+	build/stage0 samples/json.vd -M
+	build/stage0 samples/tetris.vd -M -l SDL2
+	build/stage0 samples/touch.vd -M
+
 .PHONY: \
 	main test \
 	clean clean-but-keep-stage0 \
