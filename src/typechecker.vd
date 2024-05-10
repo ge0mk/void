@@ -2212,24 +2212,24 @@ struct TCContext {
 		} else if postfix == "f" {
 			this.replaceASTNode(id, Node::FloatLiteralExpr(number_literal.toFloat(), span, this.getType(Name("f64"), span), false));
 		} else {
-			const bits = getNumericTypeBits(postfix) else {
-				this.error("invalid number literal", span);
-				return this.getGarbageNode();
-			}
-
-			const name = match postfix[0u] {
-				case 'i'b -> yield "int";
-				case 'u'b -> yield "uint";
-				case 'f'b -> yield "float";
-				default -> {
-					this.error("invalid number literal postfix", span);
-					return this.getGarbageNode();
+			if const bits = getIntTypeBits(postfix) {
+				const name = match postfix[0u] {
+					case 'i'b -> yield "int";
+					case 'u'b -> yield "uint";
+					default -> {
+						this.error("invalid number literal postfix", span);
+						return this.getGarbageNode();
+					}
 				}
+
+				var template_parameters: List!<TemplateParameter>;
+				template_parameters.append(TemplateParameter::Integer(bits as int));
+				this.replaceASTNode(id, Node::IntegerLiteralExpr(number_literal.toInt(), span, this.getType(Name(name, template_parameters), span), false));
+				return id;
 			}
 
-			var template_parameters: List!<TemplateParameter>;
-			template_parameters.append(TemplateParameter::Integer(bits as int));
-			this.replaceASTNode(id, Node::IntegerLiteralExpr(number_literal.toInt(), span, this.getType(Name(name, template_parameters), span), false));
+			const type = this.getType(Name(postfix), span);
+			this.replaceASTNode(id, Node::IntegerLiteralExpr(number_literal.toInt(), span, type, false));
 		}
 
 		return id;
@@ -2239,7 +2239,7 @@ struct TCContext {
 		if postfix == "b" {
 			this.replaceASTNode(id, Node::IntegerLiteralExpr(char_literal as int, span, this.program.byte_type, false));
 		} else {
-			const bits = getNumericTypeBits(postfix) else {
+			const bits = getIntTypeBits(postfix) else {
 				this.error("invalid char literal", span);
 				return this.getGarbageNode();
 			}
@@ -3975,14 +3975,13 @@ struct TCContext {
 		}
 
 		if !is_namespaced_name && !is_templated_name && namespaces_to_search.contains(this.program.core_namespace) {
-			if const bits = getNumericTypeBits(last_segment.name) {
+			if const bits = getIntTypeBits(last_segment.name) {
 				var numeric_type_template_parameters: List!<TemplateParameter>;
 				numeric_type_template_parameters.append(TemplateParameter::Integer(bits as int));
 
 				const numeric_type_name = match last_segment.name[0u] {
 					case 'i'b -> yield "int";
 					case 'u'b -> yield "uint";
-					case 'f'b -> yield "float";
 					default -> panic("invalid numeric type");
 				}
 
@@ -4153,19 +4152,19 @@ struct TCContext {
 		return this.getType(Name("function", template_parameters), span);
 	}
 
-	func getNumericTypeBits(name: String) -> Optional!<uint> {
+	func getIntTypeBits(name: String) -> Optional!<uint> {
 		if name.size() <= 1 {
 			return None;
 		}
 
-		if name[0u] != 'i'b && name[0u] != 'u'b && name[0u] != 'f'b {
+		if name[0u] != 'i'b && name[0u] != 'u'b {
 			return None;
 		}
 
-		const number_str = name.substring(1u..name.size());
-		const number = parseNumber(number_str, 0u);
+		name = name.substring(1u..name.size());
+		const number = parseNumber(name, 0u);
 
-		if number.length < number_str.size() {
+		if number.length < name.size() {
 			return None;
 		}
 
@@ -4332,7 +4331,7 @@ struct TCContext {
 			const base_type = base.linked_type;
 			var type_instance: SharedHandle!<TypeDecl>;
 			match base_type.body {
-				case Int | UInt | Float -> {
+				case Int | UInt -> {
 					const bits = (template_parameters[0u] as Integer).value();
 					if bits < 0 {
 						this.error("only numeric types with size >= 0 are allowed", error_span);
@@ -4342,7 +4341,6 @@ struct TCContext {
 					match base_type.body {
 						case Int -> type_instance = this.program.createIntTypeInstance(base.parent, true, bits).decl;
 						case UInt -> type_instance = this.program.createIntTypeInstance(base.parent, false, bits).decl;
-						case Float -> type_instance = this.program.createFloatTypeInstance(base.parent, bits).decl;
 						default -> panic("unreachable");
 					}
 

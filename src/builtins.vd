@@ -316,17 +316,8 @@ func createFunctionTypeInstance(program: &&Program, dest_namespace: SharedHandle
 	return type_decl;
 }
 
-func createFloatTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>) -> void {
-	var template_parameters: List!<TemplateParameterDecl>;
-	template_parameters.append(TemplateParameterDecl("Size", program.uint_concept, false));
-	discard program.createType(dest_namespace, "float", template_parameters, TypeBody::Float(0u));
-}
-
-func createFloatTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, size: int) -> Type {
-	var template_parameters: List!<TemplateParameterDecl>;
-	template_parameters.append(TemplateParameterDecl("Size", program.uint_concept, false, TemplateParameter::Integer(size)));
-
-	const type = Type(program.createType(dest_namespace, "float", template_parameters, TypeBody::Float(size as uint)), ReferenceKind::None);
+func createFloatType(program: &&Program, dest_namespace: SharedHandle!<Namespace>, float_type: FloatType) -> Type {
+	const type = Type(program.createType(dest_namespace, format(float_type), List!<TemplateParameterDecl>(), TypeBody::Float(float_type)), ReferenceKind::None);
 	const type_namespace = type.decl.linked_namespace;
 
 	createBasicFunctions(&&program, type, type_namespace);

@@ -1236,9 +1236,9 @@ struct TypeDecl {
 				out.push("UIntTypeDecl", is_last);
 				out.value(format(size));
 			}
-			case Float: size -> {
+			case Float: float_type -> {
 				out.push("FloatTypeDecl", is_last);
-				out.value(format(size));
+				out.value(format(float_type));
 			}
 			case Pointer: pointer_type -> {
 				out.push("PointerTypeDecl", is_last);
@@ -1780,7 +1780,7 @@ struct Type {
 			case Byte -> return 8;
 			case Int: bits -> return bits;
 			case UInt: bits -> return bits;
-			case Float: bits -> return bits;
+			case Float: float_type -> return float_type.getSizeInBits();
 			case Pointer -> return sizeOf!<ptr!<byte, false>>() * 8;
 			case Enum -> return this.decl.id_type.getPrimitiveSizeInBits();
 			default -> return 0;
@@ -1807,8 +1807,7 @@ variant TypeBody {
 	case Int: uint;
 	case UInt: uint;
 
-	// size in bits attached
-	case Float: uint;
+	case Float: FloatType;
 
 	case Pointer: (pointee_type: Type, is_mutable: bool);
 	case Function: (parameter_types: List!<Type>, return_type: Type);
@@ -1830,6 +1829,26 @@ variant TypeBody {
 	case Variant;
 
 	case Unchecked: ParsedTypeDecl;
+}
+
+enum FloatType {
+	case None;
+	case F16;
+	case Bf16;
+	case F32;
+	case F64;
+	case F128;
+
+	func getSizeInBits(float_type: FloatType) -> uint {
+		match float_type {
+			case None -> return 0;
+			case F16 -> return 16;
+			case Bf16 -> return 16;
+			case F32 -> return 32;
+			case F64 -> return 64;
+			case F128 -> return 128;
+		}
+	}
 }
 
 variant FunctionBody {
@@ -2654,6 +2673,17 @@ variant Value {
 			case Type: value -> return value;
 			default -> return Type::unknown();
 		}
+	}
+}
+
+func format(float_type: FloatType) -> String {
+	match float_type {
+		case None -> return "none";
+		case F16 -> return "f16";
+		case Bf16 -> return "bf16";
+		case F32 -> return "f32";
+		case F64 -> return "f64";
+		case F128 -> return "f128";
 	}
 }
 

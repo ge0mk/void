@@ -158,8 +158,6 @@ func main(args: Range!<String, false>) -> int {
 
 		program.createFunctionTypeTemplate(ns);
 
-		program.createFloatTypeTemplate(ns);
-
 		program.createRangeTypeTemplate(ns);
 		program.createRangeIteratorTypeTemplate(ns);
 		program.createNumericRangeTypeTemplate(ns);
@@ -190,6 +188,12 @@ func main(args: Range!<String, false>) -> int {
 		discard program.createFunction(ns, "swap", List!<TemplateParameterDecl>(1u, TemplateParameterDecl("Type", program.any_concept, false)), BuiltinFunction::PrimitiveOp(PrimitiveOp::Swap, Type::unknown()));
 
 		program.createArrayTypeTemplate(ns);
+
+		discard program.createFloatType(ns, FloatType::F16);
+		discard program.createFloatType(ns, FloatType::Bf16);
+		discard program.createFloatType(ns, FloatType::F32);
+		discard program.createFloatType(ns, FloatType::F64);
+		discard program.createFloatType(ns, FloatType::F128);
 	});
 
 	typechecker.registerPragma("generate_std_math_builtins", func (this: &&TCContext, program: &&Program, ns: SharedHandle!<Namespace>, span: Span) -> void {

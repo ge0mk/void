@@ -189,10 +189,13 @@ struct CGContext {
 					type.llvm_type = LLVMIntTypeInContext(this.llvm_context, bits);
 				}
 			}
-			case Float: bits -> match bits {
-				case 32 -> type.llvm_type = LLVMFloatTypeInContext(this.llvm_context);
-				case 64 -> type.llvm_type = LLVMDoubleTypeInContext(this.llvm_context);
-				default -> this.error("invalid size for float type: " + format(bits), type.span);
+			case Float: float_type -> match float_type {
+				case F16 -> type.llvm_type = LLVMHalfTypeInContext(this.llvm_context);
+				case Bf16 -> type.llvm_type = LLVMBFloatTypeInContext(this.llvm_context);
+				case F32 -> type.llvm_type = LLVMFloatTypeInContext(this.llvm_context);
+				case F64 -> type.llvm_type = LLVMDoubleTypeInContext(this.llvm_context);
+				case F128 -> type.llvm_type = LLVMFP128TypeInContext(this.llvm_context);
+				default -> this.error("invalid float type: " + format(float_type as int), type.span);
 			}
 			case Pointer | Function -> type.llvm_type = this.ptr_type;
 			case Vector: vector_type -> type.llvm_type = LLVMVectorType(this.getType(vector_type.element_type), vector_type.size);
