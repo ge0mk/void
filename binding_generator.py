@@ -15,6 +15,8 @@ def main(args):
 
 	builtin_types = {
 		"void": "void",
+		"bool": "bool",
+		"_Bool": "bool",
 
 		"int8_t": "i8",
 		"int16_t": "i16",
@@ -200,7 +202,7 @@ def main(args):
 		}
 
 	def parseTypedefDecl(decl, prev):
-		if "inner" in decl and "ownedTagDecl" in decl["inner"][0]:
+		if "inner" in decl and "ownedTagDecl" in decl["inner"][0] and prev:
 			id = decl["inner"][0]["ownedTagDecl"]["id"]
 			if prev["id"] == id:
 				prev["name"] = decl["name"]
