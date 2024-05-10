@@ -8,4 +8,4 @@ repository = "https://github.com/ge0mk/void"
 
 [grammars.void]
 repository = "https://github.com/ge0mk/tree-sitter-void"
-commit = "c4576f56dc31de0a7ac2a4fc63f60cf6289ac6ba"
+commit = "d11a2362b920f2fd27194322db85dcad7b8bf596"

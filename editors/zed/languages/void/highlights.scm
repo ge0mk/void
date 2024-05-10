@@ -65,6 +65,7 @@
 (import_stmt (identifier) @string)
 
 (type (operand (name (identifier) @type)))
+(type (operand (prefix_expr (operand (name (identifier) @type)))))
 (name (operand (name (identifier) @type)))
 (named_tuple_expr (identifier) @property)
 
