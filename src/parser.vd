@@ -1528,7 +1528,7 @@ struct Parser {
 			case StringLiteral -> {
 				const value = this.strings[this.tokens[this.index].data()];
 				this.next();
-				return this.file.addASTNode(Node::StringLiteralExpr((value: value, postfix: this.acceptLiteralPostfix()), start, Type::unknown(), false));
+				return this.file.addASTNode(Node::StringLiteralExpr((value: value, postfix: this.acceptLiteralPostfix(), temp_var: SharedHandle!<VarDecl>()), start, Type::unknown(), false));
 			}
 			case NumberLiteral -> {
 				const value = this.numbers[this.tokens[this.index].data()];

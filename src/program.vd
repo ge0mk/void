@@ -289,9 +289,9 @@ struct CompilationUnit {
 			case NumberLiteralExpr: &literal -> out.attribute(format(literal.value) + literal.postfix);
 			case CharLiteralExpr: &literal -> out.attribute("\'" + literal.value + "\'" + literal.postfix);
 			case StringLiteralExpr: &literal -> out.attribute("\"" + literal.value + "\"" + literal.postfix);
-			case ConstAggregateExpr: elements -> {
-				for i in 0u..elements.size() {
-					this.dump(&&out, elements[i], i == elements.size());
+			case ConstAggregateExpr: expr -> {
+				for i in 0u..expr.elements.size() {
+					this.dump(&&out, expr.elements[i], i == expr.elements.size());
 				}
 			}
 			case UnaryOperatorExpr: &operator_expr -> {
@@ -762,7 +762,8 @@ struct Program {
 	}
 
 	func createType(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, template_parameters: &List!<TemplateParameterDecl>, body: TypeBody) -> SharedHandle!<TypeDecl> {
-		var linked_namespace = this.getOrCreateChildNamespace(name, template_parameters, parent_namespace, parent_namespace.file);
+		const file = parent_namespace.file;
+		var linked_namespace = this.getOrCreateChildNamespace(name, template_parameters, parent_namespace, file);
 		var type_decl = this.types.append(TypeDecl(name, linked_namespace.template_parameters, body));
 
 		type_decl.parent_namespace = linked_namespace.parent;
@@ -1428,6 +1429,7 @@ struct FunctionDecl {
 
 	var variables: SharedList!<VarDecl>;
 	var parameters: List!<SharedHandle!<VarDecl>>;
+	var return_variable: SharedHandle!<VarDecl>;
 
 	var is_copy_constructor: bool;
 
@@ -1744,7 +1746,6 @@ struct Type {
 			| Vector
 			| Matrix
 			| Enum -> return true;
-			case Array: array_type -> return array_type.element_type.isPrimitive();
 			default -> return false;
 		}
 	}
@@ -2160,7 +2161,7 @@ variant Node {
 	case CharLiteralExpr: CharLiteralExpr;
 	case StringLiteralExpr: StringLiteralExpr;
 
-	case ConstAggregateExpr: List!<uint>;
+	case ConstAggregateExpr: (elements: List!<uint>, temp_var: SharedHandle!<VarDecl>);
 
 	case UnaryOperatorExpr: UnaryOperatorExpr;
 	case BinaryOperatorExpr: BinaryOperatorExpr;
@@ -2599,7 +2600,7 @@ alias ParsedName = (name: String, template_parameters: List!<uint>);
 
 alias NumberLiteralExpr = (value: ParsedNumber, postfix: String);
 alias CharLiteralExpr = (value: byte, postfix: String);
-alias StringLiteralExpr = (value: String, postfix: String);
+alias StringLiteralExpr = (value: String, postfix: String, temp_var: SharedHandle!<VarDecl>);
 
 alias UnaryOperatorExpr = (op: Operator, operand: uint);
 alias BinaryOperatorExpr = (op: Operator, lhs: uint, rhs: uint);

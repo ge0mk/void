@@ -153,9 +153,9 @@ struct Interpreter {
 			case FloatLiteralExpr: value -> return Ok(Value::Float(value, node.type));
 			case BoolLiteralExpr: value -> return Ok(Value::Integer(value as int, node.type));
 			case StringLiteralExpr: literal -> return Ok(Value::String(literal.value, node.type));
-			case ConstAggregateExpr: children -> {
+			case ConstAggregateExpr: expr -> {
 				var values: List!<Value>;
-				for child in children {
+				for child in expr.elements {
 					values.append(try this.interpret(this.getASTNode(child)));
 				}
 				return Ok(Value::Aggregate(values, node.type));

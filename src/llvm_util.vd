@@ -95,6 +95,10 @@ func verifyModule(module: LLVMModuleRef, failure_action: LLVMVerifierFailureActi
 	return result;
 }
 
+func LLVMGetEnumAttributeKindForName(name: String) -> u32 {
+	return LLVMGetEnumAttributeKindForName(name.data(), name.size());
+}
+
 func LLVMLookupIntrinsicID(name: String) -> u32 {
 	return LLVMLookupIntrinsicID(name.data(), name.size());
 }

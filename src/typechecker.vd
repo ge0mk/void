@@ -81,7 +81,6 @@ struct TCContext {
 	var scope_stack: List!<Scope>;
 	var current_return_type: Type;
 	var active_member_variables: Set!<uint>; // used to track (de-)initialized member variables in con/de-structors
-	var return_variable: SharedHandle!<VarDecl>;
 
 	// context for checking match expressions
 	var match_value: uint;
@@ -654,8 +653,11 @@ struct TCContext {
 			}
 			case NumberLiteralExpr: literal -> return this.checkNumberLiteralExpr(id, literal.value, literal.postfix, expected_type, span);
 			case CharLiteralExpr: literal -> return this.checkCharLiteralExpr(id, literal.value, literal.postfix, span);
-			case StringLiteralExpr -> {
-				this.setASTNodeType(id, this.getType(Name("String"), span));
+			case StringLiteralExpr: expr -> {
+				var result = expr;
+				const type = this.getType(Name("String"), span);
+				result.temp_var = this.current_function.createVariable(span, "#str", type, true, false);
+				this.replaceASTNode(id, Node::StringLiteralExpr(result, span, type, false));
 				return id;
 			}
 			case Name -> return this.checkNameExpr(id, expected_type, is_comptime || inside_comptime_region, span);
@@ -1131,12 +1133,10 @@ struct TCContext {
 		var prev_scope_stack = this.scope_stack;
 		var prev_current_return_type = this.current_return_type;
 		var prev_active_member_variables = this.active_member_variables;
-		var prev_return_variable = this.return_variable;
 
 		this.scope_stack.clear();
 		this.current_return_type = decl.return_type;
 		this.active_member_variables.clear();
-		this.return_variable = SharedHandle!<VarDecl>();
 
 		this.pushScope(ScopeKind::Function);
 
@@ -1159,22 +1159,27 @@ struct TCContext {
 		for parameter in decl.parameters {
 			// create a local copy of all parameters passed by value
 			if parameter.type.reference_kind == None {
-				var copy = decl.createVariable(decl.signature_span, parameter.name, parameter.type, false, false);
-				const parameter_expr = this.addASTNode(Node::VarInvokeExpr(parameter, decl.signature_span, parameter.type, false));
-
-				if parameter.is_shallow_parameter {
-					copy.constructor_call = this.addASTNode(Node::ShallowCopyExpr(ShallowCopyExpr(
-						this.addASTNode(Node::VarInvokeExpr(copy, decl.signature_span, copy.type.varRef(), false)),
-						parameter_expr,
-					), decl.signature_span, this.program.void_type, false));
-					copy.is_const = true;
+				if parameter.is_shallow_parameter && !parameter.type.isPrimitive() {
+					parameter.is_const = true;
+					this.addVariableToCurrentScope(parameter);
 				} else {
-					this.createConstructorCall(copy, List!<uint>(1u, parameter_expr));
-					this.createDestructorCall(copy);
-				}
+					var copy = decl.createVariable(decl.signature_span, parameter.name, parameter.type, false, false);
+					const parameter_expr = this.addASTNode(Node::VarInvokeExpr(parameter, decl.signature_span, parameter.type, false));
 
-				this.addVariableToCurrentScope(copy);
-				checked_body.append(this.addASTNode(Node::LifeTimeStart(copy, decl.signature_span, Type::unknown(), false)));
+					if parameter.is_shallow_parameter {
+						copy.constructor_call = this.addASTNode(Node::ShallowCopyExpr(ShallowCopyExpr(
+							this.addASTNode(Node::VarInvokeExpr(copy, decl.signature_span, copy.type.varRef(), false)),
+							parameter_expr,
+						), decl.signature_span, this.program.void_type, false));
+						copy.is_const = true;
+					} else {
+						this.createConstructorCall(copy, List!<uint>(1u, parameter_expr));
+						this.createDestructorCall(copy);
+					}
+
+					this.addVariableToCurrentScope(copy);
+					checked_body.append(this.addASTNode(Node::LifeTimeStart(copy, decl.signature_span, Type::unknown(), false)));
+				}
 			} else {
 				this.addVariableToCurrentScope(parameter);
 			}
@@ -1182,7 +1187,7 @@ struct TCContext {
 
 		if !decl.return_type.isUnknown(){
 			if decl.return_type != this.program.void_type && decl.return_type != this.program.never_type {
-				this.return_variable = decl.createVariable(decl.signature_span, "#return_var", decl.return_type, false, false);
+				decl.return_variable = decl.createVariable(decl.signature_span, "#return_var", decl.return_type, false, false);
 			}
 		}
 
@@ -1256,7 +1261,6 @@ struct TCContext {
 		this.scope_stack = prev_scope_stack;
 		this.current_return_type = prev_current_return_type;
 		this.active_member_variables = prev_active_member_variables;
-		this.return_variable = prev_return_variable;
 	}
 
 	func checkTemplateParameterDecl(this: &&TCContext, unchecked_parameters: &List!<ParsedTemplateParameterDecl>) -> List!<TemplateParameterDecl> {
@@ -2084,7 +2088,7 @@ struct TCContext {
 		}
 
 		var parameters: List!<uint>;
-		parameters.append(this.addASTNode(Node::VarInvokeExpr(this.return_variable, span, this.current_return_type.varRef(), false)));
+		parameters.append(this.addASTNode(Node::VarInvokeExpr(this.current_function.return_variable, span, this.current_return_type.varRef(), false)));
 		parameters.append(value);
 
 		if this.current_return_type.reference_kind == None {
@@ -2093,11 +2097,15 @@ struct TCContext {
 			result.append(this.addASTNode(Node::ShallowCopyExpr(ShallowCopyExpr(parameters[0u], parameters[1u]), span, this.program.void_type, false)));
 		}
 
-		value = this.addASTNode(Node::VarInvokeExpr(this.return_variable, span, this.current_return_type.varRef(), false));
+		if this.current_function.return_type.isPrimitive() {
+			value = this.addASTNode(Node::VarInvokeExpr(this.current_function.return_variable, span, this.current_return_type.varRef(), false));
 
-		if this.current_return_type.reference_kind == None {
-			value = this.addASTNode(Node::DereferenceExpr(value, span, this.current_return_type, false));
-			this.setASTNodeType(value, this.current_return_type);
+			if this.current_return_type.reference_kind == None {
+				value = this.addASTNode(Node::DereferenceExpr(value, span, this.current_return_type, false));
+				this.setASTNodeType(value, this.current_return_type);
+			}
+		} else {
+			value = this.addASTNode(Node::Empty(span, this.program.void_type, false));
 		}
 
 		result.append(value_cleanup);
@@ -2300,19 +2308,13 @@ struct TCContext {
 		template_parameters.append(TemplateParameter::Integer(elements.size() as int));
 		const result_type = this.getType(Name("Array", template_parameters), span);
 
-		const temporary_variable = this.createTemporaryVariable(
-			result_type,
-			List!<TemplateParameter>(),
-			List!<uint>(1u, this.addASTNode(Node::ConstAggregateExpr(elements, span, result_type, false))),
-			is_comptime,
-			span
-		);
-
-		if temporary_variable is Garbage {
-			return this.getGarbageNode();
-		}
-
-		this.replaceASTNode(id, temporary_variable);
+		const result = this.addASTNode(Node::ConstAggregateExpr(
+			(
+				elements: elements,
+				temp_var: this.current_function.createVariable(span, "#agg", result_type, true, is_comptime)
+			), span, result_type.constRef(), is_comptime
+		));
+		this.replaceASTNode(id, Node::DereferenceExpr(result, span, result_type, is_comptime));
 		return id;
 	}
 
@@ -3614,7 +3616,7 @@ struct TCContext {
 				));
 			}
 
-			if required_parameter_types[i].reference_kind != None {
+			if required_parameter_types[i].reference_kind != None || !required_parameter_types[i].isPrimitive() {
 				arguments[i] = this.removeDereference(arguments[i]);
 			}
 
@@ -3637,6 +3639,15 @@ struct TCContext {
 
 			if type.reference_kind == Var && required_parameter_types[i].reference_kind == Const {
 				continue;
+			}
+
+			if !required_parameter_types[i].isPrimitive() {
+				if type.reference_kind == None {
+					this.error("non-primitive types must be passed by reference", span);
+					return false;
+				} else {
+					continue;
+				}
 			}
 
 			this.error("invalid parameter type for call", span);
@@ -4635,7 +4646,7 @@ struct TCContext {
 			case Void -> return Node::Empty(span, value.type, false);
 			case Integer: v -> return Node::IntegerLiteralExpr(v, span, value.type, false);
 			case Float: v -> return Node::FloatLiteralExpr(v, span, value.type, false);
-			case String: v -> return Node::StringLiteralExpr(StringLiteralExpr(v, ""), span, value.type, false);
+			case String: v -> return Node::StringLiteralExpr(StringLiteralExpr(v, "", this.current_function.createVariable(span, "#str", value.type, true, false)), span, value.type, false);
 			case Pointer -> {
 				this.error("comptime pointers can't be added to the ast", span);
 				return Node::Garbage(span, value.type, false);
@@ -4645,7 +4656,10 @@ struct TCContext {
 				for &c in children {
 					converted_children.append(this.addASTNode(this.comptimeValueToASTNode(c, span)));
 				}
-				return Node::ConstAggregateExpr(converted_children, span, value.type, false);
+				return Node::ConstAggregateExpr((
+					elements: converted_children,
+					temp_var: this.current_function.createVariable(span, "#agg", value.type, true, false)
+				), span, value.type.constRef(), false);
 			}
 			case Type: type -> return Node::TypeRefExpr(type, span, value.type, false);
 			case Function: function -> return Node::FunctionRefExpr(function, span, value.type, false);

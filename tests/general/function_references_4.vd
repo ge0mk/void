@@ -1,0 +1,21 @@
+import std/core;
+
+struct Foo {
+	var x: uint;
+
+	func constructor(this: &&Foo, x: uint) -> void {
+		this.x := x;
+	}
+
+	func constructor(this: &&Foo, other: Foo) -> void = default;
+	func destructor(this: &&Foo) -> void = default;
+}
+
+func bar() -> Foo {
+	return Foo(42u);
+}
+
+func main() -> void {
+	const f = func& bar();
+	assert(f().x == 42);
+}

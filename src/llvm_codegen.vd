@@ -27,6 +27,12 @@ struct CGContext {
 	var int_type: LLVMTypeRef;
 	var ptr_type: LLVMTypeRef;
 
+	var sret_attribute_kind: u32;
+	var byval_attribute_kind: u32;
+	var byref_attribute_kind: u32;
+	var writable_attribute_kind: u32;
+	var noundef_attribute_kind: u32;
+
 	var global_variables: Map!<SharedHandle!<VarDecl>, LLVMValueRef>;
 
 	var builder: LLVMBuilderRef;
@@ -50,6 +56,12 @@ struct CGContext {
 		this.byte_type := LLVMIntTypeInContext(this.llvm_context, 8u);
 		this.int_type := LLVMIntTypeInContext(this.llvm_context, LLVMPointerSize(this.data_layout) as uint * 8);
 		this.ptr_type := LLVMPointerTypeInContext(this.llvm_context, 0u);
+
+		this.sret_attribute_kind := LLVMGetEnumAttributeKindForName("sret");
+		this.byval_attribute_kind := LLVMGetEnumAttributeKindForName("byval");
+		this.byref_attribute_kind := LLVMGetEnumAttributeKindForName("byref");
+		this.writable_attribute_kind := LLVMGetEnumAttributeKindForName("writable");
+		this.noundef_attribute_kind := LLVMGetEnumAttributeKindForName("noundef");
 	}
 
 	func destructor(this: &&CGContext) -> void = default;
@@ -473,8 +485,17 @@ struct CGContext {
 			return_type = this.int_type;
 		} else {
 			for type in function.parameter_types {
-				parameter_types.append(this.getType(type));
+				if !type.isPrimitive() {
+					parameter_types.append(this.ptr_type);
+				} else {
+					parameter_types.append(this.getType(type));
+				}
 			}
+		}
+
+		if !function.return_type.isPrimitive() {
+			parameter_types.insert(0u, this.ptr_type);
+			return_type = this.void_type;
 		}
 
 		const function_type = LLVMFunctionType(return_type, parameter_types, false);
@@ -494,6 +515,23 @@ struct CGContext {
 		}
 
 		function.llvm_func = LLVMAddFunction(this.llvm_module, name, function_type);
+
+		if !function.return_type.isPrimitive() {
+			const sret_attribute = LLVMCreateTypeAttribute(this.llvm_context, this.sret_attribute_kind, this.getType(function.return_type));
+			LLVMAddAttributeAtIndex(function.llvm_func, 1u as LLVMAttributeIndex, sret_attribute);
+		}
+
+		if function != this.program.main_function {
+			for i in 0u..function.parameter_types.size() {
+				const index = i + 1 + (!function.return_type.isPrimitive()) as uint;
+				if !function.parameter_types[i].isPrimitive() {
+					const byval_attribute = LLVMCreateTypeAttribute(this.llvm_context, this.byval_attribute_kind, this.getType(function.parameter_types[i]));
+					LLVMAddAttributeAtIndex(function.llvm_func, index as LLVMAttributeIndex, byval_attribute);
+					const noundef_attribute = LLVMCreateEnumAttribute(this.llvm_context, this.noundef_attribute_kind, 1u64);
+					LLVMAddAttributeAtIndex(function.llvm_func, index as LLVMAttributeIndex, noundef_attribute);
+				}
+			}
+		}
 	}
 
 	func codegenFunctionBody(this: &&CGContext, function: SharedHandle!<FunctionDecl>) -> void {
@@ -585,9 +623,16 @@ struct CGContext {
 						var args = LLVMConstNull(this.getType(function.parameter_types[0u]));
 						args = LLVMBuildInsertValue(this.builder, args, LLVMGetParam(this.current_function, 0u), 0u, "");
 						args = LLVMBuildInsertValue(this.builder, args, LLVMGetParam(this.current_function, 1u), 1u, "");
-						this.variables.set(variable, args);
+						const tmp = LLVMBuildAlloca(this.builder, this.getType(variable.type), "");
+						discard LLVMBuildStore(this.builder, args, tmp);
+						this.variables.set(variable, tmp);
 					} else {
-						const parameter = LLVMGetParam(this.current_function, variable.id);
+						var parameter_id = variable.id;
+						if !function.return_type.isPrimitive() {
+							parameter_id += 1;
+						}
+
+						const parameter = LLVMGetParam(this.current_function, parameter_id);
 						this.variables.set(variable, parameter);
 
 						if this.program.options.generate_debug_info {
@@ -613,6 +658,8 @@ struct CGContext {
 							);
 						}
 					}
+				} else if variable.name == "#return_var" && !function.return_type.isPrimitive() {
+					this.variables.set(variable, LLVMGetParam(this.current_function, 0u));
 				} else {
 					this.setCurrentDebugLocation(variable.span);
 					const address = LLVMBuildAlloca(this.builder, this.getType(variable.type), variable.name);
@@ -650,7 +697,7 @@ struct CGContext {
 
 		// codegen body
 		match function.body {
-			case Builtin: builtin_function -> this.codegenBuiltinFunction(builtin_function, function.signature_span);
+			case Builtin: builtin_function -> this.codegenBuiltinFunction(builtin_function, function.parameter_types, function.return_type, function.signature_span);
 			case Stmt: &stmt -> discard this.codegenNode(this.getASTNode(stmt));
 			default -> panic("invalid function body for codegen");
 		}
@@ -678,7 +725,7 @@ struct CGContext {
 		this.variables = prev_variables;
 	}
 
-	func codegenBuiltinFunction(this: &&CGContext, function: BuiltinFunction, signature_span: Span) -> void {
+	func codegenBuiltinFunction(this: &&CGContext, function: BuiltinFunction, parameter_types: List!<Type>, return_type: Type, signature_span: Span) -> void {
 		const type = this.getType(function.base_type);
 		const decl = function.base_type.decl;
 
@@ -716,17 +763,18 @@ struct CGContext {
 			}
 			case StructCopyConstructor -> {
 				for i in 0u..decl.member_variables.size() {
+					const member_type = decl.member_variables[i].type;
 					const member_ptr = LLVMBuildStructGEP2(this.builder, type, param0, i, "");
-					const initializer = LLVMBuildExtractValue(this.builder, param1, i, "");
+					var initializer = LLVMBuildStructGEP2(this.builder, type, param1, i, "");
+					if member_type.isPrimitive() {
+						initializer = LLVMBuildLoad2(this.builder, this.getType(member_type), initializer, "");
+					}
 
-					if decl.member_variables[i].type.reference_kind == None {
-						const member_type = decl.member_variables[i].type.decl;
-
+					if member_type.reference_kind == None {
 						var parameters: List!<LLVMValueRef>;
 						parameters.append(member_ptr);
 						parameters.append(initializer);
-
-						discard this.codegenCall(member_type.copy_constructor, parameters, ReturnKind::None, signature_span);
+						discard this.codegenCall(member_type.decl.copy_constructor, parameters, ReturnKind::None, signature_span);
 					} else {
 						discard LLVMBuildStore(this.builder, initializer, member_ptr);
 					}
@@ -753,17 +801,18 @@ struct CGContext {
 			}
 			case StructOpAssign -> {
 				for i in 0u..decl.member_variables.size() {
+					const member_type = decl.member_variables[i].type;
 					const member_ptr = LLVMBuildStructGEP2(this.builder, type, param0, i, "");
-					const initializer = LLVMBuildExtractValue(this.builder, param1, i, "");
+					var initializer = LLVMBuildStructGEP2(this.builder, type, param1, i, "");
+					if member_type.isPrimitive() {
+						initializer = LLVMBuildLoad2(this.builder, this.getType(member_type), initializer, "");
+					}
 
-					if decl.member_variables[i].type.reference_kind == None {
-						const member_type = decl.member_variables[i].type.decl;
-
+					if member_type.reference_kind == None {
 						var parameters: List!<LLVMValueRef>;
 						parameters.append(member_ptr);
 						parameters.append(initializer);
-
-						discard this.codegenCall(member_type.op_assign, parameters, ReturnKind::None, signature_span);
+						discard this.codegenCall(member_type.decl.op_assign, parameters, ReturnKind::None, signature_span);
 					} else {
 						discard LLVMBuildStore(this.builder, initializer, member_ptr);
 					}
@@ -819,15 +868,14 @@ struct CGContext {
 			}
 			case VariantCopyConstructor -> {
 				const id_type = this.getType(decl.id_type);
-				const id_ptr = LLVMBuildStructGEP2(this.builder, type, param0, 0u, "");
+
+				const this_id_ptr = LLVMBuildStructGEP2(this.builder, type, param0, 0u, "");
+				const other_id_ptr = LLVMBuildStructGEP2(this.builder, type, param1, 0u, "");
 				const this_payload_ptr = LLVMBuildStructGEP2(this.builder, type, param0, 1u, "");
+				const other_payload_ptr = LLVMBuildStructGEP2(this.builder, type, param1, 1u, "");
 
-				const other_payload_ptr = LLVMBuildAlloca(this.builder, LLVMStructGetTypeAtIndex(type, 1u), "");
-				discard LLVMBuildStore(this.builder, LLVMBuildExtractValue(this.builder, param1, 1u, ""), other_payload_ptr);
-
-				const other_id = LLVMBuildExtractValue(this.builder, param1, 0u, "");
-				discard LLVMBuildStore(this.builder, other_id, id_ptr);
-
+				const id = LLVMBuildLoad2(this.builder, id_type, other_id_ptr, "");
+				discard LLVMBuildStore(this.builder, id, this_id_ptr);
 				discard LLVMBuildStore(this.builder, LLVMConstNull(LLVMStructGetTypeAtIndex(type, 1u32)), this_payload_ptr);
 
 				const cont_block = LLVMAppendBasicBlockInContext(this.llvm_context, this.current_function, "cont");
@@ -839,9 +887,10 @@ struct CGContext {
 					}
 				}
 
-				var switch_instr = LLVMBuildSwitch(this.builder, other_id, cont_block, case_count);
+				var switch_instr = LLVMBuildSwitch(this.builder, id, cont_block, case_count);
 
 				for case_decl in decl.variant_cases {
+					const case_type = case_decl.type;
 					if case_decl.type == this.program.void_type {
 						continue;
 					}
@@ -850,15 +899,16 @@ struct CGContext {
 					LLVMAddCase(switch_instr, LLVMConstInt(id_type, case_decl.id, false), case_block);
 					LLVMPositionBuilderAtEnd(this.builder, case_block);
 
-					const other_payload = LLVMBuildLoad2(this.builder, this.getType(case_decl.type), other_payload_ptr, "");
+					var other_payload = other_payload_ptr;
+					if case_type.isPrimitive() {
+						other_payload = LLVMBuildLoad2(this.builder, this.getType(case_type), other_payload_ptr, "");
+					}
 
-					if case_decl.type.reference_kind == None {
-						const case_type = case_decl.type.decl;
+					if case_type.reference_kind == None {
 						var parameters: List!<LLVMValueRef>;
 						parameters.append(this_payload_ptr);
 						parameters.append(other_payload);
-
-						discard this.codegenCall(case_type.copy_constructor, parameters, ReturnKind::None, signature_span);
+						discard this.codegenCall(case_type.decl.copy_constructor, parameters, ReturnKind::None, signature_span);
 					} else {
 						discard LLVMBuildStore(this.builder, other_payload, this_payload_ptr);
 					}
@@ -869,17 +919,18 @@ struct CGContext {
 				LLVMPositionBuilderAtEnd(this.builder, cont_block);
 
 				for i in 0u..decl.member_variables.size() {
+					const member_type = decl.member_variables[i].type;
 					const this_member_ptr = LLVMBuildStructGEP2(this.builder, type, param0, i + 2, "");
-					const other_member = LLVMBuildExtractValue(this.builder, param1, i + 2, "");
+					var other_member = LLVMBuildStructGEP2(this.builder, type, param1, i + 2, "");
+					if member_type.isPrimitive() {
+						other_member = LLVMBuildLoad2(this.builder, this.getType(member_type), other_member, "");
+					}
 
 					if decl.member_variables[i].type.reference_kind == None {
-						const member_type = decl.member_variables[i].type.decl;
-
 						var parameters: List!<LLVMValueRef>;
 						parameters.append(this_member_ptr);
 						parameters.append(other_member);
-
-						discard this.codegenCall(member_type.copy_constructor, parameters, ReturnKind::None, signature_span);
+						discard this.codegenCall(member_type.decl.copy_constructor, parameters, ReturnKind::None, signature_span);
 					} else {
 						discard LLVMBuildStore(this.builder, other_member, this_member_ptr);
 					}
@@ -940,18 +991,29 @@ struct CGContext {
 				discard LLVMBuildRetVoid(this.builder);
 			}
 			case VariantOpAssign -> {
+				const early_ret_block = LLVMAppendBasicBlockInContext(this.llvm_context, this.current_function, "early_ret");
+				const dest_payload_block = LLVMAppendBasicBlockInContext(this.llvm_context, this.current_function, "dest_payload");
+				const copy_payload_block = LLVMAppendBasicBlockInContext(this.llvm_context, this.current_function, "copy_payload");
+				const copy_members_block = LLVMAppendBasicBlockInContext(this.llvm_context, this.current_function, "copy_members");
+
+				const is_self_assignment = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntEQ, param0, param1, "");
+				discard LLVMBuildCondBr(this.builder, is_self_assignment, early_ret_block, dest_payload_block);
+
+				LLVMPositionBuilderAtEnd(this.builder, early_ret_block);
+				discard LLVMBuildRetVoid(this.builder);
+
+				LLVMPositionBuilderAtEnd(this.builder, dest_payload_block);
+
 				const id_type = this.getType(decl.id_type);
 				const payload_type = LLVMStructGetTypeAtIndex(type, 1u);
 
-				const id_ptr = LLVMBuildStructGEP2(this.builder, type, param0, 0u, "");
-				const this_id = LLVMBuildLoad2(this.builder, id_type, id_ptr, "");
+				const this_id_ptr = LLVMBuildStructGEP2(this.builder, type, param0, 0u, "");
+				const other_id_ptr = LLVMBuildStructGEP2(this.builder, type, param1, 0u, "");
 				const this_payload_ptr = LLVMBuildStructGEP2(this.builder, type, param0, 1u, "");
+				const other_payload_ptr = LLVMBuildStructGEP2(this.builder, type, param1, 1u, "");
 
-				const other_payload_ptr = LLVMBuildAlloca(this.builder, payload_type, "");
-				discard LLVMBuildStore(this.builder, LLVMBuildExtractValue(this.builder, param1, 1u, ""), other_payload_ptr);
-				const other_id = LLVMBuildExtractValue(this.builder, param1, 0u, "");
-
-				const payload_copy_ptr = LLVMBuildAlloca(this.builder, LLVMStructGetTypeAtIndex(type, 1u), "");
+				const this_id = LLVMBuildLoad2(this.builder, id_type, this_id_ptr, "");
+				const other_id = LLVMBuildLoad2(this.builder, id_type, other_id_ptr, "");
 
 				var copy_case_count = 0u;
 				var dest_case_count = 0u;
@@ -965,46 +1027,11 @@ struct CGContext {
 					}
 				}
 
-				// copy payload to temporary
-				const dest_block = LLVMAppendBasicBlockInContext(this.llvm_context, this.current_function, "cont");
-
-				var copy_switch_instr = LLVMBuildSwitch(this.builder, other_id, dest_block, copy_case_count);
-
-				for case_decl in decl.variant_cases {
-					if case_decl.type == this.program.void_type {
-						continue;
-					}
-
-					const case_block = LLVMAppendBasicBlockInContext(this.llvm_context, this.current_function, "case");
-					LLVMAddCase(copy_switch_instr, LLVMConstInt(id_type, case_decl.id, false), case_block);
-					LLVMPositionBuilderAtEnd(this.builder, case_block);
-
-					const other_payload = LLVMBuildLoad2(this.builder, this.getType(case_decl.type), other_payload_ptr, "");
-
-					if case_decl.type.reference_kind == None {
-						const case_type = case_decl.type.decl;
-						var parameters: List!<LLVMValueRef>;
-						parameters.append(payload_copy_ptr);
-						parameters.append(other_payload);
-
-						discard this.codegenCall(case_type.copy_constructor, parameters, ReturnKind::None, signature_span);
-					} else {
-						discard LLVMBuildStore(this.builder, other_payload, payload_copy_ptr);
-					}
-
-					discard LLVMBuildBr(this.builder, dest_block);
-				}
-
-				LLVMPositionBuilderAtEnd(this.builder, dest_block);
-
 				// destruct old payload
 				var case_destructor_args: List!<LLVMValueRef>;
 				case_destructor_args.append(this_payload_ptr);
 
-				const cont_block = LLVMAppendBasicBlockInContext(this.llvm_context, this.current_function, "cont");
-
-				var switch_instr = LLVMBuildSwitch(this.builder, this_id, cont_block, dest_case_count);
-
+				var switch_instr = LLVMBuildSwitch(this.builder, this_id, copy_payload_block, dest_case_count);
 				for case_decl in decl.variant_cases {
 					if case_decl.type == this.program.void_type || case_decl.type.reference_kind != None {
 						continue;
@@ -1018,28 +1045,56 @@ struct CGContext {
 
 					discard this.codegenCall(case_type.destructor, case_destructor_args, ReturnKind::None, signature_span);
 
-					discard LLVMBuildBr(this.builder, cont_block);
+					discard LLVMBuildBr(this.builder, copy_payload_block);
 				}
 
-				LLVMPositionBuilderAtEnd(this.builder, cont_block);
+				LLVMPositionBuilderAtEnd(this.builder, copy_payload_block);
+				discard LLVMBuildStore(this.builder, other_id, this_id_ptr);
 
-				// move temporary payload to this
-				discard LLVMBuildStore(this.builder, LLVMBuildLoad2(this.builder, payload_type, payload_copy_ptr, ""), this_payload_ptr);
-				discard LLVMBuildStore(this.builder, other_id, id_ptr);
+				var copy_switch_instr = LLVMBuildSwitch(this.builder, other_id, copy_members_block, copy_case_count);
+				for case_decl in decl.variant_cases {
+					const case_type = case_decl.type;
+					if case_type == this.program.void_type {
+						continue;
+					}
+
+					const case_block = LLVMAppendBasicBlockInContext(this.llvm_context, this.current_function, "case");
+					LLVMAddCase(copy_switch_instr, LLVMConstInt(id_type, case_decl.id, false), case_block);
+					LLVMPositionBuilderAtEnd(this.builder, case_block);
+
+					var other_payload = other_payload_ptr;
+					if case_type.isPrimitive() {
+						other_payload = LLVMBuildLoad2(this.builder, this.getType(case_type), other_payload_ptr, "");
+					}
+
+					if case_type.reference_kind == None {
+						var parameters: List!<LLVMValueRef>;
+						parameters.append(this_payload_ptr);
+						parameters.append(other_payload);
+						discard this.codegenCall(case_type.decl.copy_constructor, parameters, ReturnKind::None, signature_span);
+					} else {
+						discard LLVMBuildStore(this.builder, other_payload, this_payload_ptr);
+					}
+
+					discard LLVMBuildBr(this.builder, copy_members_block);
+				}
+
+				LLVMPositionBuilderAtEnd(this.builder, copy_members_block);
 
 				// assign member variables
 				for i in 0u..decl.member_variables.size() {
+					const member_type = decl.member_variables[i].type;
 					const member_ptr = LLVMBuildStructGEP2(this.builder, type, param0, i + 2, "");
-					const initializer = LLVMBuildExtractValue(this.builder, param1, i + 2, "");
+					var initializer = LLVMBuildStructGEP2(this.builder, type, param1, i + 2, "");
+					if member_type.isPrimitive() {
+						initializer = LLVMBuildLoad2(this.builder, this.getType(member_type), initializer, "");
+					}
 
-					if decl.member_variables[i].type.reference_kind == None {
-						const member_type = decl.member_variables[i].type.decl;
-
+					if member_type.reference_kind == None {
 						var parameters: List!<LLVMValueRef>;
 						parameters.append(member_ptr);
 						parameters.append(initializer);
-
-						discard this.codegenCall(member_type.op_assign, parameters, ReturnKind::None, signature_span);
+						discard this.codegenCall(member_type.decl.op_assign, parameters, ReturnKind::None, signature_span);
 					} else {
 						discard LLVMBuildStore(this.builder, initializer, member_ptr);
 					}
@@ -1056,15 +1111,11 @@ struct CGContext {
 					const data_block = LLVMAppendBasicBlockInContext(this.llvm_context, this.current_function, "data");
 
 					// store lhs & rhs on stack to access the payload in a safe way
-					const lhs_id = LLVMBuildExtractValue(this.builder, param0, 0u, "");
-					const lhs_data = LLVMBuildAlloca(this.builder, type, "");
-					discard LLVMBuildStore(this.builder, param0, lhs_data);
-					const lhs_payload_ptr = LLVMBuildStructGEP2(this.builder, type, lhs_data, 1u, "");
+					const lhs_id_ptr = LLVMBuildStructGEP2(this.builder, type, param0, 0u, "");
+					const lhs_id = LLVMBuildLoad2(this.builder, id_type, lhs_id_ptr, "");
 
-					const rhs_id = LLVMBuildExtractValue(this.builder, param1, 0u, "");
-					const rhs_data = LLVMBuildAlloca(this.builder, type, "");
-					discard LLVMBuildStore(this.builder, param1, rhs_data);
-					const rhs_payload_ptr = LLVMBuildStructGEP2(this.builder, type, rhs_data, 1u, "");
+					const rhs_id_ptr = LLVMBuildStructGEP2(this.builder, type, param1, 0u, "");
+					const rhs_id = LLVMBuildLoad2(this.builder, id_type, rhs_id_ptr, "");
 
 					const same_id = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntEQ, lhs_id, rhs_id, "");
 					discard LLVMBuildCondBr(this.builder, same_id, data_block, uneq_block);
@@ -1082,7 +1133,8 @@ struct CGContext {
 					var switch_instr = LLVMBuildSwitch(this.builder, lhs_id, cont_block, case_count);
 
 					for case_decl in decl.variant_cases {
-						if case_decl.type == this.program.void_type {
+						const case_type = case_decl.type;
+						if case_type == this.program.void_type {
 							continue;
 						}
 
@@ -1090,17 +1142,19 @@ struct CGContext {
 						LLVMAddCase(switch_instr, LLVMConstInt(id_type, case_decl.id, false), case_block);
 						LLVMPositionBuilderAtEnd(this.builder, case_block);
 
-						const lhs = LLVMBuildLoad2(this.builder, this.getType(case_decl.type), lhs_payload_ptr, "");
-						const rhs = LLVMBuildLoad2(this.builder, this.getType(case_decl.type), rhs_payload_ptr, "");
+						var lhs = LLVMBuildStructGEP2(this.builder, type, param0, 1u, "");
+						var rhs = LLVMBuildStructGEP2(this.builder, type, param1, 1u, "");
+						if case_type.isPrimitive() {
+							lhs = LLVMBuildLoad2(this.builder, this.getType(case_decl.type), lhs, "");
+							rhs = LLVMBuildLoad2(this.builder, this.getType(case_decl.type), rhs, "");
+						}
 
 						var equal = LLVMValueRef();
-						if case_decl.type.reference_kind == None {
-							const case_type = case_decl.type.decl;
+						if case_type.reference_kind == None {
 							var parameters: List!<LLVMValueRef>;
 							parameters.append(lhs);
 							parameters.append(rhs);
-
-							equal = this.codegenCall(case_type.op_equal, parameters, ReturnKind::Value, signature_span);
+							equal = this.codegenCall(case_type.decl.op_equal, parameters, ReturnKind::Value, signature_span);
 						} else {
 							equal = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntEQ, lhs, rhs, "");
 						}
@@ -1113,17 +1167,20 @@ struct CGContext {
 
 				const member_var_offset = function is VariantOpEqual ? 2u : 0u;
 				for i in 0u..decl.member_variables.size() {
-					const lhs = LLVMBuildExtractValue(this.builder, param0, i + member_var_offset, "");
-					const rhs = LLVMBuildExtractValue(this.builder, param1, i + member_var_offset, "");
+					const member_type = decl.member_variables[i].type;
+					var lhs = LLVMBuildStructGEP2(this.builder, type, param0, i + member_var_offset, "");
+					var rhs = LLVMBuildStructGEP2(this.builder, type, param1, i + member_var_offset, "");
+					if member_type.isPrimitive() {
+						lhs = LLVMBuildLoad2(this.builder, this.getType(member_type), lhs, "");
+						rhs = LLVMBuildLoad2(this.builder, this.getType(member_type), rhs, "");
+					}
 
 					var equal = LLVMValueRef();
 					if decl.member_variables[i].type.reference_kind == None {
-						const member_type = decl.member_variables[i].type.decl;
 						var parameters: List!<LLVMValueRef>;
 						parameters.append(lhs);
 						parameters.append(rhs);
-
-						equal = this.codegenCall(member_type.op_equal, parameters, ReturnKind::Value, signature_span);
+						equal = this.codegenCall(member_type.decl.op_equal, parameters, ReturnKind::Value, signature_span);
 					} else {
 						equal = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntEQ, lhs, rhs, "");
 					}
@@ -1147,19 +1204,25 @@ struct CGContext {
 				var cmp_blocks: List!<LLVMBasicBlockRef>;
 
 				for i in 0u..decl.member_variables.size() {
-					const lhs = LLVMBuildExtractValue(this.builder, param0, i, "");
-					const rhs = LLVMBuildExtractValue(this.builder, param1, i, "");
+					const member_type = decl.member_variables[i].type;
+					var lhs = LLVMBuildStructGEP2(this.builder, type, param0, i, "");
+					var rhs = LLVMBuildStructGEP2(this.builder, type, param1, i, "");
+					if member_type.isPrimitive() {
+						lhs = LLVMBuildLoad2(this.builder, this.getType(member_type), lhs, "");
+						rhs = LLVMBuildLoad2(this.builder, this.getType(member_type), rhs, "");
+					}
+
 					var parameters: List!<LLVMValueRef>;
 					parameters.append(lhs);
 					parameters.append(rhs);
 
 					var sign = LLVMValueRef();
-					if decl.member_variables[i].type.reference_kind == None {
-						const member_type = decl.member_variables[i].type.decl;
-						sign = this.codegenCall(member_type.op_compare, parameters, ReturnKind::Value, signature_span);
+					if member_type.reference_kind == None {
+						sign = this.codegenCall(member_type.decl.op_compare, parameters, ReturnKind::Value, signature_span);
 					} else {
-						sign = this.codegenInlineBuiltinFunctionCall(BuiltinFunction::PrimitiveOp(PrimitiveOp::Cmp, decl.member_variables[i].type), parameters);
+						sign = this.codegenInlineBuiltinFunctionCall(BuiltinFunction::PrimitiveOp(PrimitiveOp::Cmp, member_type), List!<Type>(2u, member_type), this.program.int_type, parameters, LLVMValueRef());
 					}
+
 					cmp_values.append(sign);
 					cmp_blocks.append(LLVMGetInsertBlock(this.builder));
 
@@ -1200,7 +1263,6 @@ struct CGContext {
 				// TODO: turn into a loop for better code size (llvm can unroll it for performance)
 				const array_type = (decl.body as Array).value();
 				const element_type = array_type.element_type;
-				const element_type_decl = element_type.decl;
 
 				for i in 0u..array_type.size {
 					var indices: List!<LLVMValueRef>;
@@ -1209,17 +1271,19 @@ struct CGContext {
 					const element_ptr = LLVMBuildGEP2(this.builder, type, param0, indices, "");
 
 					if !(function is ArrayCopyConstructor) {
-						discard this.codegenCall(element_type_decl.destructor, List!<LLVMValueRef>(1u, element_ptr), ReturnKind::None, signature_span);
+						discard this.codegenCall(element_type.decl.destructor, List!<LLVMValueRef>(1u, element_ptr), ReturnKind::None, signature_span);
 					}
 
 					if !(function is ArrayDestructor) {
-						const other_element = LLVMBuildExtractValue(this.builder, param1, i, "");
+						var other_element = LLVMBuildGEP2(this.builder, type, param1, indices, "");
+						if element_type.isPrimitive() {
+							other_element = LLVMBuildLoad2(this.builder, this.getType(element_type), other_element, "");
+						}
 
 						var parameters: List!<LLVMValueRef>;
 						parameters.append(element_ptr);
 						parameters.append(other_element);
-
-						discard this.codegenCall(element_type_decl.copy_constructor, parameters, ReturnKind::None, signature_span);
+						discard this.codegenCall(element_type.decl.copy_constructor, parameters, ReturnKind::None, signature_span);
 					}
 				}
 
@@ -1229,21 +1293,27 @@ struct CGContext {
 				// TODO: turn into a loop for better code size (llvm can unroll it for performance)
 				const array_type = (decl.body as Array).value();
 				const element_type = array_type.element_type;
-				const element_type_decl = element_type.decl;
 
 				const uneq_block = LLVMAppendBasicBlockInContext(this.llvm_context, this.current_function, "uneq");
 
 				for i in 0u..array_type.size {
-					const lhs = LLVMBuildExtractValue(this.builder, param0, i, "");
-					const rhs = LLVMBuildExtractValue(this.builder, param1, i, "");
+					var indices: List!<LLVMValueRef>;
+					indices.append(LLVMConstInt(this.int_type, 0, false));
+					indices.append(LLVMConstInt(this.int_type, i as int, false));
+
+					var lhs = LLVMBuildGEP2(this.builder, type, param0, indices, "");
+					var rhs = LLVMBuildGEP2(this.builder, type, param1, indices, "");
+					if element_type.isPrimitive() {
+						lhs = LLVMBuildLoad2(this.builder, this.getType(element_type), lhs, "");
+						rhs = LLVMBuildLoad2(this.builder, this.getType(element_type), rhs, "");
+					}
 
 					var equal = LLVMValueRef();
 					if element_type.reference_kind == None {
 						var parameters: List!<LLVMValueRef>;
 						parameters.append(lhs);
 						parameters.append(rhs);
-
-						equal = this.codegenCall(element_type_decl.op_equal, parameters, ReturnKind::Value, signature_span);
+						equal = this.codegenCall(element_type.decl.op_equal, parameters, ReturnKind::Value, signature_span);
 					} else {
 						equal = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntEQ, lhs, rhs, "");
 					}
@@ -1261,11 +1331,17 @@ struct CGContext {
 			}
 			default -> {
 				var parameters: List!<LLVMValueRef>;
-				for i in 0u32..LLVMCountParams(this.current_function) {
-					parameters.append(LLVMGetParam(this.current_function, i));
+				for i in 0u..parameter_types.size() {
+					const parameter_id = return_type.isPrimitive() ? i : i + 1;
+					parameters.append(LLVMGetParam(this.current_function, parameter_id));
 				}
 
-				discard LLVMBuildRet(this.builder, this.codegenInlineBuiltinFunctionCall(function, parameters));
+				const result = this.codegenInlineBuiltinFunctionCall(function, parameter_types, return_type, parameters, LLVMGetParam(this.current_function, 0u));
+				if return_type.isPrimitive() {
+					discard LLVMBuildRet(this.builder, result);
+				} else {
+					discard LLVMBuildRetVoid(this.builder);
+				}
 			}
 		}
 	}
@@ -1561,9 +1637,21 @@ struct CGContext {
 		}
 	}
 
-	func codegenInlineBuiltinFunctionCall(this: &&CGContext, function: BuiltinFunction, parameters: &List!<LLVMValueRef>) -> LLVMValueRef {
+	func codegenInlineBuiltinFunctionCall(this: &&CGContext, function: BuiltinFunction, parameter_types: &List!<Type>, return_type: Type, parameters: List!<LLVMValueRef>, return_var: LLVMValueRef) -> LLVMValueRef {
 		match function {
-			case PrimitiveOp: op -> return this.codegenPrimitiveOp(function.base_type, op, parameters);
+			case PrimitiveOp: op -> {
+				for i in 0u..parameters.size() {
+					if !parameter_types[i].isPrimitive() {
+						parameters[i] = LLVMBuildLoad2(this.builder, this.getType(parameter_types[i]), parameters[i], "");
+					}
+				}
+				const result = this.codegenPrimitiveOp(function.base_type, op, parameters);
+				if !return_type.isPrimitive() {
+					return LLVMBuildStore(this.builder, result, return_var);
+				} else {
+					return result;
+				}
+			}
 			case PointerToRef -> return parameters[0u];	// reference & pointer types are the same in llvm
 			case RefToPointer -> return parameters[0u];	// reference & pointer types are the same in llvm
 			case PointerCast -> return parameters[0u];	// all pointer types are the same in llvm
@@ -1586,17 +1674,24 @@ struct CGContext {
 			case FunctionPointerCall -> {
 				const function_type = (function.base_type.decl.body as Function).value();
 
-				const return_type = this.getType(function_type.return_type);
-				var parameter_types: List!<LLVMTypeRef>;
-				for p in function_type.parameter_types {
-					parameter_types.append(this.getType(p));
+				var callee_parameter_types: List!<LLVMTypeRef>;
+				if !function_type.return_type.isPrimitive() {
+					callee_parameter_types.append(this.ptr_type);
 				}
-				const llvm_function_type = LLVMFunctionType(return_type, parameter_types, false);
+				for p in function_type.parameter_types {
+					callee_parameter_types.append(p.isPrimitive() ? this.getType(p) : this.ptr_type);
+				}
+				const llvm_function_type = LLVMFunctionType(this.getType(return_type), callee_parameter_types, false);
 
-				const call_parameters = List!<LLVMValueRef>(parameters[1u..parameters.size()]);
+				var call_parameters = List!<LLVMValueRef>(parameters[1u..parameters.size()]);
+				if !function_type.return_type.isPrimitive() {
+					call_parameters.insert(0u, return_var);
+				}
+
 				const result = LLVMBuildCall2(this.builder, llvm_function_type, parameters[0u], call_parameters, "");
+				this.addCallSiteAttributes(result, function_type.parameter_types, return_type);
 
-				if return_type == this.void_type {
+				if return_type == this.program.void_type {
 					return LLVMValueRef();
 				} else {
 					return result;
@@ -1759,31 +1854,48 @@ struct CGContext {
 				return LLVMValueRef();
 			}
 
-			case RangeGetData -> return LLVMBuildExtractValue(this.builder, parameters[0u], 0u, "");
-			case RangeGetSize -> return LLVMBuildExtractValue(this.builder, parameters[0u], 1u, "");
+			case RangeGetData -> {
+				const range_type = this.getType(function.base_type);
+				const data_ptr = LLVMBuildStructGEP2(this.builder, range_type, parameters[0u], 0u, "");
+				return LLVMBuildLoad2(this.builder, this.ptr_type, data_ptr, "");
+			}
+			case RangeGetSize -> {
+				const range_type = this.getType(function.base_type);
+				const size_ptr = LLVMBuildStructGEP2(this.builder, range_type, parameters[0u], 1u, "");
+				return LLVMBuildLoad2(this.builder, this.int_type, size_ptr, "");
+			}
 			case RangeGetIterator: iterator_type -> {
+				const range_type = this.getType(function.base_type);
 				const pointee_type = (function.base_type.decl.template_parameters[0u].value as Type).value();
 
-				const begin = LLVMBuildExtractValue(this.builder, parameters[0u], 0u, "");
-				const size = LLVMBuildExtractValue(this.builder, parameters[0u], 1u, "");
+				const data_ptr = LLVMBuildStructGEP2(this.builder, range_type, parameters[0u], 0u, "");
+				const begin = LLVMBuildLoad2(this.builder, this.ptr_type, data_ptr, "");
+				const size_ptr = LLVMBuildStructGEP2(this.builder, range_type, parameters[0u], 1u, "");
+				const size = LLVMBuildLoad2(this.builder, this.int_type, size_ptr, "");
 				const end = LLVMBuildGEP2(this.builder, this.getType(pointee_type), begin, List!<LLVMValueRef>(1u, size), "");
 
 				var iterator = LLVMConstNull(this.getType(iterator_type));
 				iterator = LLVMBuildInsertValue(this.builder, iterator, begin, 0u, "");
 				iterator = LLVMBuildInsertValue(this.builder, iterator, end, 1u, "");
-				return iterator;
+				return LLVMBuildStore(this.builder, iterator, return_var);
 			}
 			case RangeIteratorHasNext -> {
-				const current = LLVMBuildExtractValue(this.builder, parameters[0u], 0u, "");
-				const next = LLVMBuildExtractValue(this.builder, parameters[0u], 1u, "");
-				return LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntULT, current, next, "");
+				const iterator_type = this.getType(function.base_type);
+
+				const current_ptr = LLVMBuildStructGEP2(this.builder, iterator_type, parameters[0u], 0u, "");
+				const current = LLVMBuildLoad2(this.builder, this.ptr_type, current_ptr, "");
+				const end_ptr = LLVMBuildStructGEP2(this.builder, iterator_type, parameters[0u], 1u, "");
+				const end = LLVMBuildLoad2(this.builder, this.ptr_type, end_ptr, "");
+
+				return LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntULT, current, end, "");
 			}
 			case RangeIteratorGetNext -> {
+				const iterator_type = this.getType(function.base_type);
 				const pointee_type = (function.base_type.decl.template_parameters[0u].value as Type).value();
-				const current_ptr = LLVMBuildStructGEP2(this.builder, this.getType(function.base_type), parameters[0u], 0u, "");
-				const current = LLVMBuildLoad2(this.builder, this.ptr_type, current_ptr, "");
 
-				const end_ptr = LLVMBuildStructGEP2(this.builder, this.getType(function.base_type), parameters[0u], 1u, "");
+				const current_ptr = LLVMBuildStructGEP2(this.builder, iterator_type, parameters[0u], 0u, "");
+				const current = LLVMBuildLoad2(this.builder, this.ptr_type, current_ptr, "");
+				const end_ptr = LLVMBuildStructGEP2(this.builder, iterator_type, parameters[0u], 1u, "");
 				const end = LLVMBuildLoad2(this.builder, this.ptr_type, end_ptr, "");
 
 				var assert_args: List!<LLVMValueRef>;
@@ -1808,14 +1920,19 @@ struct CGContext {
 				} else {
 					value = LLVMBuildInsertValue(this.builder, value, LLVMConstReal(this.getType(function.base_type), 1.0), 2u, "");
 				}
-				return value;
+				return LLVMBuildStore(this.builder, value, return_var);
 			}
 
-			case NumericRangeSetStep -> return LLVMBuildInsertValue(this.builder, parameters[0u], parameters[1u], 2u, "");
+			case NumericRangeSetStep -> {
+				var result = LLVMBuildLoad2(this.builder, this.getType(function.base_type), parameters[0u], "");
+				result = LLVMBuildInsertValue(this.builder, result, parameters[1u], 2u, "");
+				return LLVMBuildStore(this.builder, result, return_var);
+			}
 			case NumericRangeGetIterator: iterator_type -> {
+				const range = LLVMBuildLoad2(this.builder, this.getType(function.base_type), parameters[0u], "");
 				const numeric_type = function.base_type.decl.member_variables[0u].type;
-				const start = LLVMBuildExtractValue(this.builder, parameters[0u], 0u, "");
-				const end = LLVMBuildExtractValue(this.builder, parameters[0u], 1u, "");
+				const start = LLVMBuildExtractValue(this.builder, range, 0u, "");
+				const end = LLVMBuildExtractValue(this.builder, range, 1u, "");
 
 				var is_ascending: LLVMValueRef;
 				if numeric_type.isIntType(false) {
@@ -1825,7 +1942,7 @@ struct CGContext {
 					is_ascending = LLVMBuildFCmp(this.builder, LLVMRealPredicate::LLVMRealOLT, start, end, "");
 				}
 
-				var step = LLVMBuildExtractValue(this.builder, parameters[0u], 2u, "");
+				var step = LLVMBuildExtractValue(this.builder, range, 2u, "");
 				step = LLVMBuildSelect(
 					this.builder, is_ascending, step,
 					numeric_type.isIntType(false) ? LLVMBuildNeg(this.builder, step, "") : LLVMBuildFNeg(this.builder, step, ""),
@@ -1837,12 +1954,14 @@ struct CGContext {
 				iterator = LLVMBuildInsertValue(this.builder, iterator, end, 1u, "");
 				iterator = LLVMBuildInsertValue(this.builder, iterator, step, 2u, "");
 				iterator = LLVMBuildInsertValue(this.builder, iterator, is_ascending, 3u, "");
-				return iterator;
+
+				return LLVMBuildStore(this.builder, iterator, return_var);
 			}
 			case NumericIteratorHasNext: numeric_type -> {
-				const current = LLVMBuildExtractValue(this.builder, parameters[0u], 0u, "");
-				const end = LLVMBuildExtractValue(this.builder, parameters[0u], 1u, "");
-				const is_ascending = LLVMBuildExtractValue(this.builder, parameters[0u], 3u, "");
+				const iterator = LLVMBuildLoad2(this.builder, this.getType(function.base_type), parameters[0u], "");
+				const current = LLVMBuildExtractValue(this.builder, iterator, 0u, "");
+				const end = LLVMBuildExtractValue(this.builder, iterator, 1u, "");
+				const is_ascending = LLVMBuildExtractValue(this.builder, iterator, 3u, "");
 
 				var lt: LLVMValueRef;
 				var gt: LLVMValueRef;
@@ -1885,7 +2004,8 @@ struct CGContext {
 
 			case VariantOpIs: id -> {
 				const id_type = this.getType(function.base_type.decl.id_type);
-				const object_id = LLVMBuildExtractValue(this.builder, parameters[0u], 0u, "");
+				const id_ptr = LLVMBuildStructGEP2(this.builder, this.getType(function.base_type), parameters[0u], 0u, "");
+				const object_id = LLVMBuildLoad2(this.builder, id_type, id_ptr, "");
 				return LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntEQ, object_id, LLVMConstInt(id_type, id, false), "");
 			}
 
@@ -1945,14 +2065,19 @@ struct CGContext {
 				this.setCurrentDebugLocation(node.span);
 				discard LLVMBuildBr(this.builder, this.yield_target);
 			}
-			case ReturnStmt: &value -> {
+			case ReturnStmt: value -> {
 				if value == 0 && this.current_function_decl == this.program.main_function {
 					this.setCurrentDebugLocation(node.span);
 					discard LLVMBuildRet(this.builder, LLVMConstInt(this.int_type, 0, false));
 				} else {
 					const built_value = this.codegenNode(this.getASTNode(value));
 					this.setCurrentDebugLocation(node.span);
-					discard LLVMBuildRet(this.builder, built_value);
+
+					if this.current_function_decl.return_type.isPrimitive() {
+						discard LLVMBuildRet(this.builder, built_value);
+					} else {
+						discard LLVMBuildRetVoid(this.builder);
+					}
 				}
 			}
 			case LifeTimeStart: variable -> {
@@ -1976,13 +2101,17 @@ struct CGContext {
 				result = LLVMBuildInsertValue(this.builder, result, data_ptr, 0u, "");
 				result = LLVMBuildInsertValue(this.builder, result, LLVMConstInt(this.int_type, expr.value.size() as int, false), 1u, ""); // size
 				result = LLVMBuildInsertValue(this.builder, result, LLVMConstInt(this.int_type, expr.value.size() as int, false), 2u, ""); // capacity
+				discard LLVMBuildStore(this.builder, result, this.getVariable(expr.temp_var));
+				result = this.getVariable(expr.temp_var);
 			}
-			case ConstAggregateExpr: &elements -> {
-				result = LLVMConstNull(this.getType(node.type));
-				for i in 0u..elements.size() {
-					const element = this.codegenNode(this.getASTNode(elements[i]));
+			case ConstAggregateExpr: &expr -> {
+				result = LLVMConstNull(this.getType(node.type.base()));
+				for i in 0u..expr.elements.size() {
+					const element = this.codegenNode(this.getASTNode(expr.elements[i]));
 					result = LLVMBuildInsertValue(this.builder, result, element, i, "");
 				}
+				discard LLVMBuildStore(this.builder, result, this.getVariable(expr.temp_var));
+				result = this.getVariable(expr.temp_var);
 			}
 			case CallExpr: &call_expr -> {
 				var parameters: List!<LLVMValueRef>;
@@ -2287,7 +2416,11 @@ struct CGContext {
 			if for_stmt.enumerator_variable.type.reference_kind == None {
 				var parameters: List!<LLVMValueRef>;
 				parameters.append(this.getVariable(for_stmt.enumerator_variable));
-				parameters.append(LLVMBuildLoad2(this.builder, this.getType(element_type), phi, ""));
+				if element_type.isPrimitive() {
+					parameters.append(LLVMBuildLoad2(this.builder, this.getType(element_type), phi, ""));
+				} else {
+					parameters.append(phi);
+				}
 				discard this.codegenCall(element_type.decl.copy_constructor, parameters, ReturnKind::None, for_stmt.enumerator_variable.span);
 			} else {
 				discard LLVMBuildStore(this.builder, phi, this.getVariable(for_stmt.enumerator_variable));
@@ -2355,7 +2488,7 @@ struct CGContext {
 		return this.codegenCall(function, parameters, return_kind, SharedHandle!<VarDecl>(), span);
 	}
 
-	func codegenCall(this: &&CGContext, function: SharedHandle!<FunctionDecl>, parameters: &List!<LLVMValueRef>, return_kind: ReturnKind, result_var: SharedHandle!<VarDecl>, span: Span) -> LLVMValueRef {
+	func codegenCall(this: &&CGContext, function: SharedHandle!<FunctionDecl>, parameters: List!<LLVMValueRef>, return_kind: ReturnKind, result_var: SharedHandle!<VarDecl>, span: Span) -> LLVMValueRef {
 		this.setCurrentDebugLocation(span);
 
 		if return_kind is Parameter {
@@ -2365,31 +2498,54 @@ struct CGContext {
 		const result = match function.body {
 			case Builtin: builtin_function -> {
 				if builtin_function.isInlineable() {
-					yield this.codegenInlineBuiltinFunctionCall(builtin_function, parameters);
+					if function.return_type.isPrimitive() {
+						yield this.codegenInlineBuiltinFunctionCall(builtin_function, function.parameter_types, function.return_type, parameters, LLVMValueRef());
+					} else {
+						discard this.codegenInlineBuiltinFunctionCall(builtin_function, function.parameter_types, function.return_type, parameters, this.getVariable(result_var));
+						yield this.getVariable(result_var);
+					}
 				} else {
+					if !function.return_type.isPrimitive() && return_kind != Parameter {
+						parameters.insert(0u, this.getVariable(result_var));
+					}
 					const llvm_func = this.getFunction(function);
-					yield LLVMBuildCall2(this.builder, function.llvm_type, llvm_func, parameters, "");
+					const call = LLVMBuildCall2(this.builder, function.llvm_type, llvm_func, parameters, "");
+					this.addCallSiteAttributes(call, function.parameter_types, function.return_type);
+					yield call;
 				}
 			}
 			default -> {
+				if !function.return_type.isPrimitive() && return_kind != Parameter {
+					parameters.insert(0u, this.getVariable(result_var));
+				}
 				const llvm_func = this.getFunction(function);
-				yield LLVMBuildCall2(this.builder, function.llvm_type, llvm_func, parameters, "");
+				const call = LLVMBuildCall2(this.builder, function.llvm_type, llvm_func, parameters, "");
+				this.addCallSiteAttributes(call, function.parameter_types, function.return_type);
+				yield call;
 			}
 		}
 
 		match return_kind {
 			case None -> return LLVMValueRef();
 			case Value -> return result;
-			case Variable -> {
-				const built_result_var = this.getVariable(result_var);
-				discard LLVMBuildStore(this.builder, result, built_result_var);
-				return built_result_var;
-			}
-			case Parameter -> return this.getVariable(result_var);
-			case VariableButYieldNone -> {
-				const built_result_var = this.getVariable(result_var);
-				discard LLVMBuildStore(this.builder, result, built_result_var);
-				return LLVMValueRef();
+			case Variable | Parameter -> return this.getVariable(result_var);
+			case VariableButYieldNone -> return LLVMValueRef();
+		}
+	}
+
+	func addCallSiteAttributes(this: &&CGContext, call: LLVMValueRef, parameter_types: List!<Type>, return_type: Type) -> void {
+		if !return_type.isPrimitive() {
+			const sret_attribute = LLVMCreateTypeAttribute(this.llvm_context, this.sret_attribute_kind, this.getType(return_type));
+			LLVMAddCallSiteAttribute(call, 1u as LLVMAttributeIndex, sret_attribute);
+		}
+
+		for i in 0u..parameter_types.size() {
+			const index = i + 1 + (!return_type.isPrimitive()) as uint;
+			if !parameter_types[i].isPrimitive() {
+				const byval_attribute = LLVMCreateTypeAttribute(this.llvm_context, this.byval_attribute_kind, this.getType(parameter_types[i]));
+				LLVMAddCallSiteAttribute(call, index as LLVMAttributeIndex, byval_attribute);
+				const noundef_attribute = LLVMCreateEnumAttribute(this.llvm_context, this.noundef_attribute_kind, 1u64);
+				LLVMAddCallSiteAttribute(call, index as LLVMAttributeIndex, noundef_attribute);
 			}
 		}
 	}
