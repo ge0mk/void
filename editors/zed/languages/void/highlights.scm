@@ -64,10 +64,10 @@
 
 (import_stmt (identifier) @string)
 
-(type (operand (name (identifier) @type)))
-(type (operand (prefix_expr (operand (name (identifier) @type)))))
-(name (operand (name (identifier) @type)))
-(named_tuple_expr (identifier) @property)
+(type (name (identifier) @type))
+(type (prefix_expr (name (identifier) @type)))
+(name (name (identifier) @type))
+(named_tuple_element (identifier) @property)
 
 (parameter_decl (identifier) @variable.parameter)
 (var_decl (identifier) @variable)
@@ -75,7 +75,7 @@
 (for_stmt (identifier) @variable)
 
 (variant_case_decl (identifier) @constant)
-(match_case_decl (operand (name (identifier) @constant)))
+(match_case_decl (name (identifier) @constant))
 
 [
 	(bin_literal)
@@ -95,32 +95,10 @@
 (char_literal (identifier) @type)
 (string_literal (identifier) @type)
 
-(call_expr callee: (operand
-	(name (identifier) @function)
-))
-
-(operand
-	(member_access_expr rhs: (operand
-		(name (identifier) @property)
-	))
-)
-
-(call_expr callee: (operand
-	(member_access_expr rhs: (operand
-		(name (identifier) @function)
-	))
-))
-
-(operand
-	(namespace_expr (operand
-		(name (identifier) @type)
-	))
-)
-
-(call_expr callee: (operand
-	(namespace_expr rhs: (operand
-		(name (identifier) @function)
-	))
-))
+(call_expr callee: (name (identifier) @function))
+(member_access_expr rhs: (name (identifier) @property))
+(call_expr callee: (member_access_expr rhs: (name (identifier) @function)))
+(namespace_expr (name (identifier) @type))
+(call_expr callee: (namespace_expr rhs: (name (identifier) @function)))
 
 (comment) @comment
