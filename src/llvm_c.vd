@@ -52,10 +52,6 @@ struct LLVMOpaquePassManager {}
 
 alias LLVMPassManagerRef = ptr!<LLVMOpaquePassManager, true>;
 
-struct LLVMOpaquePassRegistry {}
-
-alias LLVMPassRegistryRef = ptr!<LLVMOpaquePassRegistry, true>;
-
 struct LLVMOpaqueUse {}
 
 alias LLVMUseRef = ptr!<LLVMOpaqueUse, true>;
@@ -81,6 +77,30 @@ alias LLVMJITEventListenerRef = ptr!<LLVMOpaqueJITEventListener, true>;
 struct LLVMOpaqueBinary {}
 
 alias LLVMBinaryRef = ptr!<LLVMOpaqueBinary, true>;
+
+enum LLVMVerifierFailureAction {
+	case LLVMAbortProcessAction;
+	case LLVMPrintMessageAction;
+	case LLVMReturnStatusAction;
+}
+
+func LLVMVerifyModule(M: LLVMModuleRef, Action: LLVMVerifierFailureAction, OutMessage: ptr!<ptr!<byte, true>, true>) -> LLVMBool = extern;
+func LLVMVerifyFunction(Fn: LLVMValueRef, Action: LLVMVerifierFailureAction) -> LLVMBool = extern;
+func LLVMViewFunctionCFG(Fn: LLVMValueRef) -> void = extern;
+func LLVMViewFunctionCFGOnly(Fn: LLVMValueRef) -> void = extern;
+func LLVMParseBitcode(MemBuf: LLVMMemoryBufferRef, OutModule: ptr!<LLVMModuleRef, true>, OutMessage: ptr!<ptr!<byte, true>, true>) -> LLVMBool = extern;
+func LLVMParseBitcode2(MemBuf: LLVMMemoryBufferRef, OutModule: ptr!<LLVMModuleRef, true>) -> LLVMBool = extern;
+func LLVMParseBitcodeInContext(ContextRef: LLVMContextRef, MemBuf: LLVMMemoryBufferRef, OutModule: ptr!<LLVMModuleRef, true>, OutMessage: ptr!<ptr!<byte, true>, true>) -> LLVMBool = extern;
+func LLVMParseBitcodeInContext2(ContextRef: LLVMContextRef, MemBuf: LLVMMemoryBufferRef, OutModule: ptr!<LLVMModuleRef, true>) -> LLVMBool = extern;
+func LLVMGetBitcodeModuleInContext(ContextRef: LLVMContextRef, MemBuf: LLVMMemoryBufferRef, OutM: ptr!<LLVMModuleRef, true>, OutMessage: ptr!<ptr!<byte, true>, true>) -> LLVMBool = extern;
+func LLVMGetBitcodeModuleInContext2(ContextRef: LLVMContextRef, MemBuf: LLVMMemoryBufferRef, OutM: ptr!<LLVMModuleRef, true>) -> LLVMBool = extern;
+func LLVMGetBitcodeModule(MemBuf: LLVMMemoryBufferRef, OutM: ptr!<LLVMModuleRef, true>, OutMessage: ptr!<ptr!<byte, true>, true>) -> LLVMBool = extern;
+func LLVMGetBitcodeModule2(MemBuf: LLVMMemoryBufferRef, OutM: ptr!<LLVMModuleRef, true>) -> LLVMBool = extern;
+func LLVMWriteBitcodeToFile(M: LLVMModuleRef, Path: ptr!<byte, false>) -> i32 = extern;
+func LLVMWriteBitcodeToFD(M: LLVMModuleRef, FD: i32, ShouldClose: i32, Unbuffered: i32) -> i32 = extern;
+func LLVMWriteBitcodeToFileHandle(M: LLVMModuleRef, Handle: i32) -> i32 = extern;
+func LLVMWriteBitcodeToMemoryBuffer(M: LLVMModuleRef) -> LLVMMemoryBufferRef = extern;
+
 alias LLVMFatalErrorHandler = (ptr!<byte, false>) -> void;
 
 func LLVMInstallFatalErrorHandler(Handler: LLVMFatalErrorHandler) -> void = extern;
@@ -388,12 +408,11 @@ enum LLVMModuleFlagBehavior {
 	case LLVMModuleFlagBehaviorAppendUnique;
 }
 
-enum LLVMAttributeIndex {
-	case LLVMAttributeReturnIndex = 0;
-	case LLVMAttributeFunctionIndex = -1;
-}
+comptime const LLVMAttributeReturnIndex = 0;
+comptime const LLVMAttributeFunctionIndex = -1;
 
-func LLVMInitializeCore(R: LLVMPassRegistryRef) -> void = extern;
+alias LLVMAttributeIndex = u32;
+
 func LLVMShutdown() -> void = extern;
 func LLVMGetVersion(Major: ptr!<u32, true>, Minor: ptr!<u32, true>, Patch: ptr!<u32, true>) -> void = extern;
 func LLVMCreateMessage(Message: ptr!<byte, false>) -> ptr!<byte, true> = extern;
@@ -410,7 +429,6 @@ func LLVMContextGetDiagnosticContext(C: LLVMContextRef) -> ptr!<byte, true> = ex
 func LLVMContextSetYieldCallback(C: LLVMContextRef, Callback: LLVMYieldCallback, OpaqueHandle: ptr!<byte, true>) -> void = extern;
 func LLVMContextShouldDiscardValueNames(C: LLVMContextRef) -> LLVMBool = extern;
 func LLVMContextSetDiscardValueNames(C: LLVMContextRef, Discard: LLVMBool) -> void = extern;
-func LLVMContextSetOpaquePointers(C: LLVMContextRef, OpaquePointers: LLVMBool) -> void = extern;
 func LLVMContextDispose(C: LLVMContextRef) -> void = extern;
 func LLVMGetDiagInfoDescription(DI: LLVMDiagnosticInfoRef) -> ptr!<byte, true> = extern;
 func LLVMGetDiagInfoSeverity(DI: LLVMDiagnosticInfoRef) -> LLVMDiagnosticSeverity = extern;
@@ -534,7 +552,9 @@ func LLVMGetElementType(Ty: LLVMTypeRef) -> LLVMTypeRef = extern;
 func LLVMGetSubtypes(Tp: LLVMTypeRef, Arr: ptr!<LLVMTypeRef, true>) -> void = extern;
 func LLVMGetNumContainedTypes(Tp: LLVMTypeRef) -> u32 = extern;
 func LLVMArrayType(ElementType: LLVMTypeRef, ElementCount: u32) -> LLVMTypeRef = extern;
+func LLVMArrayType2(ElementType: LLVMTypeRef, ElementCount: u64) -> LLVMTypeRef = extern;
 func LLVMGetArrayLength(ArrayTy: LLVMTypeRef) -> u32 = extern;
+func LLVMGetArrayLength2(ArrayTy: LLVMTypeRef) -> u64 = extern;
 func LLVMPointerType(ElementType: LLVMTypeRef, AddressSpace: u32) -> LLVMTypeRef = extern;
 func LLVMPointerTypeIsOpaque(Ty: LLVMTypeRef) -> LLVMBool = extern;
 func LLVMPointerTypeInContext(C: LLVMContextRef, AddressSpace: u32) -> LLVMTypeRef = extern;
@@ -652,6 +672,7 @@ func LLVMIsAAtomicCmpXchgInst(Val: LLVMValueRef) -> LLVMValueRef = extern;
 func LLVMIsAAtomicRMWInst(Val: LLVMValueRef) -> LLVMValueRef = extern;
 func LLVMIsAFenceInst(Val: LLVMValueRef) -> LLVMValueRef = extern;
 func LLVMIsAMDNode(Val: LLVMValueRef) -> LLVMValueRef = extern;
+func LLVMIsAValueAsMetadata(Val: LLVMValueRef) -> LLVMValueRef = extern;
 func LLVMIsAMDString(Val: LLVMValueRef) -> LLVMValueRef = extern;
 func LLVMGetValueName(Val: LLVMValueRef) -> ptr!<byte, false> = extern;
 func LLVMSetValueName(Val: LLVMValueRef, Name: ptr!<byte, false>) -> void = extern;
@@ -686,6 +707,7 @@ func LLVMGetAsString(c: LLVMValueRef, Length: ptr!<uint, true>) -> ptr!<byte, fa
 func LLVMConstStructInContext(C: LLVMContextRef, ConstantVals: ptr!<LLVMValueRef, true>, Count: u32, Packed: LLVMBool) -> LLVMValueRef = extern;
 func LLVMConstStruct(ConstantVals: ptr!<LLVMValueRef, true>, Count: u32, Packed: LLVMBool) -> LLVMValueRef = extern;
 func LLVMConstArray(ElementTy: LLVMTypeRef, ConstantVals: ptr!<LLVMValueRef, true>, Length: u32) -> LLVMValueRef = extern;
+func LLVMConstArray2(ElementTy: LLVMTypeRef, ConstantVals: ptr!<LLVMValueRef, true>, Length: u64) -> LLVMValueRef = extern;
 func LLVMConstNamedStruct(StructTy: LLVMTypeRef, ConstantVals: ptr!<LLVMValueRef, true>, Count: u32) -> LLVMValueRef = extern;
 func LLVMGetAggregateElement(C: LLVMValueRef, Idx: u32) -> LLVMValueRef = extern;
 func LLVMGetElementAsConstant(C: LLVMValueRef, idx: u32) -> LLVMValueRef = extern;
@@ -735,7 +757,6 @@ func LLVMConstTruncOrBitCast(ConstantVal: LLVMValueRef, ToType: LLVMTypeRef) -> 
 func LLVMConstPointerCast(ConstantVal: LLVMValueRef, ToType: LLVMTypeRef) -> LLVMValueRef = extern;
 func LLVMConstIntCast(ConstantVal: LLVMValueRef, ToType: LLVMTypeRef, isSigned: LLVMBool) -> LLVMValueRef = extern;
 func LLVMConstFPCast(ConstantVal: LLVMValueRef, ToType: LLVMTypeRef) -> LLVMValueRef = extern;
-func LLVMConstSelect(ConstantCondition: LLVMValueRef, ConstantIfTrue: LLVMValueRef, ConstantIfFalse: LLVMValueRef) -> LLVMValueRef = extern;
 func LLVMConstExtractElement(VectorConstant: LLVMValueRef, IndexConstant: LLVMValueRef) -> LLVMValueRef = extern;
 func LLVMConstInsertElement(VectorConstant: LLVMValueRef, ElementValueConstant: LLVMValueRef, IndexConstant: LLVMValueRef) -> LLVMValueRef = extern;
 func LLVMConstShuffleVector(VectorAConstant: LLVMValueRef, VectorBConstant: LLVMValueRef, MaskConstant: LLVMValueRef) -> LLVMValueRef = extern;
@@ -841,6 +862,7 @@ func LLVMValueAsMetadata(Val: LLVMValueRef) -> LLVMMetadataRef = extern;
 func LLVMGetMDString(V: LLVMValueRef, Length: ptr!<u32, true>) -> ptr!<byte, false> = extern;
 func LLVMGetMDNodeNumOperands(V: LLVMValueRef) -> u32 = extern;
 func LLVMGetMDNodeOperands(V: LLVMValueRef, Dest: ptr!<LLVMValueRef, true>) -> void = extern;
+func LLVMReplaceMDNodeOperandWith(V: LLVMValueRef, Index: u32, Replacement: LLVMMetadataRef) -> void = extern;
 func LLVMMDStringInContext(C: LLVMContextRef, Str: ptr!<byte, false>, SLen: u32) -> LLVMValueRef = extern;
 func LLVMMDString(Str: ptr!<byte, false>, SLen: u32) -> LLVMValueRef = extern;
 func LLVMMDNodeInContext(C: LLVMContextRef, Vals: ptr!<LLVMValueRef, true>, Count: u32) -> LLVMValueRef = extern;
@@ -1002,6 +1024,12 @@ func LLVMBuildNSWNeg(B: LLVMBuilderRef, V: LLVMValueRef, Name: ptr!<byte, false>
 func LLVMBuildNUWNeg(B: LLVMBuilderRef, V: LLVMValueRef, Name: ptr!<byte, false>) -> LLVMValueRef = extern;
 func LLVMBuildFNeg(_: LLVMBuilderRef, V: LLVMValueRef, Name: ptr!<byte, false>) -> LLVMValueRef = extern;
 func LLVMBuildNot(_: LLVMBuilderRef, V: LLVMValueRef, Name: ptr!<byte, false>) -> LLVMValueRef = extern;
+func LLVMGetNUW(ArithInst: LLVMValueRef) -> LLVMBool = extern;
+func LLVMSetNUW(ArithInst: LLVMValueRef, HasNUW: LLVMBool) -> void = extern;
+func LLVMGetNSW(ArithInst: LLVMValueRef) -> LLVMBool = extern;
+func LLVMSetNSW(ArithInst: LLVMValueRef, HasNSW: LLVMBool) -> void = extern;
+func LLVMGetExact(DivOrShrInst: LLVMValueRef) -> LLVMBool = extern;
+func LLVMSetExact(DivOrShrInst: LLVMValueRef, IsExact: LLVMBool) -> void = extern;
 func LLVMBuildMalloc(_: LLVMBuilderRef, Ty: LLVMTypeRef, Name: ptr!<byte, false>) -> LLVMValueRef = extern;
 func LLVMBuildArrayMalloc(_: LLVMBuilderRef, Ty: LLVMTypeRef, Val: LLVMValueRef, Name: ptr!<byte, false>) -> LLVMValueRef = extern;
 func LLVMBuildMemSet(B: LLVMBuilderRef, Ptr: LLVMValueRef, Val: LLVMValueRef, Len: LLVMValueRef, Align: u32) -> LLVMValueRef = extern;
@@ -1083,7 +1111,6 @@ func LLVMCreateMemoryBufferWithMemoryRangeCopy(InputData: ptr!<byte, false>, Inp
 func LLVMGetBufferStart(MemBuf: LLVMMemoryBufferRef) -> ptr!<byte, false> = extern;
 func LLVMGetBufferSize(MemBuf: LLVMMemoryBufferRef) -> uint = extern;
 func LLVMDisposeMemoryBuffer(MemBuf: LLVMMemoryBufferRef) -> void = extern;
-func LLVMGetGlobalPassRegistry() -> LLVMPassRegistryRef = extern;
 func LLVMCreatePassManager() -> LLVMPassManagerRef = extern;
 func LLVMCreateFunctionPassManagerForModule(M: LLVMModuleRef) -> LLVMPassManagerRef = extern;
 func LLVMCreateFunctionPassManager(MP: LLVMModuleProviderRef) -> LLVMPassManagerRef = extern;
@@ -1095,26 +1122,254 @@ func LLVMDisposePassManager(PM: LLVMPassManagerRef) -> void = extern;
 func LLVMStartMultithreaded() -> LLVMBool = extern;
 func LLVMStopMultithreaded() -> void = extern;
 func LLVMIsMultithreaded() -> LLVMBool = extern;
-func LLVMInitializeTransformUtils(R: LLVMPassRegistryRef) -> void = extern;
-func LLVMInitializeScalarOpts(R: LLVMPassRegistryRef) -> void = extern;
-func LLVMInitializeVectorization(R: LLVMPassRegistryRef) -> void = extern;
-func LLVMInitializeInstCombine(R: LLVMPassRegistryRef) -> void = extern;
-func LLVMInitializeIPO(R: LLVMPassRegistryRef) -> void = extern;
-func LLVMInitializeAnalysis(R: LLVMPassRegistryRef) -> void = extern;
-func LLVMInitializeIPA(R: LLVMPassRegistryRef) -> void = extern;
-func LLVMInitializeCodeGen(R: LLVMPassRegistryRef) -> void = extern;
-func LLVMInitializeTarget(R: LLVMPassRegistryRef) -> void = extern;
 
-enum LLVMVerifierFailureAction {
-	case LLVMAbortProcessAction;
-	case LLVMPrintMessageAction;
-	case LLVMReturnStatusAction;
+enum LLVMDIFlags {
+	case LLVMDIFlagZero = 0;
+	case LLVMDIFlagPrivate = 1;
+	case LLVMDIFlagProtected = 2;
+	case LLVMDIFlagPublic = 3;
+	case LLVMDIFlagFwdDecl = 4;
+	case LLVMDIFlagAppleBlock = 8;
+	case LLVMDIFlagReservedBit4 = 16;
+	case LLVMDIFlagVirtual = 32;
+	case LLVMDIFlagArtificial = 64;
+	case LLVMDIFlagExplicit = 128;
+	case LLVMDIFlagPrototyped = 256;
+	case LLVMDIFlagObjcClassComplete = 512;
+	case LLVMDIFlagObjectPointer = 1024;
+	case LLVMDIFlagVector = 2048;
+	case LLVMDIFlagStaticMember = 4096;
+	case LLVMDIFlagLValueReference = 8192;
+	case LLVMDIFlagRValueReference = 16384;
+	case LLVMDIFlagReserved = 32768;
+	case LLVMDIFlagSingleInheritance = 65536;
+	case LLVMDIFlagMultipleInheritance = 131072;
+	case LLVMDIFlagVirtualInheritance = 196608;
+	case LLVMDIFlagIntroducedVirtual = 262144;
+	case LLVMDIFlagBitField = 524288;
+	case LLVMDIFlagNoReturn = 1048576;
+	case LLVMDIFlagTypePassByValue = 4194304;
+	case LLVMDIFlagTypePassByReference = 8388608;
+	case LLVMDIFlagEnumClass = 16777216;
+	case LLVMDIFlagFixedEnum = 16777216;
+	case LLVMDIFlagThunk = 33554432;
+	case LLVMDIFlagNonTrivial = 67108864;
+	case LLVMDIFlagBigEndian = 134217728;
+	case LLVMDIFlagLittleEndian = 268435456;
+	case LLVMDIFlagIndirectVirtualBase = 36;
+	case LLVMDIFlagAccessibility = 3;
+	case LLVMDIFlagPtrToMemberRep = 196608;
 }
 
-func LLVMVerifyModule(M: LLVMModuleRef, Action: LLVMVerifierFailureAction, OutMessage: ptr!<ptr!<byte, true>, true>) -> LLVMBool = extern;
-func LLVMVerifyFunction(Fn: LLVMValueRef, Action: LLVMVerifierFailureAction) -> LLVMBool = extern;
-func LLVMViewFunctionCFG(Fn: LLVMValueRef) -> void = extern;
-func LLVMViewFunctionCFGOnly(Fn: LLVMValueRef) -> void = extern;
+enum LLVMDWARFSourceLanguage {
+	case LLVMDWARFSourceLanguageC89;
+	case LLVMDWARFSourceLanguageC;
+	case LLVMDWARFSourceLanguageAda83;
+	case LLVMDWARFSourceLanguageC_plus_plus;
+	case LLVMDWARFSourceLanguageCobol74;
+	case LLVMDWARFSourceLanguageCobol85;
+	case LLVMDWARFSourceLanguageFortran77;
+	case LLVMDWARFSourceLanguageFortran90;
+	case LLVMDWARFSourceLanguagePascal83;
+	case LLVMDWARFSourceLanguageModula2;
+	case LLVMDWARFSourceLanguageJava;
+	case LLVMDWARFSourceLanguageC99;
+	case LLVMDWARFSourceLanguageAda95;
+	case LLVMDWARFSourceLanguageFortran95;
+	case LLVMDWARFSourceLanguagePLI;
+	case LLVMDWARFSourceLanguageObjC;
+	case LLVMDWARFSourceLanguageObjC_plus_plus;
+	case LLVMDWARFSourceLanguageUPC;
+	case LLVMDWARFSourceLanguageD;
+	case LLVMDWARFSourceLanguagePython;
+	case LLVMDWARFSourceLanguageOpenCL;
+	case LLVMDWARFSourceLanguageGo;
+	case LLVMDWARFSourceLanguageModula3;
+	case LLVMDWARFSourceLanguageHaskell;
+	case LLVMDWARFSourceLanguageC_plus_plus_03;
+	case LLVMDWARFSourceLanguageC_plus_plus_11;
+	case LLVMDWARFSourceLanguageOCaml;
+	case LLVMDWARFSourceLanguageRust;
+	case LLVMDWARFSourceLanguageC11;
+	case LLVMDWARFSourceLanguageSwift;
+	case LLVMDWARFSourceLanguageJulia;
+	case LLVMDWARFSourceLanguageDylan;
+	case LLVMDWARFSourceLanguageC_plus_plus_14;
+	case LLVMDWARFSourceLanguageFortran03;
+	case LLVMDWARFSourceLanguageFortran08;
+	case LLVMDWARFSourceLanguageRenderScript;
+	case LLVMDWARFSourceLanguageBLISS;
+	case LLVMDWARFSourceLanguageKotlin;
+	case LLVMDWARFSourceLanguageZig;
+	case LLVMDWARFSourceLanguageCrystal;
+	case LLVMDWARFSourceLanguageC_plus_plus_17;
+	case LLVMDWARFSourceLanguageC_plus_plus_20;
+	case LLVMDWARFSourceLanguageC17;
+	case LLVMDWARFSourceLanguageFortran18;
+	case LLVMDWARFSourceLanguageAda2005;
+	case LLVMDWARFSourceLanguageAda2012;
+	case LLVMDWARFSourceLanguageMojo;
+	case LLVMDWARFSourceLanguageMips_Assembler;
+	case LLVMDWARFSourceLanguageGOOGLE_RenderScript;
+	case LLVMDWARFSourceLanguageBORLAND_Delphi;
+}
+
+enum LLVMDWARFEmissionKind {
+	case LLVMDWARFEmissionNone = 0;
+	case LLVMDWARFEmissionFull;
+	case LLVMDWARFEmissionLineTablesOnly;
+}
+
+comptime const LLVMMDStringMetadataKind = 0;
+comptime const LLVMConstantAsMetadataMetadataKind = 1;
+comptime const LLVMLocalAsMetadataMetadataKind = 2;
+comptime const LLVMDistinctMDOperandPlaceholderMetadataKind = 3;
+comptime const LLVMMDTupleMetadataKind = 4;
+comptime const LLVMDILocationMetadataKind = 5;
+comptime const LLVMDIExpressionMetadataKind = 6;
+comptime const LLVMDIGlobalVariableExpressionMetadataKind = 7;
+comptime const LLVMGenericDINodeMetadataKind = 8;
+comptime const LLVMDISubrangeMetadataKind = 9;
+comptime const LLVMDIEnumeratorMetadataKind = 10;
+comptime const LLVMDIBasicTypeMetadataKind = 11;
+comptime const LLVMDIDerivedTypeMetadataKind = 12;
+comptime const LLVMDICompositeTypeMetadataKind = 13;
+comptime const LLVMDISubroutineTypeMetadataKind = 14;
+comptime const LLVMDIFileMetadataKind = 15;
+comptime const LLVMDICompileUnitMetadataKind = 16;
+comptime const LLVMDISubprogramMetadataKind = 17;
+comptime const LLVMDILexicalBlockMetadataKind = 18;
+comptime const LLVMDILexicalBlockFileMetadataKind = 19;
+comptime const LLVMDINamespaceMetadataKind = 20;
+comptime const LLVMDIModuleMetadataKind = 21;
+comptime const LLVMDITemplateTypeParameterMetadataKind = 22;
+comptime const LLVMDITemplateValueParameterMetadataKind = 23;
+comptime const LLVMDIGlobalVariableMetadataKind = 24;
+comptime const LLVMDILocalVariableMetadataKind = 25;
+comptime const LLVMDILabelMetadataKind = 26;
+comptime const LLVMDIObjCPropertyMetadataKind = 27;
+comptime const LLVMDIImportedEntityMetadataKind = 28;
+comptime const LLVMDIMacroMetadataKind = 29;
+comptime const LLVMDIMacroFileMetadataKind = 30;
+comptime const LLVMDICommonBlockMetadataKind = 31;
+comptime const LLVMDIStringTypeMetadataKind = 32;
+comptime const LLVMDIGenericSubrangeMetadataKind = 33;
+comptime const LLVMDIArgListMetadataKind = 34;
+comptime const LLVMDIAssignIDMetadataKind = 35;
+
+alias LLVMMetadataKind = u32;
+alias LLVMDWARFTypeEncoding = u32;
+
+enum LLVMDWARFMacinfoRecordType {
+	case LLVMDWARFMacinfoRecordTypeDefine = 1;
+	case LLVMDWARFMacinfoRecordTypeMacro = 2;
+	case LLVMDWARFMacinfoRecordTypeStartFile = 3;
+	case LLVMDWARFMacinfoRecordTypeEndFile = 4;
+	case LLVMDWARFMacinfoRecordTypeVendorExt = 255;
+}
+
+func LLVMDebugMetadataVersion() -> u32 = extern;
+func LLVMGetModuleDebugMetadataVersion(Module: LLVMModuleRef) -> u32 = extern;
+func LLVMStripModuleDebugInfo(Module: LLVMModuleRef) -> LLVMBool = extern;
+func LLVMCreateDIBuilderDisallowUnresolved(M: LLVMModuleRef) -> LLVMDIBuilderRef = extern;
+func LLVMCreateDIBuilder(M: LLVMModuleRef) -> LLVMDIBuilderRef = extern;
+func LLVMDisposeDIBuilder(Builder: LLVMDIBuilderRef) -> void = extern;
+func LLVMDIBuilderFinalize(Builder: LLVMDIBuilderRef) -> void = extern;
+func LLVMDIBuilderFinalizeSubprogram(Builder: LLVMDIBuilderRef, Subprogram: LLVMMetadataRef) -> void = extern;
+func LLVMDIBuilderCreateCompileUnit(Builder: LLVMDIBuilderRef, Lang: LLVMDWARFSourceLanguage, FileRef: LLVMMetadataRef, Producer: ptr!<byte, false>, ProducerLen: uint, isOptimized: LLVMBool, Flags: ptr!<byte, false>, FlagsLen: uint, RuntimeVer: u32, SplitName: ptr!<byte, false>, SplitNameLen: uint, Kind: LLVMDWARFEmissionKind, DWOId: u32, SplitDebugInlining: LLVMBool, DebugInfoForProfiling: LLVMBool, SysRoot: ptr!<byte, false>, SysRootLen: uint, SDK: ptr!<byte, false>, SDKLen: uint) -> LLVMMetadataRef = extern;
+func LLVMDIBuilderCreateFile(Builder: LLVMDIBuilderRef, Filename: ptr!<byte, false>, FilenameLen: uint, Directory: ptr!<byte, false>, DirectoryLen: uint) -> LLVMMetadataRef = extern;
+func LLVMDIBuilderCreateModule(Builder: LLVMDIBuilderRef, ParentScope: LLVMMetadataRef, Name: ptr!<byte, false>, NameLen: uint, ConfigMacros: ptr!<byte, false>, ConfigMacrosLen: uint, IncludePath: ptr!<byte, false>, IncludePathLen: uint, APINotesFile: ptr!<byte, false>, APINotesFileLen: uint) -> LLVMMetadataRef = extern;
+func LLVMDIBuilderCreateNameSpace(Builder: LLVMDIBuilderRef, ParentScope: LLVMMetadataRef, Name: ptr!<byte, false>, NameLen: uint, ExportSymbols: LLVMBool) -> LLVMMetadataRef = extern;
+func LLVMDIBuilderCreateFunction(Builder: LLVMDIBuilderRef, Scope: LLVMMetadataRef, Name: ptr!<byte, false>, NameLen: uint, LinkageName: ptr!<byte, false>, LinkageNameLen: uint, File: LLVMMetadataRef, LineNo: u32, Ty: LLVMMetadataRef, IsLocalToUnit: LLVMBool, IsDefinition: LLVMBool, ScopeLine: u32, Flags: LLVMDIFlags, IsOptimized: LLVMBool) -> LLVMMetadataRef = extern;
+func LLVMDIBuilderCreateLexicalBlock(Builder: LLVMDIBuilderRef, Scope: LLVMMetadataRef, File: LLVMMetadataRef, Line: u32, Column: u32) -> LLVMMetadataRef = extern;
+func LLVMDIBuilderCreateLexicalBlockFile(Builder: LLVMDIBuilderRef, Scope: LLVMMetadataRef, File: LLVMMetadataRef, Discriminator: u32) -> LLVMMetadataRef = extern;
+func LLVMDIBuilderCreateImportedModuleFromNamespace(Builder: LLVMDIBuilderRef, Scope: LLVMMetadataRef, NS: LLVMMetadataRef, File: LLVMMetadataRef, Line: u32) -> LLVMMetadataRef = extern;
+func LLVMDIBuilderCreateImportedModuleFromAlias(Builder: LLVMDIBuilderRef, Scope: LLVMMetadataRef, ImportedEntity: LLVMMetadataRef, File: LLVMMetadataRef, Line: u32, Elements: ptr!<LLVMMetadataRef, true>, NumElements: u32) -> LLVMMetadataRef = extern;
+func LLVMDIBuilderCreateImportedModuleFromModule(Builder: LLVMDIBuilderRef, Scope: LLVMMetadataRef, M: LLVMMetadataRef, File: LLVMMetadataRef, Line: u32, Elements: ptr!<LLVMMetadataRef, true>, NumElements: u32) -> LLVMMetadataRef = extern;
+func LLVMDIBuilderCreateImportedDeclaration(Builder: LLVMDIBuilderRef, Scope: LLVMMetadataRef, Decl: LLVMMetadataRef, File: LLVMMetadataRef, Line: u32, Name: ptr!<byte, false>, NameLen: uint, Elements: ptr!<LLVMMetadataRef, true>, NumElements: u32) -> LLVMMetadataRef = extern;
+func LLVMDIBuilderCreateDebugLocation(Ctx: LLVMContextRef, Line: u32, Column: u32, Scope: LLVMMetadataRef, InlinedAt: LLVMMetadataRef) -> LLVMMetadataRef = extern;
+func LLVMDILocationGetLine(Location: LLVMMetadataRef) -> u32 = extern;
+func LLVMDILocationGetColumn(Location: LLVMMetadataRef) -> u32 = extern;
+func LLVMDILocationGetScope(Location: LLVMMetadataRef) -> LLVMMetadataRef = extern;
+func LLVMDILocationGetInlinedAt(Location: LLVMMetadataRef) -> LLVMMetadataRef = extern;
+func LLVMDIScopeGetFile(Scope: LLVMMetadataRef) -> LLVMMetadataRef = extern;
+func LLVMDIFileGetDirectory(File: LLVMMetadataRef, Len: ptr!<u32, true>) -> ptr!<byte, false> = extern;
+func LLVMDIFileGetFilename(File: LLVMMetadataRef, Len: ptr!<u32, true>) -> ptr!<byte, false> = extern;
+func LLVMDIFileGetSource(File: LLVMMetadataRef, Len: ptr!<u32, true>) -> ptr!<byte, false> = extern;
+func LLVMDIBuilderGetOrCreateTypeArray(Builder: LLVMDIBuilderRef, Data: ptr!<LLVMMetadataRef, true>, NumElements: uint) -> LLVMMetadataRef = extern;
+func LLVMDIBuilderCreateSubroutineType(Builder: LLVMDIBuilderRef, File: LLVMMetadataRef, ParameterTypes: ptr!<LLVMMetadataRef, true>, NumParameterTypes: u32, Flags: LLVMDIFlags) -> LLVMMetadataRef = extern;
+func LLVMDIBuilderCreateMacro(Builder: LLVMDIBuilderRef, ParentMacroFile: LLVMMetadataRef, Line: u32, RecordType: LLVMDWARFMacinfoRecordType, Name: ptr!<byte, false>, NameLen: uint, Value: ptr!<byte, false>, ValueLen: uint) -> LLVMMetadataRef = extern;
+func LLVMDIBuilderCreateTempMacroFile(Builder: LLVMDIBuilderRef, ParentMacroFile: LLVMMetadataRef, Line: u32, File: LLVMMetadataRef) -> LLVMMetadataRef = extern;
+func LLVMDIBuilderCreateEnumerator(Builder: LLVMDIBuilderRef, Name: ptr!<byte, false>, NameLen: uint, Value: i64, IsUnsigned: LLVMBool) -> LLVMMetadataRef = extern;
+func LLVMDIBuilderCreateEnumerationType(Builder: LLVMDIBuilderRef, Scope: LLVMMetadataRef, Name: ptr!<byte, false>, NameLen: uint, File: LLVMMetadataRef, LineNumber: u32, SizeInBits: u64, AlignInBits: u32, Elements: ptr!<LLVMMetadataRef, true>, NumElements: u32, ClassTy: LLVMMetadataRef) -> LLVMMetadataRef = extern;
+func LLVMDIBuilderCreateUnionType(Builder: LLVMDIBuilderRef, Scope: LLVMMetadataRef, Name: ptr!<byte, false>, NameLen: uint, File: LLVMMetadataRef, LineNumber: u32, SizeInBits: u64, AlignInBits: u32, Flags: LLVMDIFlags, Elements: ptr!<LLVMMetadataRef, true>, NumElements: u32, RunTimeLang: u32, UniqueId: ptr!<byte, false>, UniqueIdLen: uint) -> LLVMMetadataRef = extern;
+func LLVMDIBuilderCreateArrayType(Builder: LLVMDIBuilderRef, Size: u64, AlignInBits: u32, Ty: LLVMMetadataRef, Subscripts: ptr!<LLVMMetadataRef, true>, NumSubscripts: u32) -> LLVMMetadataRef = extern;
+func LLVMDIBuilderCreateVectorType(Builder: LLVMDIBuilderRef, Size: u64, AlignInBits: u32, Ty: LLVMMetadataRef, Subscripts: ptr!<LLVMMetadataRef, true>, NumSubscripts: u32) -> LLVMMetadataRef = extern;
+func LLVMDIBuilderCreateUnspecifiedType(Builder: LLVMDIBuilderRef, Name: ptr!<byte, false>, NameLen: uint) -> LLVMMetadataRef = extern;
+func LLVMDIBuilderCreateBasicType(Builder: LLVMDIBuilderRef, Name: ptr!<byte, false>, NameLen: uint, SizeInBits: u64, Encoding: LLVMDWARFTypeEncoding, Flags: LLVMDIFlags) -> LLVMMetadataRef = extern;
+func LLVMDIBuilderCreatePointerType(Builder: LLVMDIBuilderRef, PointeeTy: LLVMMetadataRef, SizeInBits: u64, AlignInBits: u32, AddressSpace: u32, Name: ptr!<byte, false>, NameLen: uint) -> LLVMMetadataRef = extern;
+func LLVMDIBuilderCreateStructType(Builder: LLVMDIBuilderRef, Scope: LLVMMetadataRef, Name: ptr!<byte, false>, NameLen: uint, File: LLVMMetadataRef, LineNumber: u32, SizeInBits: u64, AlignInBits: u32, Flags: LLVMDIFlags, DerivedFrom: LLVMMetadataRef, Elements: ptr!<LLVMMetadataRef, true>, NumElements: u32, RunTimeLang: u32, VTableHolder: LLVMMetadataRef, UniqueId: ptr!<byte, false>, UniqueIdLen: uint) -> LLVMMetadataRef = extern;
+func LLVMDIBuilderCreateMemberType(Builder: LLVMDIBuilderRef, Scope: LLVMMetadataRef, Name: ptr!<byte, false>, NameLen: uint, File: LLVMMetadataRef, LineNo: u32, SizeInBits: u64, AlignInBits: u32, OffsetInBits: u64, Flags: LLVMDIFlags, Ty: LLVMMetadataRef) -> LLVMMetadataRef = extern;
+func LLVMDIBuilderCreateStaticMemberType(Builder: LLVMDIBuilderRef, Scope: LLVMMetadataRef, Name: ptr!<byte, false>, NameLen: uint, File: LLVMMetadataRef, LineNumber: u32, Type: LLVMMetadataRef, Flags: LLVMDIFlags, ConstantVal: LLVMValueRef, AlignInBits: u32) -> LLVMMetadataRef = extern;
+func LLVMDIBuilderCreateMemberPointerType(Builder: LLVMDIBuilderRef, PointeeType: LLVMMetadataRef, ClassType: LLVMMetadataRef, SizeInBits: u64, AlignInBits: u32, Flags: LLVMDIFlags) -> LLVMMetadataRef = extern;
+func LLVMDIBuilderCreateObjCIVar(Builder: LLVMDIBuilderRef, Name: ptr!<byte, false>, NameLen: uint, File: LLVMMetadataRef, LineNo: u32, SizeInBits: u64, AlignInBits: u32, OffsetInBits: u64, Flags: LLVMDIFlags, Ty: LLVMMetadataRef, PropertyNode: LLVMMetadataRef) -> LLVMMetadataRef = extern;
+func LLVMDIBuilderCreateObjCProperty(Builder: LLVMDIBuilderRef, Name: ptr!<byte, false>, NameLen: uint, File: LLVMMetadataRef, LineNo: u32, GetterName: ptr!<byte, false>, GetterNameLen: uint, SetterName: ptr!<byte, false>, SetterNameLen: uint, PropertyAttributes: u32, Ty: LLVMMetadataRef) -> LLVMMetadataRef = extern;
+func LLVMDIBuilderCreateObjectPointerType(Builder: LLVMDIBuilderRef, Type: LLVMMetadataRef) -> LLVMMetadataRef = extern;
+func LLVMDIBuilderCreateQualifiedType(Builder: LLVMDIBuilderRef, Tag: u32, Type: LLVMMetadataRef) -> LLVMMetadataRef = extern;
+func LLVMDIBuilderCreateReferenceType(Builder: LLVMDIBuilderRef, Tag: u32, Type: LLVMMetadataRef) -> LLVMMetadataRef = extern;
+func LLVMDIBuilderCreateNullPtrType(Builder: LLVMDIBuilderRef) -> LLVMMetadataRef = extern;
+func LLVMDIBuilderCreateTypedef(Builder: LLVMDIBuilderRef, Type: LLVMMetadataRef, Name: ptr!<byte, false>, NameLen: uint, File: LLVMMetadataRef, LineNo: u32, Scope: LLVMMetadataRef, AlignInBits: u32) -> LLVMMetadataRef = extern;
+func LLVMDIBuilderCreateInheritance(Builder: LLVMDIBuilderRef, Ty: LLVMMetadataRef, BaseTy: LLVMMetadataRef, BaseOffset: u64, VBPtrOffset: u32, Flags: LLVMDIFlags) -> LLVMMetadataRef = extern;
+func LLVMDIBuilderCreateForwardDecl(Builder: LLVMDIBuilderRef, Tag: u32, Name: ptr!<byte, false>, NameLen: uint, Scope: LLVMMetadataRef, File: LLVMMetadataRef, Line: u32, RuntimeLang: u32, SizeInBits: u64, AlignInBits: u32, UniqueIdentifier: ptr!<byte, false>, UniqueIdentifierLen: uint) -> LLVMMetadataRef = extern;
+func LLVMDIBuilderCreateReplaceableCompositeType(Builder: LLVMDIBuilderRef, Tag: u32, Name: ptr!<byte, false>, NameLen: uint, Scope: LLVMMetadataRef, File: LLVMMetadataRef, Line: u32, RuntimeLang: u32, SizeInBits: u64, AlignInBits: u32, Flags: LLVMDIFlags, UniqueIdentifier: ptr!<byte, false>, UniqueIdentifierLen: uint) -> LLVMMetadataRef = extern;
+func LLVMDIBuilderCreateBitFieldMemberType(Builder: LLVMDIBuilderRef, Scope: LLVMMetadataRef, Name: ptr!<byte, false>, NameLen: uint, File: LLVMMetadataRef, LineNumber: u32, SizeInBits: u64, OffsetInBits: u64, StorageOffsetInBits: u64, Flags: LLVMDIFlags, Type: LLVMMetadataRef) -> LLVMMetadataRef = extern;
+func LLVMDIBuilderCreateClassType(Builder: LLVMDIBuilderRef, Scope: LLVMMetadataRef, Name: ptr!<byte, false>, NameLen: uint, File: LLVMMetadataRef, LineNumber: u32, SizeInBits: u64, AlignInBits: u32, OffsetInBits: u64, Flags: LLVMDIFlags, DerivedFrom: LLVMMetadataRef, Elements: ptr!<LLVMMetadataRef, true>, NumElements: u32, VTableHolder: LLVMMetadataRef, TemplateParamsNode: LLVMMetadataRef, UniqueIdentifier: ptr!<byte, false>, UniqueIdentifierLen: uint) -> LLVMMetadataRef = extern;
+func LLVMDIBuilderCreateArtificialType(Builder: LLVMDIBuilderRef, Type: LLVMMetadataRef) -> LLVMMetadataRef = extern;
+func LLVMDITypeGetName(DType: LLVMMetadataRef, Length: ptr!<uint, true>) -> ptr!<byte, false> = extern;
+func LLVMDITypeGetSizeInBits(DType: LLVMMetadataRef) -> u64 = extern;
+func LLVMDITypeGetOffsetInBits(DType: LLVMMetadataRef) -> u64 = extern;
+func LLVMDITypeGetAlignInBits(DType: LLVMMetadataRef) -> u32 = extern;
+func LLVMDITypeGetLine(DType: LLVMMetadataRef) -> u32 = extern;
+func LLVMDITypeGetFlags(DType: LLVMMetadataRef) -> LLVMDIFlags = extern;
+func LLVMDIBuilderGetOrCreateSubrange(Builder: LLVMDIBuilderRef, LowerBound: i64, Count: i64) -> LLVMMetadataRef = extern;
+func LLVMDIBuilderGetOrCreateArray(Builder: LLVMDIBuilderRef, Data: ptr!<LLVMMetadataRef, true>, NumElements: uint) -> LLVMMetadataRef = extern;
+func LLVMDIBuilderCreateExpression(Builder: LLVMDIBuilderRef, Addr: ptr!<u64, true>, Length: uint) -> LLVMMetadataRef = extern;
+func LLVMDIBuilderCreateConstantValueExpression(Builder: LLVMDIBuilderRef, Value: u64) -> LLVMMetadataRef = extern;
+func LLVMDIBuilderCreateGlobalVariableExpression(Builder: LLVMDIBuilderRef, Scope: LLVMMetadataRef, Name: ptr!<byte, false>, NameLen: uint, Linkage: ptr!<byte, false>, LinkLen: uint, File: LLVMMetadataRef, LineNo: u32, Ty: LLVMMetadataRef, LocalToUnit: LLVMBool, Expr: LLVMMetadataRef, Decl: LLVMMetadataRef, AlignInBits: u32) -> LLVMMetadataRef = extern;
+func LLVMGetDINodeTag(MD: LLVMMetadataRef) -> u16 = extern;
+func LLVMDIGlobalVariableExpressionGetVariable(GVE: LLVMMetadataRef) -> LLVMMetadataRef = extern;
+func LLVMDIGlobalVariableExpressionGetExpression(GVE: LLVMMetadataRef) -> LLVMMetadataRef = extern;
+func LLVMDIVariableGetFile(Var: LLVMMetadataRef) -> LLVMMetadataRef = extern;
+func LLVMDIVariableGetScope(Var: LLVMMetadataRef) -> LLVMMetadataRef = extern;
+func LLVMDIVariableGetLine(Var: LLVMMetadataRef) -> u32 = extern;
+func LLVMTemporaryMDNode(Ctx: LLVMContextRef, Data: ptr!<LLVMMetadataRef, true>, NumElements: uint) -> LLVMMetadataRef = extern;
+func LLVMDisposeTemporaryMDNode(TempNode: LLVMMetadataRef) -> void = extern;
+func LLVMMetadataReplaceAllUsesWith(TempTargetMetadata: LLVMMetadataRef, Replacement: LLVMMetadataRef) -> void = extern;
+func LLVMDIBuilderCreateTempGlobalVariableFwdDecl(Builder: LLVMDIBuilderRef, Scope: LLVMMetadataRef, Name: ptr!<byte, false>, NameLen: uint, Linkage: ptr!<byte, false>, LnkLen: uint, File: LLVMMetadataRef, LineNo: u32, Ty: LLVMMetadataRef, LocalToUnit: LLVMBool, Decl: LLVMMetadataRef, AlignInBits: u32) -> LLVMMetadataRef = extern;
+func LLVMDIBuilderInsertDeclareBefore(Builder: LLVMDIBuilderRef, Storage: LLVMValueRef, VarInfo: LLVMMetadataRef, Expr: LLVMMetadataRef, DebugLoc: LLVMMetadataRef, Instr: LLVMValueRef) -> LLVMValueRef = extern;
+func LLVMDIBuilderInsertDeclareAtEnd(Builder: LLVMDIBuilderRef, Storage: LLVMValueRef, VarInfo: LLVMMetadataRef, Expr: LLVMMetadataRef, DebugLoc: LLVMMetadataRef, Block: LLVMBasicBlockRef) -> LLVMValueRef = extern;
+func LLVMDIBuilderInsertDbgValueBefore(Builder: LLVMDIBuilderRef, Val: LLVMValueRef, VarInfo: LLVMMetadataRef, Expr: LLVMMetadataRef, DebugLoc: LLVMMetadataRef, Instr: LLVMValueRef) -> LLVMValueRef = extern;
+func LLVMDIBuilderInsertDbgValueAtEnd(Builder: LLVMDIBuilderRef, Val: LLVMValueRef, VarInfo: LLVMMetadataRef, Expr: LLVMMetadataRef, DebugLoc: LLVMMetadataRef, Block: LLVMBasicBlockRef) -> LLVMValueRef = extern;
+func LLVMDIBuilderCreateAutoVariable(Builder: LLVMDIBuilderRef, Scope: LLVMMetadataRef, Name: ptr!<byte, false>, NameLen: uint, File: LLVMMetadataRef, LineNo: u32, Ty: LLVMMetadataRef, AlwaysPreserve: LLVMBool, Flags: LLVMDIFlags, AlignInBits: u32) -> LLVMMetadataRef = extern;
+func LLVMDIBuilderCreateParameterVariable(Builder: LLVMDIBuilderRef, Scope: LLVMMetadataRef, Name: ptr!<byte, false>, NameLen: uint, ArgNo: u32, File: LLVMMetadataRef, LineNo: u32, Ty: LLVMMetadataRef, AlwaysPreserve: LLVMBool, Flags: LLVMDIFlags) -> LLVMMetadataRef = extern;
+func LLVMGetSubprogram(Func: LLVMValueRef) -> LLVMMetadataRef = extern;
+func LLVMSetSubprogram(Func: LLVMValueRef, SP: LLVMMetadataRef) -> void = extern;
+func LLVMDISubprogramGetLine(Subprogram: LLVMMetadataRef) -> u32 = extern;
+func LLVMInstructionGetDebugLoc(Inst: LLVMValueRef) -> LLVMMetadataRef = extern;
+func LLVMInstructionSetDebugLoc(Inst: LLVMValueRef, Loc: LLVMMetadataRef) -> void = extern;
+func LLVMGetMetadataKind(Metadata: LLVMMetadataRef) -> LLVMMetadataKind = extern;
+
+struct LLVMOpaqueError {}
+
+alias LLVMErrorRef = ptr!<LLVMOpaqueError, true>;
+alias LLVMErrorTypeId = ptr!<byte, false>;
+
+func LLVMGetErrorTypeId(Err: LLVMErrorRef) -> LLVMErrorTypeId = extern;
+func LLVMConsumeError(Err: LLVMErrorRef) -> void = extern;
+func LLVMGetErrorMessage(Err: LLVMErrorRef) -> ptr!<byte, true> = extern;
+func LLVMDisposeErrorMessage(ErrMsg: ptr!<byte, true>) -> void = extern;
+func LLVMGetStringErrorTypeId() -> LLVMErrorTypeId = extern;
+func LLVMCreateStringError(ErrMsg: ptr!<byte, false>) -> LLVMErrorRef = extern;
 
 enum LLVMByteOrdering {
 	case LLVMBigEndian;
@@ -1272,261 +1527,6 @@ func LLVMPreferredAlignmentOfType(TD: LLVMTargetDataRef, Ty: LLVMTypeRef) -> u32
 func LLVMPreferredAlignmentOfGlobal(TD: LLVMTargetDataRef, GlobalVar: LLVMValueRef) -> u32 = extern;
 func LLVMElementAtOffset(TD: LLVMTargetDataRef, StructTy: LLVMTypeRef, Offset: u64) -> u32 = extern;
 func LLVMOffsetOfElement(TD: LLVMTargetDataRef, StructTy: LLVMTypeRef, Element: u32) -> u64 = extern;
-func LLVMParseIRInContext(ContextRef: LLVMContextRef, MemBuf: LLVMMemoryBufferRef, OutM: ptr!<LLVMModuleRef, true>, OutMessage: ptr!<ptr!<byte, true>, true>) -> LLVMBool = extern;
-func LLVMParseBitcode(MemBuf: LLVMMemoryBufferRef, OutModule: ptr!<LLVMModuleRef, true>, OutMessage: ptr!<ptr!<byte, true>, true>) -> LLVMBool = extern;
-func LLVMParseBitcode2(MemBuf: LLVMMemoryBufferRef, OutModule: ptr!<LLVMModuleRef, true>) -> LLVMBool = extern;
-func LLVMParseBitcodeInContext(ContextRef: LLVMContextRef, MemBuf: LLVMMemoryBufferRef, OutModule: ptr!<LLVMModuleRef, true>, OutMessage: ptr!<ptr!<byte, true>, true>) -> LLVMBool = extern;
-func LLVMParseBitcodeInContext2(ContextRef: LLVMContextRef, MemBuf: LLVMMemoryBufferRef, OutModule: ptr!<LLVMModuleRef, true>) -> LLVMBool = extern;
-func LLVMGetBitcodeModuleInContext(ContextRef: LLVMContextRef, MemBuf: LLVMMemoryBufferRef, OutM: ptr!<LLVMModuleRef, true>, OutMessage: ptr!<ptr!<byte, true>, true>) -> LLVMBool = extern;
-func LLVMGetBitcodeModuleInContext2(ContextRef: LLVMContextRef, MemBuf: LLVMMemoryBufferRef, OutM: ptr!<LLVMModuleRef, true>) -> LLVMBool = extern;
-func LLVMGetBitcodeModule(MemBuf: LLVMMemoryBufferRef, OutM: ptr!<LLVMModuleRef, true>, OutMessage: ptr!<ptr!<byte, true>, true>) -> LLVMBool = extern;
-func LLVMGetBitcodeModule2(MemBuf: LLVMMemoryBufferRef, OutM: ptr!<LLVMModuleRef, true>) -> LLVMBool = extern;
-func LLVMWriteBitcodeToFile(M: LLVMModuleRef, Path: ptr!<byte, false>) -> i32 = extern;
-func LLVMWriteBitcodeToFD(M: LLVMModuleRef, FD: i32, ShouldClose: i32, Unbuffered: i32) -> i32 = extern;
-func LLVMWriteBitcodeToFileHandle(M: LLVMModuleRef, Handle: i32) -> i32 = extern;
-func LLVMWriteBitcodeToMemoryBuffer(M: LLVMModuleRef) -> LLVMMemoryBufferRef = extern;
-
-enum LLVMLinkerMode {
-	case LLVMLinkerDestroySource = 0;
-	case LLVMLinkerPreserveSource_Removed = 1;
-}
-
-func LLVMLinkModules2(Dest: LLVMModuleRef, Src: LLVMModuleRef) -> LLVMBool = extern;
-
-enum LLVMDIFlags {
-	case LLVMDIFlagZero = 0;
-	case LLVMDIFlagPrivate = 1;
-	case LLVMDIFlagProtected = 2;
-	case LLVMDIFlagPublic = 3;
-	case LLVMDIFlagFwdDecl = 4;
-	case LLVMDIFlagAppleBlock = 8;
-	case LLVMDIFlagReservedBit4 = 16;
-	case LLVMDIFlagVirtual = 32;
-	case LLVMDIFlagArtificial = 64;
-	case LLVMDIFlagExplicit = 128;
-	case LLVMDIFlagPrototyped = 256;
-	case LLVMDIFlagObjcClassComplete = 512;
-	case LLVMDIFlagObjectPointer = 1024;
-	case LLVMDIFlagVector = 2048;
-	case LLVMDIFlagStaticMember = 4096;
-	case LLVMDIFlagLValueReference = 8192;
-	case LLVMDIFlagRValueReference = 16384;
-	case LLVMDIFlagReserved = 32768;
-	case LLVMDIFlagSingleInheritance = 65536;
-	case LLVMDIFlagMultipleInheritance = 131072;
-	case LLVMDIFlagVirtualInheritance = 196608;
-	case LLVMDIFlagIntroducedVirtual = 262144;
-	case LLVMDIFlagBitField = 524288;
-	case LLVMDIFlagNoReturn = 1048576;
-	case LLVMDIFlagTypePassByValue = 4194304;
-	case LLVMDIFlagTypePassByReference = 8388608;
-	case LLVMDIFlagEnumClass = 16777216;
-	case LLVMDIFlagFixedEnum = 16777216;
-	case LLVMDIFlagThunk = 33554432;
-	case LLVMDIFlagNonTrivial = 67108864;
-	case LLVMDIFlagBigEndian = 134217728;
-	case LLVMDIFlagLittleEndian = 268435456;
-	case LLVMDIFlagIndirectVirtualBase = 36;
-	case LLVMDIFlagAccessibility = 3;
-	case LLVMDIFlagPtrToMemberRep = 196608;
-}
-
-enum LLVMDWARFSourceLanguage {
-	case LLVMDWARFSourceLanguageC89;
-	case LLVMDWARFSourceLanguageC;
-	case LLVMDWARFSourceLanguageAda83;
-	case LLVMDWARFSourceLanguageC_plus_plus;
-	case LLVMDWARFSourceLanguageCobol74;
-	case LLVMDWARFSourceLanguageCobol85;
-	case LLVMDWARFSourceLanguageFortran77;
-	case LLVMDWARFSourceLanguageFortran90;
-	case LLVMDWARFSourceLanguagePascal83;
-	case LLVMDWARFSourceLanguageModula2;
-	case LLVMDWARFSourceLanguageJava;
-	case LLVMDWARFSourceLanguageC99;
-	case LLVMDWARFSourceLanguageAda95;
-	case LLVMDWARFSourceLanguageFortran95;
-	case LLVMDWARFSourceLanguagePLI;
-	case LLVMDWARFSourceLanguageObjC;
-	case LLVMDWARFSourceLanguageObjC_plus_plus;
-	case LLVMDWARFSourceLanguageUPC;
-	case LLVMDWARFSourceLanguageD;
-	case LLVMDWARFSourceLanguagePython;
-	case LLVMDWARFSourceLanguageOpenCL;
-	case LLVMDWARFSourceLanguageGo;
-	case LLVMDWARFSourceLanguageModula3;
-	case LLVMDWARFSourceLanguageHaskell;
-	case LLVMDWARFSourceLanguageC_plus_plus_03;
-	case LLVMDWARFSourceLanguageC_plus_plus_11;
-	case LLVMDWARFSourceLanguageOCaml;
-	case LLVMDWARFSourceLanguageRust;
-	case LLVMDWARFSourceLanguageC11;
-	case LLVMDWARFSourceLanguageSwift;
-	case LLVMDWARFSourceLanguageJulia;
-	case LLVMDWARFSourceLanguageDylan;
-	case LLVMDWARFSourceLanguageC_plus_plus_14;
-	case LLVMDWARFSourceLanguageFortran03;
-	case LLVMDWARFSourceLanguageFortran08;
-	case LLVMDWARFSourceLanguageRenderScript;
-	case LLVMDWARFSourceLanguageBLISS;
-	case LLVMDWARFSourceLanguageKotlin;
-	case LLVMDWARFSourceLanguageZig;
-	case LLVMDWARFSourceLanguageCrystal;
-	case LLVMDWARFSourceLanguageC_plus_plus_17;
-	case LLVMDWARFSourceLanguageC_plus_plus_20;
-	case LLVMDWARFSourceLanguageC17;
-	case LLVMDWARFSourceLanguageFortran18;
-	case LLVMDWARFSourceLanguageAda2005;
-	case LLVMDWARFSourceLanguageAda2012;
-	case LLVMDWARFSourceLanguageMips_Assembler;
-	case LLVMDWARFSourceLanguageGOOGLE_RenderScript;
-	case LLVMDWARFSourceLanguageBORLAND_Delphi;
-}
-
-enum LLVMDWARFEmissionKind {
-	case LLVMDWARFEmissionNone = 0;
-	case LLVMDWARFEmissionFull;
-	case LLVMDWARFEmissionLineTablesOnly;
-}
-
-enum LLVMMetadataKind {
-	case LLVMMDStringMetadataKind;
-	case LLVMConstantAsMetadataMetadataKind;
-	case LLVMLocalAsMetadataMetadataKind;
-	case LLVMDistinctMDOperandPlaceholderMetadataKind;
-	case LLVMMDTupleMetadataKind;
-	case LLVMDILocationMetadataKind;
-	case LLVMDIExpressionMetadataKind;
-	case LLVMDIGlobalVariableExpressionMetadataKind;
-	case LLVMGenericDINodeMetadataKind;
-	case LLVMDISubrangeMetadataKind;
-	case LLVMDIEnumeratorMetadataKind;
-	case LLVMDIBasicTypeMetadataKind;
-	case LLVMDIDerivedTypeMetadataKind;
-	case LLVMDICompositeTypeMetadataKind;
-	case LLVMDISubroutineTypeMetadataKind;
-	case LLVMDIFileMetadataKind;
-	case LLVMDICompileUnitMetadataKind;
-	case LLVMDISubprogramMetadataKind;
-	case LLVMDILexicalBlockMetadataKind;
-	case LLVMDILexicalBlockFileMetadataKind;
-	case LLVMDINamespaceMetadataKind;
-	case LLVMDIModuleMetadataKind;
-	case LLVMDITemplateTypeParameterMetadataKind;
-	case LLVMDITemplateValueParameterMetadataKind;
-	case LLVMDIGlobalVariableMetadataKind;
-	case LLVMDILocalVariableMetadataKind;
-	case LLVMDILabelMetadataKind;
-	case LLVMDIObjCPropertyMetadataKind;
-	case LLVMDIImportedEntityMetadataKind;
-	case LLVMDIMacroMetadataKind;
-	case LLVMDIMacroFileMetadataKind;
-	case LLVMDICommonBlockMetadataKind;
-	case LLVMDIStringTypeMetadataKind;
-	case LLVMDIGenericSubrangeMetadataKind;
-	case LLVMDIArgListMetadataKind;
-	case LLVMDIAssignIDMetadataKind;
-}
-
-alias LLVMDWARFTypeEncoding = u32;
-
-enum LLVMDWARFMacinfoRecordType {
-	case LLVMDWARFMacinfoRecordTypeDefine = 1;
-	case LLVMDWARFMacinfoRecordTypeMacro = 2;
-	case LLVMDWARFMacinfoRecordTypeStartFile = 3;
-	case LLVMDWARFMacinfoRecordTypeEndFile = 4;
-	case LLVMDWARFMacinfoRecordTypeVendorExt = 255;
-}
-
-func LLVMDebugMetadataVersion() -> u32 = extern;
-func LLVMGetModuleDebugMetadataVersion(Module: LLVMModuleRef) -> u32 = extern;
-func LLVMStripModuleDebugInfo(Module: LLVMModuleRef) -> LLVMBool = extern;
-func LLVMCreateDIBuilderDisallowUnresolved(M: LLVMModuleRef) -> LLVMDIBuilderRef = extern;
-func LLVMCreateDIBuilder(M: LLVMModuleRef) -> LLVMDIBuilderRef = extern;
-func LLVMDisposeDIBuilder(Builder: LLVMDIBuilderRef) -> void = extern;
-func LLVMDIBuilderFinalize(Builder: LLVMDIBuilderRef) -> void = extern;
-func LLVMDIBuilderFinalizeSubprogram(Builder: LLVMDIBuilderRef, Subprogram: LLVMMetadataRef) -> void = extern;
-func LLVMDIBuilderCreateCompileUnit(Builder: LLVMDIBuilderRef, Lang: LLVMDWARFSourceLanguage, FileRef: LLVMMetadataRef, Producer: ptr!<byte, false>, ProducerLen: uint, isOptimized: LLVMBool, Flags: ptr!<byte, false>, FlagsLen: uint, RuntimeVer: u32, SplitName: ptr!<byte, false>, SplitNameLen: uint, Kind: LLVMDWARFEmissionKind, DWOId: u32, SplitDebugInlining: LLVMBool, DebugInfoForProfiling: LLVMBool, SysRoot: ptr!<byte, false>, SysRootLen: uint, SDK: ptr!<byte, false>, SDKLen: uint) -> LLVMMetadataRef = extern;
-func LLVMDIBuilderCreateFile(Builder: LLVMDIBuilderRef, Filename: ptr!<byte, false>, FilenameLen: uint, Directory: ptr!<byte, false>, DirectoryLen: uint) -> LLVMMetadataRef = extern;
-func LLVMDIBuilderCreateModule(Builder: LLVMDIBuilderRef, ParentScope: LLVMMetadataRef, Name: ptr!<byte, false>, NameLen: uint, ConfigMacros: ptr!<byte, false>, ConfigMacrosLen: uint, IncludePath: ptr!<byte, false>, IncludePathLen: uint, APINotesFile: ptr!<byte, false>, APINotesFileLen: uint) -> LLVMMetadataRef = extern;
-func LLVMDIBuilderCreateNameSpace(Builder: LLVMDIBuilderRef, ParentScope: LLVMMetadataRef, Name: ptr!<byte, false>, NameLen: uint, ExportSymbols: LLVMBool) -> LLVMMetadataRef = extern;
-func LLVMDIBuilderCreateFunction(Builder: LLVMDIBuilderRef, Scope: LLVMMetadataRef, Name: ptr!<byte, false>, NameLen: uint, LinkageName: ptr!<byte, false>, LinkageNameLen: uint, File: LLVMMetadataRef, LineNo: u32, Ty: LLVMMetadataRef, IsLocalToUnit: LLVMBool, IsDefinition: LLVMBool, ScopeLine: u32, Flags: LLVMDIFlags, IsOptimized: LLVMBool) -> LLVMMetadataRef = extern;
-func LLVMDIBuilderCreateLexicalBlock(Builder: LLVMDIBuilderRef, Scope: LLVMMetadataRef, File: LLVMMetadataRef, Line: u32, Column: u32) -> LLVMMetadataRef = extern;
-func LLVMDIBuilderCreateLexicalBlockFile(Builder: LLVMDIBuilderRef, Scope: LLVMMetadataRef, File: LLVMMetadataRef, Discriminator: u32) -> LLVMMetadataRef = extern;
-func LLVMDIBuilderCreateImportedModuleFromNamespace(Builder: LLVMDIBuilderRef, Scope: LLVMMetadataRef, NS: LLVMMetadataRef, File: LLVMMetadataRef, Line: u32) -> LLVMMetadataRef = extern;
-func LLVMDIBuilderCreateImportedModuleFromAlias(Builder: LLVMDIBuilderRef, Scope: LLVMMetadataRef, ImportedEntity: LLVMMetadataRef, File: LLVMMetadataRef, Line: u32, Elements: ptr!<LLVMMetadataRef, true>, NumElements: u32) -> LLVMMetadataRef = extern;
-func LLVMDIBuilderCreateImportedModuleFromModule(Builder: LLVMDIBuilderRef, Scope: LLVMMetadataRef, M: LLVMMetadataRef, File: LLVMMetadataRef, Line: u32, Elements: ptr!<LLVMMetadataRef, true>, NumElements: u32) -> LLVMMetadataRef = extern;
-func LLVMDIBuilderCreateImportedDeclaration(Builder: LLVMDIBuilderRef, Scope: LLVMMetadataRef, Decl: LLVMMetadataRef, File: LLVMMetadataRef, Line: u32, Name: ptr!<byte, false>, NameLen: uint, Elements: ptr!<LLVMMetadataRef, true>, NumElements: u32) -> LLVMMetadataRef = extern;
-func LLVMDIBuilderCreateDebugLocation(Ctx: LLVMContextRef, Line: u32, Column: u32, Scope: LLVMMetadataRef, InlinedAt: LLVMMetadataRef) -> LLVMMetadataRef = extern;
-func LLVMDILocationGetLine(Location: LLVMMetadataRef) -> u32 = extern;
-func LLVMDILocationGetColumn(Location: LLVMMetadataRef) -> u32 = extern;
-func LLVMDILocationGetScope(Location: LLVMMetadataRef) -> LLVMMetadataRef = extern;
-func LLVMDILocationGetInlinedAt(Location: LLVMMetadataRef) -> LLVMMetadataRef = extern;
-func LLVMDIScopeGetFile(Scope: LLVMMetadataRef) -> LLVMMetadataRef = extern;
-func LLVMDIFileGetDirectory(File: LLVMMetadataRef, Len: ptr!<u32, true>) -> ptr!<byte, false> = extern;
-func LLVMDIFileGetFilename(File: LLVMMetadataRef, Len: ptr!<u32, true>) -> ptr!<byte, false> = extern;
-func LLVMDIFileGetSource(File: LLVMMetadataRef, Len: ptr!<u32, true>) -> ptr!<byte, false> = extern;
-func LLVMDIBuilderGetOrCreateTypeArray(Builder: LLVMDIBuilderRef, Data: ptr!<LLVMMetadataRef, true>, NumElements: uint) -> LLVMMetadataRef = extern;
-func LLVMDIBuilderCreateSubroutineType(Builder: LLVMDIBuilderRef, File: LLVMMetadataRef, ParameterTypes: ptr!<LLVMMetadataRef, true>, NumParameterTypes: u32, Flags: LLVMDIFlags) -> LLVMMetadataRef = extern;
-func LLVMDIBuilderCreateMacro(Builder: LLVMDIBuilderRef, ParentMacroFile: LLVMMetadataRef, Line: u32, RecordType: LLVMDWARFMacinfoRecordType, Name: ptr!<byte, false>, NameLen: uint, Value: ptr!<byte, false>, ValueLen: uint) -> LLVMMetadataRef = extern;
-func LLVMDIBuilderCreateTempMacroFile(Builder: LLVMDIBuilderRef, ParentMacroFile: LLVMMetadataRef, Line: u32, File: LLVMMetadataRef) -> LLVMMetadataRef = extern;
-func LLVMDIBuilderCreateEnumerator(Builder: LLVMDIBuilderRef, Name: ptr!<byte, false>, NameLen: uint, Value: i64, IsUnsigned: LLVMBool) -> LLVMMetadataRef = extern;
-func LLVMDIBuilderCreateEnumerationType(Builder: LLVMDIBuilderRef, Scope: LLVMMetadataRef, Name: ptr!<byte, false>, NameLen: uint, File: LLVMMetadataRef, LineNumber: u32, SizeInBits: u64, AlignInBits: u32, Elements: ptr!<LLVMMetadataRef, true>, NumElements: u32, ClassTy: LLVMMetadataRef) -> LLVMMetadataRef = extern;
-func LLVMDIBuilderCreateUnionType(Builder: LLVMDIBuilderRef, Scope: LLVMMetadataRef, Name: ptr!<byte, false>, NameLen: uint, File: LLVMMetadataRef, LineNumber: u32, SizeInBits: u64, AlignInBits: u32, Flags: LLVMDIFlags, Elements: ptr!<LLVMMetadataRef, true>, NumElements: u32, RunTimeLang: u32, UniqueId: ptr!<byte, false>, UniqueIdLen: uint) -> LLVMMetadataRef = extern;
-func LLVMDIBuilderCreateArrayType(Builder: LLVMDIBuilderRef, Size: u64, AlignInBits: u32, Ty: LLVMMetadataRef, Subscripts: ptr!<LLVMMetadataRef, true>, NumSubscripts: u32) -> LLVMMetadataRef = extern;
-func LLVMDIBuilderCreateVectorType(Builder: LLVMDIBuilderRef, Size: u64, AlignInBits: u32, Ty: LLVMMetadataRef, Subscripts: ptr!<LLVMMetadataRef, true>, NumSubscripts: u32) -> LLVMMetadataRef = extern;
-func LLVMDIBuilderCreateUnspecifiedType(Builder: LLVMDIBuilderRef, Name: ptr!<byte, false>, NameLen: uint) -> LLVMMetadataRef = extern;
-func LLVMDIBuilderCreateBasicType(Builder: LLVMDIBuilderRef, Name: ptr!<byte, false>, NameLen: uint, SizeInBits: u64, Encoding: LLVMDWARFTypeEncoding, Flags: LLVMDIFlags) -> LLVMMetadataRef = extern;
-func LLVMDIBuilderCreatePointerType(Builder: LLVMDIBuilderRef, PointeeTy: LLVMMetadataRef, SizeInBits: u64, AlignInBits: u32, AddressSpace: u32, Name: ptr!<byte, false>, NameLen: uint) -> LLVMMetadataRef = extern;
-func LLVMDIBuilderCreateStructType(Builder: LLVMDIBuilderRef, Scope: LLVMMetadataRef, Name: ptr!<byte, false>, NameLen: uint, File: LLVMMetadataRef, LineNumber: u32, SizeInBits: u64, AlignInBits: u32, Flags: LLVMDIFlags, DerivedFrom: LLVMMetadataRef, Elements: ptr!<LLVMMetadataRef, true>, NumElements: u32, RunTimeLang: u32, VTableHolder: LLVMMetadataRef, UniqueId: ptr!<byte, false>, UniqueIdLen: uint) -> LLVMMetadataRef = extern;
-func LLVMDIBuilderCreateMemberType(Builder: LLVMDIBuilderRef, Scope: LLVMMetadataRef, Name: ptr!<byte, false>, NameLen: uint, File: LLVMMetadataRef, LineNo: u32, SizeInBits: u64, AlignInBits: u32, OffsetInBits: u64, Flags: LLVMDIFlags, Ty: LLVMMetadataRef) -> LLVMMetadataRef = extern;
-func LLVMDIBuilderCreateStaticMemberType(Builder: LLVMDIBuilderRef, Scope: LLVMMetadataRef, Name: ptr!<byte, false>, NameLen: uint, File: LLVMMetadataRef, LineNumber: u32, Type: LLVMMetadataRef, Flags: LLVMDIFlags, ConstantVal: LLVMValueRef, AlignInBits: u32) -> LLVMMetadataRef = extern;
-func LLVMDIBuilderCreateMemberPointerType(Builder: LLVMDIBuilderRef, PointeeType: LLVMMetadataRef, ClassType: LLVMMetadataRef, SizeInBits: u64, AlignInBits: u32, Flags: LLVMDIFlags) -> LLVMMetadataRef = extern;
-func LLVMDIBuilderCreateObjCIVar(Builder: LLVMDIBuilderRef, Name: ptr!<byte, false>, NameLen: uint, File: LLVMMetadataRef, LineNo: u32, SizeInBits: u64, AlignInBits: u32, OffsetInBits: u64, Flags: LLVMDIFlags, Ty: LLVMMetadataRef, PropertyNode: LLVMMetadataRef) -> LLVMMetadataRef = extern;
-func LLVMDIBuilderCreateObjCProperty(Builder: LLVMDIBuilderRef, Name: ptr!<byte, false>, NameLen: uint, File: LLVMMetadataRef, LineNo: u32, GetterName: ptr!<byte, false>, GetterNameLen: uint, SetterName: ptr!<byte, false>, SetterNameLen: uint, PropertyAttributes: u32, Ty: LLVMMetadataRef) -> LLVMMetadataRef = extern;
-func LLVMDIBuilderCreateObjectPointerType(Builder: LLVMDIBuilderRef, Type: LLVMMetadataRef) -> LLVMMetadataRef = extern;
-func LLVMDIBuilderCreateQualifiedType(Builder: LLVMDIBuilderRef, Tag: u32, Type: LLVMMetadataRef) -> LLVMMetadataRef = extern;
-func LLVMDIBuilderCreateReferenceType(Builder: LLVMDIBuilderRef, Tag: u32, Type: LLVMMetadataRef) -> LLVMMetadataRef = extern;
-func LLVMDIBuilderCreateNullPtrType(Builder: LLVMDIBuilderRef) -> LLVMMetadataRef = extern;
-func LLVMDIBuilderCreateTypedef(Builder: LLVMDIBuilderRef, Type: LLVMMetadataRef, Name: ptr!<byte, false>, NameLen: uint, File: LLVMMetadataRef, LineNo: u32, Scope: LLVMMetadataRef, AlignInBits: u32) -> LLVMMetadataRef = extern;
-func LLVMDIBuilderCreateInheritance(Builder: LLVMDIBuilderRef, Ty: LLVMMetadataRef, BaseTy: LLVMMetadataRef, BaseOffset: u64, VBPtrOffset: u32, Flags: LLVMDIFlags) -> LLVMMetadataRef = extern;
-func LLVMDIBuilderCreateForwardDecl(Builder: LLVMDIBuilderRef, Tag: u32, Name: ptr!<byte, false>, NameLen: uint, Scope: LLVMMetadataRef, File: LLVMMetadataRef, Line: u32, RuntimeLang: u32, SizeInBits: u64, AlignInBits: u32, UniqueIdentifier: ptr!<byte, false>, UniqueIdentifierLen: uint) -> LLVMMetadataRef = extern;
-func LLVMDIBuilderCreateReplaceableCompositeType(Builder: LLVMDIBuilderRef, Tag: u32, Name: ptr!<byte, false>, NameLen: uint, Scope: LLVMMetadataRef, File: LLVMMetadataRef, Line: u32, RuntimeLang: u32, SizeInBits: u64, AlignInBits: u32, Flags: LLVMDIFlags, UniqueIdentifier: ptr!<byte, false>, UniqueIdentifierLen: uint) -> LLVMMetadataRef = extern;
-func LLVMDIBuilderCreateBitFieldMemberType(Builder: LLVMDIBuilderRef, Scope: LLVMMetadataRef, Name: ptr!<byte, false>, NameLen: uint, File: LLVMMetadataRef, LineNumber: u32, SizeInBits: u64, OffsetInBits: u64, StorageOffsetInBits: u64, Flags: LLVMDIFlags, Type: LLVMMetadataRef) -> LLVMMetadataRef = extern;
-func LLVMDIBuilderCreateClassType(Builder: LLVMDIBuilderRef, Scope: LLVMMetadataRef, Name: ptr!<byte, false>, NameLen: uint, File: LLVMMetadataRef, LineNumber: u32, SizeInBits: u64, AlignInBits: u32, OffsetInBits: u64, Flags: LLVMDIFlags, DerivedFrom: LLVMMetadataRef, Elements: ptr!<LLVMMetadataRef, true>, NumElements: u32, VTableHolder: LLVMMetadataRef, TemplateParamsNode: LLVMMetadataRef, UniqueIdentifier: ptr!<byte, false>, UniqueIdentifierLen: uint) -> LLVMMetadataRef = extern;
-func LLVMDIBuilderCreateArtificialType(Builder: LLVMDIBuilderRef, Type: LLVMMetadataRef) -> LLVMMetadataRef = extern;
-func LLVMDITypeGetName(DType: LLVMMetadataRef, Length: ptr!<uint, true>) -> ptr!<byte, false> = extern;
-func LLVMDITypeGetSizeInBits(DType: LLVMMetadataRef) -> u64 = extern;
-func LLVMDITypeGetOffsetInBits(DType: LLVMMetadataRef) -> u64 = extern;
-func LLVMDITypeGetAlignInBits(DType: LLVMMetadataRef) -> u32 = extern;
-func LLVMDITypeGetLine(DType: LLVMMetadataRef) -> u32 = extern;
-func LLVMDITypeGetFlags(DType: LLVMMetadataRef) -> LLVMDIFlags = extern;
-func LLVMDIBuilderGetOrCreateSubrange(Builder: LLVMDIBuilderRef, LowerBound: i64, Count: i64) -> LLVMMetadataRef = extern;
-func LLVMDIBuilderGetOrCreateArray(Builder: LLVMDIBuilderRef, Data: ptr!<LLVMMetadataRef, true>, NumElements: uint) -> LLVMMetadataRef = extern;
-func LLVMDIBuilderCreateExpression(Builder: LLVMDIBuilderRef, Addr: ptr!<u64, true>, Length: uint) -> LLVMMetadataRef = extern;
-func LLVMDIBuilderCreateConstantValueExpression(Builder: LLVMDIBuilderRef, Value: u64) -> LLVMMetadataRef = extern;
-func LLVMDIBuilderCreateGlobalVariableExpression(Builder: LLVMDIBuilderRef, Scope: LLVMMetadataRef, Name: ptr!<byte, false>, NameLen: uint, Linkage: ptr!<byte, false>, LinkLen: uint, File: LLVMMetadataRef, LineNo: u32, Ty: LLVMMetadataRef, LocalToUnit: LLVMBool, Expr: LLVMMetadataRef, Decl: LLVMMetadataRef, AlignInBits: u32) -> LLVMMetadataRef = extern;
-func LLVMDIGlobalVariableExpressionGetVariable(GVE: LLVMMetadataRef) -> LLVMMetadataRef = extern;
-func LLVMDIGlobalVariableExpressionGetExpression(GVE: LLVMMetadataRef) -> LLVMMetadataRef = extern;
-func LLVMDIVariableGetFile(Var: LLVMMetadataRef) -> LLVMMetadataRef = extern;
-func LLVMDIVariableGetScope(Var: LLVMMetadataRef) -> LLVMMetadataRef = extern;
-func LLVMDIVariableGetLine(Var: LLVMMetadataRef) -> u32 = extern;
-func LLVMTemporaryMDNode(Ctx: LLVMContextRef, Data: ptr!<LLVMMetadataRef, true>, NumElements: uint) -> LLVMMetadataRef = extern;
-func LLVMDisposeTemporaryMDNode(TempNode: LLVMMetadataRef) -> void = extern;
-func LLVMMetadataReplaceAllUsesWith(TempTargetMetadata: LLVMMetadataRef, Replacement: LLVMMetadataRef) -> void = extern;
-func LLVMDIBuilderCreateTempGlobalVariableFwdDecl(Builder: LLVMDIBuilderRef, Scope: LLVMMetadataRef, Name: ptr!<byte, false>, NameLen: uint, Linkage: ptr!<byte, false>, LnkLen: uint, File: LLVMMetadataRef, LineNo: u32, Ty: LLVMMetadataRef, LocalToUnit: LLVMBool, Decl: LLVMMetadataRef, AlignInBits: u32) -> LLVMMetadataRef = extern;
-func LLVMDIBuilderInsertDeclareBefore(Builder: LLVMDIBuilderRef, Storage: LLVMValueRef, VarInfo: LLVMMetadataRef, Expr: LLVMMetadataRef, DebugLoc: LLVMMetadataRef, Instr: LLVMValueRef) -> LLVMValueRef = extern;
-func LLVMDIBuilderInsertDeclareAtEnd(Builder: LLVMDIBuilderRef, Storage: LLVMValueRef, VarInfo: LLVMMetadataRef, Expr: LLVMMetadataRef, DebugLoc: LLVMMetadataRef, Block: LLVMBasicBlockRef) -> LLVMValueRef = extern;
-func LLVMDIBuilderInsertDbgValueBefore(Builder: LLVMDIBuilderRef, Val: LLVMValueRef, VarInfo: LLVMMetadataRef, Expr: LLVMMetadataRef, DebugLoc: LLVMMetadataRef, Instr: LLVMValueRef) -> LLVMValueRef = extern;
-func LLVMDIBuilderInsertDbgValueAtEnd(Builder: LLVMDIBuilderRef, Val: LLVMValueRef, VarInfo: LLVMMetadataRef, Expr: LLVMMetadataRef, DebugLoc: LLVMMetadataRef, Block: LLVMBasicBlockRef) -> LLVMValueRef = extern;
-func LLVMDIBuilderCreateAutoVariable(Builder: LLVMDIBuilderRef, Scope: LLVMMetadataRef, Name: ptr!<byte, false>, NameLen: uint, File: LLVMMetadataRef, LineNo: u32, Ty: LLVMMetadataRef, AlwaysPreserve: LLVMBool, Flags: LLVMDIFlags, AlignInBits: u32) -> LLVMMetadataRef = extern;
-func LLVMDIBuilderCreateParameterVariable(Builder: LLVMDIBuilderRef, Scope: LLVMMetadataRef, Name: ptr!<byte, false>, NameLen: uint, ArgNo: u32, File: LLVMMetadataRef, LineNo: u32, Ty: LLVMMetadataRef, AlwaysPreserve: LLVMBool, Flags: LLVMDIFlags) -> LLVMMetadataRef = extern;
-func LLVMGetSubprogram(Func: LLVMValueRef) -> LLVMMetadataRef = extern;
-func LLVMSetSubprogram(Func: LLVMValueRef, SP: LLVMMetadataRef) -> void = extern;
-func LLVMDISubprogramGetLine(Subprogram: LLVMMetadataRef) -> u32 = extern;
-func LLVMInstructionGetDebugLoc(Inst: LLVMValueRef) -> LLVMMetadataRef = extern;
-func LLVMInstructionSetDebugLoc(Inst: LLVMValueRef, Loc: LLVMMetadataRef) -> void = extern;
-func LLVMGetMetadataKind(Metadata: LLVMMetadataRef) -> LLVMMetadataKind = extern;
 
 struct LLVMOpaqueTargetMachine {}
 
@@ -1657,6 +1657,88 @@ func LLVMCreateGDBRegistrationListener() -> LLVMJITEventListenerRef = extern;
 func LLVMCreateIntelJITEventListener() -> LLVMJITEventListenerRef = extern;
 func LLVMCreateOProfileJITEventListener() -> LLVMJITEventListenerRef = extern;
 func LLVMCreatePerfJITEventListener() -> LLVMJITEventListenerRef = extern;
+func LLVMParseIRInContext(ContextRef: LLVMContextRef, MemBuf: LLVMMemoryBufferRef, OutM: ptr!<LLVMModuleRef, true>, OutMessage: ptr!<ptr!<byte, true>, true>) -> LLVMBool = extern;
+
+enum LLVMLinkerMode {
+	case LLVMLinkerDestroySource = 0;
+	case LLVMLinkerPreserveSource_Removed = 1;
+}
+
+func LLVMLinkModules2(Dest: LLVMModuleRef, Src: LLVMModuleRef) -> LLVMBool = extern;
+
+struct LLVMOpaqueSectionIterator {}
+
+alias LLVMSectionIteratorRef = ptr!<LLVMOpaqueSectionIterator, true>;
+
+struct LLVMOpaqueSymbolIterator {}
+
+alias LLVMSymbolIteratorRef = ptr!<LLVMOpaqueSymbolIterator, true>;
+
+struct LLVMOpaqueRelocationIterator {}
+
+alias LLVMRelocationIteratorRef = ptr!<LLVMOpaqueRelocationIterator, true>;
+
+enum LLVMBinaryType {
+	case LLVMBinaryTypeArchive;
+	case LLVMBinaryTypeMachOUniversalBinary;
+	case LLVMBinaryTypeCOFFImportFile;
+	case LLVMBinaryTypeIR;
+	case LLVMBinaryTypeWinRes;
+	case LLVMBinaryTypeCOFF;
+	case LLVMBinaryTypeELF32L;
+	case LLVMBinaryTypeELF32B;
+	case LLVMBinaryTypeELF64L;
+	case LLVMBinaryTypeELF64B;
+	case LLVMBinaryTypeMachO32L;
+	case LLVMBinaryTypeMachO32B;
+	case LLVMBinaryTypeMachO64L;
+	case LLVMBinaryTypeMachO64B;
+	case LLVMBinaryTypeWasm;
+	case LLVMBinaryTypeOffload;
+}
+
+func LLVMCreateBinary(MemBuf: LLVMMemoryBufferRef, Context: LLVMContextRef, ErrorMessage: ptr!<ptr!<byte, true>, true>) -> LLVMBinaryRef = extern;
+func LLVMDisposeBinary(BR: LLVMBinaryRef) -> void = extern;
+func LLVMBinaryCopyMemoryBuffer(BR: LLVMBinaryRef) -> LLVMMemoryBufferRef = extern;
+func LLVMBinaryGetType(BR: LLVMBinaryRef) -> LLVMBinaryType = extern;
+func LLVMMachOUniversalBinaryCopyObjectForArch(BR: LLVMBinaryRef, Arch: ptr!<byte, false>, ArchLen: uint, ErrorMessage: ptr!<ptr!<byte, true>, true>) -> LLVMBinaryRef = extern;
+func LLVMObjectFileCopySectionIterator(BR: LLVMBinaryRef) -> LLVMSectionIteratorRef = extern;
+func LLVMObjectFileIsSectionIteratorAtEnd(BR: LLVMBinaryRef, SI: LLVMSectionIteratorRef) -> LLVMBool = extern;
+func LLVMObjectFileCopySymbolIterator(BR: LLVMBinaryRef) -> LLVMSymbolIteratorRef = extern;
+func LLVMObjectFileIsSymbolIteratorAtEnd(BR: LLVMBinaryRef, SI: LLVMSymbolIteratorRef) -> LLVMBool = extern;
+func LLVMDisposeSectionIterator(SI: LLVMSectionIteratorRef) -> void = extern;
+func LLVMMoveToNextSection(SI: LLVMSectionIteratorRef) -> void = extern;
+func LLVMMoveToContainingSection(Sect: LLVMSectionIteratorRef, Sym: LLVMSymbolIteratorRef) -> void = extern;
+func LLVMDisposeSymbolIterator(SI: LLVMSymbolIteratorRef) -> void = extern;
+func LLVMMoveToNextSymbol(SI: LLVMSymbolIteratorRef) -> void = extern;
+func LLVMGetSectionName(SI: LLVMSectionIteratorRef) -> ptr!<byte, false> = extern;
+func LLVMGetSectionSize(SI: LLVMSectionIteratorRef) -> u64 = extern;
+func LLVMGetSectionContents(SI: LLVMSectionIteratorRef) -> ptr!<byte, false> = extern;
+func LLVMGetSectionAddress(SI: LLVMSectionIteratorRef) -> u64 = extern;
+func LLVMGetSectionContainsSymbol(SI: LLVMSectionIteratorRef, Sym: LLVMSymbolIteratorRef) -> LLVMBool = extern;
+func LLVMGetRelocations(Section: LLVMSectionIteratorRef) -> LLVMRelocationIteratorRef = extern;
+func LLVMDisposeRelocationIterator(RI: LLVMRelocationIteratorRef) -> void = extern;
+func LLVMIsRelocationIteratorAtEnd(Section: LLVMSectionIteratorRef, RI: LLVMRelocationIteratorRef) -> LLVMBool = extern;
+func LLVMMoveToNextRelocation(RI: LLVMRelocationIteratorRef) -> void = extern;
+func LLVMGetSymbolName(SI: LLVMSymbolIteratorRef) -> ptr!<byte, false> = extern;
+func LLVMGetSymbolAddress(SI: LLVMSymbolIteratorRef) -> u64 = extern;
+func LLVMGetSymbolSize(SI: LLVMSymbolIteratorRef) -> u64 = extern;
+func LLVMGetRelocationOffset(RI: LLVMRelocationIteratorRef) -> u64 = extern;
+func LLVMGetRelocationSymbol(RI: LLVMRelocationIteratorRef) -> LLVMSymbolIteratorRef = extern;
+func LLVMGetRelocationType(RI: LLVMRelocationIteratorRef) -> u64 = extern;
+func LLVMGetRelocationTypeName(RI: LLVMRelocationIteratorRef) -> ptr!<byte, false> = extern;
+func LLVMGetRelocationValueString(RI: LLVMRelocationIteratorRef) -> ptr!<byte, false> = extern;
+
+struct LLVMOpaqueObjectFile {}
+
+alias LLVMObjectFileRef = ptr!<LLVMOpaqueObjectFile, true>;
+
+func LLVMCreateObjectFile(MemBuf: LLVMMemoryBufferRef) -> LLVMObjectFileRef = extern;
+func LLVMDisposeObjectFile(ObjectFile: LLVMObjectFileRef) -> void = extern;
+func LLVMGetSections(ObjectFile: LLVMObjectFileRef) -> LLVMSectionIteratorRef = extern;
+func LLVMIsSectionIteratorAtEnd(ObjectFile: LLVMObjectFileRef, SI: LLVMSectionIteratorRef) -> LLVMBool = extern;
+func LLVMGetSymbols(ObjectFile: LLVMObjectFileRef) -> LLVMSymbolIteratorRef = extern;
+func LLVMIsSymbolIteratorAtEnd(ObjectFile: LLVMObjectFileRef, SI: LLVMSymbolIteratorRef) -> LLVMBool = extern;
 
 enum DWARFTag {
 	case Tag_null = 0;
