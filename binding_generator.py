@@ -9,9 +9,51 @@ def main(args):
 	src = args[1]
 	dst = args[2]
 
-	generate_default_functions = "--generate-default-functions" in args
+	generate_struct_default_constructor = "--generate-struct-default-constructor" in args
+	generate_struct_copy_constructor = "--generate-struct-copy-construct" in args
+	generate_struct_destructor = "--generate-struct-destructor" in args
+	generate_struct_op_assign = "--generate-struct-op-assign" in args
+	generate_struct_op_equal = "--generate-struct-op-equal" in args
+	generate_enum_bitwise_ops = "--generate-enum-bitwise-ops" in args
 	allow_global_variables = "--allow-global-variables" in args
 	infer_enum_name = "--infer-enum-name" in args
+
+	generate_any_struct_func = generate_struct_default_constructor | generate_struct_copy_constructor | generate_struct_destructor | generate_struct_op_assign | generate_struct_op_equal
+
+	nodes_by_id = {}
+	decls = {}
+	unique_decls = set()
+
+	cstdlib = [
+		"/usr/include/arpa",
+		"/usr/include/bits",
+		"/usr/include/net",
+		"/usr/include/netinet",
+		"/usr/include/netpacket",
+		"/usr/include/scsi",
+		"/usr/include/sys",
+
+		"/usr/include/assert.h",
+		"/usr/include/complex.h",
+		"/usr/include/errno.h",
+		"/usr/include/fcntl.h",
+		"/usr/include/limits.h",
+		"/usr/include/math.h",
+		"/usr/include/stdalign.h",
+		"/usr/include/stdarg.h",
+		"/usr/include/stdbool.h",
+		"/usr/include/stddef.h",
+		"/usr/include/stdint.h",
+		"/usr/include/stdio.h",
+		"/usr/include/stdlib.h",
+		"/usr/include/string.h",
+		"/usr/include/threads.h",
+		"/usr/include/time.h",
+		"/usr/include/unistd.h",
+		"/usr/include/wchar.h",
+
+		"/usr/lib/clang",
+	]
 
 	builtin_types = {
 		"void": "void",
@@ -79,6 +121,10 @@ def main(args):
 		"register_t": "register_t",
 	}
 
+	reserved_keywords = [
+		"case", "match"
+	]
+
 	def clang(path):
 		cmd = ["clang", "-Xclang", "-ast-dump=json", "-c", path]
 		return json.loads(subprocess.check_output(cmd))["inner"]
@@ -122,19 +168,26 @@ def main(args):
 	def parseStructDecl(decl, name):
 		fields = []
 		if "inner" in decl:
-			fields = [{
-				"name": field["name"],
-				"type": parseType(field["type"]["qualType"])
-			} for field in decl["inner"] if field["kind"] == "FieldDecl"]
+			for field in decl["inner"]:
+				if field["kind"] != "FieldDecl":
+					continue
+				if isLocFromSystemLibrary(field["loc"]):
+					return None
+
+				fields.append({
+					"name": field["name"],
+					"type": parseType(field["type"]["qualType"])
+				})
 
 		return {
 			"kind": "struct",
 			"name": name,
 			"id": decl["id"],
-			"fields": fields
+			"fields": fields,
+			"loc": decl["loc"]
 		}
 
-	def parseEnumDecl(decl, name, id):
+	def parseEnumDecl(decl, name):
 		cases = []
 		if "inner" in decl:
 			cases = [{
@@ -143,17 +196,16 @@ def main(args):
 			} for c in decl["inner"] if c["kind"] == "EnumConstantDecl"]
 
 		if name == "" and infer_enum_name and len(cases) >= 2:
-			tmp = cases[0]["name"]
+			name = cases[0]["name"]
 			for i in range(len(cases) - 1):
-				tmp = findCommonName(cases[i + 1]["name"], tmp)
-			if tmp != "":
-				name = tmp
+				name = findCommonName(cases[i + 1]["name"], name)
 
 		return {
 			"kind": "enum",
 			"name": name,
-			"id": id,
-			"cases": cases
+			"id": decl["id"],
+			"cases": cases,
+			"loc": decl["loc"]
 		}
 
 	def parseEnumCaseValue(inner):
@@ -185,11 +237,16 @@ def main(args):
 		print("error: invalid constant expr: " + json.dumps(value, indent="\t"))
 		return None
 
+	def checkName(name):
+		if name in reserved_keywords:
+			return name[0:1]
+		return name
+
 	def parseFunctionDecl(decl):
 		params = []
 		if "inner" in decl:
 			params = [{
-				"name": param["name"] if "name" in param else "_",
+				"name": checkName(param["name"]) if "name" in param else "_",
 				"type": parseType(param["type"]["qualType"])
 			} for param in decl["inner"] if param["kind"] == "ParmVarDecl"]
 
@@ -198,14 +255,15 @@ def main(args):
 			"name": decl["name"],
 			"id": decl["id"],
 			"return_type": parseType(decl["type"]["qualType"].split("(")[0]),
-			"params": params
+			"params": params,
+			"loc": decl["loc"]
 		}
 
-	def parseTypedefDecl(decl, prev):
-		if "inner" in decl and "ownedTagDecl" in decl["inner"][0] and prev:
+	def parseTypedefDecl(decl):
+		if "inner" in decl and "ownedTagDecl" in decl["inner"][0]:
 			id = decl["inner"][0]["ownedTagDecl"]["id"]
-			if prev["id"] == id:
-				prev["name"] = decl["name"]
+			if id in decls:
+				decls[id]["name"] = decl["name"]
 				return None
 
 		if decl["name"] in builtin_types:
@@ -219,7 +277,8 @@ def main(args):
 			"kind": "alias",
 			"name": decl["name"],
 			"id": decl["id"],
-			"type": t
+			"type": t,
+			"loc": decl["loc"]
 		}
 
 	def parseVarDecl(decl):
@@ -236,7 +295,8 @@ def main(args):
 				"id": decl["id"],
 				"type": parseType(t),
 				"init": parseConstantValue(decl["inner"][0]) if "inner" in decl else None,
-				"extern": "storageClass" in decl and decl["storageClass"] == "extern"
+				"extern": "storageClass" in decl and decl["storageClass"] == "extern",
+				"loc": decl["loc"]
 			}
 		elif decl["kind"] == "EnumConstantDecl":
 			return {
@@ -244,13 +304,14 @@ def main(args):
 				"name": decl["name"],
 				"id": decl["id"],
 				"type": "i32",
-				"init": parseConstantValue(decl["inner"][0]) if "inner" in decl else None
+				"init": parseConstantValue(decl["inner"][0]) if "inner" in decl else None,
+				"loc": decl["loc"]
 			}
 		else:
 			print(decl)
 
 	def isSystemLibrary(path):
-		for d in ["/usr/lib/clang/", "/usr/include/sys", "/usr/include/bits"]:
+		for d in cstdlib:
 			if path.startswith(d):
 				return True
 		return False
@@ -260,13 +321,25 @@ def main(args):
 			return True
 		if "includedFrom" in loc and isSystemLibrary(loc["includedFrom"]["file"]):
 			return True
-		if "spellingLoc" in loc:
-			return isLocFromSystemLibrary(loc["spellingLoc"])
+		if "expansionLoc" in loc:
+			return isLocFromSystemLibrary(loc["expansionLoc"])
 		return False
 
-	def parseDecl(decl, prev):
+	def isRangeFromSystemLibrary(r):
+		return isLocFromSystemLibrary(r["begin"]) or isLocFromSystemLibrary(r["end"])
+
+	def parseDecl(decl):
 		if isLocFromSystemLibrary(decl["loc"]):
 			return None
+		elif "range" in decl and isRangeFromSystemLibrary(decl["range"]):
+			return None
+
+		if "previousDecl" in decl:
+			prev2 = nodes_by_id[decl["previousDecl"]]
+			if isLocFromSystemLibrary(prev2["loc"]):
+				return None
+			elif "range" in prev2 and isRangeFromSystemLibrary(prev2["range"]):
+				return None
 
 		# ignore builtin decls
 		if "name" in decl and (decl["name"].startswith("__") or decl["name"] in builtin_types):
@@ -277,16 +350,16 @@ def main(args):
 				if "name" in decl:
 					return parseStructDecl(decl, decl["name"])
 				else:
-					return None
+					return parseStructDecl(decl, "")
 			case "EnumDecl":
 				if "name" in decl:
-					return parseEnumDecl(decl, decl["name"], decl["id"])
+					return parseEnumDecl(decl, decl["name"])
 				else:
-					return parseEnumDecl(decl, "", decl["id"])
+					return parseEnumDecl(decl, "")
 			case "FunctionDecl":
 				return parseFunctionDecl(decl)
 			case "TypedefDecl":
-				return parseTypedefDecl(decl, prev)
+				return parseTypedefDecl(decl)
 			case "VarDecl":
 				return parseVarDecl(decl)
 			case _:
@@ -337,20 +410,26 @@ def main(args):
 			return prefix + postfix
 
 	ast = clang(args[1])
-	decls = []
-	unique_decls = set()
 	for decl in ast:
-		d = parseDecl(decl, decls[-1] if len(decls) > 0 else None)
-		if d is None or d["name"] in unique_decls:
+		nodes_by_id[decl["id"]] = decl
+
+	for decl in ast:
+		d = parseDecl(decl)
+		if d is None:
 			continue
 
-		decls.append(d)
-		unique_decls.add(d["name"])
+		if not d["name"] == "" and d["name"] in unique_decls:
+			continue
+
+		decls[decl["id"]] = d
+
+		if not d["name"] == "":
+			unique_decls.add(d["name"])
 
 	output = "import std/core;\n"
 
 	prev_kind = ""
-	for decl in decls:
+	for decl in decls.values():
 		match decl["kind"]:
 			case "struct":
 				output += "\nstruct " + decl["name"] + " {"
@@ -360,12 +439,18 @@ def main(args):
 				for v in decl["fields"]:
 					output += "\tvar " + v["name"] + ": " + v["type"] + ";\n"
 
-				if generate_default_functions and len(decl["fields"]) > 0:
+				if len(decl["fields"]) > 0 and generate_any_struct_func:
 					output += "\n"
-					output += "\tfunc constructor(this: &&" + decl["name"] + ", other: " + decl["name"] + ") -> void = default;\n"
-					output += "\tfunc destructor(this: &&" + decl["name"] + ") -> void = default;\n"
-					output += "\toperator =(this: &&" + decl["name"] + ", other: " + decl["name"] + ") -> void = default;\n"
-					output += "\toperator ==(this: " + decl["name"] + ", other: " + decl["name"] + ") -> bool = default;\n"
+					if generate_struct_default_constructor:
+						output += "\tfunc constructor(this: &&" + decl["name"] + ") -> void = default;\n"
+					if generate_struct_copy_constructor:
+						output += "\tfunc constructor(this: &&" + decl["name"] + ", other: " + decl["name"] + ") -> void = default;\n"
+					if generate_struct_destructor:
+						output += "\tfunc destructor(this: &&" + decl["name"] + ") -> void = default;\n"
+					if generate_struct_op_assign:
+						output += "\tfunc =(this: &&" + decl["name"] + ", other: " + decl["name"] + ") -> void = default;\n"
+					if generate_struct_op_equal:
+						output += "\tfunc ==(this: " + decl["name"] + ", other: " + decl["name"] + ") -> bool = default;\n"
 
 				output += "}\n"
 			case "enum":
@@ -392,10 +477,10 @@ def main(args):
 							output += " = " + c["value"]
 						output += ";\n"
 
-					if generate_default_functions:
+					if generate_enum_bitwise_ops:
 						output += "\n"
-						output += "\toperator &(this: " + decl["name"] + ", other: " + decl["name"] + ") -> " + decl["name"] + " = default;\n"
-						output += "\toperator |(this: " + decl["name"] + ", other: " + decl["name"] + ") -> " + decl["name"] + " = default;\n"
+						output += "\tfunc &(this: " + decl["name"] + ", other: " + decl["name"] + ") -> " + decl["name"] + " = default;\n"
+						output += "\tfunc |(this: " + decl["name"] + ", other: " + decl["name"] + ") -> " + decl["name"] + " = default;\n"
 
 					output += "}\n"
 			case "alias":
