@@ -57,12 +57,16 @@
 
 (name "<" @punctuation.bracket ">" @punctuation.bracket)
 
+(import (identifier) @string)
+
 (template_parameter (identifier) @type)
 (function_decl (identifier) @function)
 (function_decl (operator_name) @function)
-(type_decl (identifier) @type)
-
-(import_stmt (identifier) @string)
+(struct_decl (identifier) @type)
+(enum_decl (identifier) @type)
+(variant_decl (identifier) @type)
+(namespace_decl (identifier) @type)
+(type_alias (identifier) @type)
 
 (type (name (identifier) @type))
 (type (prefix_expr (name (identifier) @type)))
@@ -71,7 +75,6 @@
 
 (parameter_decl (identifier) @variable.parameter)
 (var_decl (identifier) @variable)
-(type_decl (compound_stmt (var_decl (identifier) @property)))
 (for_stmt (identifier) @variable)
 
 (variant_case_decl (identifier) @constant)
