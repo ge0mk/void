@@ -9,16 +9,42 @@ def main(args):
 	src = args[1]
 	dst = args[2]
 
-	generate_struct_default_constructor = "--generate-struct-default-constructor" in args
-	generate_struct_copy_constructor = "--generate-struct-copy-construct" in args
-	generate_struct_destructor = "--generate-struct-destructor" in args
-	generate_struct_op_assign = "--generate-struct-op-assign" in args
-	generate_struct_op_equal = "--generate-struct-op-equal" in args
-	generate_enum_bitwise_ops = "--generate-enum-bitwise-ops" in args
 	allow_global_variables = "--allow-global-variables" in args
 	infer_enum_name = "--infer-enum-name" in args
 
-	generate_any_struct_func = generate_struct_default_constructor | generate_struct_copy_constructor | generate_struct_destructor | generate_struct_op_assign | generate_struct_op_equal
+	generated_functions = {
+		"struct-default-constructor": False,
+		"struct-copy-constructor": False,
+		"struct-destructor": False,
+		"struct-op-assign": False,
+		"struct-op-equal": False,
+		"enum-bitwise-ops": False,
+	}
+
+	for arg in args:
+		for name in generated_functions.keys():
+			key = "--generate-" + name
+			if arg == key:
+				generated_functions[name] = True
+			elif arg.startswith(key + "="):
+				generated_functions[name] = arg.split("=")[1].split(",")
+
+	def generateFunction(name, type):
+		if generated_functions[name] == True:
+			return True
+		elif generated_functions[name] == False:
+			return False
+		elif type in generated_functions[name]:
+			return True
+
+	def generateAnyStructFunction(type):
+		return any([generateFunction(name, type) for name in [
+			"struct-default-constructor",
+			"struct-copy-constructor",
+			"struct-destructor",
+			"struct-op-assign",
+			"struct-op-equal"
+		]])
 
 	nodes_by_id = {}
 	decls = {}
@@ -439,17 +465,17 @@ def main(args):
 				for v in decl["fields"]:
 					output += "\tvar " + v["name"] + ": " + v["type"] + ";\n"
 
-				if len(decl["fields"]) > 0 and generate_any_struct_func:
+				if len(decl["fields"]) > 0 and generateAnyStructFunction(decl["name"]):
 					output += "\n"
-					if generate_struct_default_constructor:
+					if generateFunction("struct-default-constructor", decl["name"]):
 						output += "\tfunc constructor(this: &&" + decl["name"] + ") -> void = default;\n"
-					if generate_struct_copy_constructor:
+					if generateFunction("struct-copy-constructor", decl["name"]):
 						output += "\tfunc constructor(this: &&" + decl["name"] + ", other: " + decl["name"] + ") -> void = default;\n"
-					if generate_struct_destructor:
+					if generateFunction("struct-destructor", decl["name"]):
 						output += "\tfunc destructor(this: &&" + decl["name"] + ") -> void = default;\n"
-					if generate_struct_op_assign:
+					if generateFunction("struct-op-assign", decl["name"]):
 						output += "\tfunc =(this: &&" + decl["name"] + ", other: " + decl["name"] + ") -> void = default;\n"
-					if generate_struct_op_equal:
+					if generateFunction("struct-op-equal", decl["name"]):
 						output += "\tfunc ==(this: " + decl["name"] + ", other: " + decl["name"] + ") -> bool = default;\n"
 
 				output += "}\n"
@@ -477,7 +503,7 @@ def main(args):
 							output += " = " + c["value"]
 						output += ";\n"
 
-					if generate_enum_bitwise_ops:
+					if generateFunction("enum-bitwise-ops", decl["name"]):
 						output += "\n"
 						output += "\tfunc &(this: " + decl["name"] + ", other: " + decl["name"] + ") -> " + decl["name"] + " = default;\n"
 						output += "\tfunc |(this: " + decl["name"] + ", other: " + decl["name"] + ") -> " + decl["name"] + " = default;\n"
