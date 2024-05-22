@@ -53,8 +53,6 @@
 	"as" "is"
 ] @operator
 
-["true" "false"] @constant.builtin
-
 (name "<" @punctuation.bracket ">" @punctuation.bracket)
 
 (import (identifier) @string)
@@ -75,26 +73,20 @@
 
 (parameter_decl (identifier) @variable.parameter)
 (var_decl (identifier) @variable)
+(if_var_stmt (identifier) @variable)
+(var_else_stmt (identifier) @variable)
 (for_stmt (identifier) @variable)
 
 (variant_case_decl (identifier) @constant)
 (match_case_decl (name (identifier) @constant))
 
-[
-	(bin_literal)
-	(oct_literal)
-	(dec_literal)
-	(hex_literal)
-] @number
-
+(bool_literal) @constant.builtin
+(number_literal) @number
 (char_literal) @string.quoted.double
 (string_literal) @string.quoted.single
 (escape_sequence) @escape
 
-(bin_literal (identifier) @type)
-(oct_literal (identifier) @type)
-(dec_literal (identifier) @type)
-(hex_literal (identifier) @type)
+(number_literal (identifier) @type)
 (char_literal (identifier) @type)
 (string_literal (identifier) @type)
 

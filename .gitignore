@@ -1,6 +1,7 @@
 build/*
 !build/stage0.bc
 bootstrap*
+.zed
 *.sublime-project
 *.sublime-workspace
 rt.ll
