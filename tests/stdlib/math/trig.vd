@@ -1,0 +1,24 @@
+import std/core;
+import std/math;
+
+func eq(lhs: f32, rhs: f32) -> bool {
+	return abs!<f32>(lhs - rhs) < 0.0001;
+}
+
+func main() -> void {
+	const pi = 3.141592654f32;
+	const pi2 = pi * 2;
+	const pih = pi / 2;
+
+	assert(eq(sin!<f32>(0f32), 0f32));
+	assert(eq(sin!<f32>(pih), 1f32));
+	assert(eq(sin!<f32>(pi), 0f32));
+	assert(eq(sin!<f32>(pi + pih), -1f32));
+	assert(eq(sin!<f32>(pi2), 0f32));
+
+	assert(eq(cos!<f32>(0f32), 1f32));
+	assert(eq(cos!<f32>(pih), 0f32));
+	assert(eq(cos!<f32>(pi), -1f32));
+	assert(eq(cos!<f32>(pi + pih), 0f32));
+	assert(eq(cos!<f32>(pi2), 1f32));
+}

@@ -221,6 +221,20 @@ func main(args: Range!<String, false>) -> int {
 		discard program.createFunction(ns, "ceil", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Ceil, Type::unknown()));
 		discard program.createFunction(ns, "fract", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Fract, Type::unknown()));
 		discard program.createFunction(ns, "round", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Round, Type::unknown()));
+		discard program.createFunction(ns, "roundEven", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::RoundEven, Type::unknown()));
+
+		discard program.createFunction(ns, "sin", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Sin, Type::unknown()));
+		discard program.createFunction(ns, "cos", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Cos, Type::unknown()));
+		discard program.createFunction(ns, "tan", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Tan, Type::unknown()));
+		discard program.createFunction(ns, "sinh", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::SinH, Type::unknown()));
+		discard program.createFunction(ns, "cosh", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::CosH, Type::unknown()));
+		discard program.createFunction(ns, "tanh", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::TanH, Type::unknown()));
+		discard program.createFunction(ns, "asin", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::ASin, Type::unknown()));
+		discard program.createFunction(ns, "acos", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::ACos, Type::unknown()));
+		discard program.createFunction(ns, "atan", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::ATan, Type::unknown()));
+		discard program.createFunction(ns, "asinh", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::ASinH, Type::unknown()));
+		discard program.createFunction(ns, "acosh", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::ACosH, Type::unknown()));
+		discard program.createFunction(ns, "atanh", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::ATanH, Type::unknown()));
 
 		program.createVectorTypeTemplate(ns);
 		program.createMatrixTypeTemplate(ns);
