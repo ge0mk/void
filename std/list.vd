@@ -287,6 +287,32 @@ struct List {
 		this.size = 0u;
 	}
 
+	func qsort(this: &&List!<T>, cmp: (T, T) -> int) -> void {
+		this.qsort(0u, this.size, cmp);
+	}
+
+	func qsort(this: &&List!<T>, begin: uint, end: uint, cmp: (T, T) -> int) -> void {
+		assert(begin <= end);
+		assert(end <= this.size);
+
+		if end - begin <= 1 {
+			return;
+		}
+
+		const pivot = this[end - 1];
+		var i = begin;
+		for j in begin..(end - 1) {
+			if cmp(this[j], pivot) <= 0 {
+				swap!<T>(&&this[j], &&this[i]);
+				i++;
+			}
+		}
+		swap!<T>(&&this[i], &&this[end - 1]);
+
+		this.qsort(begin, i, cmp);
+		this.qsort(i + 1, end, cmp)
+	}
+
 	func ==(@[shallow] this: List!<T>, @[shallow] other: List!<T>) -> bool {
 		if this.size() != other.size() {
 			return false;

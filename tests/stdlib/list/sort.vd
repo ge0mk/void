@@ -1,0 +1,20 @@
+import std/core;
+import std/list;
+
+func main() -> void {
+	var l: List!<int>;
+	l.append(1);
+	l.append(5);
+	l.append(2);
+	l.append(8);
+	l.append(4);
+	l.qsort(func (lhs: int, rhs: int) -> int {
+		return lhs <=> rhs;
+	});
+
+	assert(l[0u] == 1);
+	assert(l[1u] == 2);
+	assert(l[2u] == 4);
+	assert(l[3u] == 5);
+	assert(l[4u] == 8);
+}
