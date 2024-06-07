@@ -1,5 +1,6 @@
 import std/core;
 import std/libc/stdio;
+import std/libc/string;
 import std/string;
 
 func fprint(f: ptr!<FILE, true>, msg: String) -> void {
@@ -49,4 +50,19 @@ func assert(cond: bool, msg: String) -> void {
 func panic(msg: String) -> never {
 	eprintln(msg);
 	abort();
+}
+
+func readln() -> String {
+	var buffer = String(1024u, '\0'b);
+	if fgets(buffer.vdata(), buffer.size() as i32, libc::stdio::stdin()) == ptr!<byte, true>::null() {
+		return String();
+	}
+
+	var len = strlen(buffer.data()) as uint;
+	if (len > 0 && buffer[len - 1] == '\n'b) {
+		len--;
+	}
+
+	buffer.remove(len..buffer.size());
+	return buffer;
 }
