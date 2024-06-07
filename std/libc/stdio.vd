@@ -16,6 +16,15 @@ func fopen(pathname: ptr!<byte, false>, mode: ptr!<byte, false>) -> ptr!<FILE, t
 func freopen(pathname: ptr!<byte, false>, mode: ptr!<byte, false>, file: ptr!<FILE, true>) -> ptr!<FILE, true> = extern;
 func fclose(file: ptr!<FILE, true>) -> void = extern;
 
+enum SeekMode : i32 {
+	case Set = 0; /* Seek from beginning of file.  */
+	case Cur = 1; /* Seek from current position.  */
+	case End = 2; /* Seek from end of file.  */
+}
+
+func fseek(file: ptr!<FILE, true>, offset: uint, whence: SeekMode) -> i32 = extern;
+func ftell(file: ptr!<FILE, true>) -> uint = extern;
+
 func feof(file: ptr!<FILE, true>) -> bool = extern;
 func ferror(file: ptr!<FILE, true>) -> Error = extern;
 func fflush(file: ptr!<FILE, true>) -> i32 = extern;
