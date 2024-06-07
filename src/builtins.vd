@@ -837,11 +837,9 @@ func getDefaultFunctionBody(this: &FunctionDecl) -> BuiltinFunction {
 }
 
 func getPrimitiveOpParameterTypes(program: &Program, op: PrimitiveOp, base_type: Type) -> List!<Type> {
-	var result: List!<Type>;
-
 	match op.getOp() {
-		case NoOp | ConstNull -> {}
-		case Swap -> result = List!<Type>(2u, base_type.varRef());
+		case NoOp | ConstNull -> return List!<Type>();
+		case Swap -> return List!<Type>(2u, base_type.varRef());
 		case Copy | Neg | Inc | Dec | Abs | Sign
 		| BitwiseReverse | BytewiseReverse
 		| PopCount | CountLeadingZeros | CountTrailingZeros
@@ -849,16 +847,14 @@ func getPrimitiveOpParameterTypes(program: &Program, op: PrimitiveOp, base_type:
 		| Floor | Ceil | Fract | Round | RoundEven
 		| Sin | Cos | Tan | ASin | ACos | ATan
 		| SinH | CosH | TanH | ASinH | ACosH | ATanH
-		| IsInf | IsNan -> result = List!<Type>(1u, base_type);
+		| IsInf | IsNan -> return List!<Type>(1u, base_type);
 		case And | Or | XOr | Not | Shl | Shr | Rotl | Rotr
 		| Add | Sub | Mul | Div | Mod
 		| EQ | NE | LT | LE | GT | GE | Cmp
-		| Min | Max | Pow | Step -> result = List!<Type>(2u, base_type);
-		case Clamp | Lerp | SmoothStep -> result = List!<Type>(3u, base_type);
+		| Min | Max | Pow | Step -> return List!<Type>(2u, base_type);
+		case Clamp | Lerp | SmoothStep -> return List!<Type>(3u, base_type);
 		default -> panic("invalid primitive op");
 	}
-
-	return result;
 }
 
 func getPrimitiveOpReturnType(program: &Program, op: PrimitiveOp, base_type: Type) -> Type {
@@ -871,7 +867,7 @@ func getPrimitiveOpReturnType(program: &Program, op: PrimitiveOp, base_type: Typ
 		case ConstNull | Copy
 		| And | Or | XOr | Not | Shl | Shr | Rotl | Rotr
 		| Add | Sub | Mul | Div | Mod | Neg | Inc | Dec
-		| Abs
+		| Abs | Sign
 		| Min | Max | Clamp | Lerp
 		| BitwiseReverse | BytewiseReverse
 		| PopCount | CountLeadingZeros | CountTrailingZeros
@@ -882,7 +878,7 @@ func getPrimitiveOpReturnType(program: &Program, op: PrimitiveOp, base_type: Typ
 		| SinH | CosH | TanH | ASinH | ACosH | ATanH -> return base_type;
 		case EQ | NE | LT | LE | GT | GE
 		| IsInf | IsNan -> return program.bool_type;
-		case Cmp | Sign -> return program.int_type;
+		case Cmp -> return program.int_type;
 		default -> panic("invalid primitive op");
 	}
 }

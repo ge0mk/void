@@ -1443,6 +1443,18 @@ struct CGContext {
 			case (PrimitiveOp::Abs | Unsigned)	-> result = parameters[0u];
 			case (PrimitiveOp::Abs | Signed)	-> result = this.codegenIntrinsicCall("llvm.abs", List!<LLVMTypeRef>(1u, llvm_type), parameters + LLVMConstNull(this.bool_type));
 			case (PrimitiveOp::Abs | Float)		-> result = this.codegenIntrinsicCall("llvm.fabs", List!<LLVMTypeRef>(1u, llvm_type), parameters);
+			case (PrimitiveOp::Sign | Unsigned)	-> result = LLVMBuildSub(this.builder,
+				LLVMBuildZExt(this.builder, LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntUGT, lhs, LLVMConstNull(llvm_type), ""), llvm_type, ""),
+				LLVMBuildZExt(this.builder, LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntULT, lhs, LLVMConstNull(llvm_type), ""), llvm_type, ""), ""
+			);
+			case (PrimitiveOp::Sign | Signed)	-> result = LLVMBuildSub(this.builder,
+				LLVMBuildZExt(this.builder, LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntSGT, lhs, LLVMConstNull(llvm_type), ""), llvm_type, ""),
+				LLVMBuildZExt(this.builder, LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntSLT, lhs, LLVMConstNull(llvm_type), ""), llvm_type, ""), ""
+			);
+			case (PrimitiveOp::Sign | Float)	-> result = LLVMBuildFSub(this.builder,
+				LLVMBuildUIToFP(this.builder, LLVMBuildFCmp(this.builder, LLVMRealPredicate::LLVMRealOGT, lhs, LLVMConstNull(llvm_type), ""), llvm_type, ""),
+				LLVMBuildUIToFP(this.builder, LLVMBuildFCmp(this.builder, LLVMRealPredicate::LLVMRealOLT, lhs, LLVMConstNull(llvm_type), ""), llvm_type, ""), ""
+			);
 			case (PrimitiveOp::Min | Unsigned)	-> result = this.codegenIntrinsicCall("llvm.umin", List!<LLVMTypeRef>(1u, llvm_type), parameters);
 			case (PrimitiveOp::Min | Signed)	-> result = this.codegenIntrinsicCall("llvm.smin", List!<LLVMTypeRef>(1u, llvm_type), parameters);
 			case (PrimitiveOp::Min | Float)		-> result = this.codegenIntrinsicCall("llvm.minimum", List!<LLVMTypeRef>(1u, llvm_type), parameters);
@@ -1482,6 +1494,7 @@ struct CGContext {
 			case (PrimitiveOp::RoundEven | Float) -> result = this.codegenIntrinsicCall("llvm.roundeven", List!<LLVMTypeRef>(1u, llvm_type), parameters);
 			case (PrimitiveOp::Sin | Float)		-> result = this.codegenIntrinsicCall("llvm.sin", List!<LLVMTypeRef>(1u, llvm_type), parameters);
 			case (PrimitiveOp::Cos | Float)		-> result = this.codegenIntrinsicCall("llvm.cos", List!<LLVMTypeRef>(1u, llvm_type), parameters);
+			case (PrimitiveOp::Tan | Float)		-> result = this.codegenIntrinsicCall("llvm.tan", List!<LLVMTypeRef>(1u, llvm_type), parameters);
 			case (PrimitiveOp::VectorEQ | Unsigned)
 			| (PrimitiveOp::VectorEQ | Signed)	-> {
 				const tmp = LLVMBuildICmp(this.builder, LLVMIntPredicate::LLVMIntEQ, lhs, rhs, "");
