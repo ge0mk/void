@@ -2237,7 +2237,11 @@ struct TCContext {
 			}
 
 			const type = this.getType(Name(postfix), span);
-			this.replaceASTNode(id, Node::IntegerLiteralExpr(number_literal.toInt(), span, type, false));
+			if type.isFloatType(false) {
+				this.replaceASTNode(id, Node::FloatLiteralExpr(number_literal.toFloat(), span, type, false));
+			} else {
+				this.replaceASTNode(id, Node::IntegerLiteralExpr(number_literal.toInt(), span, type, false));
+			}
 		}
 
 		return id;
