@@ -217,7 +217,7 @@ struct File {
 	func readOne(this: &&File) -> Result!<T> {
 		var result: T;
 
-		const r = fread!<T>(ptr!<T, true>::addressOf(&&result) as vptr, 1u, this.c_file);
+		const r = fread!<T>(ptr!<T, true>::addressOf(&&result), 1u, this.c_file);
 		const err = ferror(this.c_file);
 		if err != Error::OK {
 			throw err;
@@ -312,6 +312,21 @@ struct File {
 		}
 
 		return Ok;
+	}
+
+	func getSize(this: &&File) -> uint {
+		const prev_pos = libc::stdio::ftell(this.c_file)
+		discard libc::stdio::fseek(this.c_file, 0u, libc::stdio::SeekMode::End);
+		const end_pos = libc::stdio::ftell(this.c_file);
+		discard libc::stdio::fseek(this.c_file, prev_pos, libc::stdio::SeekMode::Set);
+		return end_pos;
+	}
+
+	func getSize(path: &String) -> uint {
+		var file = File::open(path, OpenMode::read) else {
+			return 0;
+		}
+		return file.getSize();
 	}
 
 	func eof(this: File) -> bool {
