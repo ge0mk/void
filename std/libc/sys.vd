@@ -1,0 +1,35 @@
+import std/core;
+
+enum MMapProtection : i32 {
+	case Read = 0x1;				/* Page can be read.  */
+	case Write = 0x2;				/* Page can be written.  */
+	case Exec = 0x4;				/* Page can be executed.  */
+	case None = 0x0;				/* Page can not be accessed.  */
+	case GrowsDown = 0x01000000;	/* Extend change to start of growsdown vma (mprotect only).  */
+	case GrowsUp = 0x02000000;		/* Extend change to start of growsup vma (mprotect only).  */
+
+	func |(lhs: MMapProtection, rhs: MMapProtection) -> MMapProtection = default;
+	func &(lhs: MMapProtection, rhs: MMapProtection) -> MMapProtection = default;
+
+	func |=(lhs: &&MMapProtection, rhs: MMapProtection) -> void = default;
+	func &=(lhs: &&MMapProtection, rhs: MMapProtection) -> void = default;
+}
+
+enum MMapFlags : i32 {
+	case Shared = 0x01;				/* Share changes.  */
+	case Private = 0x02;			/* Changes are private.  */
+	case SharedValidate = 0x03;		/* Share changes and validate extension flags.  */
+	case Type = 0x0f;				/* Mask for type of mapping.  */
+
+	/* Other flags.  */
+	case Fixed = 0x10;				/* Interpret addr exactly.  */
+	case File = 0;
+	case Anonymous = 0x20;			/* Don't use a file.  */
+
+	/* When MAP_HUGETLB is set bits [26:31] encode the log2 of the huge page size.  */
+	case HugeShift = 26;
+	case HugeMask = 0x3f;
+}
+
+func mmap(addr: ptr!<void, true>, len: uint, prot: MMapProtection, flags: MMapFlags, fd: i32, offset: uint) -> ptr!<void, true> = extern;
+func munmap(addr: ptr!<void, true>, len: uint) -> i32 = extern;
