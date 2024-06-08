@@ -209,8 +209,7 @@ struct File {
 			throw err;
 		}
 
-		result.size = r;
-		return Ok(result);
+		return Ok(result.substring(0u..r));
 	}
 
 	template<T: type>
