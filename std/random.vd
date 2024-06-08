@@ -1,0 +1,30 @@
+import std/core;
+
+struct Random {
+	var state: uint;
+
+	func constructor(this: &&Random, seed: uint) -> void {
+		this.state := seed;
+	}
+
+	func constructor(this: &&Random, other: Random) -> void = default;
+	func destructor(this: &&Random) -> void = default;
+
+	func =(this: &&Random, other: Random) -> void = default;
+
+	func uint(this: &&Random) -> uint {
+		// xorshift rng: https://en.wikipedia.org/wiki/Xorshift#xorshift.2A
+		this.state ^= this.state >> 12;
+		this.state ^= this.state << 25;
+		this.state ^= this.state >> 27;
+		return this.state * 0x2545F4914F6CDD1D;
+	}
+
+	func u32(this: &&Random) -> u32 {
+		return (this.uint() >> 32) as u32;
+	}
+
+	func f32(this: &&Random) -> f32 {
+		return (this.u32() >> 8) as f32 / 16777216.0f32;
+	}
+}
