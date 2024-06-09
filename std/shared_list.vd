@@ -64,6 +64,14 @@ struct SharedList {
 		return SharedHandle!<T>(data);
 	}
 
+	func first(this: &SharedList!<T>) -> SharedHandle!<T> {
+		return this.elements.first() ?? SharedHandle!<T>();
+	}
+
+	func last(this: &SharedList!<T>) -> SharedHandle!<T> {
+		return this.elements.last() ?? SharedHandle!<T>();
+	}
+
 	func range(this: &SharedList!<T>) -> Range!<SharedHandle!<T>, false> {
 		return this.elements.range();
 	}
