@@ -36,7 +36,7 @@
 	"yield"
 ] @keyword
 
-[ "::" ":" "." "," ";" "->" ] @punctuation.delimiter
+[ "::" ":" "." "," ";" "->" "=>" ] @punctuation.delimiter
 
 [ "(" ")" "[" "]" "{" "}" ] @punctuation.bracket
 
@@ -46,7 +46,7 @@
 	"++" "--"
 	".."
 	"=" ":="
-	"&=" "|=" "^=" "~=" "<<=" ">>="
+	"&=" "|=" "^=" "<<=" ">>="
 	"+=" "-=" "*=" "/=" "%="
 	"==" "!=" "<" "<=" ">" ">=" "<=>"
 	"||" "&&" "!"
@@ -57,6 +57,8 @@
 
 (import (identifier) @string)
 
+(name (identifier) @variable)
+
 (template_parameter (identifier) @type)
 (function_decl (identifier) @function)
 (function_decl (operator_name) @function)
@@ -66,9 +68,6 @@
 (namespace_decl (identifier) @type)
 (type_alias (identifier) @type)
 
-(type (name (identifier) @type))
-(type (prefix_expr (name (identifier) @type)))
-(name (name (identifier) @type))
 (named_tuple_element (identifier) @property)
 
 (parameter_decl (identifier) @variable.parameter)
@@ -93,7 +92,6 @@
 (call_expr callee: (name (identifier) @function))
 (member_access_expr rhs: (name (identifier) @property))
 (call_expr callee: (member_access_expr rhs: (name (identifier) @function)))
-(namespace_expr (name (identifier) @type))
 (call_expr callee: (namespace_expr rhs: (name (identifier) @function)))
 
 (comment) @comment
