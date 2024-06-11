@@ -611,7 +611,7 @@ struct Parser {
 			this.recover(TokenType::RParen);
 		}
 
-		if !this.expect(TokenType::Arrow) {
+		if !this.expect(TokenType::FatArrow) {
 			this.error("expected function return type", this.currentSpan());
 			return Some(ParsedFunctionSignature(start..this.previousSpan(), name, parameters, this.file.getGarbageNode()));
 		}
@@ -1353,7 +1353,7 @@ struct Parser {
 		}
 
 		if !is_named && this.scope_stack.last().value() != CaseStmtPattern {
-			if this.accept(TokenType::Arrow) {
+			if this.accept(TokenType::FatArrow) {
 				var parameter_types: List!<uint>;
 				for e in elements {
 					parameter_types.append(e.value);

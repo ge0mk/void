@@ -45,6 +45,7 @@ enum TokenType: u8 {
 	case Tilde;						// ~
 	case ExclamationMark;			// !
 	case Arrow;						// ->
+	case FatArrow;					// =>
 	case DoubleDot;					// ..
 	case DoubleQuestionMark;		// ??
 	case DoublePlus;				// ++
@@ -150,6 +151,7 @@ enum TokenType: u8 {
 			case Tilde -> return "<token> ~";
 			case ExclamationMark -> return "<token> !";
 			case Arrow -> return "<token> ->";
+			case FatArrow -> return "<token> =>";
 			case DoubleDot -> return "<token> ..";
 			case DoubleQuestionMark -> return "<token> ??";
 			case DoublePlus -> return "<token> ++";
@@ -522,6 +524,9 @@ struct Lexer {
 		if this.src.at(this.index + 1) ?? '\0'b == '='b {
 			this.index += 2;
 			return Token(TokenType::Equal, this.span(this.index - 2, this.index));
+		} else if this.src.at(this.index + 1) ?? '\0'b == '>'b {
+			this.index += 2;
+			return Token(TokenType::FatArrow, this.span(this.index - 2, this.index));
 		} else {
 			this.index += 1;
 			return Token(TokenType::Assign, this.span(this.index - 1, this.index));
