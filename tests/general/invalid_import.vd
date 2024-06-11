@@ -3,6 +3,6 @@
 import std/core;
 import a/b/c;
 
-func main() -> int {
+func main() => int {
 	return 0;
 }

@@ -2,7 +2,7 @@
 
 import std/core;
 
-func main() -> void {
+func main() => void {
 	match true {
 		case true -> {}
 		case false -> {}

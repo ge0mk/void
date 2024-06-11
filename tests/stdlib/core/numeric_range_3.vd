@@ -1,6 +1,6 @@
 import std/core;
 
-func main() -> void {
+func main() => void {
 	var acc = 0;
 	// 5 + 4 + 3
 	for i in 5..2 {

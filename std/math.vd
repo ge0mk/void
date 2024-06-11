@@ -5,33 +5,33 @@ pragma generate_std_math_builtins;
 template <T: type, Size: uint>
 namespace Vector {
 	comptime if Size == 3 {
-		func cross(lhs: Vector!<T, Size>, rhs: Vector!<T, Size>) -> Vector!<T, Size> {
+		func cross(lhs: Vector!<T, Size>, rhs: Vector!<T, Size>) => Vector!<T, Size> {
 			return lhs.yzx * rhs.zxy - lhs.zxy * rhs.yzx;
 		}
 	}
 
-	func squareLength(this: Vector!<T, Size>) -> T {
+	func squareLength(this: Vector!<T, Size>) => T {
 		return dot(this, this);
 	}
 
 	comptime if T == f32 | T == f64 {
-		func length(this: Vector!<T, Size>) -> T {
+		func length(this: Vector!<T, Size>) => T {
 			return sqrt!<T>(dot(this, this));
 		}
 
-		func distance(lhs: Vector!<T, Size>, rhs: Vector!<T, Size>) -> T {
+		func distance(lhs: Vector!<T, Size>, rhs: Vector!<T, Size>) => T {
 			return sqrt!<T>(squareLength(lhs - rhs));
 		}
 
-		func normalize(this: Vector!<T, Size>) -> Vector!<T, Size> {
+		func normalize(this: Vector!<T, Size>) => Vector!<T, Size> {
 			return this / length(this);
 		}
 
-		func reflect(v: Vector!<T, Size>, n: Vector!<T, Size>) -> Vector!<T, Size> {
+		func reflect(v: Vector!<T, Size>, n: Vector!<T, Size>) => Vector!<T, Size> {
 			return v - n * dot(n, v) * (2 as T);
 		}
 
-		func refract(v: Vector!<T, Size>, n: Vector!<T, Size>, eta: T) -> Vector!<T, Size> {
+		func refract(v: Vector!<T, Size>, n: Vector!<T, Size>, eta: T) => Vector!<T, Size> {
 			const d = dot(n, v);
 			const k = (1 as T) - eta * eta * (-(d * d) + 1);
 			if k < 0 {
@@ -50,7 +50,7 @@ namespace Matrix {
 	comptime const e0: T = 0;
 
 	comptime if Columns > 2 & Rows > 2 {
-		func submatrix(this: Matrix!<T, Columns, Rows>, column: uint, row: uint) -> Matrix!<T, (Columns - 1), (Rows - 1)> {
+		func submatrix(this: Matrix!<T, Columns, Rows>, column: uint, row: uint) => Matrix!<T, (Columns - 1), (Rows - 1)> {
 			var res: Matrix!<T, (Columns - 1), (Rows - 1)>;
 			for c in 0u..((Columns - 1) as uint) {
 				const c2 = c + (c >= column) as uint;
@@ -64,7 +64,7 @@ namespace Matrix {
 	}
 
 	comptime if Columns == Rows {
-		func cofactor(this: Matrix!<T, Columns, Rows>, column: uint, row: uint) -> T {
+		func cofactor(this: Matrix!<T, Columns, Rows>, column: uint, row: uint) => T {
 			comptime if Columns == 2 {
 				return this[(column + 1) % 2, (row + 1) % 2] * ((column + row) % 2 == 1 ? -1 : 1);
 			} else {
@@ -72,7 +72,7 @@ namespace Matrix {
 			}
 		}
 
-		func determinant(this: Matrix!<T, Columns, Rows>) -> T {
+		func determinant(this: Matrix!<T, Columns, Rows>) => T {
 			comptime if Columns == 2 {
 				return this[0, 0] * this[1, 1] - this[0, 1] * this[1, 0];
 			} else if Columns == 3 {
@@ -88,11 +88,11 @@ namespace Matrix {
 			}
 		}
 
-		func isInvertible(this: Matrix!<T, Columns, Rows>) -> bool {
+		func isInvertible(this: Matrix!<T, Columns, Rows>) => bool {
 			return this.determinant() != 0;
 		}
 
-		func inverse(this: Matrix!<T, Columns, Rows>) -> Matrix!<T, Columns, Rows> {
+		func inverse(this: Matrix!<T, Columns, Rows>) => Matrix!<T, Columns, Rows> {
 			const det = this.determinant();
 			if det == 0 {
 				return Matrix!<T, Columns, Rows>();
@@ -109,7 +109,7 @@ namespace Matrix {
 	}
 
 	comptime if Columns == 4 & Rows == 4 {
-		func translate(v: Vector!<T, 3>) -> Matrix!<T, 4, 4> {
+		func translate(v: Vector!<T, 3>) => Matrix!<T, 4, 4> {
 			return Matrix!<T, 4, 4>(
 				e1, e0, e0, v.x,
 				e0, e1, e0, v.y,
@@ -118,11 +118,11 @@ namespace Matrix {
 			);
 		}
 
-		func translate(this: Matrix!<T, 4, 4>, v: Vector!<T, 3>) -> Matrix!<T, 4, 4> {
+		func translate(this: Matrix!<T, 4, 4>, v: Vector!<T, 3>) => Matrix!<T, 4, 4> {
 			return this * translate(v);
 		}
 
-		func scale(v: Vector!<T, 3>) -> Matrix!<T, 4, 4> {
+		func scale(v: Vector!<T, 3>) => Matrix!<T, 4, 4> {
 			return Matrix!<T, 4, 4>(
 				v.x, e0, e0, e0,
 				e0, v.y, e0, e0,
@@ -131,12 +131,12 @@ namespace Matrix {
 			);
 		}
 
-		func scale(this: Matrix!<T, 4, 4>, v: Vector!<T, 3>) -> Matrix!<T, 4, 4> {
+		func scale(this: Matrix!<T, 4, 4>, v: Vector!<T, 3>) => Matrix!<T, 4, 4> {
 			return this * scale(v);
 		}
 
 		comptime if T == f64 | T == f32 {
-			func rotateX(angle: T) -> Matrix!<T, 4, 4> {
+			func rotateX(angle: T) => Matrix!<T, 4, 4> {
 				const s = sin!<T>(angle);
 				const c = cos!<T>(angle);
 				return Matrix!<T, 4, 4>(
@@ -147,11 +147,11 @@ namespace Matrix {
 				);
 			}
 
-			func rotateX(this: Matrix!<T, 4, 4>, angle: T) -> Matrix!<T, 4, 4> {
+			func rotateX(this: Matrix!<T, 4, 4>, angle: T) => Matrix!<T, 4, 4> {
 				return this * rotateX(angle);
 			}
 
-			func rotateY(angle: T) -> Matrix!<T, 4, 4> {
+			func rotateY(angle: T) => Matrix!<T, 4, 4> {
 				const s = sin!<T>(angle);
 				const c = cos!<T>(angle);
 				return Matrix!<T, 4, 4>(
@@ -162,11 +162,11 @@ namespace Matrix {
 				);
 			}
 
-			func rotateY(this: Matrix!<T, 4, 4>, angle: T) -> Matrix!<T, 4, 4> {
+			func rotateY(this: Matrix!<T, 4, 4>, angle: T) => Matrix!<T, 4, 4> {
 				return this * rotateY(angle);
 			}
 
-			func rotateZ(angle: T) -> Matrix!<T, 4, 4> {
+			func rotateZ(angle: T) => Matrix!<T, 4, 4> {
 				const s = sin!<T>(angle);
 				const c = cos!<T>(angle);
 				return Matrix!<T, 4, 4>(
@@ -177,19 +177,19 @@ namespace Matrix {
 				);
 			}
 
-			func rotateZ(this: Matrix!<T, 4, 4>, angle: T) -> Matrix!<T, 4, 4> {
+			func rotateZ(this: Matrix!<T, 4, 4>, angle: T) => Matrix!<T, 4, 4> {
 				return this * rotateZ(angle);
 			}
 
-			func rotateEuler(angles: Vector!<T, 3>) -> Matrix!<T, 4, 4> {
+			func rotateEuler(angles: Vector!<T, 3>) => Matrix!<T, 4, 4> {
 				return rotateZ(angles.z) * rotateY(angles.y) * rotateX(angles.x);
 			}
 
-			func rotateEuler(this: Matrix!<T, 4, 4>, angles: Vector!<T, 3>) -> Matrix!<T, 4, 4> {
+			func rotateEuler(this: Matrix!<T, 4, 4>, angles: Vector!<T, 3>) => Matrix!<T, 4, 4> {
 				return this * rotateZ(angles.z) * rotateY(angles.y) * rotateX(angles.x);
 			}
 
-			func projection(fov: T, aspect_ratio: T, z_near: T, z_far: T) -> Matrix!<T, 4, 4> {
+			func projection(fov: T, aspect_ratio: T, z_near: T, z_far: T) => Matrix!<T, 4, 4> {
 				if(fov < 0 || aspect_ratio == 0) {
 					return Matrix!<T, 4, 4>();
 				}
@@ -206,7 +206,7 @@ namespace Matrix {
 			}
 		}
 
-		func shear(xy: T, xz: T, yx: T, yz: T, zx: T, zy: T) -> Matrix!<T, 4, 4> {
+		func shear(xy: T, xz: T, yx: T, yz: T, zx: T, zy: T) => Matrix!<T, 4, 4> {
 			return Matrix!<T, 4, 4>(
 				e1, xy, xz, e0,
 				yx, e1, yz, e0,
@@ -215,14 +215,14 @@ namespace Matrix {
 			);
 		}
 
-		func shear(this: Matrix!<T, 4, 4>, xy: T, xz: T, yx: T, yz: T, zx: T, zy: T) -> Matrix!<T, 4, 4> {
+		func shear(this: Matrix!<T, 4, 4>, xy: T, xz: T, yx: T, yz: T, zx: T, zy: T) => Matrix!<T, 4, 4> {
 			return this * shear(xy, xz, yx, yz, zx, zy);
 		}
 	}
 }
 
 template <T: type>
-func gcd(a: T, b: T) -> T {
+func gcd(a: T, b: T) => T {
 	while b != 0 {
 		const t = b;
 		b = a % b;
@@ -232,7 +232,7 @@ func gcd(a: T, b: T) -> T {
 }
 
 template <T: type>
-func lcm(a: T, b: T) -> T {
+func lcm(a: T, b: T) => T {
 	if a == 0 || b == 0 {
 		return 0;
 	}

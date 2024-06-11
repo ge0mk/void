@@ -5,7 +5,7 @@ enum ReferenceKind: byte {
 	case Const;
 	case Var;
 
-	func constructor(this: &&ReferenceKind) -> void {
+	func constructor(this: &&ReferenceKind) => void {
 		this.constructor(ReferenceKind::None);
 	}
 }
@@ -154,7 +154,7 @@ namespace Error {
 	case EOF = -1;
 
 	@[extern_name: "error_toCString"]
-	func toCString(this: Error) -> ptr!<byte, false> = extern;
+	func toCString(this: Error) => ptr!<byte, false> = extern;
 }
 
 template <T: type>
@@ -162,15 +162,15 @@ variant Optional {
 	case None;
 	case Some: T;
 
-	func constructor(this: &&Optional!<T>) -> void {
+	func constructor(this: &&Optional!<T>) => void {
 		this.constructor!<0>();	// default to None
 	}
 
-	func hasValue(this: Optional!<T>) -> bool {
+	func hasValue(this: Optional!<T>) => bool {
 		return this is Some;
 	}
 
-	func value(this: Optional!<T>) -> T {
+	func value(this: Optional!<T>) => T {
 		comptime if referenceKindOf!<T>() == ReferenceKind::Var {
 			match this {
 				case Some: &&value -> return &&value;
@@ -189,7 +189,7 @@ variant Optional {
 		}
 	}
 
-	func ??(this: Optional!<T>, other: T) -> T {
+	func ??(this: Optional!<T>, other: T) => T {
 		comptime if referenceKindOf!<T>() == ReferenceKind::Var {
 			match this {
 				case Some: &&value -> return &&value;
@@ -208,7 +208,7 @@ variant Optional {
 		}
 	}
 
-	func ??(this: Optional!<T>, other: Optional!<T>) -> Optional!<T> {
+	func ??(this: Optional!<T>, other: Optional!<T>) => Optional!<T> {
 		match this {
 			case Some -> return this;
 			default -> return other;
@@ -221,15 +221,15 @@ variant Result {
 	case Ok: Tok;
 	case Error: Terr;
 
-	func hasValue(this: Result!<Tok, Terr>) -> bool {
+	func hasValue(this: Result!<Tok, Terr>) => bool {
 		return this is Ok;
 	}
 
-	func hasError(this: Result!<Tok, Terr>) -> bool {
+	func hasError(this: Result!<Tok, Terr>) => bool {
 		return this is Error;
 	}
 
-	func error(this: Result!<Tok, Terr>) -> Terr {
+	func error(this: Result!<Tok, Terr>) => Terr {
 		match this {
 			case Error: error -> return error;
 			default -> abort();
@@ -237,7 +237,7 @@ variant Result {
 	}
 
 	comptime if Tok != void {
-		func value(this: Result!<Tok, Terr>) -> Tok {
+		func value(this: Result!<Tok, Terr>) => Tok {
 			comptime if referenceKindOf!<Tok>() == ReferenceKind::Var {
 				match this {
 					case Ok: &&value -> return &&value;
@@ -256,7 +256,7 @@ variant Result {
 			}
 		}
 
-		func ??(this: Result!<Tok, Terr>, other: Tok) -> Tok {
+		func ??(this: Result!<Tok, Terr>, other: Tok) => Tok {
 			comptime if referenceKindOf!<Tok>() == ReferenceKind::Var {
 				match this {
 					case Ok: &&value -> return &&value;
@@ -282,15 +282,15 @@ variant Result {
 	case Ok: Tok;
 	case Error: Error;
 
-	func hasValue(this: Result!<Tok>) -> bool {
+	func hasValue(this: Result!<Tok>) => bool {
 		return this is Ok;
 	}
 
-	func hasError(this: Result!<Tok>) -> bool {
+	func hasError(this: Result!<Tok>) => bool {
 		return this is Error;
 	}
 
-	func error(this: Result!<Tok>) -> Error {
+	func error(this: Result!<Tok>) => Error {
 		match this {
 			case Error: error -> return error;
 			default -> abort();
@@ -298,7 +298,7 @@ variant Result {
 	}
 
 	comptime if Tok != void {
-		func value(this: Result!<Tok>) -> Tok {
+		func value(this: Result!<Tok>) => Tok {
 			comptime if referenceKindOf!<Tok>() == ReferenceKind::Var {
 				match this {
 					case Ok: &&value -> return &&value;
@@ -317,7 +317,7 @@ variant Result {
 			}
 		}
 
-		func ??(this: Result!<Tok>, other: Tok) -> Tok {
+		func ??(this: Result!<Tok>, other: Tok) => Tok {
 			comptime if referenceKindOf!<Tok>() == ReferenceKind::Var {
 				match this {
 					case Ok: &&value -> return &&value;
@@ -340,7 +340,7 @@ variant Result {
 
 template <Type: type, Mutable: bool>
 namespace Range {
-	func at(this: &Range!<Type, Mutable>, index: uint) -> Optional!<&Type> {
+	func at(this: &Range!<Type, Mutable>, index: uint) => Optional!<&Type> {
 		if index >= this.size {
 			return None;
 		}
@@ -349,18 +349,18 @@ namespace Range {
 	}
 
 	comptime if Mutable {
-		func [](this: &Range!<Type, Mutable>, index: uint) -> &&Type {
+		func [](this: &Range!<Type, Mutable>, index: uint) => &&Type {
 			assert(index < this.size, Error::EINVAL);
 			return &&this.data[index];
 		}
 	} else {
-		func [](this: &Range!<Type, Mutable>, index: uint) -> &Type {
+		func [](this: &Range!<Type, Mutable>, index: uint) => &Type {
 			assert(index < this.size, Error::EINVAL);
 			return &this.data[index];
 		}
 	}
 
-	func find(this: Range!<Type, Mutable>, value: Type) -> Optional!<uint> {
+	func find(this: Range!<Type, Mutable>, value: Type) => Optional!<uint> {
 		for index in 0u..this.size() {
 			if this.data[index] == value {
 				return Some(index);
@@ -370,7 +370,7 @@ namespace Range {
 		return None;
 	}
 
-	func contains(this: Range!<Type, Mutable>, value: Type) -> bool {
+	func contains(this: Range!<Type, Mutable>, value: Type) => bool {
 		return this.find(value) is Some;
 	}
 }
@@ -379,15 +379,15 @@ template <T: type, Size: uint>
 namespace Array {
 	pragma finalize_std_core_array_instance;
 
-	func iterator(this: &Array!<T, Size>) -> RangeIterator!<T, false> {
+	func iterator(this: &Array!<T, Size>) => RangeIterator!<T, false> {
 		return RangeIterator!<T, false>(this.data() as ptr!<T, false>, this.data() as ptr!<T, false> + Size);
 	}
 
-	func iterator(this: &&Array!<T, Size>) -> RangeIterator!<T, true> {
+	func iterator(this: &&Array!<T, Size>) => RangeIterator!<T, true> {
 		return RangeIterator!<T, true>(this.data() as ptr!<T, true>, this.data() as ptr!<T, true> + Size);
 	}
 
-	func at(this: &Array!<T, Size>, index: uint) -> Optional!<&T> {
+	func at(this: &Array!<T, Size>, index: uint) => Optional!<&T> {
 		if index < 0u || index >= Size {
 			return None;
 		}
@@ -395,37 +395,37 @@ namespace Array {
 		return Some(&this.data()[index]);
 	}
 
-	func [](this: &Array!<T, Size>, index: uint) -> &T {
+	func [](this: &Array!<T, Size>, index: uint) => &T {
 		assert(index < Size, Error::EBOUNDS);
 		return &this.data()[index];
 	}
 
-	func [](this: &&Array!<T, Size>, index: uint) -> &&T {
+	func [](this: &&Array!<T, Size>, index: uint) => &&T {
 		assert(index < Size, Error::EBOUNDS);
 		return &&this.data()[index];
 	}
 
-	func [](this: &Array!<T, Size>, range: NumericRange!<uint>) -> Range!<T, false> {
+	func [](this: &Array!<T, Size>, range: NumericRange!<uint>) => Range!<T, false> {
 		assert(range.end <= Size, Error::EBOUNDS);
 		assert(range.start <= range.end && range.step == 1, Error::EINVAL);
 		return Range!<T, false>(this.data() + range.start, range.end - range.start);
 	}
 
-	func [](this: &&Array!<T, Size>, range: NumericRange!<uint>) -> Range!<T, true> {
+	func [](this: &&Array!<T, Size>, range: NumericRange!<uint>) => Range!<T, true> {
 		assert(range.end <= Size, Error::EBOUNDS);
 		assert(range.start <= range.end && range.step == 1, Error::EINVAL);
 		return Range!<T, true>(this.data() + range.start, range.end - range.start);
 	}
 
-	func range(this: &Array!<T, Size>) -> Range!<T, false> {
+	func range(this: &Array!<T, Size>) => Range!<T, false> {
 		return Range!<T, false>(this.data(), this.size());
 	}
 
-	func range(this: &&Array!<T, Size>) -> Range!<T, true> {
+	func range(this: &&Array!<T, Size>) => Range!<T, true> {
 		return Range!<T, true>(this.data(), this.size());
 	}
 
-	func find(this: &Array!<T, Size>, value: T) -> Optional!<uint> {
+	func find(this: &Array!<T, Size>, value: T) => Optional!<uint> {
 		for index in 0u..this.size() {
 			if this.data()[index] == value {
 				return Some(index);
@@ -435,7 +435,7 @@ namespace Array {
 		return None;
 	}
 
-	func contains(this: &Array!<T, Size>, value: T) -> bool {
+	func contains(this: &Array!<T, Size>, value: T) => bool {
 		return this.find(value) is Some;
 	}
 }

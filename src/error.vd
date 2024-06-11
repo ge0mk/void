@@ -24,22 +24,22 @@ struct CompilationError {
 	var stage: ErrorStage;
 	var span: Span;
 
-	func constructor(this: &&CompilationError, other: CompilationError) -> void = default;
+	func constructor(this: &&CompilationError, other: CompilationError) => void = default;
 
-	func constructor(this: &&CompilationError, message: String, type: ErrorType, stage: ErrorStage, span: Span) -> void {
+	func constructor(this: &&CompilationError, message: String, type: ErrorType, stage: ErrorStage, span: Span) => void {
 		this.message := message;
 		this.type := type;
 		this.stage := stage;
 		this.span := span;
 	}
 
-	func destructor(this: &&CompilationError) -> void = default;
+	func destructor(this: &&CompilationError) => void = default;
 
-	func =(this: &&CompilationError, other: CompilationError) -> void = default;
+	func =(this: &&CompilationError, other: CompilationError) => void = default;
 
-	func ==(this: CompilationError, other: CompilationError) -> bool = default;
+	func ==(this: CompilationError, other: CompilationError) => bool = default;
 
-	func toString(this: CompilationError, file_name: String) -> String {
+	func toString(this: CompilationError, file_name: String) => String {
 		var result = "";
 		match this.type {
 			case Error -> result += "Error: ";

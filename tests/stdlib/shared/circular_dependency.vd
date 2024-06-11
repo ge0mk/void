@@ -7,27 +7,27 @@ struct Foo {
 	var counter: &&int;
 	var that: WeakPtr!<Foo>;
 
-	func constructor(this: &&Foo, counter: &&int) -> void {
+	func constructor(this: &&Foo, counter: &&int) => void {
 		this.counter := &&counter;
 		this.counter++;
 	}
 
-	func constructor(this: &&Foo, other: Foo) -> void {
+	func constructor(this: &&Foo, other: Foo) => void {
 		this.counter := &&other.counter;
 		this.counter++;
 	}
 
-	func destructor(this: &&Foo) -> void {
+	func destructor(this: &&Foo) => void {
 		this.counter--;
 	}
 }
 
-func foo(counter: &&int) -> void {
+func foo(counter: &&int) => void {
 	var a = SharedPtr!<Foo>::new(Foo(&&counter));
 	a.that = WeakPtr!<Foo>(a);
 }
 
-func main() -> void {
+func main() => void {
 	var counter = 0;
 	foo(&&counter);
 	assert(counter == 0);

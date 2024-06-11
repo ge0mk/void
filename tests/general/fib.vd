@@ -2,7 +2,7 @@
 
 import std/core;
 
-func fib(x: int) -> int {
+func fib(x: int) => int {
 	if x <= 1 {
 		return x;
 	} else {
@@ -10,6 +10,6 @@ func fib(x: int) -> int {
 	}
 }
 
-func main() -> int {
+func main() => int {
 	return fib(10);
 }

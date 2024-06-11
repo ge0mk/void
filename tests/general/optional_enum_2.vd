@@ -6,9 +6,9 @@ enum Foo {
 }
 
 struct Bar {
-	func bar() -> Optional!<Foo> {
+	func bar() => Optional!<Foo> {
 		return Optional!<Foo>::None;
 	}
 }
 
-func main() -> void {}
+func main() => void {}

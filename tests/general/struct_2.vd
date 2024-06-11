@@ -6,20 +6,20 @@ import std/io;
 import std/string;
 
 struct Foo {
-	func constructor(this: &&Foo) -> void {
+	func constructor(this: &&Foo) => void {
 		println("hello");
 	}
 
-	func constructor(this: &&Foo, other: Foo) -> void {
+	func constructor(this: &&Foo, other: Foo) => void {
 		println("copy");
 	}
 
-	func destructor(this: &&Foo) -> void {
+	func destructor(this: &&Foo) => void {
 		println("world");
 	}
 }
 
-func main() -> int {
+func main() => int {
 	const a = Foo();
 	return 0;
 }

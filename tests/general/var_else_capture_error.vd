@@ -2,11 +2,11 @@
 
 import std/core;
 
-func foo() -> Result!<int, int> {
+func foo() => Result!<int, int> {
 	return Result!<int, int>::Error(42);
 }
 
-func main() -> int {
+func main() => int {
 	var a = foo() else: error {
 		return error;
 	}

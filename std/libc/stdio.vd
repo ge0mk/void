@@ -4,17 +4,17 @@ import std/libc/errno;
 struct FILE {}
 
 @[extern_name: "get_stdin"]
-func stdin() -> ptr!<FILE, true> = extern;
+func stdin() => ptr!<FILE, true> = extern;
 
 @[extern_name: "get_stdout"]
-func stdout() -> ptr!<FILE, true> = extern;
+func stdout() => ptr!<FILE, true> = extern;
 
 @[extern_name: "get_stderr"]
-func stderr() -> ptr!<FILE, true> = extern;
+func stderr() => ptr!<FILE, true> = extern;
 
-func fopen(pathname: ptr!<byte, false>, mode: ptr!<byte, false>) -> ptr!<FILE, true> = extern;
-func freopen(pathname: ptr!<byte, false>, mode: ptr!<byte, false>, file: ptr!<FILE, true>) -> ptr!<FILE, true> = extern;
-func fclose(file: ptr!<FILE, true>) -> void = extern;
+func fopen(pathname: ptr!<byte, false>, mode: ptr!<byte, false>) => ptr!<FILE, true> = extern;
+func freopen(pathname: ptr!<byte, false>, mode: ptr!<byte, false>, file: ptr!<FILE, true>) => ptr!<FILE, true> = extern;
+func fclose(file: ptr!<FILE, true>) => void = extern;
 
 enum SeekMode : i32 {
 	case Set = 0; /* Seek from beginning of file.  */
@@ -22,29 +22,29 @@ enum SeekMode : i32 {
 	case End = 2; /* Seek from end of file.  */
 }
 
-func fseek(file: ptr!<FILE, true>, offset: uint, whence: SeekMode) -> i32 = extern;
-func ftell(file: ptr!<FILE, true>) -> uint = extern;
+func fseek(file: ptr!<FILE, true>, offset: uint, whence: SeekMode) => i32 = extern;
+func ftell(file: ptr!<FILE, true>) => uint = extern;
 
-func feof(file: ptr!<FILE, true>) -> bool = extern;
-func ferror(file: ptr!<FILE, true>) -> Error = extern;
-func fflush(file: ptr!<FILE, true>) -> i32 = extern;
-func clearerr(file: ptr!<FILE, true>) -> void = extern;
+func feof(file: ptr!<FILE, true>) => bool = extern;
+func ferror(file: ptr!<FILE, true>) => Error = extern;
+func fflush(file: ptr!<FILE, true>) => i32 = extern;
+func clearerr(file: ptr!<FILE, true>) => void = extern;
 
-func fread(data: ptr!<byte, true>, element_size: uint, element_count: uint, file: ptr!<FILE, true>) -> uint = extern;
-func fwrite(data: ptr!<byte, false>, element_size: uint, element_count: uint, file: ptr!<FILE, true>) -> uint = extern;
+func fread(data: ptr!<byte, true>, element_size: uint, element_count: uint, file: ptr!<FILE, true>) => uint = extern;
+func fwrite(data: ptr!<byte, false>, element_size: uint, element_count: uint, file: ptr!<FILE, true>) => uint = extern;
 
 template <T: type>
-func fread(data: ptr!<T, true>, count: uint, file: ptr!<FILE, true>) -> uint {
+func fread(data: ptr!<T, true>, count: uint, file: ptr!<FILE, true>) => uint {
 	return fread(data as ptr!<byte, true>, sizeOf!<T>(), count, file);
 }
 
 template <T: type>
-func fwrite(data: ptr!<T, false>, count: uint, file: ptr!<FILE, true>) -> uint {
+func fwrite(data: ptr!<T, false>, count: uint, file: ptr!<FILE, true>) => uint {
 	return fwrite(data as ptr!<byte, false>, sizeOf!<T>(), count, file);
 }
 
-func fgetc(file: ptr!<FILE, true>) -> i32 = extern;
-func fgets(data: ptr!<byte, true>, size: i32, file: ptr!<FILE, true>) -> ptr!<byte, true> = extern;
-func fputc(data: i32, file: ptr!<FILE, true>) -> i32 = extern;
+func fgetc(file: ptr!<FILE, true>) => i32 = extern;
+func fgets(data: ptr!<byte, true>, size: i32, file: ptr!<FILE, true>) => ptr!<byte, true> = extern;
+func fputc(data: i32, file: ptr!<FILE, true>) => i32 = extern;
 
-func fdopen(fd: i32, mode: ptr!<byte, false>) -> ptr!<FILE, true> = extern;
+func fdopen(fd: i32, mode: ptr!<byte, false>) => ptr!<FILE, true> = extern;

@@ -5,7 +5,7 @@ import std/io;
 
 import llvm_c;
 
-func createInterpreterForModule(module: LLVMModuleRef) -> Result!<LLVMExecutionEngineRef, String> {
+func createInterpreterForModule(module: LLVMModuleRef) => Result!<LLVMExecutionEngineRef, String> {
 	var result: LLVMExecutionEngineRef;
 	var out_error: ptr!<byte, true>;
 
@@ -18,7 +18,7 @@ func createInterpreterForModule(module: LLVMModuleRef) -> Result!<LLVMExecutionE
 	return Ok(result);
 }
 
-func createJITCompilerForModule(module: LLVMModuleRef, optimization_level: uint) -> Result!<LLVMExecutionEngineRef, String> {
+func createJITCompilerForModule(module: LLVMModuleRef, optimization_level: uint) => Result!<LLVMExecutionEngineRef, String> {
 	var result: LLVMExecutionEngineRef;
 	var out_error: ptr!<byte, true>;
 
@@ -31,7 +31,7 @@ func createJITCompilerForModule(module: LLVMModuleRef, optimization_level: uint)
 	return Ok(result);
 }
 
-func loadModuleFromFile(ctx: LLVMContextRef, path: String) -> Optional!<LLVMModuleRef> {
+func loadModuleFromFile(ctx: LLVMContextRef, path: String) => Optional!<LLVMModuleRef> {
 	var buffer: LLVMMemoryBufferRef;
 	var message: ptr!<byte, true>;
 
@@ -65,7 +65,7 @@ func loadModuleFromFile(ctx: LLVMContextRef, path: String) -> Optional!<LLVMModu
 	return Some(module);
 }
 
-func printModuleToFile(module: LLVMModuleRef, path: String) -> bool {
+func printModuleToFile(module: LLVMModuleRef, path: String) => bool {
 	var error_message = ptr!<byte, true>::null();
 	if LLVMPrintModuleToFile(module, (path + '\0'b).data(), ptr!<ptr!<byte, true>, true>::addressOf(&&error_message)) != 0 {
 		eprintln(String::fromCString(error_message as ptr!<byte, false>));
@@ -76,14 +76,14 @@ func printModuleToFile(module: LLVMModuleRef, path: String) -> bool {
 	return true;
 }
 
-func printModuleToString(module: LLVMModuleRef) -> String {
+func printModuleToString(module: LLVMModuleRef) => String {
 	const data = LLVMPrintModuleToString(module);
 	const result = String::fromCString(data as ptr!<byte, false>);
 	LLVMDisposeMessage(data);
 	return result;
 }
 
-func verifyModule(module: LLVMModuleRef, failure_action: LLVMVerifierFailureAction) -> Result!<void, String> {
+func verifyModule(module: LLVMModuleRef, failure_action: LLVMVerifierFailureAction) => Result!<void, String> {
 	var result = Result!<void, String>::Ok;
 
 	var message = ptr!<byte, true>::null();
@@ -95,468 +95,468 @@ func verifyModule(module: LLVMModuleRef, failure_action: LLVMVerifierFailureActi
 	return result;
 }
 
-func LLVMGetEnumAttributeKindForName(name: String) -> u32 {
+func LLVMGetEnumAttributeKindForName(name: String) => u32 {
 	return LLVMGetEnumAttributeKindForName(name.data(), name.size());
 }
 
-func LLVMLookupIntrinsicID(name: String) -> u32 {
+func LLVMLookupIntrinsicID(name: String) => u32 {
 	return LLVMLookupIntrinsicID(name.data(), name.size());
 }
 
-func LLVMModuleCreateWithNameInContext(name: String, ctx: LLVMContextRef) -> LLVMModuleRef {
+func LLVMModuleCreateWithNameInContext(name: String, ctx: LLVMContextRef) => LLVMModuleRef {
 	return LLVMModuleCreateWithNameInContext((name + '\0'b).data(), ctx);
 }
 
-func LLVMPointerTypeInContext(ctx: LLVMContextRef, address_space: uint) -> LLVMTypeRef {
+func LLVMPointerTypeInContext(ctx: LLVMContextRef, address_space: uint) => LLVMTypeRef {
 	return LLVMPointerTypeInContext(ctx, address_space as u32);
 }
 
-func LLVMIntTypeInContext(ctx: LLVMContextRef, bits: uint) -> LLVMTypeRef {
+func LLVMIntTypeInContext(ctx: LLVMContextRef, bits: uint) => LLVMTypeRef {
 	return LLVMIntTypeInContext(ctx, bits as u32);
 }
 
-func LLVMArrayType(element_type: LLVMTypeRef, size: uint) -> LLVMTypeRef {
+func LLVMArrayType(element_type: LLVMTypeRef, size: uint) => LLVMTypeRef {
 	return LLVMArrayType(element_type, size as u32);
 }
 
-func LLVMVectorType(element_type: LLVMTypeRef, size: uint) -> LLVMTypeRef {
+func LLVMVectorType(element_type: LLVMTypeRef, size: uint) => LLVMTypeRef {
 	return LLVMVectorType(element_type, size as u32);
 }
 
-func LLVMFunctionType(return_type: LLVMTypeRef, parameter_types: &List!<LLVMTypeRef>, is_variadic: bool) -> LLVMTypeRef {
+func LLVMFunctionType(return_type: LLVMTypeRef, parameter_types: &List!<LLVMTypeRef>, is_variadic: bool) => LLVMTypeRef {
 	return LLVMFunctionType(return_type, parameter_types.data, parameter_types.size() as u32, is_variadic as LLVMBool);
 }
 
-func LLVMStructTypeInContext(ctx: LLVMContextRef, element_types: &List!<LLVMTypeRef>, is_packed: bool) -> LLVMTypeRef {
+func LLVMStructTypeInContext(ctx: LLVMContextRef, element_types: &List!<LLVMTypeRef>, is_packed: bool) => LLVMTypeRef {
 	return LLVMStructTypeInContext(ctx, element_types.data, element_types.size() as u32, is_packed as LLVMBool);
 }
 
-func LLVMStructCreateNamed(ctx: LLVMContextRef, name: String) -> LLVMTypeRef {
+func LLVMStructCreateNamed(ctx: LLVMContextRef, name: String) => LLVMTypeRef {
 	return LLVMStructCreateNamed(ctx, (name + '\0'b).data());
 }
 
-func LLVMAppendBasicBlockInContext(ctx: LLVMContextRef, function: LLVMValueRef, name: String) -> LLVMBasicBlockRef {
+func LLVMAppendBasicBlockInContext(ctx: LLVMContextRef, function: LLVMValueRef, name: String) => LLVMBasicBlockRef {
 	return LLVMAppendBasicBlockInContext(ctx, function, (name + '\0'b).data());
 }
 
-func LLVMConstStringInContext(ctx: LLVMContextRef, value: String, dont_null_terminate: bool) -> LLVMValueRef {
+func LLVMConstStringInContext(ctx: LLVMContextRef, value: String, dont_null_terminate: bool) => LLVMValueRef {
 	return LLVMConstStringInContext(ctx, value.data(), value.size() as u32, dont_null_terminate as LLVMBool);
 }
 
-func LLVMIntrinsicGetType(ctx: LLVMContextRef, id: u32, parameter_types: &List!<LLVMTypeRef>) -> LLVMTypeRef {
+func LLVMIntrinsicGetType(ctx: LLVMContextRef, id: u32, parameter_types: &List!<LLVMTypeRef>) => LLVMTypeRef {
 	return LLVMIntrinsicGetType(ctx, id, parameter_types.data, parameter_types.size());
 }
 
-func LLVMDIBuilderCreateDebugLocation(ctx: LLVMContextRef, line: uint, column: uint, scope: LLVMMetadataRef) -> LLVMMetadataRef {
+func LLVMDIBuilderCreateDebugLocation(ctx: LLVMContextRef, line: uint, column: uint, scope: LLVMMetadataRef) => LLVMMetadataRef {
 	return LLVMDIBuilderCreateDebugLocation(ctx, line as u32, column as u32, scope, ptr!<LLVMOpaqueMetadata, true>::null());
 }
 
-func LLVMDIBuilderCreateDebugLocation(ctx: LLVMContextRef, line: uint, column: uint, scope: LLVMMetadataRef, inlined_at: LLVMMetadataRef) -> LLVMMetadataRef {
+func LLVMDIBuilderCreateDebugLocation(ctx: LLVMContextRef, line: uint, column: uint, scope: LLVMMetadataRef, inlined_at: LLVMMetadataRef) => LLVMMetadataRef {
 	return LLVMDIBuilderCreateDebugLocation(ctx, line as u32, column as u32, scope, inlined_at);
 }
 
-func LLVMTemporaryMDNode(ctx: LLVMContextRef) -> LLVMMetadataRef {
+func LLVMTemporaryMDNode(ctx: LLVMContextRef) => LLVMMetadataRef {
 	return LLVMTemporaryMDNode(ctx, ptr!<LLVMMetadataRef, true>::null(), 0u);
 }
 
-func LLVMSetModuleIdentifier(module: LLVMModuleRef, identifier: String) -> void {
+func LLVMSetModuleIdentifier(module: LLVMModuleRef, identifier: String) => void {
 	LLVMSetModuleIdentifier(module, identifier.data(), identifier.size());
 }
 
-func LLVMSetSourceFileName(module: LLVMModuleRef, file_name: String) -> void {
+func LLVMSetSourceFileName(module: LLVMModuleRef, file_name: String) => void {
 	LLVMSetSourceFileName(module, file_name.data(), file_name.size());
 }
 
-func LLVMSetTarget(module: LLVMModuleRef, target_triple: String) -> void {
+func LLVMSetTarget(module: LLVMModuleRef, target_triple: String) => void {
 	LLVMSetTarget(module, (target_triple + '\0'b).data());
 }
 
-func LLVMSetDataLayout(module: LLVMModuleRef, data_layout: String) -> void {
+func LLVMSetDataLayout(module: LLVMModuleRef, data_layout: String) => void {
 	LLVMSetDataLayout(module, (data_layout + '\0'b).data());
 }
 
-func LLVMWriteBitcodeToFile(module: LLVMModuleRef, path: String) -> int {
+func LLVMWriteBitcodeToFile(module: LLVMModuleRef, path: String) => int {
 	return LLVMWriteBitcodeToFile(module, (path + '\0'b).data()) as int;
 }
 
-func LLVMAddFunction(module: LLVMModuleRef, name: String, type: LLVMTypeRef) -> LLVMValueRef {
+func LLVMAddFunction(module: LLVMModuleRef, name: String, type: LLVMTypeRef) => LLVMValueRef {
 	return LLVMAddFunction(module, (name + '\0'b).data(), type);
 }
 
-func LLVMGetNamedFunction(module: LLVMModuleRef, name: String) -> LLVMValueRef {
+func LLVMGetNamedFunction(module: LLVMModuleRef, name: String) => LLVMValueRef {
 	return LLVMGetNamedFunction(module, (name + '\0'b).data());
 }
 
-func LLVMAddGlobal(module: LLVMModuleRef, type: LLVMTypeRef, name: String) -> LLVMValueRef {
+func LLVMAddGlobal(module: LLVMModuleRef, type: LLVMTypeRef, name: String) => LLVMValueRef {
 	return LLVMAddGlobal(module, type, (name + '\0'b).data());
 }
 
-func LLVMAddModuleFlag(module: LLVMModuleRef, behavior: LLVMModuleFlagBehavior, key: String, value: LLVMMetadataRef) -> void {
+func LLVMAddModuleFlag(module: LLVMModuleRef, behavior: LLVMModuleFlagBehavior, key: String, value: LLVMMetadataRef) => void {
 	LLVMAddModuleFlag(module, behavior, key.data(), key.size(), value);
 }
 
-func LLVMGetIntrinsicDeclaration(module: LLVMModuleRef, id: u32, parameter_types: &List!<LLVMTypeRef>) -> LLVMValueRef {
+func LLVMGetIntrinsicDeclaration(module: LLVMModuleRef, id: u32, parameter_types: &List!<LLVMTypeRef>) => LLVMValueRef {
 	return LLVMGetIntrinsicDeclaration(module, id, parameter_types.data, parameter_types.size());
 }
 
-func LLVMStructSetBody(type: LLVMTypeRef, element_types: &List!<LLVMTypeRef>, is_packed: bool) -> void {
+func LLVMStructSetBody(type: LLVMTypeRef, element_types: &List!<LLVMTypeRef>, is_packed: bool) => void {
 	LLVMStructSetBody(type, element_types.data, element_types.size() as u32, is_packed as LLVMBool);
 }
 
-func LLVMStructGetTypeAtIndex(type: LLVMTypeRef, index: uint) -> LLVMTypeRef {
+func LLVMStructGetTypeAtIndex(type: LLVMTypeRef, index: uint) => LLVMTypeRef {
 	return LLVMStructGetTypeAtIndex(type, index as u32);
 }
 
-func LLVMGetParam(value: LLVMValueRef, index: uint) -> LLVMValueRef {
+func LLVMGetParam(value: LLVMValueRef, index: uint) => LLVMValueRef {
 	return LLVMGetParam(value, index as u32);
 }
 
-func LLVMSetUnnamedAddr(value: LLVMValueRef, unnamed_address: bool) -> void {
+func LLVMSetUnnamedAddr(value: LLVMValueRef, unnamed_address: bool) => void {
 	LLVMSetUnnamedAddr(value, unnamed_address as LLVMBool);
 }
 
-func LLVMSetAlignment(value: LLVMValueRef, alignment: uint) -> void {
+func LLVMSetAlignment(value: LLVMValueRef, alignment: uint) => void {
 	LLVMSetAlignment(value, alignment as u32);
 }
 
-func LLVMSetGlobalConstant(value: LLVMValueRef, state: bool) -> void {
+func LLVMSetGlobalConstant(value: LLVMValueRef, state: bool) => void {
 	LLVMSetGlobalConstant(value, state as LLVMBool);
 }
 
-func LLVMAddIncoming(phi_node: LLVMValueRef, values: &List!<LLVMValueRef>, blocks: &List!<LLVMBasicBlockRef>) -> void {
+func LLVMAddIncoming(phi_node: LLVMValueRef, values: &List!<LLVMValueRef>, blocks: &List!<LLVMBasicBlockRef>) => void {
 	assert(values.size() == blocks.size());
 	LLVMAddIncoming(phi_node, values.data, blocks.data, values.size() as u32);
 }
 
-func LLVMOffsetOfElement(target_data: LLVMTargetDataRef, type: LLVMTypeRef, index: uint) -> uint {
+func LLVMOffsetOfElement(target_data: LLVMTargetDataRef, type: LLVMTypeRef, index: uint) => uint {
 	return LLVMOffsetOfElement(target_data, type, index as u32) as uint;
 }
 
-func LLVMHasBasicBlockTerminator(bb: LLVMBasicBlockRef) -> bool {
+func LLVMHasBasicBlockTerminator(bb: LLVMBasicBlockRef) => bool {
 	return LLVMGetBasicBlockTerminator(bb) != LLVMValueRef::null();
 }
 
-func LLVMBuildSwitch(builder: LLVMBuilderRef, value: LLVMValueRef, else_block: LLVMBasicBlockRef, num_cases: uint) -> LLVMValueRef {
+func LLVMBuildSwitch(builder: LLVMBuilderRef, value: LLVMValueRef, else_block: LLVMBasicBlockRef, num_cases: uint) => LLVMValueRef {
 	return LLVMBuildSwitch(builder, value, else_block, num_cases as u32);
 }
 
-func LLVMBuildAdd(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+func LLVMBuildAdd(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) => LLVMValueRef {
 	return LLVMBuildAdd(builder, lhs, rhs, (name + '\0'b).data());
 }
 
-func LLVMBuildNSWAdd(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+func LLVMBuildNSWAdd(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) => LLVMValueRef {
 	return LLVMBuildNSWAdd(builder, lhs, rhs, (name + '\0'b).data());
 }
 
-func LLVMBuildNUWAdd(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+func LLVMBuildNUWAdd(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) => LLVMValueRef {
 	return LLVMBuildNUWAdd(builder, lhs, rhs, (name + '\0'b).data());
 }
 
-func LLVMBuildFAdd(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+func LLVMBuildFAdd(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) => LLVMValueRef {
 	return LLVMBuildFAdd(builder, lhs, rhs, (name + '\0'b).data());
 }
 
-func LLVMBuildSub(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+func LLVMBuildSub(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) => LLVMValueRef {
 	return LLVMBuildSub(builder, lhs, rhs, (name + '\0'b).data());
 }
 
-func LLVMBuildNSWSub(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+func LLVMBuildNSWSub(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) => LLVMValueRef {
 	return LLVMBuildNSWSub(builder, lhs, rhs, (name + '\0'b).data());
 }
 
-func LLVMBuildNUWSub(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+func LLVMBuildNUWSub(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) => LLVMValueRef {
 	return LLVMBuildNUWSub(builder, lhs, rhs, (name + '\0'b).data());
 }
 
-func LLVMBuildFSub(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+func LLVMBuildFSub(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) => LLVMValueRef {
 	return LLVMBuildFSub(builder, lhs, rhs, (name + '\0'b).data());
 }
 
-func LLVMBuildMul(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+func LLVMBuildMul(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) => LLVMValueRef {
 	return LLVMBuildMul(builder, lhs, rhs, (name + '\0'b).data());
 }
 
-func LLVMBuildNSWMul(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+func LLVMBuildNSWMul(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) => LLVMValueRef {
 	return LLVMBuildNSWMul(builder, lhs, rhs, (name + '\0'b).data());
 }
 
-func LLVMBuildNUWMul(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+func LLVMBuildNUWMul(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) => LLVMValueRef {
 	return LLVMBuildNUWMul(builder, lhs, rhs, (name + '\0'b).data());
 }
 
-func LLVMBuildFMul(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+func LLVMBuildFMul(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) => LLVMValueRef {
 	return LLVMBuildFMul(builder, lhs, rhs, (name + '\0'b).data());
 }
 
-func LLVMBuildUDiv(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+func LLVMBuildUDiv(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) => LLVMValueRef {
 	return LLVMBuildUDiv(builder, lhs, rhs, (name + '\0'b).data());
 }
 
-func LLVMBuildExactUDiv(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+func LLVMBuildExactUDiv(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) => LLVMValueRef {
 	return LLVMBuildExactUDiv(builder, lhs, rhs, (name + '\0'b).data());
 }
 
-func LLVMBuildSDiv(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+func LLVMBuildSDiv(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) => LLVMValueRef {
 	return LLVMBuildSDiv(builder, lhs, rhs, (name + '\0'b).data());
 }
 
-func LLVMBuildExactSDiv(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+func LLVMBuildExactSDiv(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) => LLVMValueRef {
 	return LLVMBuildExactSDiv(builder, lhs, rhs, (name + '\0'b).data());
 }
 
-func LLVMBuildFDiv(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+func LLVMBuildFDiv(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) => LLVMValueRef {
 	return LLVMBuildFDiv(builder, lhs, rhs, (name + '\0'b).data());
 }
 
-func LLVMBuildURem(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+func LLVMBuildURem(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) => LLVMValueRef {
 	return LLVMBuildURem(builder, lhs, rhs, (name + '\0'b).data());
 }
 
-func LLVMBuildSRem(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+func LLVMBuildSRem(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) => LLVMValueRef {
 	return LLVMBuildSRem(builder, lhs, rhs, (name + '\0'b).data());
 }
 
-func LLVMBuildFRem(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+func LLVMBuildFRem(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) => LLVMValueRef {
 	return LLVMBuildFRem(builder, lhs, rhs, (name + '\0'b).data());
 }
 
-func LLVMBuildShl(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+func LLVMBuildShl(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) => LLVMValueRef {
 	return LLVMBuildShl(builder, lhs, rhs, (name + '\0'b).data());
 }
 
-func LLVMBuildLShr(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+func LLVMBuildLShr(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) => LLVMValueRef {
 	return LLVMBuildLShr(builder, lhs, rhs, (name + '\0'b).data());
 }
 
-func LLVMBuildAShr(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+func LLVMBuildAShr(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) => LLVMValueRef {
 	return LLVMBuildAShr(builder, lhs, rhs, (name + '\0'b).data());
 }
 
-func LLVMBuildAnd(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+func LLVMBuildAnd(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) => LLVMValueRef {
 	return LLVMBuildAnd(builder, lhs, rhs, (name + '\0'b).data());
 }
 
-func LLVMBuildOr(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+func LLVMBuildOr(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) => LLVMValueRef {
 	return LLVMBuildOr(builder, lhs, rhs, (name + '\0'b).data());
 }
 
-func LLVMBuildXor(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+func LLVMBuildXor(builder: LLVMBuilderRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) => LLVMValueRef {
 	return LLVMBuildXor(builder, lhs, rhs, (name + '\0'b).data());
 }
 
-func LLVMBuildNeg(builder: LLVMBuilderRef, lhs: LLVMValueRef, name: String) -> LLVMValueRef {
+func LLVMBuildNeg(builder: LLVMBuilderRef, lhs: LLVMValueRef, name: String) => LLVMValueRef {
 	return LLVMBuildNeg(builder, lhs, (name + '\0'b).data());
 }
 
-func LLVMBuildNSWNeg(builder: LLVMBuilderRef, lhs: LLVMValueRef, name: String) -> LLVMValueRef {
+func LLVMBuildNSWNeg(builder: LLVMBuilderRef, lhs: LLVMValueRef, name: String) => LLVMValueRef {
 	return LLVMBuildNSWNeg(builder, lhs, (name + '\0'b).data());
 }
 
-func LLVMBuildNUWNeg(builder: LLVMBuilderRef, lhs: LLVMValueRef, name: String) -> LLVMValueRef {
+func LLVMBuildNUWNeg(builder: LLVMBuilderRef, lhs: LLVMValueRef, name: String) => LLVMValueRef {
 	return LLVMBuildNUWNeg(builder, lhs, (name + '\0'b).data());
 }
 
-func LLVMBuildFNeg(builder: LLVMBuilderRef, lhs: LLVMValueRef, name: String) -> LLVMValueRef {
+func LLVMBuildFNeg(builder: LLVMBuilderRef, lhs: LLVMValueRef, name: String) => LLVMValueRef {
 	return LLVMBuildFNeg(builder, lhs, (name + '\0'b).data());
 }
 
-func LLVMBuildNot(builder: LLVMBuilderRef, lhs: LLVMValueRef, name: String) -> LLVMValueRef {
+func LLVMBuildNot(builder: LLVMBuilderRef, lhs: LLVMValueRef, name: String) => LLVMValueRef {
 	return LLVMBuildNot(builder, lhs, (name + '\0'b).data());
 }
 
-func LLVMBuildAlloca(builder: LLVMBuilderRef, type: LLVMTypeRef, name: String) -> LLVMValueRef {
+func LLVMBuildAlloca(builder: LLVMBuilderRef, type: LLVMTypeRef, name: String) => LLVMValueRef {
 	return LLVMBuildAlloca(builder, type, (name + '\0'b).data());
 }
 
-func LLVMBuildLoad2(builder: LLVMBuilderRef, type: LLVMTypeRef, pointer: LLVMValueRef, name: String) -> LLVMValueRef {
+func LLVMBuildLoad2(builder: LLVMBuilderRef, type: LLVMTypeRef, pointer: LLVMValueRef, name: String) => LLVMValueRef {
 	return LLVMBuildLoad2(builder, type, pointer, (name + '\0'b).data());
 }
 
-func LLVMBuildGEP2(builder: LLVMBuilderRef, type: LLVMTypeRef, pointer: LLVMValueRef, indices: &List!<LLVMValueRef>, name: String) -> LLVMValueRef {
+func LLVMBuildGEP2(builder: LLVMBuilderRef, type: LLVMTypeRef, pointer: LLVMValueRef, indices: &List!<LLVMValueRef>, name: String) => LLVMValueRef {
 	return LLVMBuildGEP2(builder, type, pointer, indices.data, indices.size() as u32, (name + '\0'b).data());
 }
 
-func LLVMBuildStructGEP2(builder: LLVMBuilderRef, type: LLVMTypeRef, pointer: LLVMValueRef, index: uint, name: String) -> LLVMValueRef {
+func LLVMBuildStructGEP2(builder: LLVMBuilderRef, type: LLVMTypeRef, pointer: LLVMValueRef, index: uint, name: String) => LLVMValueRef {
 	return LLVMBuildStructGEP2(builder, type, pointer, index as u32, (name + '\0'b).data());
 }
 
-func LLVMBuildTrunc(builder: LLVMBuilderRef, value: LLVMValueRef, type: LLVMTypeRef, name: String) -> LLVMValueRef {
+func LLVMBuildTrunc(builder: LLVMBuilderRef, value: LLVMValueRef, type: LLVMTypeRef, name: String) => LLVMValueRef {
 	return LLVMBuildTrunc(builder, value, type, (name + '\0'b).data());
 }
 
-func LLVMBuildZExt(builder: LLVMBuilderRef, value: LLVMValueRef, type: LLVMTypeRef, name: String) -> LLVMValueRef {
+func LLVMBuildZExt(builder: LLVMBuilderRef, value: LLVMValueRef, type: LLVMTypeRef, name: String) => LLVMValueRef {
 	return LLVMBuildZExt(builder, value, type, (name + '\0'b).data());
 }
 
-func LLVMBuildSExt(builder: LLVMBuilderRef, value: LLVMValueRef, type: LLVMTypeRef, name: String) -> LLVMValueRef {
+func LLVMBuildSExt(builder: LLVMBuilderRef, value: LLVMValueRef, type: LLVMTypeRef, name: String) => LLVMValueRef {
 	return LLVMBuildSExt(builder, value, type, (name + '\0'b).data());
 }
 
-func LLVMBuildFPToUI(builder: LLVMBuilderRef, value: LLVMValueRef, type: LLVMTypeRef, name: String) -> LLVMValueRef {
+func LLVMBuildFPToUI(builder: LLVMBuilderRef, value: LLVMValueRef, type: LLVMTypeRef, name: String) => LLVMValueRef {
 	return LLVMBuildFPToUI(builder, value, type, (name + '\0'b).data());
 }
 
-func LLVMBuildFPToSI(builder: LLVMBuilderRef, value: LLVMValueRef, type: LLVMTypeRef, name: String) -> LLVMValueRef {
+func LLVMBuildFPToSI(builder: LLVMBuilderRef, value: LLVMValueRef, type: LLVMTypeRef, name: String) => LLVMValueRef {
 	return LLVMBuildFPToSI(builder, value, type, (name + '\0'b).data());
 }
 
-func LLVMBuildUIToFP(builder: LLVMBuilderRef, value: LLVMValueRef, type: LLVMTypeRef, name: String) -> LLVMValueRef {
+func LLVMBuildUIToFP(builder: LLVMBuilderRef, value: LLVMValueRef, type: LLVMTypeRef, name: String) => LLVMValueRef {
 	return LLVMBuildUIToFP(builder, value, type, (name + '\0'b).data());
 }
 
-func LLVMBuildSIToFP(builder: LLVMBuilderRef, value: LLVMValueRef, type: LLVMTypeRef, name: String) -> LLVMValueRef {
+func LLVMBuildSIToFP(builder: LLVMBuilderRef, value: LLVMValueRef, type: LLVMTypeRef, name: String) => LLVMValueRef {
 	return LLVMBuildSIToFP(builder, value, type, (name + '\0'b).data());
 }
 
-func LLVMBuildFPTrunc(builder: LLVMBuilderRef, value: LLVMValueRef, type: LLVMTypeRef, name: String) -> LLVMValueRef {
+func LLVMBuildFPTrunc(builder: LLVMBuilderRef, value: LLVMValueRef, type: LLVMTypeRef, name: String) => LLVMValueRef {
 	return LLVMBuildFPTrunc(builder, value, type, (name + '\0'b).data());
 }
 
-func LLVMBuildFPExt(builder: LLVMBuilderRef, value: LLVMValueRef, type: LLVMTypeRef, name: String) -> LLVMValueRef {
+func LLVMBuildFPExt(builder: LLVMBuilderRef, value: LLVMValueRef, type: LLVMTypeRef, name: String) => LLVMValueRef {
 	return LLVMBuildFPExt(builder, value, type, (name + '\0'b).data());
 }
 
-func LLVMBuildBitCast(builder: LLVMBuilderRef, value: LLVMValueRef, type: LLVMTypeRef, name: String) -> LLVMValueRef {
+func LLVMBuildBitCast(builder: LLVMBuilderRef, value: LLVMValueRef, type: LLVMTypeRef, name: String) => LLVMValueRef {
 	return LLVMBuildBitCast(builder, value, type, (name + '\0'b).data());
 }
 
-func LLVMBuildICmp(builder: LLVMBuilderRef, op: LLVMIntPredicate, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+func LLVMBuildICmp(builder: LLVMBuilderRef, op: LLVMIntPredicate, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) => LLVMValueRef {
 	return LLVMBuildICmp(builder, op, lhs, rhs, (name + '\0'b).data());
 }
 
-func LLVMBuildFCmp(builder: LLVMBuilderRef, op: LLVMRealPredicate, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+func LLVMBuildFCmp(builder: LLVMBuilderRef, op: LLVMRealPredicate, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) => LLVMValueRef {
 	return LLVMBuildFCmp(builder, op, lhs, rhs, (name + '\0'b).data());
 }
 
-func LLVMBuildPhi(builder: LLVMBuilderRef, type: LLVMTypeRef, name: String) -> LLVMValueRef {
+func LLVMBuildPhi(builder: LLVMBuilderRef, type: LLVMTypeRef, name: String) => LLVMValueRef {
 	return LLVMBuildPhi(builder, type, (name + '\0'b).data());
 }
 
-func LLVMBuildCall2(builder: LLVMBuilderRef, type: LLVMTypeRef, function: LLVMValueRef, args: &List!<LLVMValueRef>, name: String) -> LLVMValueRef {
+func LLVMBuildCall2(builder: LLVMBuilderRef, type: LLVMTypeRef, function: LLVMValueRef, args: &List!<LLVMValueRef>, name: String) => LLVMValueRef {
 	return LLVMBuildCall2(builder, type, function, args.data, args.size() as u32, (name + '\0'b).data());
 }
 
-func LLVMBuildSelect(builder: LLVMBuilderRef, condition: LLVMValueRef, then_value: LLVMValueRef, else_value: LLVMValueRef, name: String) -> LLVMValueRef {
+func LLVMBuildSelect(builder: LLVMBuilderRef, condition: LLVMValueRef, then_value: LLVMValueRef, else_value: LLVMValueRef, name: String) => LLVMValueRef {
 	return LLVMBuildSelect(builder, condition, then_value, else_value, (name + '\0'b).data());
 }
 
-func LLVMBuildExtractElement(builder: LLVMBuilderRef, vector: LLVMValueRef, index: LLVMValueRef, name: String) -> LLVMValueRef {
+func LLVMBuildExtractElement(builder: LLVMBuilderRef, vector: LLVMValueRef, index: LLVMValueRef, name: String) => LLVMValueRef {
 	return LLVMBuildExtractElement(builder, vector, index, (name + '\0'b).data());
 }
 
-func LLVMBuildInsertElement(builder: LLVMBuilderRef, vector: LLVMValueRef, element: LLVMValueRef, index: LLVMValueRef, name: String) -> LLVMValueRef {
+func LLVMBuildInsertElement(builder: LLVMBuilderRef, vector: LLVMValueRef, element: LLVMValueRef, index: LLVMValueRef, name: String) => LLVMValueRef {
 	return LLVMBuildInsertElement(builder, vector, element, index, (name + '\0'b).data());
 }
 
-func LLVMBuildShuffleVector(builder: LLVMBuilderRef, v1: LLVMValueRef, v2: LLVMValueRef, mask: LLVMValueRef, name: String) -> LLVMValueRef {
+func LLVMBuildShuffleVector(builder: LLVMBuilderRef, v1: LLVMValueRef, v2: LLVMValueRef, mask: LLVMValueRef, name: String) => LLVMValueRef {
 	return LLVMBuildShuffleVector(builder, v1, v2, mask, (name + '\0'b).data());
 }
 
-func LLVMBuildExtractValue(builder: LLVMBuilderRef, object: LLVMValueRef, index: uint, name: String) -> LLVMValueRef {
+func LLVMBuildExtractValue(builder: LLVMBuilderRef, object: LLVMValueRef, index: uint, name: String) => LLVMValueRef {
 	return LLVMBuildExtractValue(builder, object, index as u32, (name + '\0'b).data());
 }
 
-func LLVMBuildInsertValue(builder: LLVMBuilderRef, object: LLVMValueRef, element: LLVMValueRef, index: uint, name: String) -> LLVMValueRef {
+func LLVMBuildInsertValue(builder: LLVMBuilderRef, object: LLVMValueRef, element: LLVMValueRef, index: uint, name: String) => LLVMValueRef {
 	return LLVMBuildInsertValue(builder, object, element, index as u32, (name + '\0'b).data());
 }
 
-func LLVMBuildPtrDiff2(builder: LLVMBuilderRef, type: LLVMTypeRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) -> LLVMValueRef {
+func LLVMBuildPtrDiff2(builder: LLVMBuilderRef, type: LLVMTypeRef, lhs: LLVMValueRef, rhs: LLVMValueRef, name: String) => LLVMValueRef {
 	return LLVMBuildPtrDiff2(builder, type, lhs, rhs, (name + '\0'b).data());
 }
 
-func LLVMConstInt(type: LLVMTypeRef, value: int, sign_extend: bool) -> LLVMValueRef {
+func LLVMConstInt(type: LLVMTypeRef, value: int, sign_extend: bool) => LLVMValueRef {
 	return LLVMConstInt(type, value as u64, sign_extend as LLVMBool);
 }
 
-func LLVMConstVector(elements: List!<LLVMValueRef>) -> LLVMValueRef {
+func LLVMConstVector(elements: List!<LLVMValueRef>) => LLVMValueRef {
 	return LLVMConstVector(elements.data(), elements.size() as u32);
 }
 
-func LLVMConstGEP2(type: LLVMTypeRef, pointer: LLVMValueRef, indices: &List!<LLVMValueRef>) -> LLVMValueRef {
+func LLVMConstGEP2(type: LLVMTypeRef, pointer: LLVMValueRef, indices: &List!<LLVMValueRef>) => LLVMValueRef {
 	return LLVMConstGEP2(type, pointer, indices.data, indices.size() as u32);
 }
 
-func LLVMDIBuilderCreateFile(di_builder: LLVMDIBuilderRef, file_name: String, directory: String) -> LLVMMetadataRef {
+func LLVMDIBuilderCreateFile(di_builder: LLVMDIBuilderRef, file_name: String, directory: String) => LLVMMetadataRef {
 	return LLVMDIBuilderCreateFile(di_builder, file_name.data(), file_name.size(), directory.data(), directory.size());
 }
 
-func LLVMDIBuilderCreateCompileUnit(di_builder: LLVMDIBuilderRef, lang: LLVMDWARFSourceLanguage, file: LLVMMetadataRef, producer: String, is_optimized: bool, flags: String, runtime_version: uint, split_name: String, kind: LLVMDWARFEmissionKind, dwo_id: uint, split_debug_inlining: bool, debug_info_for_profiling: bool, sys_root: String, sdk: String) -> LLVMMetadataRef {
+func LLVMDIBuilderCreateCompileUnit(di_builder: LLVMDIBuilderRef, lang: LLVMDWARFSourceLanguage, file: LLVMMetadataRef, producer: String, is_optimized: bool, flags: String, runtime_version: uint, split_name: String, kind: LLVMDWARFEmissionKind, dwo_id: uint, split_debug_inlining: bool, debug_info_for_profiling: bool, sys_root: String, sdk: String) => LLVMMetadataRef {
 	return LLVMDIBuilderCreateCompileUnit(di_builder, lang, file, producer.data(), producer.size(), is_optimized as LLVMBool, flags.data(), flags.size(), runtime_version as u32, split_name.data(), split_name.size(), kind, dwo_id as u32, split_debug_inlining as LLVMBool, debug_info_for_profiling as LLVMBool, sys_root.data(), sys_root.size(), sdk.data(), sdk.size());
 }
 
-func LLVMDIBuilderCreateModule(di_builder: LLVMDIBuilderRef, cu: LLVMMetadataRef, name: String, config_macros: String, include_path: String, api_notes_file: String) -> LLVMMetadataRef {
+func LLVMDIBuilderCreateModule(di_builder: LLVMDIBuilderRef, cu: LLVMMetadataRef, name: String, config_macros: String, include_path: String, api_notes_file: String) => LLVMMetadataRef {
 	return LLVMDIBuilderCreateModule(di_builder, cu, name.data(), name.size(), config_macros.data(), config_macros.size(), include_path.data(), include_path.size(), api_notes_file.data(), api_notes_file.size());
 }
 
-func LLVMDIBuilderCreateNameSpace(di_builder: LLVMDIBuilderRef, parent: LLVMMetadataRef, name: String, export_symbols: bool) -> LLVMMetadataRef {
+func LLVMDIBuilderCreateNameSpace(di_builder: LLVMDIBuilderRef, parent: LLVMMetadataRef, name: String, export_symbols: bool) => LLVMMetadataRef {
 	return LLVMDIBuilderCreateNameSpace(di_builder, parent, name.data(), name.size(), export_symbols as LLVMBool);
 }
 
-func LLVMDIBuilderCreateFunction(di_builder: LLVMDIBuilderRef, scope: LLVMMetadataRef, name: String, linkage_name: String, file: LLVMMetadataRef, line: uint, type: LLVMMetadataRef, is_local_to_unit: bool, is_definition: bool, scope_line: uint, flags: LLVMDIFlags, is_optimized: bool) -> LLVMMetadataRef {
+func LLVMDIBuilderCreateFunction(di_builder: LLVMDIBuilderRef, scope: LLVMMetadataRef, name: String, linkage_name: String, file: LLVMMetadataRef, line: uint, type: LLVMMetadataRef, is_local_to_unit: bool, is_definition: bool, scope_line: uint, flags: LLVMDIFlags, is_optimized: bool) => LLVMMetadataRef {
 	return LLVMDIBuilderCreateFunction(di_builder, scope, name.data(), name.size(), linkage_name.data(), linkage_name.size(), file, line as u32, type, is_local_to_unit as LLVMBool, is_definition as LLVMBool, scope_line as u32, flags, is_optimized as LLVMBool);
 }
 
-func LLVMDIBuilderCreateSubroutineType(di_builder: LLVMDIBuilderRef, file: LLVMMetadataRef, parameter_types: &List!<LLVMMetadataRef>, flags: LLVMDIFlags) -> LLVMMetadataRef {
+func LLVMDIBuilderCreateSubroutineType(di_builder: LLVMDIBuilderRef, file: LLVMMetadataRef, parameter_types: &List!<LLVMMetadataRef>, flags: LLVMDIFlags) => LLVMMetadataRef {
 	return LLVMDIBuilderCreateSubroutineType(di_builder, file, parameter_types.data, parameter_types.size() as u32, flags);
 }
 
-func LLVMDIBuilderCreateEnumerator(di_builder: LLVMDIBuilderRef, name: String, value: int, is_unsigned: bool) -> LLVMMetadataRef {
+func LLVMDIBuilderCreateEnumerator(di_builder: LLVMDIBuilderRef, name: String, value: int, is_unsigned: bool) => LLVMMetadataRef {
 	return LLVMDIBuilderCreateEnumerator(di_builder, name.data(), name.size(), value as i64, is_unsigned as LLVMBool);
 }
 
-func LLVMDIBuilderCreateEnumerationType(di_builder: LLVMDIBuilderRef, scope: LLVMMetadataRef, name: String, file: LLVMMetadataRef, line: uint, size_in_bits: uint, alignment_in_bits: uint, elements: &List!<LLVMMetadataRef>, class_type: LLVMMetadataRef) -> LLVMMetadataRef {
+func LLVMDIBuilderCreateEnumerationType(di_builder: LLVMDIBuilderRef, scope: LLVMMetadataRef, name: String, file: LLVMMetadataRef, line: uint, size_in_bits: uint, alignment_in_bits: uint, elements: &List!<LLVMMetadataRef>, class_type: LLVMMetadataRef) => LLVMMetadataRef {
 	return LLVMDIBuilderCreateEnumerationType(di_builder, scope, name.data(), name.size(), file, line as u32, size_in_bits as u64, alignment_in_bits as u32, elements.data, elements.size() as u32, class_type);
 }
 
-func LLVMDIBuilderCreateUnionType(di_builder: LLVMDIBuilderRef, scope: LLVMMetadataRef, name: String, file: LLVMMetadataRef, line: uint, size_in_bits: uint, alignment_in_bits: uint, flags: LLVMDIFlags, elements: &List!<LLVMMetadataRef>, runtime_lang: u32, unique_id: String) -> LLVMMetadataRef {
+func LLVMDIBuilderCreateUnionType(di_builder: LLVMDIBuilderRef, scope: LLVMMetadataRef, name: String, file: LLVMMetadataRef, line: uint, size_in_bits: uint, alignment_in_bits: uint, flags: LLVMDIFlags, elements: &List!<LLVMMetadataRef>, runtime_lang: u32, unique_id: String) => LLVMMetadataRef {
 	return LLVMDIBuilderCreateUnionType(di_builder, scope, name.data(), name.size(), file, line as u32, size_in_bits as u64, alignment_in_bits as u32, flags, elements.data, elements.size() as u32, runtime_lang, unique_id.data(), unique_id.size());
 }
 
-func LLVMDIBuilderCreateArrayType(di_builder: LLVMDIBuilderRef, size: uint, alignment_in_bits: uint, element_type: LLVMMetadataRef, subscripts: &List!<LLVMMetadataRef>) -> LLVMMetadataRef {
+func LLVMDIBuilderCreateArrayType(di_builder: LLVMDIBuilderRef, size: uint, alignment_in_bits: uint, element_type: LLVMMetadataRef, subscripts: &List!<LLVMMetadataRef>) => LLVMMetadataRef {
 	return LLVMDIBuilderCreateArrayType(di_builder, size as u64, alignment_in_bits as u32, element_type, subscripts.data, subscripts.size() as u32);
 }
 
-func LLVMDIBuilderCreateVectorType(di_builder: LLVMDIBuilderRef, size: uint, alignment_in_bits: uint, element_type: LLVMMetadataRef, subscripts: &List!<LLVMMetadataRef>) -> LLVMMetadataRef {
+func LLVMDIBuilderCreateVectorType(di_builder: LLVMDIBuilderRef, size: uint, alignment_in_bits: uint, element_type: LLVMMetadataRef, subscripts: &List!<LLVMMetadataRef>) => LLVMMetadataRef {
 	return LLVMDIBuilderCreateVectorType(di_builder, size as u64, alignment_in_bits as u32, element_type, subscripts.data, subscripts.size() as u32);
 }
 
-func LLVMDIBuilderCreateUnspecifiedType(di_builder: LLVMDIBuilderRef, name: String) -> LLVMMetadataRef {
+func LLVMDIBuilderCreateUnspecifiedType(di_builder: LLVMDIBuilderRef, name: String) => LLVMMetadataRef {
 	return LLVMDIBuilderCreateUnspecifiedType(di_builder, name.data(), name.size());
 }
 
-func LLVMDIBuilderCreateBasicType(di_builder: LLVMDIBuilderRef, name: String, size_in_bits: uint, encoding: DWARFTypeEncoding, flags: LLVMDIFlags) -> LLVMMetadataRef {
+func LLVMDIBuilderCreateBasicType(di_builder: LLVMDIBuilderRef, name: String, size_in_bits: uint, encoding: DWARFTypeEncoding, flags: LLVMDIFlags) => LLVMMetadataRef {
 	return LLVMDIBuilderCreateBasicType(di_builder, name.data(), name.size(), size_in_bits as u64, encoding as u32, flags);
 }
 
-func LLVMDIBuilderCreatePointerType(di_builder: LLVMDIBuilderRef, pointee_type: LLVMMetadataRef, size_in_bits: uint, alignment_in_bits: uint, address_space: uint, name: String) -> LLVMMetadataRef {
+func LLVMDIBuilderCreatePointerType(di_builder: LLVMDIBuilderRef, pointee_type: LLVMMetadataRef, size_in_bits: uint, alignment_in_bits: uint, address_space: uint, name: String) => LLVMMetadataRef {
 	return LLVMDIBuilderCreatePointerType(di_builder, pointee_type, size_in_bits as u64, alignment_in_bits as u32, address_space as u32, name.data(), name.size());
 }
 
-func LLVMDIBuilderCreateStructType(di_builder: LLVMDIBuilderRef, scope: LLVMMetadataRef, name: String, file: LLVMMetadataRef, line: uint, size_in_bits: uint, alignment_in_bits: uint, flags: LLVMDIFlags, derived_from: LLVMMetadataRef, elements: &List!<LLVMMetadataRef>, runtime_lang: u32, vtable_holder: LLVMMetadataRef, unique_id: String) -> LLVMMetadataRef {
+func LLVMDIBuilderCreateStructType(di_builder: LLVMDIBuilderRef, scope: LLVMMetadataRef, name: String, file: LLVMMetadataRef, line: uint, size_in_bits: uint, alignment_in_bits: uint, flags: LLVMDIFlags, derived_from: LLVMMetadataRef, elements: &List!<LLVMMetadataRef>, runtime_lang: u32, vtable_holder: LLVMMetadataRef, unique_id: String) => LLVMMetadataRef {
 	return LLVMDIBuilderCreateStructType(di_builder, scope, name.data(), name.size(), file, line as u32, size_in_bits as u64, alignment_in_bits as u32, flags, derived_from, elements.data, elements.size() as u32, runtime_lang, vtable_holder, unique_id.data(), unique_id.size());
 }
 
-func LLVMDIBuilderCreateMemberType(di_builder: LLVMDIBuilderRef, scope: LLVMMetadataRef, name: String, file: LLVMMetadataRef, line: uint, size_in_bits: uint, alignment_in_bits: uint, offset_in_bits: uint, flags: LLVMDIFlags, type: LLVMMetadataRef) -> LLVMMetadataRef {
+func LLVMDIBuilderCreateMemberType(di_builder: LLVMDIBuilderRef, scope: LLVMMetadataRef, name: String, file: LLVMMetadataRef, line: uint, size_in_bits: uint, alignment_in_bits: uint, offset_in_bits: uint, flags: LLVMDIFlags, type: LLVMMetadataRef) => LLVMMetadataRef {
 	return LLVMDIBuilderCreateMemberType(di_builder, scope, name.data(), name.size(), file, line as u32, size_in_bits as u64, alignment_in_bits as u32, offset_in_bits as u64, flags, type);
 }
 
-func LLVMDIBuilderCreateReferenceType(di_builder: LLVMDIBuilderRef, tag: DWARFTag, base_type: LLVMMetadataRef) -> LLVMMetadataRef {
+func LLVMDIBuilderCreateReferenceType(di_builder: LLVMDIBuilderRef, tag: DWARFTag, base_type: LLVMMetadataRef) => LLVMMetadataRef {
 	return LLVMDIBuilderCreateReferenceType(di_builder, tag as u32, base_type);
 }
 
-func LLVMDIBuilderCreateReplaceableCompositeType(di_builder: LLVMDIBuilderRef, tag: DWARFTag, name: String, scope: LLVMMetadataRef, file: LLVMMetadataRef, line: uint, runtime_lang: u32, size_in_bits: uint, alignment_in_bits: uint, flags: LLVMDIFlags, unique_id: String) -> LLVMMetadataRef {
+func LLVMDIBuilderCreateReplaceableCompositeType(di_builder: LLVMDIBuilderRef, tag: DWARFTag, name: String, scope: LLVMMetadataRef, file: LLVMMetadataRef, line: uint, runtime_lang: u32, size_in_bits: uint, alignment_in_bits: uint, flags: LLVMDIFlags, unique_id: String) => LLVMMetadataRef {
 	return LLVMDIBuilderCreateReplaceableCompositeType(di_builder, tag as u32, name.data(), name.size(), scope, file, line as u32, runtime_lang, size_in_bits as u64, alignment_in_bits as u32, flags, unique_id.data(), unique_id.size());
 }
 
-func LLVMDIBuilderCreateAutoVariable(di_builder: LLVMDIBuilderRef, scope: LLVMMetadataRef, name: String, file: LLVMMetadataRef, line: uint, type: LLVMMetadataRef, always_preserve: bool, flags: LLVMDIFlags, alignment_in_bits: uint) -> LLVMMetadataRef {
+func LLVMDIBuilderCreateAutoVariable(di_builder: LLVMDIBuilderRef, scope: LLVMMetadataRef, name: String, file: LLVMMetadataRef, line: uint, type: LLVMMetadataRef, always_preserve: bool, flags: LLVMDIFlags, alignment_in_bits: uint) => LLVMMetadataRef {
 	return LLVMDIBuilderCreateAutoVariable(di_builder, scope, name.data(), name.size(), file, line as u32, type, always_preserve as LLVMBool, flags, alignment_in_bits as u32);
 }
 
-func LLVMDIBuilderCreateParameterVariable(di_builder: LLVMDIBuilderRef, scope: LLVMMetadataRef, name: String, arg_no: uint, file: LLVMMetadataRef, line: uint, type: LLVMMetadataRef, always_preserve: bool, flags: LLVMDIFlags) -> LLVMMetadataRef {
+func LLVMDIBuilderCreateParameterVariable(di_builder: LLVMDIBuilderRef, scope: LLVMMetadataRef, name: String, arg_no: uint, file: LLVMMetadataRef, line: uint, type: LLVMMetadataRef, always_preserve: bool, flags: LLVMDIFlags) => LLVMMetadataRef {
 	return LLVMDIBuilderCreateParameterVariable(di_builder, scope, name.data(), name.size(), arg_no as u32, file, line as u32, type, always_preserve as LLVMBool, flags);
 }
 
-func LLVMRunFunctionAsMain(ee: LLVMExecutionEngineRef, function: LLVMValueRef, args: List!<String>, env: List!<String>) -> int {
+func LLVMRunFunctionAsMain(ee: LLVMExecutionEngineRef, function: LLVMValueRef, args: List!<String>, env: List!<String>) => int {
 	var argv: List!<ptr!<byte, false>>;
 	for &&arg in args {
 		arg.append('\0'b);
@@ -573,6 +573,6 @@ func LLVMRunFunctionAsMain(ee: LLVMExecutionEngineRef, function: LLVMValueRef, a
 	return LLVMRunFunctionAsMain(ee, function, argv.size() as u32, argv.data() as ptr!<ptr!<byte, false>, false>, envv.data() as ptr!<ptr!<byte, false>, false>) as int;
 }
 
-func LLVMRunFunction(ee: LLVMExecutionEngineRef, function: LLVMValueRef, args: &List!<LLVMGenericValueRef>) -> LLVMGenericValueRef {
+func LLVMRunFunction(ee: LLVMExecutionEngineRef, function: LLVMValueRef, args: &List!<LLVMGenericValueRef>) => LLVMGenericValueRef {
 	return LLVMRunFunction(ee, function, args.size() as u32, args.data);
 }

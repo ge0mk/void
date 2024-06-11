@@ -1,7 +1,7 @@
 import std/core;
 import std/math;
 
-func main() -> void {
+func main() => void {
 	assert(lcm!<int>(2, 5) == 10);
 	assert(lcm!<int>(4, 6) == 12);
 	assert(lcm!<int>(21, 6) == 42);

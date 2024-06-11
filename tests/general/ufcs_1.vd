@@ -7,7 +7,7 @@ import std/core;
 import std/io;
 import std/string;
 
-func main() -> int {
+func main() => int {
     println("hello");
     io::println("world");
     std::io::println("123");

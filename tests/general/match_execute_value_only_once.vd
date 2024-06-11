@@ -1,11 +1,11 @@
 import std/core;
 
-func foo(counter: &&int) -> Result!<int> {
+func foo(counter: &&int) => Result!<int> {
 	counter++;
 	return Ok(0);
 }
 
-func main() -> void {
+func main() => void {
 	var counter = 0;
 	match foo(&&counter) {
 		case Ok: value -> {}

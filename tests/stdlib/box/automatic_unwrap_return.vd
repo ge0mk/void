@@ -3,7 +3,7 @@
 import std/core;
 import std/box;
 
-func main() -> int {
+func main() => int {
 	var a: Box!<int> = 5;
 	return a;
 }

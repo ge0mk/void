@@ -32,7 +32,7 @@ struct CompilationUnit {
 	var llvm_di_file: LLVMMetadataRef;
 	var llvm_di_module: LLVMMetadataRef;
 
-	func constructor(this: &&CompilationUnit, id: uint, group: uint, name: String, path: String, source: String, line_spans: &List!<Span>) -> void {
+	func constructor(this: &&CompilationUnit, id: uint, group: uint, name: String, path: String, source: String, line_spans: &List!<Span>) => void {
 		this.id := id;
 		this.group := group;
 		this.name := name;
@@ -45,20 +45,20 @@ struct CompilationUnit {
 		this.nodes.append(Node::Garbage(Span(), Type::unknown(), false));
 	}
 
-	func constructor(this: &&CompilationUnit, other: CompilationUnit) -> void = default;
-	func destructor(this: &&CompilationUnit) -> void = default;
+	func constructor(this: &&CompilationUnit, other: CompilationUnit) => void = default;
+	func destructor(this: &&CompilationUnit) => void = default;
 
-	func =(this: &&CompilationUnit, other: CompilationUnit) -> void = default;
+	func =(this: &&CompilationUnit, other: CompilationUnit) => void = default;
 
-	func ==(this: CompilationUnit, other: CompilationUnit) -> bool {
+	func ==(this: CompilationUnit, other: CompilationUnit) => bool {
 		return this.path == other.path;
 	}
 
-	func getASTNode(this: &CompilationUnit, id: uint) -> &Node {
+	func getASTNode(this: &CompilationUnit, id: uint) => &Node {
 		return &this.nodes[id];
 	}
 
-	func addASTNode(this: &&CompilationUnit, node: &Node) -> uint {
+	func addASTNode(this: &&CompilationUnit, node: &Node) => uint {
 		if node is Empty {
 			return this.getEmptyNode();
 		} else if node is Garbage {
@@ -70,15 +70,15 @@ struct CompilationUnit {
 		return id;
 	}
 
-	func getEmptyNode(this: &CompilationUnit) -> uint {
+	func getEmptyNode(this: &CompilationUnit) => uint {
 		return 0u;
 	}
 
-	func getGarbageNode(this: &CompilationUnit) -> uint {
+	func getGarbageNode(this: &CompilationUnit) => uint {
 		return 1u;
 	}
 
-	func duplicateNodes(this: &&CompilationUnit, start: uint, end: uint) -> uint {
+	func duplicateNodes(this: &&CompilationUnit, start: uint, end: uint) => uint {
 		assert(start <= end, Error::EINVAL);
 
 		const result_start = this.nodes.size();
@@ -94,7 +94,7 @@ struct CompilationUnit {
 		return result_offset;
 	}
 
-	func isTerminator(this: &CompilationUnit, node_id: uint, never_type: Type, yield_is_terminator: bool) -> bool {
+	func isTerminator(this: &CompilationUnit, node_id: uint, never_type: Type, yield_is_terminator: bool) => bool {
 		match this.nodes[node_id] {
 			case Empty -> return false;
 			case CompoundStmt: children -> {
@@ -115,21 +115,21 @@ struct CompilationUnit {
 		}
 	}
 
-	func addDereference(this: &&CompilationUnit, node_id: uint) -> uint {
+	func addDereference(this: &&CompilationUnit, node_id: uint) => uint {
 		match this.nodes[node_id].type.reference_kind {
 			case None -> return node_id;
 			default -> return this.addASTNode(Node::DereferenceExpr(node_id, this.nodes[node_id].span, this.nodes[node_id].type.base(), false));
 		}
 	}
 
-	func removeDereference(this: &CompilationUnit, node_id: uint) -> uint {
+	func removeDereference(this: &CompilationUnit, node_id: uint) => uint {
 		match this.nodes[node_id] {
 			case DereferenceExpr: base -> return base;
 			default -> return node_id;
 		}
 	}
 
-	func dump(this: &CompilationUnit) -> String {
+	func dump(this: &CompilationUnit) => String {
 		var out: TreeFormatter = ("Module");
 		out.value(this.name);
 
@@ -140,7 +140,7 @@ struct CompilationUnit {
 		return out.finalize();
 	}
 
-	func dump(this: &CompilationUnit, out: &&TreeFormatter, index: uint, is_last: bool) -> void {
+	func dump(this: &CompilationUnit, out: &&TreeFormatter, index: uint, is_last: bool) => void {
 		out.push(this.nodes[index].name(), is_last);
 		out.span(this.nodes[index].span);
 		out.attribute(this.nodes[index].type.signature());
@@ -405,7 +405,7 @@ struct CompilationUnit {
 		out.pop();
 	}
 
-	func dump(this: &CompilationUnit, out: &&TreeFormatter, annotation: &Annotation, is_last: bool) -> void {
+	func dump(this: &CompilationUnit, out: &&TreeFormatter, annotation: &Annotation, is_last: bool) => void {
 		out.push("Annotation", is_last);
 		out.span(annotation.span);
 		out.attribute(annotation.name);
@@ -419,7 +419,7 @@ struct CompilationUnit {
 		out.pop();
 	}
 
-	func dump(this: &CompilationUnit, out: &&TreeFormatter, template_parameter: &ParsedTemplateParameterDecl, is_last: bool) -> void {
+	func dump(this: &CompilationUnit, out: &&TreeFormatter, template_parameter: &ParsedTemplateParameterDecl, is_last: bool) => void {
 		out.push("TemplateParameterDecl", is_last);
 		out.attribute(template_parameter.name);
 		out.text(": ");
@@ -428,7 +428,7 @@ struct CompilationUnit {
 		out.pop();
 	}
 
-	func dump(this: &CompilationUnit, out: &&TreeFormatter, variable: SharedHandle!<VarDecl>, is_last: bool) -> void {
+	func dump(this: &CompilationUnit, out: &&TreeFormatter, variable: SharedHandle!<VarDecl>, is_last: bool) => void {
 		out.push(variable.is_parameter ? "ParameterDecl" : "VarDecl", is_last);
 
 		if variable.is_comptime {
@@ -447,7 +447,7 @@ struct CompilationUnit {
 		out.pop();
 	}
 
-	func dump(this: &CompilationUnit, out: &&TreeFormatter, decl:  &MemberVarDecl, is_last: bool) -> void {
+	func dump(this: &CompilationUnit, out: &&TreeFormatter, decl:  &MemberVarDecl, is_last: bool) => void {
 		out.push("MemberVarDecl", is_last);
 		out.attribute(decl.name);
 		out.value(decl.type.signature());
@@ -456,7 +456,7 @@ struct CompilationUnit {
 		out.pop();
 	}
 
-	func dump(this: &CompilationUnit, out: &&TreeFormatter, decl:  &EnumCaseDecl, is_last: bool) -> void {
+	func dump(this: &CompilationUnit, out: &&TreeFormatter, decl:  &EnumCaseDecl, is_last: bool) => void {
 		out.push("EnumCaseDecl", is_last);
 		out.attribute(decl.name);
 		out.value(format(decl.id));
@@ -464,7 +464,7 @@ struct CompilationUnit {
 		out.pop();
 	}
 
-	func dump(this: &CompilationUnit, out: &&TreeFormatter, decl:  &VariantCaseDecl, is_last: bool) -> void {
+	func dump(this: &CompilationUnit, out: &&TreeFormatter, decl:  &VariantCaseDecl, is_last: bool) => void {
 		out.push("VariantCaseDecl", is_last);
 		out.attribute(decl.name);
 		out.value(format(decl.id));
@@ -532,7 +532,7 @@ struct Program {
 	var di_builder: LLVMDIBuilderRef;
 	var di_compile_unit: LLVMMetadataRef;
 
-	func constructor(this: &&Program, options: CompilerOptions) -> void {
+	func constructor(this: &&Program, options: CompilerOptions) => void {
 		this.name := options.program_name;
 		this.options := options;
 
@@ -612,7 +612,7 @@ struct Program {
 		}
 	}
 
-	func destructor(this: &&Program) -> void {
+	func destructor(this: &&Program) => void {
 		if this.di_builder != LLVMDIBuilderRef::null() {
 			LLVMDisposeDIBuilder(this.di_builder);
 		}
@@ -623,7 +623,7 @@ struct Program {
 		LLVMShutdown();
 	}
 
-	func printError(this: &&Program, error: CompilationError) -> void {
+	func printError(this: &&Program, error: CompilationError) => void {
 		if error.type == Error {
 			this.has_errors = true;
 		}
@@ -670,13 +670,13 @@ struct Program {
 		}
 	}
 
-	func printErrors(this: &&Program, errors: &List!<CompilationError>) -> void {
+	func printErrors(this: &&Program, errors: &List!<CompilationError>) => void {
 		for e in errors {
 			this.printError(e);
 		}
 	}
 
-	func dump(this: &Program) -> String {
+	func dump(this: &Program) => String {
 		var out: TreeFormatter = ("Program");
 		out.attribute(this.name);
 		if this.main_function.isAlive() {
@@ -695,17 +695,17 @@ struct Program {
 		return out.finalize();
 	}
 
-	func createConcept(this: &&Program, concept: Concept) -> SharedHandle!<Concept> {
+	func createConcept(this: &&Program, concept: Concept) => SharedHandle!<Concept> {
 		const instance = this.concepts.append(concept);
 		this.concepts_by_name[concept.name] = instance;
 		return instance;
 	}
 
-	func getConcept(this: &Program, name: String) -> Optional!<SharedHandle!<Concept>> {
+	func getConcept(this: &Program, name: String) => Optional!<SharedHandle!<Concept>> {
 		return this.concepts_by_name.get(name);
 	}
 
-	func getOrCreateChildNamespace(this: &&Program, name: String, template_parameters: &List!<TemplateParameterDecl>, parent_namespace: SharedHandle!<Namespace>, file: SharedHandle!<CompilationUnit>) -> SharedHandle!<Namespace> {
+	func getOrCreateChildNamespace(this: &&Program, name: String, template_parameters: &List!<TemplateParameterDecl>, parent_namespace: SharedHandle!<Namespace>, file: SharedHandle!<CompilationUnit>) => SharedHandle!<Namespace> {
 		for child in parent_namespace.children {
 			if child.name != name {
 				continue;
@@ -744,7 +744,7 @@ struct Program {
 		return child;
 	}
 
-	func createModule(this: &&Program, file: SharedHandle!<CompilationUnit>) -> SharedHandle!<Namespace> {
+	func createModule(this: &&Program, file: SharedHandle!<CompilationUnit>) => SharedHandle!<Namespace> {
 		const namespaces = file.name.split("/");
 
 		var module = this.top_level_namespaces[file.group];
@@ -757,11 +757,11 @@ struct Program {
 		return module;
 	}
 
-	func getModule(this: &&Program, path: String) -> Optional!<SharedHandle!<Namespace>> {
+	func getModule(this: &&Program, path: String) => Optional!<SharedHandle!<Namespace>> {
 		return this.modules_by_path.get(path);
 	}
 
-	func createType(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, template_parameters: &List!<TemplateParameterDecl>, body: TypeBody) -> SharedHandle!<TypeDecl> {
+	func createType(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, template_parameters: &List!<TemplateParameterDecl>, body: TypeBody) => SharedHandle!<TypeDecl> {
 		const file = parent_namespace.file;
 		var linked_namespace = this.getOrCreateChildNamespace(name, template_parameters, parent_namespace, file);
 		var type_decl = this.types.append(TypeDecl(name, linked_namespace.template_parameters, body));
@@ -777,11 +777,11 @@ struct Program {
 		return type_decl;
 	}
 
-	func createType(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, body: TypeBody) -> SharedHandle!<TypeDecl> {
+	func createType(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, body: TypeBody) => SharedHandle!<TypeDecl> {
 		return this.createType(parent_namespace, name, List!<TemplateParameterDecl>(), body);
 	}
 
-	func createFunction(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, template_parameters: &List!<TemplateParameterDecl>, parameter_types: &List!<Type>, return_type: Type, body: FunctionBody) -> SharedHandle!<FunctionDecl> {
+	func createFunction(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, template_parameters: &List!<TemplateParameterDecl>, parameter_types: &List!<Type>, return_type: Type, body: FunctionBody) => SharedHandle!<FunctionDecl> {
 		var function = this.functions.append(FunctionDecl(name, template_parameters, body));
 
 		function.parent_namespace = parent_namespace;
@@ -802,27 +802,27 @@ struct Program {
 		return function;
 	}
 
-	func createFunction(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, template_parameters: &List!<TemplateParameterDecl>, parameter_types: &List!<Type>, return_type: Type, body: BuiltinFunction) -> SharedHandle!<FunctionDecl> {
+	func createFunction(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, template_parameters: &List!<TemplateParameterDecl>, parameter_types: &List!<Type>, return_type: Type, body: BuiltinFunction) => SharedHandle!<FunctionDecl> {
 		return this.createFunction(parent_namespace, name, template_parameters, parameter_types, return_type, FunctionBody::Builtin(body));
 	}
 
-	func createFunction(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, template_parameters: &List!<TemplateParameterDecl>, body: FunctionBody) -> SharedHandle!<FunctionDecl> {
+	func createFunction(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, template_parameters: &List!<TemplateParameterDecl>, body: FunctionBody) => SharedHandle!<FunctionDecl> {
 		return this.createFunction(parent_namespace, name, template_parameters, List!<Type>(), Type::unknown(), body);
 	}
 
-	func createFunction(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, template_parameters: &List!<TemplateParameterDecl>, body: BuiltinFunction) -> SharedHandle!<FunctionDecl> {
+	func createFunction(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, template_parameters: &List!<TemplateParameterDecl>, body: BuiltinFunction) => SharedHandle!<FunctionDecl> {
 		return this.createFunction(parent_namespace, name, template_parameters, List!<Type>(), Type::unknown(), FunctionBody::Builtin(body));
 	}
 
-	func createFunction(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, parameter_types: &List!<Type>, return_type: Type, body: FunctionBody) -> SharedHandle!<FunctionDecl> {
+	func createFunction(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, parameter_types: &List!<Type>, return_type: Type, body: FunctionBody) => SharedHandle!<FunctionDecl> {
 		return this.createFunction(parent_namespace, name, List!<TemplateParameterDecl>(), parameter_types, return_type, body);
 	}
 
-	func createFunction(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, parameter_types: &List!<Type>, return_type: Type, body: BuiltinFunction) -> SharedHandle!<FunctionDecl> {
+	func createFunction(this: &&Program, parent_namespace: SharedHandle!<Namespace>, name: String, parameter_types: &List!<Type>, return_type: Type, body: BuiltinFunction) => SharedHandle!<FunctionDecl> {
 		return this.createFunction(parent_namespace, name, List!<TemplateParameterDecl>(), parameter_types, return_type, FunctionBody::Builtin(body));
 	}
 
-	func createGlobalVariable(this: &&Program, ns: SharedHandle!<Namespace>, name: String, type: Type, initializer: Value, is_const: bool, is_extern_initialized: bool, span: Span) -> SharedHandle!<VarDecl> {
+	func createGlobalVariable(this: &&Program, ns: SharedHandle!<Namespace>, name: String, type: Type, initializer: Value, is_const: bool, is_extern_initialized: bool, span: Span) => SharedHandle!<VarDecl> {
 		const variable = ns.global_variables.append(VarDecl(span, 0u, name, type, is_const, false, false));
 		variable.is_global = true;
 		variable.is_extern_initialized = is_extern_initialized;
@@ -831,7 +831,7 @@ struct Program {
 		return variable;
 	}
 
-	func printLLVMIRToFile(this: &Program) -> Optional!<String> {
+	func printLLVMIRToFile(this: &Program) => Optional!<String> {
 		const output_path = this.options.getOutputCodePath(".ll");
 		if printModuleToFile(this.llvm_module, output_path) {
 			return Some(output_path);
@@ -840,7 +840,7 @@ struct Program {
 		}
 	}
 
-	func writeLLVMBitcodeToFile(this: &Program) -> Optional!<String> {
+	func writeLLVMBitcodeToFile(this: &Program) => Optional!<String> {
 		const output_path = this.options.getOutputCodePath(".bc");
 		if LLVMWriteBitcodeToFile(this.llvm_module, output_path) == 0 {
 			return Some(output_path);
@@ -849,21 +849,21 @@ struct Program {
 		}
 	}
 
-	func printLLVMIRString(this: &Program) -> String {
+	func printLLVMIRString(this: &Program) => String {
 		return printModuleToString(this.llvm_module);
 	}
 
-	func finalizeDI(this: &Program) -> void {
+	func finalizeDI(this: &Program) => void {
 		if this.di_builder != LLVMDIBuilderRef::null() {
 			LLVMDIBuilderFinalize(this.di_builder);
 		}
 	}
 
-	func runFunction(this: &Program, function: SharedHandle!<FunctionDecl>, args: &List!<LLVMGenericValueRef>) -> LLVMGenericValueRef {
+	func runFunction(this: &Program, function: SharedHandle!<FunctionDecl>, args: &List!<LLVMGenericValueRef>) => LLVMGenericValueRef {
 		return LLVMRunFunction(this.llvm_execution_engine, function.llvm_func, args);
 	}
 
-	func runMainFunction(this: &Program, args: &List!<String>, env: &List!<String>) -> int {
+	func runMainFunction(this: &Program, args: &List!<String>, env: &List!<String>) => int {
 		return LLVMRunFunctionAsMain(this.llvm_execution_engine, LLVMGetNamedFunction(this.llvm_module, "main"), args, env);
 	}
 }
@@ -876,7 +876,7 @@ variant Concept {
 	case Integer: bool;
 	case String;
 
-	func dump(this: &Concept, out: &&TreeFormatter, is_last: bool) -> void {
+	func dump(this: &Concept, out: &&TreeFormatter, is_last: bool) => void {
 		out.push("Concept", is_last);
 		out.attribute(this.name);
 
@@ -899,28 +899,28 @@ struct TemplateParameterDecl {
 
 	var value: TemplateParameter;
 
-	func constructor(this: &&TemplateParameterDecl, name: String, concept: SharedHandle!<Concept>, is_variadic: bool) -> void {
+	func constructor(this: &&TemplateParameterDecl, name: String, concept: SharedHandle!<Concept>, is_variadic: bool) => void {
 		this.name := name;
 		this.concept := concept;
 		this.is_variadic := is_variadic;
 		this.value := None;
 	}
 
-	func constructor(this: &&TemplateParameterDecl, name: String, concept: SharedHandle!<Concept>, is_variadic: bool, value: TemplateParameter) -> void {
+	func constructor(this: &&TemplateParameterDecl, name: String, concept: SharedHandle!<Concept>, is_variadic: bool, value: TemplateParameter) => void {
 		this.name := name;
 		this.concept := concept;
 		this.is_variadic := is_variadic;
 		this.value := value;
 	}
 
-	func constructor(this: &&TemplateParameterDecl, other: TemplateParameterDecl) -> void = default;
-	func destructor(this: &&TemplateParameterDecl) -> void = default;
+	func constructor(this: &&TemplateParameterDecl, other: TemplateParameterDecl) => void = default;
+	func destructor(this: &&TemplateParameterDecl) => void = default;
 
-	func =(this: &&TemplateParameterDecl, other: TemplateParameterDecl) -> void = default;
+	func =(this: &&TemplateParameterDecl, other: TemplateParameterDecl) => void = default;
 
-	func ==(this: TemplateParameterDecl, other: TemplateParameterDecl) -> bool = default;
+	func ==(this: TemplateParameterDecl, other: TemplateParameterDecl) => bool = default;
 
-	func signature(this: &TemplateParameterDecl) -> String {
+	func signature(this: &TemplateParameterDecl) => String {
 		var result = this.name + ": ";
 		result += (this.is_variadic ? "..." : "");
 		result += this.concept.name;
@@ -933,7 +933,7 @@ struct TemplateParameterDecl {
 		return result;
 	}
 
-	func dump(this: &TemplateParameterDecl, out: &&TreeFormatter, is_last: bool) -> void {
+	func dump(this: &TemplateParameterDecl, out: &&TreeFormatter, is_last: bool) => void {
 		out.push("TemplateParameterDecl", is_last);
 		out.attribute(this.name);
 		out.text(":");
@@ -956,7 +956,7 @@ enum NamespaceState {
 	case UncheckedFunctionBodies;
 	case Done;
 
-	func +(this: NamespaceState, delta: uint) -> NamespaceState {
+	func +(this: NamespaceState, delta: uint) => NamespaceState {
 		return (this as uint + delta) as NamespaceState;
 	}
 }
@@ -1002,7 +1002,7 @@ struct Namespace {
 
 	var llvm_di: LLVMMetadataRef;
 
-	func constructor(this: &&Namespace, name: String, template_parameters: &List!<TemplateParameterDecl>, parent: SharedHandle!<Namespace>, file: SharedHandle!<CompilationUnit>) -> void {
+	func constructor(this: &&Namespace, name: String, template_parameters: &List!<TemplateParameterDecl>, parent: SharedHandle!<Namespace>, file: SharedHandle!<CompilationUnit>) => void {
 		this.file := file;
 
 		this.name := name;
@@ -1029,7 +1029,7 @@ struct Namespace {
 		this.full_name := full_name;
 	}
 
-	func constructor(this: &&Namespace, other: Namespace) -> void {
+	func constructor(this: &&Namespace, other: Namespace) => void {
 		this.file := other.file;
 		this.name := other.name;
 		this.full_name := other.full_name;
@@ -1040,9 +1040,9 @@ struct Namespace {
 		this.state := other.state;
 	}
 
-	func destructor(this: &&Namespace) -> void = default;
+	func destructor(this: &&Namespace) => void = default;
 
-	func signature(this: &Namespace) -> String {
+	func signature(this: &Namespace) => String {
 		if this.parent.isAlive() {
 			var result = this.parent.signature();
 			result += "::";
@@ -1054,7 +1054,7 @@ struct Namespace {
 		return this.name + format(this.template_parameters);
 	}
 
-	func dump(this: &Namespace, out: &&TreeFormatter, is_last: bool) -> void {
+	func dump(this: &Namespace, out: &&TreeFormatter, is_last: bool) => void {
 		out.push("Namespace", is_last);
 		out.attribute(this.signature());
 		out.value(format(this.state));
@@ -1086,11 +1086,11 @@ struct Namespace {
 		out.pop();
 	}
 
-	func isIncompleteTemplate(this: &Namespace) -> bool {
+	func isIncompleteTemplate(this: &Namespace) => bool {
 		return this.state == IncompleteTemplate
 	}
 
-	func updateState(this: &&Namespace, new_state: NamespaceState) -> void {
+	func updateState(this: &&Namespace, new_state: NamespaceState) => void {
 		if this.state == IncompleteTemplate {
 			return;
 		}
@@ -1102,7 +1102,7 @@ struct Namespace {
 		}
 	}
 
-	func updateMinState(this: &&Namespace, min_state: NamespaceState) -> void {
+	func updateMinState(this: &&Namespace, min_state: NamespaceState) => void {
 		if this.state == IncompleteTemplate {
 			return;
 		}
@@ -1118,19 +1118,19 @@ struct Namespace {
 		}
 	}
 
-	func addImportedNamespace(this: &&Namespace, other: SharedHandle!<Namespace>) -> void {
+	func addImportedNamespace(this: &&Namespace, other: SharedHandle!<Namespace>) => void {
 		this.imported_namespaces.add(other);
 		this.addVisibleNamespace(other);
 	}
 
-	func addVisibleNamespace(this: &&Namespace, other: SharedHandle!<Namespace>) -> void {
+	func addVisibleNamespace(this: &&Namespace, other: SharedHandle!<Namespace>) => void {
 		this.visible_namespaces.add(other);
 		for c in this.children {
 			c.addVisibleNamespace(other);
 		}
 	}
 
-	func addUncheckedBody(this: &&Namespace, body: &ParsedNamespaceDecl) -> void {
+	func addUncheckedBody(this: &&Namespace, body: &ParsedNamespaceDecl) => void {
 		this.unchecked_bodies.append(body);
 		this.updateMinState(NamespaceState::Unchecked);
 
@@ -1139,22 +1139,22 @@ struct Namespace {
 		}
 	}
 
-	func addUncheckedType(this: &&Namespace, type: SharedHandle!<TypeDecl>) -> void {
+	func addUncheckedType(this: &&Namespace, type: SharedHandle!<TypeDecl>) => void {
 		this.unchecked_types.append(type);
 		this.updateMinState(NamespaceState::UncheckedTypeBodies);
 	}
 
-	func addUncheckedFunction(this: &&Namespace, function: SharedHandle!<FunctionDecl>) -> void {
+	func addUncheckedFunction(this: &&Namespace, function: SharedHandle!<FunctionDecl>) => void {
 		this.unchecked_functions.append(function);
 		this.updateMinState(NamespaceState::UncheckedFunctionSignatures);
 	}
 
-	func addUncheckedFunctionBody(this: &&Namespace, function: SharedHandle!<FunctionDecl>) -> void {
+	func addUncheckedFunctionBody(this: &&Namespace, function: SharedHandle!<FunctionDecl>) => void {
 		this.unchecked_function_bodies.append(function);
 		this.updateMinState(NamespaceState::UncheckedFunctionBodies);
 	}
 
-	func createComptimeVariable(this: &&Namespace, span: Span, name: String, type: Type, is_const: bool) -> SharedHandle!<VarDecl> {
+	func createComptimeVariable(this: &&Namespace, span: Span, name: String, type: Type, is_const: bool) => SharedHandle!<VarDecl> {
 		const variable = this.comptime_variables.append(VarDecl(span, 0u, name, type, is_const, false, true));
 		this.variables_by_name.set(name, variable);
 		return variable;
@@ -1213,17 +1213,17 @@ struct TypeDecl {
 	var llvm_type: LLVMTypeRef;
 	var llvm_di: LLVMMetadataRef;
 
-	func constructor(this: &&TypeDecl, name: String, template_parameters: &List!<TemplateParameterDecl>, body: TypeBody) -> void {
+	func constructor(this: &&TypeDecl, name: String, template_parameters: &List!<TemplateParameterDecl>, body: TypeBody) => void {
 		this.name := name;
 		this.template_parameters := template_parameters;
 		this.body := body;
 		this.parsed_id_type := 0;
 	}
 
-	func constructor(this: &&TypeDecl, other: TypeDecl) -> void = default;
-	func destructor(this: &&TypeDecl) -> void = default;
+	func constructor(this: &&TypeDecl, other: TypeDecl) => void = default;
+	func destructor(this: &&TypeDecl) => void = default;
 
-	func dump(this: &TypeDecl, out: &&TreeFormatter, is_last: bool) -> void {
+	func dump(this: &TypeDecl, out: &&TreeFormatter, is_last: bool) => void {
 		match this.body {
 			case Empty -> out.push("EmptyTypeDecl", is_last);
 			case Void -> out.push("VoidTypeDecl", is_last);
@@ -1309,11 +1309,11 @@ struct TypeDecl {
 		out.pop();
 	}
 
-	func signature(this: &TypeDecl) -> String {
+	func signature(this: &TypeDecl) => String {
 		return this.linked_namespace.signature();
 	}
 
-	func isIncompleteTemplate(this: &TypeDecl) -> bool {
+	func isIncompleteTemplate(this: &TypeDecl) => bool {
 		for parameter in this.template_parameters {
 			if parameter.value is None {
 				return true;
@@ -1323,7 +1323,7 @@ struct TypeDecl {
 		return false;
 	}
 
-	func addContainedType(this: &&TypeDecl, type: Type) -> void {
+	func addContainedType(this: &&TypeDecl, type: Type) => void {
 		if type.isUnknown() {
 			return;
 		}
@@ -1333,11 +1333,11 @@ struct TypeDecl {
 		}
 	}
 
-	func createMemberVariable(this: &&TypeDecl, span: Span, name: String, type: Type) -> void {
+	func createMemberVariable(this: &&TypeDecl, span: Span, name: String, type: Type) => void {
 		return this.createMemberVariable(span, name, type, this.linked_namespace.file.getEmptyNode());
 	}
 
-	func createMemberVariable(this: &&TypeDecl, span: Span, name: String, type: Type, initializer: uint) -> void {
+	func createMemberVariable(this: &&TypeDecl, span: Span, name: String, type: Type, initializer: uint) => void {
 		if this.member_variables_by_name.contains(name) {
 			return;
 		}
@@ -1348,7 +1348,7 @@ struct TypeDecl {
 		this.addContainedType(type);
 	}
 
-	func getMemberVariable(this: &TypeDecl, name: String) -> Optional!<MemberVarDecl> {
+	func getMemberVariable(this: &TypeDecl, name: String) => Optional!<MemberVarDecl> {
 		for v in this.member_variables {
 			if v.name == name {
 				return Some(v);
@@ -1358,7 +1358,7 @@ struct TypeDecl {
 		return None;
 	}
 
-	func getNextCaseId(this: &TypeDecl) -> int {
+	func getNextCaseId(this: &TypeDecl) => int {
 		if this.body is Enum {
 			if const prev_case = this.enum_cases.last() {
 				return prev_case.id + 1;
@@ -1371,12 +1371,12 @@ struct TypeDecl {
 		return 0;
 	}
 
-	func createEnumCase(this: &&TypeDecl, span: Span, id: int, name: String) -> void {
+	func createEnumCase(this: &&TypeDecl, span: Span, id: int, name: String) => void {
 		this.enum_cases_by_name.set(name, this.enum_cases.size());
 		this.enum_cases.append(EnumCaseDecl(span, id, name));
 	}
 
-	func getEnumCase(this: &TypeDecl, name: String) -> Optional!<EnumCaseDecl> {
+	func getEnumCase(this: &TypeDecl, name: String) => Optional!<EnumCaseDecl> {
 		const index = this.enum_cases_by_name.get(name) else {
 			return None;
 		}
@@ -1384,14 +1384,14 @@ struct TypeDecl {
 		return Some(this.enum_cases[index]);
 	}
 
-	func createVariantCase(this: &&TypeDecl, span: Span, id: int, name: String, payload: Type) -> void {
+	func createVariantCase(this: &&TypeDecl, span: Span, id: int, name: String, payload: Type) => void {
 		this.variant_cases_by_name.set(name, this.variant_cases.size());
 		this.variant_cases_by_id.set(id, this.variant_cases.size());
 		this.variant_cases.append(VariantCaseDecl(span, id, name, payload));
 		this.addContainedType(payload);
 	}
 
-	func getVariantCase(this: &TypeDecl, name: String) -> Optional!<VariantCaseDecl> {
+	func getVariantCase(this: &TypeDecl, name: String) => Optional!<VariantCaseDecl> {
 		const index = this.variant_cases_by_name.get(name) else {
 			return None;
 		}
@@ -1399,7 +1399,7 @@ struct TypeDecl {
 		return Some(this.variant_cases[index]);
 	}
 
-	func getVariantCase(this: &TypeDecl, id: int) -> Optional!<VariantCaseDecl> {
+	func getVariantCase(this: &TypeDecl, id: int) => Optional!<VariantCaseDecl> {
 		const index = this.variant_cases_by_id.get(id) else {
 			return None;
 		}
@@ -1438,21 +1438,21 @@ struct FunctionDecl {
 	var llvm_type: LLVMTypeRef;
 	var llvm_di: LLVMMetadataRef;
 
-	func constructor(this: &&FunctionDecl, name: String, template_parameters: &List!<TemplateParameterDecl>, body: FunctionBody) -> void {
+	func constructor(this: &&FunctionDecl, name: String, template_parameters: &List!<TemplateParameterDecl>, body: FunctionBody) => void {
 		this.name := name;
 		this.template_parameters := template_parameters;
 		this.body := body;
 	}
 
-	func constructor(this: &&FunctionDecl, other: FunctionDecl) -> void {
+	func constructor(this: &&FunctionDecl, other: FunctionDecl) => void {
 		this.name := other.name;
 		this.template_parameters := other.template_parameters;
 		this.body := other.body;
 	}
 
-	func destructor(this: &&FunctionDecl) -> void = default;
+	func destructor(this: &&FunctionDecl) => void = default;
 
-	func dump(this: &FunctionDecl, out: &&TreeFormatter, is_last: bool) -> void {
+	func dump(this: &FunctionDecl, out: &&TreeFormatter, is_last: bool) => void {
 		out.push("FunctionDecl", is_last);
 		out.attribute(this.signature());
 		out.span(this.span);
@@ -1490,7 +1490,7 @@ struct FunctionDecl {
 		out.pop();
 	}
 
-	func signature(this: &FunctionDecl) -> String {
+	func signature(this: &FunctionDecl) => String {
 		var result = this.parent_namespace.signature();
 
 		result += "::";
@@ -1505,21 +1505,21 @@ struct FunctionDecl {
 			result += this.parameter_types[i].signature();
 		}
 
-		result += ") -> ";
+		result += ") => ";
 		result += this.return_type.signature();
 		return result;
 	}
 
-	func createParameter(this: &&FunctionDecl, span: Span, name: String, type: Type) -> void {
+	func createParameter(this: &&FunctionDecl, span: Span, name: String, type: Type) => void {
 		const variable = this.variables.append(VarDecl(span, this.variables.size(), name, type, type.reference_kind != Var, true, false));
 		this.parameters.append(variable);
 	}
 
-	func createVariable(this: &&FunctionDecl, span: Span, name: String, type: Type, is_const: bool, is_comptime: bool) -> SharedHandle!<VarDecl> {
+	func createVariable(this: &&FunctionDecl, span: Span, name: String, type: Type, is_const: bool, is_comptime: bool) => SharedHandle!<VarDecl> {
 		return this.variables.append(VarDecl(span, this.variables.size(), name, type, is_const, false, is_comptime));
 	}
 
-	func isIncompleteTemplate(this: &FunctionDecl) -> bool {
+	func isIncompleteTemplate(this: &FunctionDecl) => bool {
 		for parameter in this.template_parameters {
 			if parameter.value is None {
 				return true;
@@ -1553,7 +1553,7 @@ struct VarDecl {
 	// parameters only
 	var is_shallow_parameter: bool;
 
-	func constructor(this: &&VarDecl, span: Span, id: uint, name: String, type: Type, is_const: bool, is_parameter: bool, is_comptime: bool) -> void {
+	func constructor(this: &&VarDecl, span: Span, id: uint, name: String, type: Type, is_const: bool, is_parameter: bool, is_comptime: bool) => void {
 		this.span := span;
 
 		this.id := id;
@@ -1568,16 +1568,16 @@ struct VarDecl {
 		this.value := Undefined;
 	}
 
-	func constructor(this: &&VarDecl, other: VarDecl) -> void = default;
-	func destructor(this: &&VarDecl) -> void = default;
+	func constructor(this: &&VarDecl, other: VarDecl) => void = default;
+	func destructor(this: &&VarDecl) => void = default;
 
-	func =(this: &&VarDecl, other: VarDecl) -> void = default;
+	func =(this: &&VarDecl, other: VarDecl) => void = default;
 
-	func ==(@[shallow] this: VarDecl, @[shallow] other: VarDecl) -> bool {
+	func ==(@[shallow] this: VarDecl, @[shallow] other: VarDecl) => bool {
 		return this.id == other.id;
 	}
 
-	func signature(this: &VarDecl) -> String {
+	func signature(this: &VarDecl) => String {
 		return (this.is_const ? "const " : "var ") + (this.is_parameter ? "#" : "") + this.name + ": " + this.type.signature();
 	}
 }
@@ -1586,38 +1586,38 @@ struct Type {
 	var decl: SharedHandle!<TypeDecl>;
 	var reference_kind: ReferenceKind;
 
-	func constructor(this: &&Type, decl: SharedHandle!<TypeDecl>) -> void {
+	func constructor(this: &&Type, decl: SharedHandle!<TypeDecl>) => void {
 		this.decl := decl;
 		this.reference_kind := None;
 	}
 
-	func constructor(this: &&Type, decl: SharedHandle!<TypeDecl>, reference_kind: ReferenceKind) -> void {
+	func constructor(this: &&Type, decl: SharedHandle!<TypeDecl>, reference_kind: ReferenceKind) => void {
 		this.decl := decl;
 		this.reference_kind := reference_kind;
 	}
 
-	func constructor(this: &&Type) -> void = default;
-	func constructor(this: &&Type, other: Type) -> void = default;
-	func destructor(this: &&Type) -> void = default;
+	func constructor(this: &&Type) => void = default;
+	func constructor(this: &&Type, other: Type) => void = default;
+	func destructor(this: &&Type) => void = default;
 
-	func =(this: &&Type, other: Type) -> void = default;
+	func =(this: &&Type, other: Type) => void = default;
 
-	func ==(this: Type, other: Type) -> bool = default;
-	func <=>(this: Type, other: Type) -> int = default;
+	func ==(this: Type, other: Type) => bool = default;
+	func <=>(this: Type, other: Type) => int = default;
 
-	func unknown() -> Type {
+	func unknown() => Type {
 		return Type(SharedHandle!<TypeDecl>(), ReferenceKind::None);
 	}
 
-	func isUnknown(this: &Type) -> bool {
+	func isUnknown(this: &Type) => bool {
 		return this.decl.isEmpty();
 	}
 
-	func isAlive(this: &Type) -> bool {
+	func isAlive(this: &Type) => bool {
 		return this.decl.isAlive();
 	}
 
-	func signature(this: &Type) -> String {
+	func signature(this: &Type) => String {
 		if this.decl.isAlive() {
 			return format(this.reference_kind) + this.decl.signature();
 		}
@@ -1625,19 +1625,19 @@ struct Type {
 		return "unknown";
 	}
 
-	func base(this: &Type) -> Type {
+	func base(this: &Type) => Type {
 		return Type(this.decl, ReferenceKind::None);
 	}
 
-	func constRef(this: &Type) -> Type {
+	func constRef(this: &Type) => Type {
 		return Type(this.decl, ReferenceKind::Const);
 	}
 
-	func varRef(this: &Type) -> Type {
+	func varRef(this: &Type) => Type {
 		return Type(this.decl, ReferenceKind::Var);
 	}
 
-	func isIncompleteTemplate(this: &Type) -> bool {
+	func isIncompleteTemplate(this: &Type) => bool {
 		if this.decl.isEmpty() {
 			return false;
 		}
@@ -1645,7 +1645,7 @@ struct Type {
 		return this.decl.isIncompleteTemplate();
 	}
 
-	func isIntType(this: &Type, allow_vector_types: bool) -> bool {
+	func isIntType(this: &Type, allow_vector_types: bool) => bool {
 		if this.decl.isEmpty() {
 			return false;
 		}
@@ -1662,7 +1662,7 @@ struct Type {
 		}
 	}
 
-	func isSigned(this: &Type, allow_vector_types: bool) -> bool {
+	func isSigned(this: &Type, allow_vector_types: bool) => bool {
 		if this.decl.isEmpty() {
 			return false;
 		}
@@ -1677,7 +1677,7 @@ struct Type {
 		}
 	}
 
-	func isFloatType(this: &Type, allow_vector_types: bool) -> bool {
+	func isFloatType(this: &Type, allow_vector_types: bool) => bool {
 		if this.decl.isEmpty() {
 			return false;
 		}
@@ -1690,7 +1690,7 @@ struct Type {
 		}
 	}
 
-	func isPtrType(this: &Type) -> bool {
+	func isPtrType(this: &Type) => bool {
 		if this.decl.isEmpty() {
 			return false;
 		}
@@ -1698,7 +1698,7 @@ struct Type {
 		return this.decl.body is Pointer;
 	}
 
-	func isConstPtrType(this: &Type) -> bool {
+	func isConstPtrType(this: &Type) => bool {
 		if this.decl.isEmpty() {
 			return false;
 		}
@@ -1709,7 +1709,7 @@ struct Type {
 		}
 	}
 
-	func isVectorType(this: &Type) -> bool {
+	func isVectorType(this: &Type) => bool {
 		if this.decl.isEmpty() {
 			return false;
 		}
@@ -1717,7 +1717,7 @@ struct Type {
 		return this.decl.body is Vector;
 	}
 
-	func isMatrixType(this: &Type) -> bool {
+	func isMatrixType(this: &Type) => bool {
 		if this.decl.isEmpty() {
 			return false;
 		}
@@ -1725,7 +1725,7 @@ struct Type {
 		return this.decl.body is Matrix;
 	}
 
-	func isPrimitive(this: &Type) -> bool {
+	func isPrimitive(this: &Type) => bool {
 		if this.reference_kind != None {
 			return true; // reference types are always primitive
 		}
@@ -1750,7 +1750,7 @@ struct Type {
 		}
 	}
 
-	func isEnum(this: &Type) -> bool {
+	func isEnum(this: &Type) => bool {
 		if this.decl.isEmpty() {
 			return false;
 		}
@@ -1758,7 +1758,7 @@ struct Type {
 		return this.decl.body is Enum;
 	}
 
-	func isVariant(this: &Type) -> bool {
+	func isVariant(this: &Type) => bool {
 		if this.decl.isEmpty() {
 			return false;
 		}
@@ -1766,7 +1766,7 @@ struct Type {
 		return this.decl.body is Variant;
 	}
 
-	func getPrimitiveSizeInBits(this: &Type) -> uint {
+	func getPrimitiveSizeInBits(this: &Type) => uint {
 		if this.reference_kind != None {
 			return sizeOf!<ptr!<byte, false>>() * 8;
 		}
@@ -1788,7 +1788,7 @@ struct Type {
 		}
 	}
 
-	func getBitMask(this: &Type) -> int {
+	func getBitMask(this: &Type) => int {
 		if this.getPrimitiveSizeInBits() >= sizeOf!<int>() * 8 {
 			return -1;
 		}
@@ -1840,7 +1840,7 @@ enum FloatType {
 	case F64;
 	case F128;
 
-	func getSizeInBits(float_type: FloatType) -> uint {
+	func getSizeInBits(float_type: FloatType) => uint {
 		match float_type {
 			case None -> return 0;
 			case F16 -> return 16;
@@ -1964,14 +1964,14 @@ enum PrimitiveOp {
 	case Assign = 512;
 	case RHSToVector = 1024;
 
-	func |(lhs: PrimitiveOp, rhs: PrimitiveOp) -> PrimitiveOp = default;
-	func &(lhs: PrimitiveOp, rhs: PrimitiveOp) -> PrimitiveOp = default;
+	func |(lhs: PrimitiveOp, rhs: PrimitiveOp) => PrimitiveOp = default;
+	func &(lhs: PrimitiveOp, rhs: PrimitiveOp) => PrimitiveOp = default;
 
-	func isAssignment(op: PrimitiveOp) -> bool {
+	func isAssignment(op: PrimitiveOp) => bool {
 		return (op & Assign) != NoOp;
 	}
 
-	func getOp(op: PrimitiveOp) -> PrimitiveOp {
+	func getOp(op: PrimitiveOp) => PrimitiveOp {
 		return ((op as uint) & (PrimitiveOp::Assign as uint - 1)) as PrimitiveOp;
 	}
 }
@@ -2062,7 +2062,7 @@ variant BuiltinFunction {
 	case ArrayOpAssign;
 	case ArrayOpEqual;
 
-	func isInlineable(this: &BuiltinFunction) -> bool {
+	func isInlineable(this: &BuiltinFunction) => bool {
 		match this {
 			case PrimitiveOp
 			| PointerToRef
@@ -2190,7 +2190,7 @@ variant Node {
 	case VectorGetSwizzleExpr: (vector: uint, offset: uint, offset_scale: uint, indices: List!<uint>, indices_are_sequential: bool);
 	case VectorSetSwizzleExpr: (vector: uint, offset: uint, offset_scale: uint, indices: List!<uint>, value: uint);
 
-	func name(this: &Node) -> String {
+	func name(this: &Node) => String {
 		match this {
 			case Empty -> return "Empty";
 			case Garbage -> return "Garbage";
@@ -2253,7 +2253,7 @@ variant Node {
 		}
 	}
 
-	func isAnonymousTuple(this: &Node) -> bool {
+	func isAnonymousTuple(this: &Node) => bool {
 		match this {
 			case TupleExpr: &elements -> {
 				var is_anonymous = true;
@@ -2266,7 +2266,7 @@ variant Node {
 		}
 	}
 
-	func addIdOffset(this: &&Node, offset: uint) -> void {
+	func addIdOffset(this: &&Node, offset: uint) => void {
 		match this {
 			case NamespaceDecl: &&decl -> {
 				decl.first_node_id += offset;
@@ -2480,47 +2480,47 @@ struct Name {
 	var span: Span;
 	var segments: List!<NameSegment>;
 
-	func constructor(this: &&Name) -> void = default;
+	func constructor(this: &&Name) => void = default;
 
-	func constructor(this: &&Name, span: Span) -> void {
+	func constructor(this: &&Name, span: Span) => void {
 		this.span := span;
 	}
 
-	func constructor(this: &&Name, name: String) -> void {
+	func constructor(this: &&Name, name: String) => void {
 		this.segments := (1u, NameSegment(name, List!<TemplateParameter>()));
 	}
 
-	func constructor(this: &&Name, span: Span, name: String, template_parameters: &List!<TemplateParameter>) -> void {
+	func constructor(this: &&Name, span: Span, name: String, template_parameters: &List!<TemplateParameter>) => void {
 		this.span := span;
 		this.segments := (1u, NameSegment(name, template_parameters));
 	}
 
-	func constructor(this: &&Name, name: String, template_parameters: &List!<TemplateParameter>) -> void {
+	func constructor(this: &&Name, name: String, template_parameters: &List!<TemplateParameter>) => void {
 		this.segments := (1u, NameSegment(name, template_parameters));
 	}
 
-	func constructor(this: &&Name, span: Span, segments: List!<NameSegment>) -> void {
+	func constructor(this: &&Name, span: Span, segments: List!<NameSegment>) => void {
 		this.span := span;
 		this.segments := segments;
 	}
 
-	func constructor(this: &&Name, other: Name) -> void = default;
-	func destructor(this: &&Name) -> void = default;
+	func constructor(this: &&Name, other: Name) => void = default;
+	func destructor(this: &&Name) => void = default;
 
-	func =(this: &&Name, other: Name) -> void = default;
-	func ==(@[shallow] this: Name, @[shallow] other: Name) -> bool = default;
+	func =(this: &&Name, other: Name) => void = default;
+	func ==(@[shallow] this: Name, @[shallow] other: Name) => bool = default;
 
-	func +(@[shallow] this: Name, @[shallow] segment: NameSegment) -> Name {
+	func +(@[shallow] this: Name, @[shallow] segment: NameSegment) => Name {
 		var result = this;
 		result.segments.append(segment);
 		return result;
 	}
 
-	func ..(@[shallow] lhs: Name, @[shallow] rhs: Name) -> Name {
+	func ..(@[shallow] lhs: Name, @[shallow] rhs: Name) => Name {
 		return Name(lhs.span..rhs.span, lhs.segments + rhs.segments);
 	}
 
-	func intersection(this: &Name, segments: &List!<NameSegment>) -> uint {
+	func intersection(this: &Name, segments: &List!<NameSegment>) => uint {
 		for offset in 0u..this.segments.size() {
 			if segments.startsWith(this.segments[offset..this.segments.size()]) {
 				return this.segments.size() - offset;
@@ -2633,43 +2633,43 @@ variant Value {
 	case Variable: SharedHandle!<VarDecl>;
 
 	template <Id: uint = 0u>
-	func constructor(this: &&Value) -> void {
+	func constructor(this: &&Value) => void {
 		this.constructor!<0u>(Type::unknown());
 	}
 
-	func constructor(this: &&Value) -> void {
+	func constructor(this: &&Value) => void {
 		this.constructor!<0u>(Type::unknown());
 	}
 
-	func toBool(this: &Value) -> bool {
+	func toBool(this: &Value) => bool {
 		match this {
 			case Integer: value -> return (value & this.type.getBitMask()) != 0;
 			default -> return false;
 		}
 	}
 
-	func toInt(this: &Value) -> int {
+	func toInt(this: &Value) => int {
 		match this {
 			case Integer: value -> return (value & this.type.getBitMask());
 			default -> return 0;
 		}
 	}
 
-	func toUInt(this: &Value) -> uint {
+	func toUInt(this: &Value) => uint {
 		match this {
 			case Integer: value -> return (value & this.type.getBitMask()) as uint;
 			default -> return 0;
 		}
 	}
 
-	func toFloat(this: &Value) -> f64 {
+	func toFloat(this: &Value) => f64 {
 		match this {
 			case Float: value -> return value;
 			default -> return 0;
 		}
 	}
 
-	func toType(this: &Value) -> Type {
+	func toType(this: &Value) => Type {
 		match this {
 			case Type: value -> return value;
 			default -> return Type::unknown();
@@ -2677,7 +2677,7 @@ variant Value {
 	}
 }
 
-func format(float_type: FloatType) -> String {
+func format(float_type: FloatType) => String {
 	match float_type {
 		case None -> return "none";
 		case F16 -> return "f16";
@@ -2688,7 +2688,7 @@ func format(float_type: FloatType) -> String {
 	}
 }
 
-func format(template_parameter: &TemplateParameter) -> String {
+func format(template_parameter: &TemplateParameter) => String {
 	match template_parameter {
 		case None -> return "<none>";
 		case Type: t -> return t.signature();
@@ -2699,7 +2699,7 @@ func format(template_parameter: &TemplateParameter) -> String {
 	}
 }
 
-func format(template_parameters: &List!<TemplateParameterDecl>) -> String {
+func format(template_parameters: &List!<TemplateParameterDecl>) => String {
 	if template_parameters.isEmpty() {
 		return "";
 	}
@@ -2716,7 +2716,7 @@ func format(template_parameters: &List!<TemplateParameterDecl>) -> String {
 	return result + ">";
 }
 
-func format(template_parameters: &List!<TemplateParameter>) -> String {
+func format(template_parameters: &List!<TemplateParameter>) => String {
 	if template_parameters.isEmpty() {
 		return "";
 	}
@@ -2733,7 +2733,7 @@ func format(template_parameters: &List!<TemplateParameter>) -> String {
 	return result + ">";
 }
 
-func format(state: NamespaceState) -> String {
+func format(state: NamespaceState) => String {
 	assert(state >= IncompleteTemplate && state <= Done);
 
 	match state {
@@ -2746,7 +2746,7 @@ func format(state: NamespaceState) -> String {
 	}
 }
 
-func format(this: &Name) -> String {
+func format(this: &Name) => String {
 	var result = "";
 	var first = true;
 	for i in 0u..this.segments.size() {
@@ -2760,7 +2760,7 @@ func format(this: &Name) -> String {
 	return result;
 }
 
-func format(types: &List!<Type>) -> String {
+func format(types: &List!<Type>) => String {
 	var result = "(";
 	for i in 0u..types.size() {
 		if i != 0 {
@@ -2773,7 +2773,7 @@ func format(types: &List!<Type>) -> String {
 	return result + ")";
 }
 
-func format(return_kind: ReturnKind) -> String {
+func format(return_kind: ReturnKind) => String {
 	match return_kind {
 		case None -> return "None";
 		case Value -> return "Value";
@@ -2783,7 +2783,7 @@ func format(return_kind: ReturnKind) -> String {
 	}
 }
 
-func format(this: ReferenceKind) -> String {
+func format(this: ReferenceKind) => String {
 	match this {
 		case None -> return "";
 		case Const -> return "&";
@@ -2791,11 +2791,11 @@ func format(this: ReferenceKind) -> String {
 	}
 }
 
-func format(parsed_number: ParsedNumber) -> String {
+func format(parsed_number: ParsedNumber) => String {
 	return format(parsed_number.significant) + " * " + format(parsed_number.base) + "^" + format(parsed_number.exponent);
 }
 
-func format(this: &Value) -> String {
+func format(this: &Value) => String {
 	match this {
 		case Undefined -> return "undefined";
 		case Void -> return "void";

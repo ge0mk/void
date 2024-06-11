@@ -1,14 +1,14 @@
 import std/core;
 import std/list;
 
-func main() -> void {
+func main() => void {
 	var l: List!<int>;
 	l.append(1);
 	l.append(5);
 	l.append(2);
 	l.append(8);
 	l.append(4);
-	l.qsort(func (lhs: int, rhs: int) -> int {
+	l.qsort(func (lhs: int, rhs: int) => int {
 		return lhs <=> rhs;
 	});
 

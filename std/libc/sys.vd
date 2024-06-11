@@ -8,11 +8,11 @@ enum MMapProtection : i32 {
 	case GrowsDown = 0x01000000;	/* Extend change to start of growsdown vma (mprotect only).  */
 	case GrowsUp = 0x02000000;		/* Extend change to start of growsup vma (mprotect only).  */
 
-	func |(lhs: MMapProtection, rhs: MMapProtection) -> MMapProtection = default;
-	func &(lhs: MMapProtection, rhs: MMapProtection) -> MMapProtection = default;
+	func |(lhs: MMapProtection, rhs: MMapProtection) => MMapProtection = default;
+	func &(lhs: MMapProtection, rhs: MMapProtection) => MMapProtection = default;
 
-	func |=(lhs: &&MMapProtection, rhs: MMapProtection) -> void = default;
-	func &=(lhs: &&MMapProtection, rhs: MMapProtection) -> void = default;
+	func |=(lhs: &&MMapProtection, rhs: MMapProtection) => void = default;
+	func &=(lhs: &&MMapProtection, rhs: MMapProtection) => void = default;
 }
 
 enum MMapFlags : i32 {
@@ -31,5 +31,5 @@ enum MMapFlags : i32 {
 	case HugeMask = 0x3f;
 }
 
-func mmap(addr: ptr!<void, true>, len: uint, prot: MMapProtection, flags: MMapFlags, fd: i32, offset: uint) -> ptr!<void, true> = extern;
-func munmap(addr: ptr!<void, true>, len: uint) -> i32 = extern;
+func mmap(addr: ptr!<void, true>, len: uint, prot: MMapProtection, flags: MMapFlags, fd: i32, offset: uint) => ptr!<void, true> = extern;
+func munmap(addr: ptr!<void, true>, len: uint) => i32 = extern;

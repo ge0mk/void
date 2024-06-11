@@ -9,34 +9,34 @@ struct vec2 {
 	var x: int;
 	var y: int;
 
-	func constructor(this: &&vec2) -> void {
+	func constructor(this: &&vec2) => void {
 		this.x := 0;
 		this.y := 0;
 		println("vec2::constructor");
 	}
 
-	func constructor(this: &&vec2, x: int, y: int) -> void {
+	func constructor(this: &&vec2, x: int, y: int) => void {
 		this.x := x;
 		this.y := y;
 		println("vec2::constructor");
 	}
 
-	func constructor(this: &&vec2, other: vec2) -> void {
+	func constructor(this: &&vec2, other: vec2) => void {
 		this.x := other.x;
 		this.y := other.y;
 		println("vec2::constructor");
 	}
 
-	func destructor(this: &&vec2) -> void {
+	func destructor(this: &&vec2) => void {
 		println("vec2::destructor");
 	}
 
-	func +(this: vec2, other: vec2) -> vec2 {
+	func +(this: vec2, other: vec2) => vec2 {
 		return vec2(this.x + other.x, this.y + other.y);
 	}
 }
 
-func print(v: vec2) -> void {
+func print(v: vec2) => void {
 	print("{ ");
 	print(format(v.x));
 	print(" | ");
@@ -44,7 +44,7 @@ func print(v: vec2) -> void {
 	print(" }");
 }
 
-func println(v: vec2) -> void {
+func println(v: vec2) => void {
 	print("{ ");
 	print(format(v.x));
 	print(" | ");
@@ -52,7 +52,7 @@ func println(v: vec2) -> void {
 	println(" }");
 }
 
-func main() -> int {
+func main() => int {
 	println(vec2(1, 2) + vec2(3, 4));
 	return 0;
 }

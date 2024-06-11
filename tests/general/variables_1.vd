@@ -2,7 +2,7 @@
 
 import std/core;
 
-func main() -> int {
+func main() => int {
 	const a = 1;
 	const b = 4;
 	return a + b;

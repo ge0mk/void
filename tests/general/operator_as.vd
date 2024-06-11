@@ -1,23 +1,23 @@
 import std/core;
 
 struct Foo {
-	func constructor(this: &&Foo) -> void = default;
-	func constructor(this: &&Foo, other: Foo) -> void = default;
-	func destructor(this: &&Foo) -> void = default;
+	func constructor(this: &&Foo) => void = default;
+	func constructor(this: &&Foo, other: Foo) => void = default;
+	func destructor(this: &&Foo) => void = default;
 
-	func =(this: &&Foo, other: Foo) -> void = default;
+	func =(this: &&Foo, other: Foo) => void = default;
 
 	template <T: type>
-	func as(this: Foo) -> int {
+	func as(this: Foo) => int {
 		return 0;
 	}
 
 	template <T: type = int>
-	func as(this: Foo) -> int {
+	func as(this: Foo) => int {
 		return 42;
 	}
 }
 
-func main() -> void {
+func main() => void {
 	assert(Foo() as int == 42);
 }

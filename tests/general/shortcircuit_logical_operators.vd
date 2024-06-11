@@ -1,10 +1,10 @@
 import std/core;
 
-func fail() -> bool {
+func fail() => bool {
 	abort();
 }
 
-func main() -> void {
+func main() => void {
 	assert((true && true) == true);
 	assert((false && true) == false);
 	assert((true && false) == false);

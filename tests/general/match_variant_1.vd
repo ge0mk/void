@@ -6,7 +6,7 @@ variant Foo {
 	case C: u64;
 }
 
-func main() -> int {
+func main() => int {
 	match Foo::A {
 		case A -> return 0;
 		default -> return 1;

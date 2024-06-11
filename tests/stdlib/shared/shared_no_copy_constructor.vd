@@ -2,10 +2,10 @@ import std/core;
 import std/shared;
 
 struct Foo {
-	func constructor(this: &&Foo) -> void = default;
-	func destructor(this: &&Foo) -> void = default;
+	func constructor(this: &&Foo) => void = default;
+	func destructor(this: &&Foo) => void = default;
 }
 
-func main() -> void {
+func main() => void {
 	const foo = SharedPtr!<Foo>::new();
 }

@@ -3,33 +3,33 @@ import std/core;
 struct Foo {
 	var counter: &&int;
 
-	func constructor(this: &&Foo, counter: &&int) -> void {
+	func constructor(this: &&Foo, counter: &&int) => void {
 		this.counter := &&counter;
 		this.counter++;
 	}
 
-	func constructor(this: &&Foo, other: Foo) -> void {
+	func constructor(this: &&Foo, other: Foo) => void {
 		this.counter := &&other.counter;
 		this.counter++;
 	}
 
-	func destructor(this: &&Foo) -> void {
+	func destructor(this: &&Foo) => void {
 		this.counter--;
 	}
 }
 
-func foo() -> Result!<int, int> {
+func foo() => Result!<int, int> {
 	throw 0;
 }
 
-func bar(a: Foo, b: int) -> void {}
+func bar(a: Foo, b: int) => void {}
 
-func baz(counter: &&int) -> Result!<void, int> {
+func baz(counter: &&int) => Result!<void, int> {
 	bar(Foo(&&counter), try foo());
 	return Ok;
 }
 
-func main() -> void {
+func main() => void {
 	var counter = 0;
 	const r = baz(&&counter);
 	assert(r is Error);

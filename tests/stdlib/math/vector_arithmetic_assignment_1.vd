@@ -1,7 +1,7 @@
 import std/core;
 import std/math;
 
-func main() -> void {
+func main() => void {
 	var a = Vector!<int, 2>();
 	assert(a.x == 0);
 	assert(a.y == 0);

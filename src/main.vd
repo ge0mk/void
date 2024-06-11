@@ -15,7 +15,7 @@ import program;
 import span;
 import typechecker;
 
-func parseArguments(arguments: Range!<String, false>) -> Optional!<CompilerOptions> {
+func parseArguments(arguments: Range!<String, false>) => Optional!<CompilerOptions> {
 	var args_parser = ArgsParser(arguments, "");
 	var options: CompilerOptions;
 
@@ -122,7 +122,7 @@ func parseArguments(arguments: Range!<String, false>) -> Optional!<CompilerOptio
 	return Some(options);
 }
 
-func main(args: Range!<String, false>) -> int {
+func main(args: Range!<String, false>) => int {
 	const options = parseArguments(args) else {
 		return 1;
 	}
@@ -134,7 +134,7 @@ func main(args: Range!<String, false>) -> int {
 
 	var program: Program = (options);
 	var typechecker: TCContext = (&&program);
-	typechecker.registerPragma("generate_std_core_builtins", func (this: &&TCContext, program: &&Program, ns: SharedHandle!<Namespace>, span: Span) -> void {
+	typechecker.registerPragma("generate_std_core_builtins", func (this: &&TCContext, program: &&Program, ns: SharedHandle!<Namespace>, span: Span) => void {
 		program.core_namespace = ns;
 
 		program.any_concept = program.createConcept(Concept::Any("type"));
@@ -196,7 +196,7 @@ func main(args: Range!<String, false>) -> int {
 		discard program.createFloatType(ns, FloatType::F128);
 	});
 
-	typechecker.registerPragma("generate_std_math_builtins", func (this: &&TCContext, program: &&Program, ns: SharedHandle!<Namespace>, span: Span) -> void {
+	typechecker.registerPragma("generate_std_math_builtins", func (this: &&TCContext, program: &&Program, ns: SharedHandle!<Namespace>, span: Span) => void {
 		const one_type_template_parameters = List!<TemplateParameterDecl>(1u, TemplateParameterDecl("Type", program.any_concept, false));
 
 		discard program.createFunction(ns, "abs", one_type_template_parameters, BuiltinFunction::PrimitiveOp(PrimitiveOp::Abs, Type::unknown()));
@@ -247,7 +247,7 @@ func main(args: Range!<String, false>) -> int {
 		discard program.createFunction(ns, "matmul", matmul_template_parameters, BuiltinFunction::MatrixMultiply((a_columns: 0u, a_rows: 0u, b_columns: 0u), Type::unknown()));
 	});
 
-	typechecker.registerPragma("finalize_std_core_array_instance", func (this: &&TCContext, program: &&Program, ns: SharedHandle!<Namespace>, span: Span) -> void {
+	typechecker.registerPragma("finalize_std_core_array_instance", func (this: &&TCContext, program: &&Program, ns: SharedHandle!<Namespace>, span: Span) => void {
 		const type = Type(ns.linked_type);
 		const element_type = (ns.linked_type.body as Array).value().element_type;
 
@@ -260,7 +260,7 @@ func main(args: Range!<String, false>) -> int {
 		discard program.createUnaryFunction(ns, "data", type.varRef(), element_vptr_type, BuiltinFunction::ArrayGetDataPointer(type));
 	});
 
-	typechecker.registerPragma("finalize_std_math_matrix_instance", func (this: &&TCContext, program: &&Program, ns: SharedHandle!<Namespace>, span: Span) -> void {
+	typechecker.registerPragma("finalize_std_math_matrix_instance", func (this: &&TCContext, program: &&Program, ns: SharedHandle!<Namespace>, span: Span) => void {
 		const type = Type(ns.linked_type);
 		const matrix_type = (ns.linked_type.body as Matrix).value();
 		const transposed_type = this.getMatrixType(matrix_type.element_type, matrix_type.rows, matrix_type.columns, span);

@@ -1,7 +1,7 @@
 import std/core;
 import std/math;
 
-func main() -> void {
+func main() => void {
 	var a = Matrix!<int, 4, 4>(
 		00, 10, 20, 30,
 		01, 11, 21, 31,

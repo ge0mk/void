@@ -3,7 +3,7 @@
 import std/core;
 import std/list;
 
-func main() -> int {
+func main() => int {
 	var a = List!<int>(10u, 0);
 	assert(a.size() == 10u);
 

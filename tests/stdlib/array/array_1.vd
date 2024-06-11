@@ -2,7 +2,7 @@
 
 import std/core;
 
-func main() -> int {
+func main() => int {
 	var a = [1, 2, 3, 4, 5];
 	return a[2u];
 }

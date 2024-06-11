@@ -9,20 +9,20 @@ struct MapIterator {
 	var values: ptr!<Tvalue, false>;
 	var end: ptr!<Tkey, false>;
 
-	func constructor(this: &&MapIterator!<Tkey, Tvalue>, keys: ptr!<Tkey, false>, values: ptr!<Tvalue, false>, end: ptr!<Tkey, false>) -> void {
+	func constructor(this: &&MapIterator!<Tkey, Tvalue>, keys: ptr!<Tkey, false>, values: ptr!<Tvalue, false>, end: ptr!<Tkey, false>) => void {
 		this.keys := keys;
 		this.values := values;
 		this.end := end;
 	}
 
-	func constructor(this: &&MapIterator!<Tkey, Tvalue>, other: MapIterator!<Tkey, Tvalue>) -> void = default;
-	func destructor(this: &&MapIterator!<Tkey, Tvalue>) -> void = default;
+	func constructor(this: &&MapIterator!<Tkey, Tvalue>, other: MapIterator!<Tkey, Tvalue>) => void = default;
+	func destructor(this: &&MapIterator!<Tkey, Tvalue>) => void = default;
 
-	func hasNext(this: &MapIterator!<Tkey, Tvalue>) -> bool {
+	func hasNext(this: &MapIterator!<Tkey, Tvalue>) => bool {
 		return this.keys < this.end;
 	}
 
-	func getNext(this: &&MapIterator!<Tkey, Tvalue>) -> (key: Tkey, value: Tvalue) {
+	func getNext(this: &&MapIterator!<Tkey, Tvalue>) => (key: Tkey, value: Tvalue) {
 		assert(this.keys < this.end, Error::EINVAL);
 
 		this.keys = this.keys + 1;
@@ -38,14 +38,14 @@ struct Map {
 	var size: uint;
 	var capacity: uint;
 
-	func constructor(this: &&Map!<Tkey, Tvalue>) -> void {
+	func constructor(this: &&Map!<Tkey, Tvalue>) => void {
 		this.keys := ();
 		this.values := ();
 		this.size := ();
 		this.capacity := ();
 	}
 
-	func constructor(this: &&Map!<Tkey, Tvalue>, other: Map!<Tkey, Tvalue>) -> void {
+	func constructor(this: &&Map!<Tkey, Tvalue>, other: Map!<Tkey, Tvalue>) => void {
 		this.keys := ();
 		this.values := ();
 		this.size := ();
@@ -59,7 +59,7 @@ struct Map {
 		this.size = other.size();
 	}
 
-	func destructor(this: &&Map!<Tkey, Tvalue>) -> void {
+	func destructor(this: &&Map!<Tkey, Tvalue>) => void {
 		this.clear();
 
 		if this.keys != ptr!<Tkey, true>::null() {
@@ -68,7 +68,7 @@ struct Map {
 		}
 	}
 
-	func =(this: &&Map!<Tkey, Tvalue>, other: Map!<Tkey, Tvalue>) -> void {
+	func =(this: &&Map!<Tkey, Tvalue>, other: Map!<Tkey, Tvalue>) => void {
 		this.clear();
 
 		this.grow(other.size());
@@ -79,27 +79,27 @@ struct Map {
 		this.size = other.size();
 	}
 
-	func size(this: &Map!<Tkey, Tvalue>) -> uint {
+	func size(this: &Map!<Tkey, Tvalue>) => uint {
 		return this.size;
 	}
 
-	func isEmpty(this: &Map!<Tkey, Tvalue>) -> bool {
+	func isEmpty(this: &Map!<Tkey, Tvalue>) => bool {
 		return this.size == 0u;
 	}
 
-	func keys(this: &Map!<Tkey, Tvalue>) -> Range!<Tkey, false> {
+	func keys(this: &Map!<Tkey, Tvalue>) => Range!<Tkey, false> {
 		return Range!<Tkey, false>(this.keys as ptr!<Tkey, false>, this.size);
 	}
 
-	func values(this: &Map!<Tkey, Tvalue>) -> Range!<Tvalue, false> {
+	func values(this: &Map!<Tkey, Tvalue>) => Range!<Tvalue, false> {
 		return Range!<Tvalue, false>(this.values as ptr!<Tvalue, false>, this.size);
 	}
 
-	func iterator(this: &Map!<Tkey, Tvalue>) -> MapIterator!<Tkey, Tvalue> {
+	func iterator(this: &Map!<Tkey, Tvalue>) => MapIterator!<Tkey, Tvalue> {
 		return MapIterator!<Tkey, Tvalue>(this.keys as ptr!<Tkey, false>, this.values as ptr!<Tvalue, false>, this.keys as ptr!<Tkey, false> + this.size());
 	}
 
-	func ==(@[shallow] this: Map!<Tkey, Tvalue>, @[shallow] other: Map!<Tkey, Tvalue>) -> bool {
+	func ==(@[shallow] this: Map!<Tkey, Tvalue>, @[shallow] other: Map!<Tkey, Tvalue>) => bool {
 		if this.size() != other.size() {
 			return false;
 		}
@@ -117,7 +117,7 @@ struct Map {
 		return true;
 	}
 
-	func getInsertPos(this: &Map!<Tkey, Tvalue>, @[shallow] key: Tkey, exact_match: &&bool) -> uint {
+	func getInsertPos(this: &Map!<Tkey, Tvalue>, @[shallow] key: Tkey, exact_match: &&bool) => uint {
 		var min = 0u;
 		var max = this.size;
 		var index = this.size / 2u;
@@ -138,13 +138,13 @@ struct Map {
 		return index;
 	}
 
-	func contains(this: &Map!<Tkey, Tvalue>, @[shallow] key: Tkey) -> bool {
+	func contains(this: &Map!<Tkey, Tvalue>, @[shallow] key: Tkey) => bool {
 		var exact_match = false;
 		discard this.getInsertPos(key, &&exact_match);
 		return exact_match;
 	}
 
-	func set(this: &&Map!<Tkey, Tvalue>, @[shallow] key: Tkey, @[shallow] value: Tvalue) -> void {
+	func set(this: &&Map!<Tkey, Tvalue>, @[shallow] key: Tkey, @[shallow] value: Tvalue) => void {
 		var exact_match = false;
 		const index = this.getInsertPos(key, &&exact_match);
 		if exact_match {
@@ -162,7 +162,7 @@ struct Map {
 		this.size += 1u;
 	}
 
-	func get(this: &Map!<Tkey, Tvalue>, @[shallow] key: Tkey) -> Optional!<Tvalue> {
+	func get(this: &Map!<Tkey, Tvalue>, @[shallow] key: Tkey) => Optional!<Tvalue> {
 		var exact_match = false;
 		const index = this.getInsertPos(key, &&exact_match);
 		if exact_match {
@@ -172,7 +172,7 @@ struct Map {
 		return None;
 	}
 
-	func getOrDefault(this: &Map!<Tkey, Tvalue>, @[shallow] key: Tkey) -> Tvalue {
+	func getOrDefault(this: &Map!<Tkey, Tvalue>, @[shallow] key: Tkey) => Tvalue {
 		var exact_match = false;
 		const index = this.getInsertPos(key, &&exact_match);
 		if exact_match {
@@ -183,7 +183,7 @@ struct Map {
 		return d;
 	}
 
-	func remove(this: &&Map!<Tkey, Tvalue>, @[shallow] key: Tkey) -> void {
+	func remove(this: &&Map!<Tkey, Tvalue>, @[shallow] key: Tkey) => void {
 		var exact_match = false;
 		const index = this.getInsertPos(key, &&exact_match);
 		if !exact_match {
@@ -198,7 +198,7 @@ struct Map {
 		memmove!<Tvalue>(this.values + index, this.values as ptr!<Tvalue, false> + index + 1, this.size - index);
 	}
 
-	func [](this: &&Map!<Tkey, Tvalue>, @[shallow] key: Tkey) -> &&Tvalue {
+	func [](this: &&Map!<Tkey, Tvalue>, @[shallow] key: Tkey) => &&Tvalue {
 		var exact_match = false;
 		const index = this.getInsertPos(key, &&exact_match);
 		if exact_match {
@@ -217,7 +217,7 @@ struct Map {
 		return &&this.values[index];
 	}
 
-	func clear(this: &&Map!<Tkey, Tvalue>) -> void {
+	func clear(this: &&Map!<Tkey, Tvalue>) => void {
 		for index in 0u..this.size {
 			this.keys[index].destructor();
 			this.values[index].destructor();
@@ -227,7 +227,7 @@ struct Map {
 	}
 
 	// ensure that memory for at least one more element is available
-	func grow(this: &&Map!<Tkey, Tvalue>) -> void {
+	func grow(this: &&Map!<Tkey, Tvalue>) => void {
 		if this.size < this.capacity {
 			return;
 		}
@@ -236,7 +236,7 @@ struct Map {
 	}
 
 	// ensure that memory for at least 'new_capacity' elements is available
-	func grow(this: &&Map!<Tkey, Tvalue>, new_capacity: uint) -> void {
+	func grow(this: &&Map!<Tkey, Tvalue>, new_capacity: uint) => void {
 		const old_capacity = this.capacity;
 		if old_capacity >= new_capacity {
 			return;

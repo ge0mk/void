@@ -14,14 +14,14 @@ alias ParsedArgument = (
 struct ArgsParser {
 	var args: List!<ParsedArgument>;
 
-	func constructor(this: &&ArgsParser, args: Range!<String, false>, description: String) -> void {
+	func constructor(this: &&ArgsParser, args: Range!<String, false>, description: String) => void {
 		this.args := ();
 		for i in 1u..args.size() {
 			this.args.append(parseArgument(args[i]));
 		}
 	}
 
-	func parseArgument(arg: String) -> ParsedArgument {
+	func parseArgument(arg: String) => ParsedArgument {
 		if arg.isEmpty() || arg == "-" {
 			return ParsedArgument(arg, "", arg, false, false);
 		}
@@ -60,11 +60,11 @@ struct ArgsParser {
 		return ParsedArgument(arg, key, value, is_short, true);
 	}
 
-	func constructor(this: &&ArgsParser, other: ArgsParser) -> void = default;
-	func destructor(this: &&ArgsParser) -> void = default;
+	func constructor(this: &&ArgsParser, other: ArgsParser) => void = default;
+	func destructor(this: &&ArgsParser) => void = default;
 
 	// --foo / --foo=[on|off]
-	func flag(this: &&ArgsParser, short: String, long: String, description: String) -> Optional!<bool> {
+	func flag(this: &&ArgsParser, short: String, long: String, description: String) => Optional!<bool> {
 		for i in 0u..this.args.size() {
 			const arg = this.args[i];
 			if arg.key.isEmpty() && arg.value == "-" {
@@ -90,7 +90,7 @@ struct ArgsParser {
 	}
 
 	// --foo=bar / --foo bar, returns 'bar'
-	func value(this: &&ArgsParser, short: String, long: String, description: String) -> Optional!<String> {
+	func value(this: &&ArgsParser, short: String, long: String, description: String) => Optional!<String> {
 		for i in 0u..this.args.size() {
 			const arg = this.args[i];
 			if arg.key.isEmpty() && arg.value == "-" {
@@ -120,7 +120,7 @@ struct ArgsParser {
 	}
 
 	// returns first arg that doesn't start with '-'
-	func anonymous(this: &&ArgsParser, description: String) -> Optional!<String> {
+	func anonymous(this: &&ArgsParser, description: String) => Optional!<String> {
 		for i in 0u..this.args.size() {
 			const arg = this.args[i];
 			if arg.key.isEmpty() && arg.value == "-" {
@@ -136,7 +136,7 @@ struct ArgsParser {
 		return None;
 	}
 
-	func subcommand(this: &&ArgsParser, commands: Range!<String, false>) -> Optional!<uint> {
+	func subcommand(this: &&ArgsParser, commands: Range!<String, false>) => Optional!<uint> {
 		if this.args.isEmpty() {
 			return None;
 		} else if !this.args[0u].key.isEmpty() {
@@ -149,7 +149,7 @@ struct ArgsParser {
 		return None;
 	}
 
-	func getArgsAfterSeparator(this: &&ArgsParser) -> List!<String> {
+	func getArgsAfterSeparator(this: &&ArgsParser) => List!<String> {
 		var result: List!<String>;
 		var after_separator = false;
 
@@ -166,7 +166,7 @@ struct ArgsParser {
 		return result;
 	}
 
-	func getUnusedArgs(this: &&ArgsParser) -> List!<String> {
+	func getUnusedArgs(this: &&ArgsParser) => List!<String> {
 		var result: List!<String>;
 		for arg in this.args {
 			if arg.key.isEmpty() && arg.value == "-" {

@@ -10,9 +10,9 @@ struct Span {
 	var column: u16;
 	var file: u16;
 
-	func constructor(this: &&Span) -> void = default;
+	func constructor(this: &&Span) => void = default;
 
-	func constructor(this: &&Span, start: uint, end: uint, line: u32, column: u16, file: u16) -> void {
+	func constructor(this: &&Span, start: uint, end: uint, line: u32, column: u16, file: u16) => void {
 		this.start := start;
 		this.end := end;
 		this.line := line;
@@ -20,13 +20,13 @@ struct Span {
 		this.file := file;
 	}
 
-	func constructor(this: &&Span, other: Span) -> void = default;
-	func destructor(this: &&Span) -> void = default;
+	func constructor(this: &&Span, other: Span) => void = default;
+	func destructor(this: &&Span) => void = default;
 
-	func =(this: &&Span, other: Span) -> void = default;
-	func ==(this: Span, other: Span) -> bool = default;
+	func =(this: &&Span, other: Span) => void = default;
+	func ==(this: Span, other: Span) => bool = default;
 
-	func ..(this: Span, other: Span) -> Span {
+	func ..(this: Span, other: Span) => Span {
 		assert(this.file == other.file);
 
 		return Span(
@@ -38,16 +38,16 @@ struct Span {
 		);
 	}
 
-	func length(this: Span) -> uint {
+	func length(this: Span) => uint {
 		return this.end - this.start;
 	}
 
-	func dump(this: Span) -> String {
+	func dump(this: Span) => String {
 		return "\e[90m" + format(this.file as int) + "[" + format(this.start as int) + ".." + format(this.end as int) + "]\e[0m"
 			+ " \e[33m@ " + format(this.line as int + 1) + ":" + format(this.column as int + 1) + "\e[0m";
 	}
 
-	func dump(this: Span, file_name: String) -> String {
+	func dump(this: Span, file_name: String) => String {
 		return "\e[90m" + file_name + "[" + format(this.start as int) + ".." + format(this.end as int) + "]\e[0m"
 			+ " \e[33m@ " + format(this.line as int + 1) + ":" + format(this.column as int + 1) + "\e[0m";
 	}

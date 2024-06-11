@@ -5,12 +5,12 @@ import std/core;
 struct Foo {
 	var x: &&int;
 
-	func constructor(this: &&Foo) -> void {}
+	func constructor(this: &&Foo) => void {}
 
-	func destructor(this: &&Foo) -> void {}
+	func destructor(this: &&Foo) => void {}
 }
 
-func main() -> int {
+func main() => int {
 	var a = Foo();
 	return 0;
 }

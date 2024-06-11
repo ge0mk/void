@@ -1,13 +1,13 @@
 import std/core;
 
-func foo(val: byte) -> bool {
+func foo(val: byte) => bool {
 	match val {
 		case 'a'b | 'b'b | 'c'b -> return true;
 		default -> return false;
 	}
 }
 
-func main() -> void {
+func main() => void {
 	assert(foo('a'b) == true);
 	assert(foo('b'b) == true);
 	assert(foo('c'b) == true);

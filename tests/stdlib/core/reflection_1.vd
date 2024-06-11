@@ -1,14 +1,14 @@
 import std/core;
 
 struct Foo {
-	func constructor(this: &&Foo) -> void {}
-	func constructor(this: &&Foo, other: Foo) -> void {}
-	func destructor(this: &&Foo) -> void {}
+	func constructor(this: &&Foo) => void {}
+	func constructor(this: &&Foo, other: Foo) => void {}
+	func destructor(this: &&Foo) => void {}
 }
 
 struct Bar {}
 
-func main() -> void {
+func main() => void {
 	assert(hasDefaultConstructor!<Foo>());
 	assert(!hasDefaultConstructor!<Bar>());
 

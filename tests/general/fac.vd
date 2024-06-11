@@ -2,7 +2,7 @@
 
 import std/core;
 
-func fac(x: int) -> int {
+func fac(x: int) => int {
 	if x <= 1 {
 		return x;
 	} else {
@@ -10,6 +10,6 @@ func fac(x: int) -> int {
 	}
 }
 
-func main() -> int {
+func main() => int {
 	return fac(5);
 }

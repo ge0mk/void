@@ -9,16 +9,16 @@ template <T: type>
 struct Foo {
 	var value: T;
 
-	func constructor(this: &&Foo!<T>, value: T) -> void {
+	func constructor(this: &&Foo!<T>, value: T) => void {
 		println("Foo<T>::constructor()");
 		this.value := value;
 	}
 
-	func constructor(this: &&Foo!<T>, other: Foo!<T>) -> void {
+	func constructor(this: &&Foo!<T>, other: Foo!<T>) => void {
 		println("Foo<T>::constructor(other)");
 	}
 
-	func destructor(this: &&Foo!<T>) -> void {
+	func destructor(this: &&Foo!<T>) => void {
 		println("Foo<T>::destructor()");
 	}
 }
@@ -27,21 +27,21 @@ template <T: type = int>
 struct Foo {
 	var value: int;
 
-	func constructor(this: &&Foo!<int>, value: int) -> void {
+	func constructor(this: &&Foo!<int>, value: int) => void {
 		println("Foo<int>::constructor()");
 		this.value := value;
 	}
 
-	func constructor(this: &&Foo!<int>, other: Foo!<T>) -> void {
+	func constructor(this: &&Foo!<int>, other: Foo!<T>) => void {
 		println("Foo<int>::constructor(other)");
 	}
 
-	func destructor(this: &&Foo!<int>) -> void {
+	func destructor(this: &&Foo!<int>) => void {
 		println("Foo<int>::destructor()");
 	}
 }
 
-func main() -> int {
+func main() => int {
 	const a = Foo!<uint>(5u);
 	const b = Foo!<int>(5);
 	return 0;

@@ -13,14 +13,14 @@ struct String {
 
 	comptime const short_capacity = 31u;
 
-	func constructor(this: &&String) -> void {
+	func constructor(this: &&String) => void {
 		this.data := ();
 		this.size := ();
 		this.capacity := ();
 		this.short_size_and_flags := 3u<<62; // set short & owner bits to true
 	}
 
-	func constructor(this: &&String, other: String) -> void {
+	func constructor(this: &&String, other: String) => void {
 		if other.isShort() {
 			this.data := other.data;
 			this.size := other.size;
@@ -31,7 +31,7 @@ struct String {
 		}
 	}
 
-	func constructor(this: &&String, count: uint, fill_char: byte) -> void {
+	func constructor(this: &&String, count: uint, fill_char: byte) => void {
 		this.constructor();
 
 		if count > short_capacity {
@@ -45,7 +45,7 @@ struct String {
 		this._fill(0u, fill_char);
 	}
 
-	func constructor(this: &&String, bytes: Range!<byte, false>) -> void {
+	func constructor(this: &&String, bytes: Range!<byte, false>) => void {
 		this.constructor();
 
 		if bytes.size() > short_capacity {
@@ -59,39 +59,39 @@ struct String {
 		this._setCapacity(bytes.size());
 	}
 
-	func fromCString(data: ptr!<byte, false>) -> String {
+	func fromCString(data: ptr!<byte, false>) => String {
 		return String(Range!<byte, false>(data, strlen(data)));
 	}
 
-	func fromErrorCode(error: Error) -> String {
+	func fromErrorCode(error: Error) => String {
 		return String::fromCString(strerror(error));
 	}
 
-	func =(this: &&String, other: String) -> void {
+	func =(this: &&String, other: String) => void {
 		this.grow(other.size());
 		this._copy(0u, other.data(), other.size());
 		this._setSize(other.size());
 	}
 
-	func destructor(this: &&String) -> void {
+	func destructor(this: &&String) => void {
 		if this.isOwner() && !this.isShort() {
 			free!<byte>(this.data);
 		}
 	}
 
-	func shortSize(this: &String) -> uint {
+	func shortSize(this: &String) => uint {
 		return (this.short_size_and_flags >> 56) & 0b111111;
 	}
 
-	func isOwner(this: &String) -> bool {
+	func isOwner(this: &String) => bool {
 		return (this.short_size_and_flags >> 62) as bool;
 	}
 
-	func isShort(this: &String) -> bool {
+	func isShort(this: &String) => bool {
 		return (this.short_size_and_flags >> 63) as bool;
 	}
 
-	func size(this: &String) -> uint {
+	func size(this: &String) => uint {
 		if this.isShort() {
 			return this.shortSize();
 		} else {
@@ -99,7 +99,7 @@ struct String {
 		}
 	}
 
-	func capacity(this: &String) -> uint {
+	func capacity(this: &String) => uint {
 		if this.isShort() {
 			return short_capacity;
 		} else {
@@ -107,7 +107,7 @@ struct String {
 		}
 	}
 
-	func data(this: &String) -> ptr!<byte, false> {
+	func data(this: &String) => ptr!<byte, false> {
 		if this.isShort() {
 			return ptr!<ptr!<byte, true>, false>::addressOf(&this.data) as ptr!<byte, false>;
 		} else {
@@ -115,7 +115,7 @@ struct String {
 		}
 	}
 
-	func vdata(this: &&String) -> ptr!<byte, true> {
+	func vdata(this: &&String) => ptr!<byte, true> {
 		if this.isShort() {
 			return ptr!<ptr!<byte, true>, true>::addressOf(&&this.data) as ptr!<byte, true>;
 		} else {
@@ -123,35 +123,35 @@ struct String {
 		}
 	}
 
-	func isEmpty(this: &String) -> bool {
+	func isEmpty(this: &String) => bool {
 		return this.size() == 0u;
 	}
 
-	func bytes(this: &String) -> Range!<byte, false> {
+	func bytes(this: &String) => Range!<byte, false> {
 		return Range!<byte, false>(this.data(), this.size());
 	}
 
-	func [](this: &String, index: uint) -> &byte {
+	func [](this: &String, index: uint) => &byte {
 		assert(index < this.size(), Error::EBOUNDS);
 		return &this.data()[index];
 	}
 
-	func [](this: &&String, index: uint) -> &&byte {
+	func [](this: &&String, index: uint) => &&byte {
 		assert(index < this.size(), Error::EBOUNDS);
 		return &&this.vdata()[index];
 	}
 
-	func [](this: &String, range: NumericRange!<uint>) -> Range!<byte, false> {
+	func [](this: &String, range: NumericRange!<uint>) => Range!<byte, false> {
 		assert(range.end <= this.size(), Error::EBOUNDS);
 		assert(range.start <= range.end && range.step == 1, Error::EINVAL);
 		return Range!<byte, false>(this.data() + range.start, range.end - range.start);
 	}
 
-	func substring(this: &String, range: NumericRange!<uint>) -> String {
+	func substring(this: &String, range: NumericRange!<uint>) => String {
 		return String(this[range]);
 	}
 
-	func at(this: &String, index: uint) -> Optional!<byte> {
+	func at(this: &String, index: uint) => Optional!<byte> {
 		if index >= this.size() {
 			return None;
 		}
@@ -159,27 +159,27 @@ struct String {
 		return Some(this.data()[index]);
 	}
 
-	func clear(this: &&String) -> void {
+	func clear(this: &&String) => void {
 		this._setSize(0u);
 	}
 
-	func append(this: &&String, value: byte) -> void {
+	func append(this: &&String, value: byte) => void {
 		this.grow();
 		this.vdata()[this.size()] = value;
 		this._setSize(this.size() + 1);
 	}
 
-	func append(this: &&String, @[shallow] other: String) -> void {
+	func append(this: &&String, @[shallow] other: String) => void {
 		this.append(other.bytes());
 	}
 
-	func append(this: &&String, bytes: Range!<byte, false>) -> void {
+	func append(this: &&String, bytes: Range!<byte, false>) => void {
 		this.grow(this.size() + bytes.size());
 		this._copy(this.size(), bytes.data(), bytes.size());
 		this._setSize(this.size() + bytes.size());
 	}
 
-	func insert(this: &&String, index: uint, value: byte) -> void {
+	func insert(this: &&String, index: uint, value: byte) => void {
 		assert(index <= this.size(), Error::EBOUNDS);
 
 		this.grow();
@@ -189,11 +189,11 @@ struct String {
 		this._setSize(this.size() + 1);
 	}
 
-	func insert(this: &&String, index: uint, @[shallow] other: String) -> void {
+	func insert(this: &&String, index: uint, @[shallow] other: String) => void {
 		this.insert(index, other.bytes());
 	}
 
-	func insert(this: &&String, index: uint, bytes: Range!<byte, false>) -> void {
+	func insert(this: &&String, index: uint, bytes: Range!<byte, false>) => void {
 		assert(index <= this.size(), Error::EBOUNDS);
 
 		this.grow(this.size() + bytes.size());
@@ -202,14 +202,14 @@ struct String {
 		this._setSize(this.size() + bytes.size());
 	}
 
-	func remove(this: &&String, index: uint) -> void {
+	func remove(this: &&String, index: uint) => void {
 		assert(index < this.size(), Error::EBOUNDS);
 
 		this._move(index, index + 1);
 		this._setSize(this.size() - 1);
 	}
 
-	func remove(this: &&String, range: NumericRange!<uint>) -> void {
+	func remove(this: &&String, range: NumericRange!<uint>) => void {
 		assert(range.end <= this.size(), Error::EBOUNDS);
 		assert(range.start <= range.end && range.step == 1, Error::EINVAL);
 
@@ -217,7 +217,7 @@ struct String {
 		this._setSize(this.size() - (range.end - range.start));
 	}
 
-	func find(this: &String, start: uint, value: byte) -> Optional!<uint> {
+	func find(this: &String, start: uint, value: byte) => Optional!<uint> {
 		if start >= this.size() {
 			return None;
 		}
@@ -230,7 +230,7 @@ struct String {
 		return Some((pos - this.data()) as uint);
 	}
 
-	func find(this: &String, start: uint, @[shallow] needle: String) -> Optional!<uint> {
+	func find(this: &String, start: uint, @[shallow] needle: String) => Optional!<uint> {
 		if start >= this.size() {
 			return None;
 		}
@@ -243,7 +243,7 @@ struct String {
 		return Some((pos - this.data()) as uint);
 	}
 
-	func rfind(this: &String, end: uint, value: byte) -> Optional!<uint> {
+	func rfind(this: &String, end: uint, value: byte) => Optional!<uint> {
 		if end >= this.size() {
 			return None;
 		}
@@ -256,27 +256,27 @@ struct String {
 		return Some((pos - this.data()) as uint);
 	}
 
-	func find(this: &String, value: byte) -> Optional!<uint> {
+	func find(this: &String, value: byte) => Optional!<uint> {
 		return this.find(0u, value);
 	}
 
-	func find(this: &String, @[shallow] needle: String) -> Optional!<uint> {
+	func find(this: &String, @[shallow] needle: String) => Optional!<uint> {
 		return this.find(0u, needle);
 	}
 
-	func rfind(this: &String, value: byte) -> Optional!<uint> {
+	func rfind(this: &String, value: byte) => Optional!<uint> {
 		return this.rfind(0u, value);
 	}
 
-	func contains(this: &String, value: byte) -> bool {
+	func contains(this: &String, value: byte) => bool {
 		return this.find(value) is Some;
 	}
 
-	func contains(this: &String, @[shallow] needle: String) -> bool {
+	func contains(this: &String, @[shallow] needle: String) => bool {
 		return this.find(needle) is Some;
 	}
 
-	func remove(this: &&String, pattern: byte) -> void {
+	func remove(this: &&String, pattern: byte) => void {
 		var pos = this.find(0u, pattern);
 		while pos.hasValue() {
 			const index = pos.value();
@@ -285,7 +285,7 @@ struct String {
 		}
 	}
 
-	func remove(this: &&String, @[shallow] pattern: String) -> void {
+	func remove(this: &&String, @[shallow] pattern: String) => void {
 		var pos = this.find(0u, pattern);
 		while pos.hasValue() {
 			const index = pos.value();
@@ -294,7 +294,7 @@ struct String {
 		}
 	}
 
-	func replace(this: &&String, range: NumericRange!<uint>, @[shallow] with: String) -> void {
+	func replace(this: &&String, range: NumericRange!<uint>, @[shallow] with: String) => void {
 		assert(range.end <= this.size(), Error::EBOUNDS);
 		assert(range.start <= range.end && range.step == 1u, Error::EINVAL);
 
@@ -314,7 +314,7 @@ struct String {
 		}
 	}
 
-	func replace(this: &&String, pattern: byte, with: byte) -> void {
+	func replace(this: &&String, pattern: byte, with: byte) => void {
 		for i in 0u..this.size() {
 			if this.data()[i] == pattern {
 				this.vdata()[i] = with;
@@ -322,7 +322,7 @@ struct String {
 		}
 	}
 
-	func replace(this: &&String, pattern: byte, @[shallow] with: String) -> void {
+	func replace(this: &&String, pattern: byte, @[shallow] with: String) => void {
 		var start = 0u;
 		var pos = this.find(start, pattern);
 
@@ -334,7 +334,7 @@ struct String {
 		}
 	}
 
-	func replace(this: &&String, @[shallow] pattern: String, @[shallow] with: String) -> void {
+	func replace(this: &&String, @[shallow] pattern: String, @[shallow] with: String) => void {
 		var start = 0u;
 		var pos = this.find(start, pattern);
 
@@ -346,7 +346,7 @@ struct String {
 		}
 	}
 
-	func split(this: &String, separator: byte) -> List!<String> {
+	func split(this: &String, separator: byte) => List!<String> {
 		var result = List!<String>();
 
 		var segment_start = 0u;
@@ -365,7 +365,7 @@ struct String {
 		return result;
 	}
 
-	func split(this: &String, @[shallow] separator: String) -> List!<String> {
+	func split(this: &String, @[shallow] separator: String) => List!<String> {
 		var result = List!<String>();
 
 		var segment_start = 0u;
@@ -384,7 +384,7 @@ struct String {
 		return result;
 	}
 
-	func join(separator: String, @[shallow] segments: List!<String>) -> String {
+	func join(separator: String, @[shallow] segments: List!<String>) => String {
 		var result = String();
 		for i in 0u..segments.size() {
 			if i != 0 {
@@ -395,7 +395,7 @@ struct String {
 		return result;
 	}
 
-	func startsWith(this: &String, @[shallow] other: String) -> bool {
+	func startsWith(this: &String, @[shallow] other: String) => bool {
 		if this.size() < other.size() {
 			return false;
 		}
@@ -403,7 +403,7 @@ struct String {
 		return this._cmp(0u, other.data(), other.size()) == 0;
 	}
 
-	func endsWith(this: &String, @[shallow] other: String) -> bool {
+	func endsWith(this: &String, @[shallow] other: String) => bool {
 		if this.size() < other.size() {
 			return false;
 		}
@@ -412,7 +412,7 @@ struct String {
 		return this._cmp(offset, other.data(), other.size()) == 0;
 	}
 
-	func ==(@[shallow] lhs: String, @[shallow] rhs: String) -> bool {
+	func ==(@[shallow] lhs: String, @[shallow] rhs: String) => bool {
 		if lhs.size() != rhs.size() {
 			return false;
 		}
@@ -420,7 +420,7 @@ struct String {
 		return lhs._cmp(0u, rhs.data(), lhs.size()) == 0;
 	}
 
-	func <=>(@[shallow] lhs: String, @[shallow] rhs: String) -> int {
+	func <=>(@[shallow] lhs: String, @[shallow] rhs: String) => int {
 		const r = lhs._cmp(0u, rhs.data(), min!<uint>(lhs.size(), rhs.size()));
 		if r == 0 {
 			return lhs.size() <=> rhs.size();
@@ -429,26 +429,26 @@ struct String {
 		}
 	}
 
-	func +(lhs: String, rhs: byte) -> String {
+	func +(lhs: String, rhs: byte) => String {
 		lhs.append(rhs);
 		return lhs;
 	}
 
-	func +(lhs: String, @[shallow] rhs: String) -> String {
+	func +(lhs: String, @[shallow] rhs: String) => String {
 		lhs.append(rhs);
 		return lhs;
 	}
 
-	func +=(this: &&String, value: byte) -> void {
+	func +=(this: &&String, value: byte) => void {
 		this.append(value);
 	}
 
-	func +=(this: &&String, @[shallow] other: String) -> void {
+	func +=(this: &&String, @[shallow] other: String) => void {
 		this.append(other);
 	}
 
 	// ensure that memory for at least one more element is available
-	func grow(this: &&String) -> void {
+	func grow(this: &&String) => void {
 		if this.size() < this.capacity() {
 			return;
 		}
@@ -457,7 +457,7 @@ struct String {
 	}
 
 	// ensure that memory for at least 'new_capacity' elements is available
-	func grow(this: &&String, new_capacity: uint) -> void {
+	func grow(this: &&String, new_capacity: uint) => void {
 		const old_capacity = this.capacity();
 		if old_capacity >= new_capacity && this.isOwner() {
 			return;
@@ -487,7 +487,7 @@ struct String {
 		this._setCapacity(new_capacity);
 	}
 
-	func _setSize(this: &&String, value: uint) -> void {
+	func _setSize(this: &&String, value: uint) => void {
 		if this.isShort() {
 			this.short_size_and_flags = (this.short_size_and_flags & ~(0b111111u << 56)) | (value << 56);
 		} else {
@@ -495,39 +495,39 @@ struct String {
 		}
 	}
 
-	func _setCapacity(this: &&String, value: uint) -> void {
+	func _setCapacity(this: &&String, value: uint) => void {
 		if !this.isShort() {
 			this.capacity = value;
 		}
 	}
 
-	func _setIsOwner(this: &&String, value: bool) -> void {
+	func _setIsOwner(this: &&String, value: bool) => void {
 		this.short_size_and_flags = this.short_size_and_flags & ~(1u << 62) | (value as uint << 62);
 	}
 
-	func _setIsShort(this: &&String, value: bool) -> void {
+	func _setIsShort(this: &&String, value: bool) => void {
 		this.short_size_and_flags = this.short_size_and_flags & ~(1u << 63) | (value as uint << 63);
 	}
 
-	func _fill(this: &&String, start: uint, fill_char: byte) -> void {
+	func _fill(this: &&String, start: uint, fill_char: byte) => void {
 		memset!<byte>(this.vdata() as ptr!<byte, true> + start, fill_char, this.size() - start);
 	}
 
-	func _move(this: &&String, dst: uint, src: uint) -> void {
+	func _move(this: &&String, dst: uint, src: uint) => void {
 		const data = this.vdata();
 		memmove!<byte>(data + dst, data as ptr!<byte, false> + src, this.size() - src);
 	}
 
-	func _copy(this: &&String, dst: uint, src: ptr!<byte, false>, length: uint) -> void {
+	func _copy(this: &&String, dst: uint, src: ptr!<byte, false>, length: uint) => void {
 		memcpy!<byte>(this.vdata() + dst, src as ptr!<byte, false>, length);
 	}
 
-	func _cmp(this: &String, offset: uint, other_data: ptr!<byte, false>, length: uint) -> int {
+	func _cmp(this: &String, offset: uint, other_data: ptr!<byte, false>, length: uint) => int {
 		return strncmp(this.data() + offset, other_data, length) as int;
 	}
 }
 
-func byteRangeFromCString(c_str: ptr!<byte, false>) -> Range!<byte, false> {
+func byteRangeFromCString(c_str: ptr!<byte, false>) => Range!<byte, false> {
 	return Range!<byte, false>(c_str, strlen(c_str));
 }
 
@@ -544,7 +544,7 @@ struct ParsedNumber {
 	var contains_decimal_point: bool;
 	var contains_exponent: bool;
 
-	func constructor(this: &&ParsedNumber, significant: int, base: int, exponent: int, length: uint, contains_decimal_point: bool, contains_exponent: bool) -> void {
+	func constructor(this: &&ParsedNumber, significant: int, base: int, exponent: int, length: uint, contains_decimal_point: bool, contains_exponent: bool) => void {
 		this.significant := significant;
 		this.base := base;
 		this.exponent := exponent;
@@ -555,15 +555,15 @@ struct ParsedNumber {
 		this.normalize();
 	}
 
-	func constructor(this: &&ParsedNumber, other: ParsedNumber) -> void = default;
-	func destructor(this: &&ParsedNumber) -> void = default;
+	func constructor(this: &&ParsedNumber, other: ParsedNumber) => void = default;
+	func destructor(this: &&ParsedNumber) => void = default;
 
-	func =(this: &&ParsedNumber, other: ParsedNumber) -> void = default;
+	func =(this: &&ParsedNumber, other: ParsedNumber) => void = default;
 
-	func ==(this: ParsedNumber, other: ParsedNumber) -> bool = default;
+	func ==(this: ParsedNumber, other: ParsedNumber) => bool = default;
 
-	// remove trailing zeros in the significant: 100 * 10^0 -> 1 * 10^2
-	func normalize(this: &&ParsedNumber) -> void {
+	// remove trailing zeros in the significant: 100 * 10^0 => 1 * 10^2
+	func normalize(this: &&ParsedNumber) => void {
 		if this.significant == 0 {
 			return;
 		}
@@ -574,7 +574,7 @@ struct ParsedNumber {
 		}
 	}
 
-	func toInt(this: &ParsedNumber) -> int {
+	func toInt(this: &ParsedNumber) => int {
 		const power = this.exponent > 0 ? this.exponent : -this.exponent;
 		var result = this.significant;
 		var i = 0;
@@ -591,11 +591,11 @@ struct ParsedNumber {
 		return result;
 	}
 
-	func toFloat(this: &ParsedNumber) -> f64 {
+	func toFloat(this: &ParsedNumber) => f64 {
 		return this.significant as f64 * pow!<f64>(this.base as f64, this.exponent as f64);
 	}
 
-	func isInteger(this: &ParsedNumber) -> bool {
+	func isInteger(this: &ParsedNumber) => bool {
 		if this.exponent >= 0 {
 			return true;
 		}
@@ -617,19 +617,19 @@ struct ParsedNumber {
 	}
 }
 
-func isAlpha(val: byte) -> bool {
+func isAlpha(val: byte) => bool {
 	return (val >= 'A'b && val <= 'Z'b) || (val >= 'a'b && val <= 'z'b);
 }
 
-func isDigit(val: byte) -> bool {
+func isDigit(val: byte) => bool {
 	return val >= '0'b && val <= '9'b;
 }
 
-func isSpace(b: byte) -> bool {
+func isSpace(b: byte) => bool {
 	return b == ' 'b || b == '\t'b || b == '\n'b || b == '\r'b;
 }
 
-func isDigit(val: byte, base: int) -> bool {
+func isDigit(val: byte, base: int) => bool {
 	match base {
 		case 2 -> return val == '0'b || val == '1'b;
 		case 8 -> return val >= '0'b && val <= '7'b;
@@ -641,7 +641,7 @@ func isDigit(val: byte, base: int) -> bool {
 	}
 }
 
-func parseDigit(val: byte, base: int) -> int {
+func parseDigit(val: byte, base: int) => int {
 	match base {
 		case 16 -> {
 			if val >= '0'b && val <= '9'b {
@@ -658,7 +658,7 @@ func parseDigit(val: byte, base: int) -> int {
 	}
 }
 
-func parseNumber(str: String, start: uint) -> ParsedNumber {
+func parseNumber(str: String, start: uint) => ParsedNumber {
 	if start >= str.size() {
 		return ParsedNumber(0, 0, 0, 0u, false, false);
 	}
@@ -695,7 +695,7 @@ func parseNumber(str: String, start: uint) -> ParsedNumber {
 			if isDigit(str[index + 2], base) {
 				index += 2;
 			} else {
-				// 0x -> number 0 with postfix x
+				// 0x => number 0 with postfix x
 				return ParsedNumber(0, 10, 0, 1u, false, false);
 			}
 		}

@@ -2,9 +2,9 @@
 
 import std/core;
 
-func foo() -> void {}
-func foo() -> void {}
+func foo() => void {}
+func foo() => void {}
 
-func main() -> int {
+func main() => int {
 	return foo();
 }

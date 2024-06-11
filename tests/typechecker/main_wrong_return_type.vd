@@ -2,6 +2,6 @@
 
 import std/core;
 
-func main() -> bool {
+func main() => bool {
 	return false;
 }

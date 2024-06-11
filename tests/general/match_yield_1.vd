@@ -2,7 +2,7 @@
 
 import std/core;
 
-func main() -> int {
+func main() => int {
 	return match 2 {
 		case 2 -> yield 0;
 		default -> yield 1;

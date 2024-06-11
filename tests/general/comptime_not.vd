@@ -1,6 +1,6 @@
 import std/core;
 
-func main() -> int {
+func main() => int {
 	comptime if !true {
 		return 5;
 	} else {

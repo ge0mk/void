@@ -39,7 +39,7 @@ struct Parser {
 
 	var scope_stack: List!<ParserScope>;
 
-	func constructor(this: &&Parser, program: &&Program, file: SharedHandle!<CompilationUnit>, tokens: &List!<Token>, strings: &List!<String>, numbers: &List!<ParsedNumber>) -> void {
+	func constructor(this: &&Parser, program: &&Program, file: SharedHandle!<CompilationUnit>, tokens: &List!<Token>, strings: &List!<String>, numbers: &List!<ParsedNumber>) => void {
 		this.program := &&program;
 		this.file := file;
 
@@ -50,18 +50,18 @@ struct Parser {
 		this.scope_stack := (1u, ParserScope::Root);
 	}
 
-	func constructor(this: &&Parser, other: Parser) -> void = default;
-	func destructor(this: &&Parser) -> void = default;
+	func constructor(this: &&Parser, other: Parser) => void = default;
+	func destructor(this: &&Parser) => void = default;
 
-	func pushScope(this: &&Parser, scope: ParserScope) -> void {
+	func pushScope(this: &&Parser, scope: ParserScope) => void {
 		this.scope_stack.append(scope);
 	}
 
-	func popScope(this: &&Parser) -> void {
+	func popScope(this: &&Parser) => void {
 		this.scope_stack.removeLast();
 	}
 
-	func countScope(this: &Parser, scope: ParserScope) -> uint {
+	func countScope(this: &Parser, scope: ParserScope) => uint {
 		var result = 0u;
 		for current in this.scope_stack {
 			if current == scope {
@@ -71,25 +71,25 @@ struct Parser {
 		return result;
 	}
 
-	func error(this: &Parser, message: String, span: Span) -> void {
+	func error(this: &Parser, message: String, span: Span) => void {
 		this.program.printError(CompilationError(message, ErrorType::Error, ErrorStage::Parser, span));
 	}
 
-	func hint(this: &Parser, message: String, span: Span) -> void {
+	func hint(this: &Parser, message: String, span: Span) => void {
 		this.program.printError(CompilationError(message, ErrorType::Hint, ErrorStage::Parser, span));
 	}
 
-	func eof(this: &Parser) -> bool {
+	func eof(this: &Parser) => bool {
 		return this.index >= this.tokens.size();
 	}
 
-	func next(this: &&Parser) -> void {
+	func next(this: &&Parser) => void {
 		if this.index < this.tokens.size() {
 			this.index++;
 		}
 	}
 
-	func getEofSpan(this: &Parser) -> Span {
+	func getEofSpan(this: &Parser) => Span {
 		if const last = this.tokens.last() {
 			return Span(
 				last.span.end,
@@ -103,7 +103,7 @@ struct Parser {
 		return Span();
 	}
 
-	func current(this: &Parser) -> TokenType {
+	func current(this: &Parser) => TokenType {
 		if this.index >= this.tokens.size() {
 			return TokenType::EndOfFile;
 		}
@@ -111,7 +111,7 @@ struct Parser {
 		return this.tokens[this.index].type();
 	}
 
-	func currentSpan(this: &Parser) -> Span {
+	func currentSpan(this: &Parser) => Span {
 		if this.index >= this.tokens.size() {
 			return this.getEofSpan();
 		}
@@ -119,7 +119,7 @@ struct Parser {
 		return this.tokens[this.index].span;
 	}
 
-	func peek(this: &Parser) -> TokenType {
+	func peek(this: &Parser) => TokenType {
 		if this.index + 1 >= this.tokens.size() {
 			return TokenType::EndOfFile;
 		}
@@ -127,7 +127,7 @@ struct Parser {
 		return this.tokens[this.index + 1].type();
 	}
 
-	func previousSpan(this: &Parser) -> Span {
+	func previousSpan(this: &Parser) => Span {
 		if this.index == 0 && !this.tokens.isEmpty() {
 			return this.tokens[0u].span;
 		}
@@ -139,7 +139,7 @@ struct Parser {
 		return this.tokens[this.index - 1].span;
 	}
 
-	func accept(this: &&Parser, token: TokenType) -> bool {
+	func accept(this: &&Parser, token: TokenType) => bool {
 		if this.current() == token {
 			this.index++;
 			return true;
@@ -148,7 +148,7 @@ struct Parser {
 		}
 	}
 
-	func expect(this: &&Parser, token: TokenType) -> bool {
+	func expect(this: &&Parser, token: TokenType) => bool {
 		if this.index >= this.tokens.size() {
 			this.error("unexpected end of file", this.getEofSpan());
 		}
@@ -162,7 +162,7 @@ struct Parser {
 		}
 	}
 
-	func expectIdentifier(this: &&Parser) -> String {
+	func expectIdentifier(this: &&Parser) => String {
 		if this.index >= this.tokens.size() {
 			this.error("unexpected end of file", this.getEofSpan());
 			return "";
@@ -179,14 +179,14 @@ struct Parser {
 		return this.strings[current.data()];
 	}
 
-	func recover(this: &&Parser, token: TokenType) -> void {
+	func recover(this: &&Parser, token: TokenType) => void {
 		while !(this.current() == token) && this.index < this.tokens.size() {
 			this.index++;
 		}
 		this.index++;
 	}
 
-	func parseStmt(this: &&Parser, is_comptime: bool) -> uint {
+	func parseStmt(this: &&Parser, is_comptime: bool) => uint {
 		defer discard this.accept(TokenType::Semicolon);
 		const start = this.currentSpan();
 
@@ -290,7 +290,7 @@ struct Parser {
 		}
 	}
 
-	func parsePragma(this: &&Parser) -> uint {
+	func parsePragma(this: &&Parser) => uint {
 		const start = this.currentSpan();
 		if !this.expect(TokenType::KeywordPragma) {
 			return this.file.getGarbageNode();
@@ -304,7 +304,7 @@ struct Parser {
 		return this.file.addASTNode(Node::Pragma(name, start..this.previousSpan(), Type::unknown(), true));
 	}
 
-	func parseImport(this: &&Parser) -> uint {
+	func parseImport(this: &&Parser) => uint {
 		const start = this.currentSpan();
 		if !this.expect(TokenType::KeywordImport) {
 			return this.file.getGarbageNode();
@@ -327,7 +327,7 @@ struct Parser {
 		return this.file.addASTNode(Node::Import(name, start..this.previousSpan(), Type::unknown(), true));
 	}
 
-	func parseDecl(this: &&Parser) -> uint {
+	func parseDecl(this: &&Parser) => uint {
 		const start = this.currentSpan();
 
 		const first_node_id = this.file.nodes.size();
@@ -358,7 +358,7 @@ struct Parser {
 		}
 	}
 
-	func parseAnnotations(this: &&Parser) -> List!<Annotation> {
+	func parseAnnotations(this: &&Parser) => List!<Annotation> {
 		var annotations: List!<Annotation>;
 
 		if !this.accept(TokenType::AtSign) {
@@ -421,7 +421,7 @@ struct Parser {
 		return annotations;
 	}
 
-	func parseTemplateParameterDecl(this: &&Parser) -> List!<ParsedTemplateParameterDecl> {
+	func parseTemplateParameterDecl(this: &&Parser) => List!<ParsedTemplateParameterDecl> {
 		var template_parameters: List!<ParsedTemplateParameterDecl>;
 
 		if !this.accept(TokenType::KeywordTemplate) {
@@ -475,7 +475,7 @@ struct Parser {
 		return template_parameters;
 	}
 
-	func parseNamespace(this: &&Parser, start: Span, first_node_id: uint, annotations: List!<Annotation>, template_parameters: List!<ParsedTemplateParameterDecl>) -> uint {
+	func parseNamespace(this: &&Parser, start: Span, first_node_id: uint, annotations: List!<Annotation>, template_parameters: List!<ParsedTemplateParameterDecl>) => uint {
 		const is_private = this.accept(TokenType::KeywordPrivate);
 
 		if !this.expect(TokenType::KeywordNamespace) {
@@ -499,7 +499,7 @@ struct Parser {
 		));
 	}
 
-	func parseTypeDecl(this: &&Parser, start: Span, first_node_id: uint, annotations: List!<Annotation>, template_parameters: List!<ParsedTemplateParameterDecl>) -> uint {
+	func parseTypeDecl(this: &&Parser, start: Span, first_node_id: uint, annotations: List!<Annotation>, template_parameters: List!<ParsedTemplateParameterDecl>) => uint {
 		const is_private = this.accept(TokenType::KeywordPrivate);
 
 		const kind = match this.current() {
@@ -537,7 +537,7 @@ struct Parser {
 		));
 	}
 
-	func parseFunctionDecl(this: &&Parser, start: Span, first_node_id: uint, annotations: List!<Annotation>, template_parameters: List!<ParsedTemplateParameterDecl>) -> uint {
+	func parseFunctionDecl(this: &&Parser, start: Span, first_node_id: uint, annotations: List!<Annotation>, template_parameters: List!<ParsedTemplateParameterDecl>) => uint {
 		const is_private = this.accept(TokenType::KeywordPrivate);
 		const is_comptime = this.accept(TokenType::KeywordComptime);
 
@@ -568,7 +568,7 @@ struct Parser {
 		));
 	}
 
-	func parseFunctionSignature(this: &&Parser) -> Optional!<ParsedFunctionSignature> {
+	func parseFunctionSignature(this: &&Parser) => Optional!<ParsedFunctionSignature> {
 		const start = this.currentSpan();
 
 		if !this.expect(TokenType::KeywordFunc) {
@@ -589,7 +589,7 @@ struct Parser {
 		return this.parseFunctionSignature(name, start);
 	}
 
-	func parseFunctionSignature(this: &&Parser, name: String, start: Span) -> Optional!<ParsedFunctionSignature> {
+	func parseFunctionSignature(this: &&Parser, name: String, start: Span) => Optional!<ParsedFunctionSignature> {
 		if !this.expect(TokenType::LParen) {
 			return None;
 		}
@@ -620,11 +620,11 @@ struct Parser {
 		return Some(ParsedFunctionSignature(start..this.previousSpan(), name, parameters, return_type));
 	}
 
-	func parseVarDecl(this: &&Parser, is_parameter: bool) -> uint {
+	func parseVarDecl(this: &&Parser, is_parameter: bool) => uint {
 		return this.parseVarDecl(this.parseAnnotations(), is_parameter);
 	}
 
-	func parseVarDecl(this: &&Parser, annotations: &List!<Annotation>, is_parameter: bool) -> uint {
+	func parseVarDecl(this: &&Parser, annotations: &List!<Annotation>, is_parameter: bool) => uint {
 		const start = this.currentSpan();
 		var is_comptime = false;
 		var is_const = false;
@@ -667,7 +667,7 @@ struct Parser {
 		return this.file.addASTNode(Node::VarDecl(variable, start..this.previousSpan(), Type::unknown(), is_comptime));
 	}
 
-	func parseCaseDecl(this: &&Parser) -> uint {
+	func parseCaseDecl(this: &&Parser) => uint {
 		const start = this.currentSpan();
 		if !this.expect(TokenType::KeywordCase) {
 			return this.file.getGarbageNode();
@@ -691,7 +691,7 @@ struct Parser {
 		return this.file.addASTNode(Node::CaseDecl(ParsedCaseDecl(name, payload, id), start..this.previousSpan(), Type::unknown(), true));
 	}
 
-	func parseAlias(this: &&Parser) -> uint {
+	func parseAlias(this: &&Parser) => uint {
 		const start = this.currentSpan();
 		if !this.expect(TokenType::KeywordAlias) {
 			return this.file.getGarbageNode();
@@ -710,7 +710,7 @@ struct Parser {
 		return this.file.addASTNode(Node::AliasDecl(ParsedAliasDecl(name, type), start..this.previousSpan(), Type::unknown(), true));
 	}
 
-	func parseCompoundStmt(this: &&Parser) -> uint {
+	func parseCompoundStmt(this: &&Parser) => uint {
 		const start = this.currentSpan();
 
 		if !this.expect(TokenType::LCurly) {
@@ -732,7 +732,7 @@ struct Parser {
 		return this.file.addASTNode(Node::CompoundStmt(children, start..this.previousSpan(), Type::unknown(), false));
 	}
 
-	func parseVarDeclStmt(this: &&Parser) -> uint {
+	func parseVarDeclStmt(this: &&Parser) => uint {
 		const start = this.currentSpan();
 		const decl = this.parseVarDecl(false);
 
@@ -763,7 +763,7 @@ struct Parser {
 		));
 	}
 
-	func parseIfStmt(this: &&Parser, is_comptime: bool) -> uint {
+	func parseIfStmt(this: &&Parser, is_comptime: bool) => uint {
 		const start = this.currentSpan();
 
 		is_comptime |= this.accept(TokenType::KeywordComptime);
@@ -790,7 +790,7 @@ struct Parser {
 		));
 	}
 
-	func parseIfVarStmt(this: &&Parser) -> uint {
+	func parseIfVarStmt(this: &&Parser) => uint {
 		const start = this.currentSpan();
 		if !this.expect(TokenType::KeywordIf) {
 			return this.file.getGarbageNode();
@@ -808,7 +808,7 @@ struct Parser {
 		));
 	}
 
-	func parseWhileStmt(this: &&Parser) -> uint {
+	func parseWhileStmt(this: &&Parser) => uint {
 		const start = this.currentSpan();
 
 		const is_comptime = this.accept(TokenType::KeywordComptime);
@@ -831,7 +831,7 @@ struct Parser {
 		));
 	}
 
-	func parseDoWhileStmt(this: &&Parser) -> uint {
+	func parseDoWhileStmt(this: &&Parser) => uint {
 		const start = this.currentSpan();
 
 		const is_comptime = this.accept(TokenType::KeywordComptime);
@@ -859,7 +859,7 @@ struct Parser {
 		));
 	}
 
-	func parseForStmt(this: &&Parser) -> uint {
+	func parseForStmt(this: &&Parser) => uint {
 		const start = this.currentSpan();
 		const is_comptime = this.accept(TokenType::KeywordComptime);
 
@@ -898,7 +898,7 @@ struct Parser {
 		));
 	}
 
-	func parseCaseStmt(this: &&Parser) -> uint {
+	func parseCaseStmt(this: &&Parser) => uint {
 		const start = this.currentSpan();
 		if !this.expect(TokenType::KeywordCase) {
 			return this.file.getGarbageNode();
@@ -937,7 +937,7 @@ struct Parser {
 		));
 	}
 
-	func parseName(this: &&Parser) -> uint {
+	func parseName(this: &&Parser) => uint {
 		const start = this.currentSpan();
 		var name = "";
 		if this.current() is Identifier {
@@ -952,7 +952,7 @@ struct Parser {
 		return this.file.addASTNode(Node::Name(ParsedName(name, template_parameters), start..this.previousSpan(), Type::unknown(), false));
 	}
 
-	func parseOperatorName(this: &&Parser) -> String {
+	func parseOperatorName(this: &&Parser) => String {
 		const start = this.currentSpan();
 
 		const op = this.parseOperator() else {
@@ -971,7 +971,7 @@ struct Parser {
 		return format(op);
 	}
 
-	func parseTemplateParameters(this: &&Parser) -> List!<uint> {
+	func parseTemplateParameters(this: &&Parser) => List!<uint> {
 		var template_parameters: List!<uint>;
 
 		if !this.accept(TokenType::ExclamationMark) {
@@ -996,15 +996,15 @@ struct Parser {
 		return template_parameters;
 	}
 
-	func parseExpr(this: &&Parser) -> uint {
+	func parseExpr(this: &&Parser) => uint {
 		return this.parseExpr(-1);
 	}
 
-	func parseHighPrecedenceExpr(this: &&Parser) -> uint {
+	func parseHighPrecedenceExpr(this: &&Parser) => uint {
 		return this.parseExpr(16);
 	}
 
-	func parseExpr(this: &&Parser, min_precedence: int) -> uint {
+	func parseExpr(this: &&Parser, min_precedence: int) => uint {
 		var lhs = this.file.getEmptyNode();
 		var start = this.currentSpan();
 
@@ -1080,7 +1080,7 @@ struct Parser {
 		return lhs;
 	}
 
-	func parsePrefixOperator(this: &&Parser) -> Optional!<Operator> {
+	func parsePrefixOperator(this: &&Parser) => Optional!<Operator> {
 		match this.current() {
 			case Minus -> {
 				this.next();
@@ -1114,7 +1114,7 @@ struct Parser {
 		}
 	}
 
-	func parsePostfixOperator(this: &&Parser) -> Optional!<Operator> {
+	func parsePostfixOperator(this: &&Parser) => Optional!<Operator> {
 		match this.current() {
 			case DoublePlus -> {
 				this.next();
@@ -1136,7 +1136,7 @@ struct Parser {
 		}
 	}
 
-	func parseInfixOperator(this: &&Parser) -> Optional!<Operator> {
+	func parseInfixOperator(this: &&Parser) => Optional!<Operator> {
 		match this.current() {
 			case Plus -> {
 				this.next();
@@ -1298,7 +1298,7 @@ struct Parser {
 		}
 	}
 
-	func parsePostfixOrInfixOperator(this: &&Parser) -> Optional!<Operator> {
+	func parsePostfixOrInfixOperator(this: &&Parser) => Optional!<Operator> {
 		if const op = this.parsePostfixOperator() {
 			return Some(op);
 		}
@@ -1310,7 +1310,7 @@ struct Parser {
 		return None;
 	}
 
-	func parseOperator(this: &&Parser) -> Optional!<Operator> {
+	func parseOperator(this: &&Parser) => Optional!<Operator> {
 		if const op = this.parsePrefixOperator() {
 			return Some(op);
 		}
@@ -1322,7 +1322,7 @@ struct Parser {
 		return None;
 	}
 
-	func parseTupleExpr(this: &&Parser) -> uint {
+	func parseTupleExpr(this: &&Parser) => uint {
 		const start = this.currentSpan();
 
 		if !this.expect(TokenType::LParen) {
@@ -1369,7 +1369,7 @@ struct Parser {
 		return this.file.addASTNode(Node::TupleExpr(elements, start..this.previousSpan(), Type::unknown(), false));
 	}
 
-	func parseArrayExpr(this: &&Parser) -> uint {
+	func parseArrayExpr(this: &&Parser) => uint {
 		const start = this.currentSpan();
 
 		if !this.expect(TokenType::LSquare) {
@@ -1398,7 +1398,7 @@ struct Parser {
 		return this.file.addASTNode(Node::ArrayExpr(values, start..end, Type::unknown(), false));
 	}
 
-	func parseDictExpr(this: &&Parser) -> uint {
+	func parseDictExpr(this: &&Parser) => uint {
 		const start = this.currentSpan();
 
 		if !this.expect(TokenType::LCurly) {
@@ -1437,7 +1437,7 @@ struct Parser {
 		return this.file.addASTNode(Node::DictExpr(elements, start..this.previousSpan(), Type::unknown(), false));
 	}
 
-	func parseMatchExpr(this: &&Parser) -> uint {
+	func parseMatchExpr(this: &&Parser) => uint {
 		const start = this.currentSpan();
 
 		if !this.expect(TokenType::KeywordMatch) {
@@ -1456,7 +1456,7 @@ struct Parser {
 		));
 	}
 
-	func parseFunctionExpr(this: &&Parser) -> uint {
+	func parseFunctionExpr(this: &&Parser) => uint {
 		const start = this.currentSpan();
 
 		if this.peek() is LParen {
@@ -1516,7 +1516,7 @@ struct Parser {
 		}
 	}
 
-	func parseOperand(this: &&Parser) -> uint {
+	func parseOperand(this: &&Parser) => uint {
 		const start = this.currentSpan();
 		match this.current() {
 			case Identifier | KeywordOperator -> return this.parseName();
@@ -1556,7 +1556,7 @@ struct Parser {
 		}
 	}
 
-	func acceptLiteralPostfix(this: &&Parser) -> String {
+	func acceptLiteralPostfix(this: &&Parser) => String {
 		if this.current() is LiteralPostfix {
 			const postfix = this.strings[this.tokens[this.index].data()];
 			this.next();

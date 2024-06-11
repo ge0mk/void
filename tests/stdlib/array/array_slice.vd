@@ -1,6 +1,6 @@
 import std/core;
 
-func main() -> void {
+func main() => void {
 	var a = [1, 2, 3, 4, 5];
 	var b = a[1u..3u];
 	assert(b.size() == 2u);

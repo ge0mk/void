@@ -1,6 +1,6 @@
 import std/core;
 
-func main() -> void {
+func main() => void {
 	assert([0, 1, 2] == [0, 1, 2]);
 	assert([0, 1, 2] != [0, 1, 3]);
 }

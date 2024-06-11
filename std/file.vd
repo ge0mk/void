@@ -12,10 +12,10 @@ enum OpenMode {
 	case trunc  = 4;
 	case append = 8;
 
-	func |(this: OpenMode, other: OpenMode) -> OpenMode = default;
-	func &(this: OpenMode, other: OpenMode) -> OpenMode = default;
+	func |(this: OpenMode, other: OpenMode) => OpenMode = default;
+	func &(this: OpenMode, other: OpenMode) => OpenMode = default;
 
-	func toStringForFOpen(this: OpenMode) -> Result!<String> {
+	func toStringForFOpen(this: OpenMode) => Result!<String> {
 		var str: String;
 
 		if (this & (OpenMode::read | OpenMode::write)) == OpenMode::read {
@@ -41,7 +41,7 @@ enum OpenMode {
 		return Ok(str + '\0'b);
 	}
 
-	func toUnixMode(this: OpenMode, create: bool) -> Result!<i32> {
+	func toUnixMode(this: OpenMode, create: bool) => Result!<i32> {
 		const O_RDONLY   = 0i32;
 		const O_WRONLY   = 1i32;
 		const O_RDWR     = 2i32;
@@ -97,15 +97,15 @@ enum FilePermissions {
 	case setgid = 0o2000;
 	case sticky = 0o1000;
 
-	func |(this: FilePermissions, other: FilePermissions) -> FilePermissions = default;
-	func &(this: FilePermissions, other: FilePermissions) -> FilePermissions = default;
+	func |(this: FilePermissions, other: FilePermissions) => FilePermissions = default;
+	func &(this: FilePermissions, other: FilePermissions) => FilePermissions = default;
 }
 
 struct File {
 	var c_file: ptr!<FILE, true>;
 	var ref_count: ptr!<uint, true>;
 
-	func constructor(this: &&File, c_file: ptr!<FILE, true>, ref_count: ptr!<uint, true>) -> void {
+	func constructor(this: &&File, c_file: ptr!<FILE, true>, ref_count: ptr!<uint, true>) => void {
 		this.c_file := c_file;
 		this.ref_count := ref_count;
 		if this.ref_count != ptr!<uint, true>::null() {
@@ -113,7 +113,7 @@ struct File {
 		}
 	}
 
-	func constructor(this: &&File, other: File) -> void {
+	func constructor(this: &&File, other: File) => void {
 		this.c_file := other.c_file;
 		this.ref_count := other.ref_count;
 		if this.ref_count != ptr!<uint, true>::null() {
@@ -121,12 +121,12 @@ struct File {
 		}
 	}
 
-	func =(this: &&File, other: File) -> void {
+	func =(this: &&File, other: File) => void {
 		this.destructor();
 		this.constructor(other);
 	}
 
-	func destructor(this: &&File) -> void {
+	func destructor(this: &&File) => void {
 		if this.ref_count == ptr!<uint, true>::null() {
 			return;
 		}
@@ -138,11 +138,11 @@ struct File {
 		}
 	}
 
-	func ==(this: File, other: File) -> bool {
+	func ==(this: File, other: File) => bool {
 		return this.c_file == other.c_file;
 	}
 
-	func open(path: String, mode: OpenMode) -> Result!<File> {
+	func open(path: String, mode: OpenMode) => Result!<File> {
 		const cpath = path + '\0'b;
 		const flags = try mode.toUnixMode(false);
 		const fd = fcntl::open(cpath.data(), flags, 0 as u32);
@@ -165,7 +165,7 @@ struct File {
 		return Ok(File(c_file, ref_count));
 	}
 
-	func create(path: String, mode: OpenMode, permissions: FilePermissions) -> Result!<File> {
+	func create(path: String, mode: OpenMode, permissions: FilePermissions) => Result!<File> {
 		const cpath = path + '\0'b;
 		const flags = try mode.toUnixMode(true);
 		const fd = fcntl::open(cpath.data(), flags, permissions as u32);
@@ -188,7 +188,7 @@ struct File {
 		return Ok(File(c_file, ref_count));
 	}
 
-	func readByte(this: &&File) -> Result!<byte> {
+	func readByte(this: &&File) => Result!<byte> {
 		const r = fgetc(this.c_file);
 		const err = ferror(this.c_file);
 		if err != Error::OK {
@@ -200,7 +200,7 @@ struct File {
 		return Ok(r as byte);
 	}
 
-	func readString(this: &&File, size: uint) -> Result!<String> {
+	func readString(this: &&File, size: uint) => Result!<String> {
 		var result = String(size, '\0'b);
 
 		const r = fread!<byte>(result.vdata(), size, this.c_file);
@@ -213,7 +213,7 @@ struct File {
 	}
 
 	template<T: type>
-	func readOne(this: &&File) -> Result!<T> {
+	func readOne(this: &&File) => Result!<T> {
 		var result: T;
 
 		const r = fread!<T>(ptr!<T, true>::addressOf(&&result), 1u, this.c_file);
@@ -228,7 +228,7 @@ struct File {
 	}
 
 	template<T: type>
-	func readSome(this: &&File, count: uint) -> Result!<List!<T>> {
+	func readSome(this: &&File, count: uint) => Result!<List!<T>> {
 		var buffer = malloc!<T>(count);
 		defer free!<T>(buffer);
 
@@ -242,7 +242,7 @@ struct File {
 		return Ok(result);
 	}
 
-	func readLine(this: &&File) -> Result!<String> {
+	func readLine(this: &&File) => Result!<String> {
 		var result: String;
 		var buffer: Array!<byte, 256u>;
 		do {
@@ -257,7 +257,7 @@ struct File {
 	}
 
 	// read entire file into String
-	func readAll(this: &&File) -> Result!<String> {
+	func readAll(this: &&File) => Result!<String> {
 		var result = "";
 		while !this.eof() {
 			result.append(try this.readString(4096u));
@@ -266,7 +266,7 @@ struct File {
 	}
 
 	template<T: type>
-	func readAll(this: &&File) -> Result!<List!<T>> {
+	func readAll(this: &&File) => Result!<List!<T>> {
 		var result = List!<T>();
 		while !this.eof() {
 			result.append(try this.readSome!<T>(1024u));
@@ -274,7 +274,7 @@ struct File {
 		return Ok(result);
 	}
 
-	func writeByte(this: &&File, value: byte) -> Result!<void> {
+	func writeByte(this: &&File, value: byte) => Result!<void> {
 		const r = fputc(value as i32, this.c_file);
 		if r < 0 {
 			throw ferror(this.c_file);
@@ -283,7 +283,7 @@ struct File {
 		return Ok;
 	}
 
-	func writeString(this: &&File, str: String) -> Result!<void> {
+	func writeString(this: &&File, str: String) => Result!<void> {
 		const r = fwrite!<byte>(str.data(), str.size(), this.c_file);
 		if r != str.size() {
 			throw ferror(this.c_file);
@@ -293,7 +293,7 @@ struct File {
 	}
 
 	template<T: type>
-	func writeOne(this: &&File, value: T) -> Result!<void> {
+	func writeOne(this: &&File, value: T) => Result!<void> {
 		const tmp = value;
 		const r = fwrite!<T>(ptr!<T, false>::addressOf(&tmp), 1u, this.c_file);
 		if r != 1 {
@@ -304,7 +304,7 @@ struct File {
 	}
 
 	template<T: type>
-	func writeList(this: &&File, values: List!<T>) -> Result!<void> {
+	func writeList(this: &&File, values: List!<T>) => Result!<void> {
 		const r = fwrite!<T>(values.data(), values.size(), this.c_file);
 		if r != values.size() {
 			throw ferror(this.c_file);
@@ -313,7 +313,7 @@ struct File {
 		return Ok;
 	}
 
-	func getSize(this: &&File) -> uint {
+	func getSize(this: &&File) => uint {
 		const prev_pos = libc::stdio::ftell(this.c_file)
 		discard libc::stdio::fseek(this.c_file, 0u, libc::stdio::SeekMode::End);
 		const end_pos = libc::stdio::ftell(this.c_file);
@@ -321,26 +321,26 @@ struct File {
 		return end_pos;
 	}
 
-	func getSize(path: &String) -> uint {
+	func getSize(path: &String) => uint {
 		var file = File::open(path, OpenMode::read) else {
 			return 0;
 		}
 		return file.getSize();
 	}
 
-	func eof(this: File) -> bool {
+	func eof(this: File) => bool {
 		return libc::stdio::feof(this.c_file);
 	}
 
-	func stdin() -> File {
+	func stdin() => File {
 		return File(libc::stdio::stdin(), ptr!<uint, true>::null());
 	}
 
-	func stdout() -> File {
+	func stdout() => File {
 		return File(libc::stdio::stdout(), ptr!<uint, true>::null());
 	}
 
-	func stderr() -> File {
+	func stderr() => File {
 		return File(libc::stdio::stderr(), ptr!<uint, true>::null());
 	}
 }

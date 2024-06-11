@@ -1,7 +1,7 @@
 import std/core;
 import std/math;
 
-func main() -> void {
+func main() => void {
 	assert(min!<u32>(1u32, 2u32) == 1u32);
 	assert(min!<u32>(2u32, 1u32) == 1u32);
 

@@ -13,11 +13,11 @@ struct StackFrame {
 	var variables: Map!<SharedHandle!<VarDecl>, Value>;
 	var return_variable: SharedHandle!<VarDecl>;
 
-	func constructor(this: &&StackFrame) -> void = default;
-	func constructor(this: &&StackFrame, other: StackFrame) -> void = default;
-	func destructor(this: &&StackFrame) -> void = default;
+	func constructor(this: &&StackFrame) => void = default;
+	func constructor(this: &&StackFrame, other: StackFrame) => void = default;
+	func destructor(this: &&StackFrame) => void = default;
 
-	func ==(this: StackFrame, other: StackFrame) -> bool = default;
+	func ==(this: StackFrame, other: StackFrame) => bool = default;
 }
 
 enum ControlFlow {
@@ -32,29 +32,29 @@ struct Interpreter {
 	var stack: List!<StackFrame>;
 	var current_namespace: SharedHandle!<Namespace>;
 
-	func constructor(this: &&Interpreter, program: &&Program) -> void {
+	func constructor(this: &&Interpreter, program: &&Program) => void {
 		this.program := &&program;
 	}
 
-	func destructor(this: &&Interpreter) -> void = default;
+	func destructor(this: &&Interpreter) => void = default;
 
-	func error(this: &Interpreter, message: String, span: Span) -> void {
+	func error(this: &Interpreter, message: String, span: Span) => void {
 		this.program.printError(CompilationError(message, ErrorType::Error, ErrorStage::Interpreter, span));
 	}
 
-	func todo(this: &Interpreter, message: String, span: Span) -> void {
+	func todo(this: &Interpreter, message: String, span: Span) => void {
 		this.program.printError(CompilationError(message, ErrorType::Todo, ErrorStage::Interpreter, span));
 	}
 
-	func getASTNode(this: &&Interpreter, id: uint) -> Node {
+	func getASTNode(this: &&Interpreter, id: uint) => Node {
 		return this.current_namespace.file.nodes[id];
 	}
 
-	func pushStackFrame(this: &&Interpreter) -> void {
+	func pushStackFrame(this: &&Interpreter) => void {
 		this.stack.append(StackFrame());
 	}
 
-	func popStackFrame(this: &&Interpreter) -> Value {
+	func popStackFrame(this: &&Interpreter) => Value {
 		const last_stack_frame = this.stack.last() else {
 			return Value::Undefined;
 		}
@@ -63,7 +63,7 @@ struct Interpreter {
 		return last_stack_frame.variables.get(last_stack_frame.return_variable) ?? Value::Void(this.program.void_type);
 	}
 
-	func setVariable(this: &&Interpreter, variable: SharedHandle!<VarDecl>, value: &Value) -> void {
+	func setVariable(this: &&Interpreter, variable: SharedHandle!<VarDecl>, value: &Value) => void {
 		if variable.is_comptime {
 			variable.value = value;
 		} else {
@@ -71,7 +71,7 @@ struct Interpreter {
 		}
 	}
 
-	func getVariable(this: &&Interpreter, variable: SharedHandle!<VarDecl>) -> Value {
+	func getVariable(this: &&Interpreter, variable: SharedHandle!<VarDecl>) => Value {
 		if variable.is_comptime {
 			return variable.value;
 		} else {
@@ -79,7 +79,7 @@ struct Interpreter {
 		}
 	}
 
-	func interpret(this: &&Interpreter, node: &Node) -> Result!<Value, ControlFlow> {
+	func interpret(this: &&Interpreter, node: &Node) => Result!<Value, ControlFlow> {
 		var result = Value::Undefined;
 
 		match node {
@@ -192,7 +192,7 @@ struct Interpreter {
 		return Ok(result);
 	}
 
-	func interpret(this: &&Interpreter, function: SharedHandle!<FunctionDecl>, args: &List!<Value>, error_span: Span) -> Value {
+	func interpret(this: &&Interpreter, function: SharedHandle!<FunctionDecl>, args: &List!<Value>, error_span: Span) => Value {
 		match function.body {
 			case Extern -> {
 				this.todo("interpret calls to extern functions", error_span);
@@ -219,7 +219,7 @@ struct Interpreter {
 		}
 	}
 
-	func interpret(this: &&Interpreter, function: BuiltinFunction, return_type: Type, args: &List!<Value>, span: Span) -> Value {
+	func interpret(this: &&Interpreter, function: BuiltinFunction, return_type: Type, args: &List!<Value>, span: Span) => Value {
 		match function {
 			case PrimitiveOp: op -> return this.interpret(op, function.base_type, args, span);
 			// casts
@@ -239,7 +239,7 @@ struct Interpreter {
 		}
 	}
 
-	func interpret(this: &&Interpreter, op: PrimitiveOp, type: Type, args: &List!<Value>, span: Span) -> Value {
+	func interpret(this: &&Interpreter, op: PrimitiveOp, type: Type, args: &List!<Value>, span: Span) => Value {
 		var lhs = args[0u];
 		if op.isAssignment() && op.getOp() > Copy {
 			const variable = args[0u] as Variable else {
@@ -331,7 +331,7 @@ struct Interpreter {
 		}
 	}
 
-	func compileAndRun(this: &&Interpreter, node: &Node) -> Value {
+	func compileAndRun(this: &&Interpreter, node: &Node) => Value {
 		var result = Value::Undefined;
 
 		this.todo("finish interpretation of expressions using llvm", node.span);

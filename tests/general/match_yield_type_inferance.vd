@@ -1,13 +1,13 @@
 import std/core;
 
-func foo(x: int) -> Optional!<int> {
+func foo(x: int) => Optional!<int> {
 	return match x {
 		case 0 -> yield None;
 		default -> yield Some(x + 2);
 	}
 }
 
-func main() -> void {
+func main() => void {
 	const a = foo(0);
 	assert(a is None);
 

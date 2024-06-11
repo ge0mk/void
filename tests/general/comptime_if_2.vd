@@ -2,7 +2,7 @@
 
 import std/core;
 
-func main() -> int {
+func main() => int {
 	comptime if false {
 		some(obvious(garbage_code().that_should_not_typecheck()));
 	} else {

@@ -2,7 +2,7 @@
 
 import std/core;
 
-func main() -> int {
+func main() => int {
 	const a = Result!<int>::Ok(5);
 	return a.value();
 }

@@ -1,6 +1,6 @@
 import std/core;
 
-func foo(err: bool) -> Result!<int, Error> {
+func foo(err: bool) => Result!<int, Error> {
 	if err {
 		throw Error::EINVAL;
 	} else {
@@ -8,13 +8,13 @@ func foo(err: bool) -> Result!<int, Error> {
 	}
 }
 
-func bar() -> Result!<void, Error> {
+func bar() => Result!<void, Error> {
 	var v = try foo(true);
 	assert(v == 5);
 	return Result!<void, Error>::Ok;
 }
 
-func main() -> void {
+func main() => void {
 	const r = bar();
 	assert(r is Error);
 }

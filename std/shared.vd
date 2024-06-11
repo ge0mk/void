@@ -13,7 +13,7 @@ struct SharedPtr {
 	var data: ptr!<refc!<T>, true>;
 
 	comptime if hasDefaultConstructor!<T>() {
-		func new() -> SharedPtr!<T> {
+		func new() => SharedPtr!<T> {
 			var data = malloc!<refc!<T>>(1u);
 			data[0u].strong_count = 1;
 			data[0u].weak_count = 1;
@@ -23,7 +23,7 @@ struct SharedPtr {
 	}
 
 	comptime if hasCopyConstructor!<T>() {
-		func new(@[shallow] value: T) -> SharedPtr!<T> {
+		func new(@[shallow] value: T) => SharedPtr!<T> {
 			var data = malloc!<refc!<T>>(1u);
 			data[0u].strong_count = 1;
 			data[0u].weak_count = 1;
@@ -32,13 +32,13 @@ struct SharedPtr {
 		}
 	}
 
-	func constructor(this: &&SharedPtr!<T>, data: ptr!<refc!<T>, true>) -> void {
+	func constructor(this: &&SharedPtr!<T>, data: ptr!<refc!<T>, true>) => void {
 		this.data := data;
 		assert(this.data[0u].strong_count == 1);
 		assert(this.data[0u].weak_count == 1);
 	}
 
-	func destructor(this: &&SharedPtr!<T>) -> void {
+	func destructor(this: &&SharedPtr!<T>) => void {
 		assert(this.data[0u].strong_count > 0);
 
 		this.data[0u].strong_count--;
@@ -52,31 +52,31 @@ struct SharedPtr {
 		}
 	}
 
-	func constructor(this: &&SharedPtr!<T>, other: SharedPtr!<T>) -> void {
+	func constructor(this: &&SharedPtr!<T>, other: SharedPtr!<T>) => void {
 		this.data := other.data;
 		this.data[0u].strong_count++;
 	}
 
-	func constructor(this: &&SharedPtr!<T>, @[shallow] other: WeakPtr!<T>) -> void {
+	func constructor(this: &&SharedPtr!<T>, @[shallow] other: WeakPtr!<T>) => void {
 		assert(other.data != ptr!<refc!<T>, true>::null());
 
 		this.data := other.data;
 		this.data[0u].strong_count++;
 	}
 
-	func =(this: &&SharedPtr!<T>, other: SharedPtr!<T>) -> void {
+	func =(this: &&SharedPtr!<T>, other: SharedPtr!<T>) => void {
 		this.destructor();
 		this.constructor(other);
 	}
 
-	func ==(this: SharedPtr!<T>, other: SharedPtr!<T>) -> bool = default;
-	func <=>(this: SharedPtr!<T>, other: SharedPtr!<T>) -> int = default;
+	func ==(this: SharedPtr!<T>, other: SharedPtr!<T>) => bool = default;
+	func <=>(this: SharedPtr!<T>, other: SharedPtr!<T>) => int = default;
 
-	func unwrap(this: &SharedPtr!<T>) -> &T {
+	func unwrap(this: &SharedPtr!<T>) => &T {
 		return &this.data[0u].value;
 	}
 
-	func unwrap(this: &&SharedPtr!<T>) -> &&T {
+	func unwrap(this: &&SharedPtr!<T>) => &&T {
 		return &&this.data[0u].value;
 	}
 }
@@ -85,23 +85,23 @@ template <T: type>
 struct WeakPtr {
 	var data: ptr!<refc!<T>, true>;
 
-	func constructor(this: &&WeakPtr!<T>) -> void = default;
+	func constructor(this: &&WeakPtr!<T>) => void = default;
 
-	func constructor(this: &&WeakPtr!<T>, @[shallow] other: SharedPtr!<T>) -> void {
+	func constructor(this: &&WeakPtr!<T>, @[shallow] other: SharedPtr!<T>) => void {
 		this.data := other.data;
 		if this.data != ptr!<refc!<T>, true>::null() {
 			this.data[0u].weak_count++;
 		}
 	}
 
-	func constructor(this: &&WeakPtr!<T>, other: WeakPtr!<T>) -> void {
+	func constructor(this: &&WeakPtr!<T>, other: WeakPtr!<T>) => void {
 		this.data := other.data;
 		if this.data != ptr!<refc!<T>, true>::null() {
 			this.data[0u].weak_count++;
 		}
 	}
 
-	func destructor(this: &&WeakPtr!<T>) -> void {
+	func destructor(this: &&WeakPtr!<T>) => void {
 		if this.data == ptr!<refc!<T>, true>::null() {
 			return;
 		}
@@ -114,12 +114,12 @@ struct WeakPtr {
 		}
 	}
 
-	func =(this: &&WeakPtr!<T>, other: WeakPtr!<T>) -> void {
+	func =(this: &&WeakPtr!<T>, other: WeakPtr!<T>) => void {
 		this.destructor();
 		this.constructor(other);
 	}
 
-	func isAlive(this: &WeakPtr!<T>) -> bool {
+	func isAlive(this: &WeakPtr!<T>) => bool {
 		if this.data == ptr!<refc!<T>, true>::null() {
 			return false;
 		}
@@ -127,7 +127,7 @@ struct WeakPtr {
 		return this.data[0u].strong_count > 0;
 	}
 
-	func isEmpty(this: &WeakPtr!<T>) -> bool {
+	func isEmpty(this: &WeakPtr!<T>) => bool {
 		if this.data == ptr!<refc!<T>, true>::null() {
 			return true;
 		}
@@ -135,7 +135,7 @@ struct WeakPtr {
 		return this.data[0u].strong_count == 0;
 	}
 
-	func lock(this: &WeakPtr!<T>) -> Optional!<SharedPtr!<T>> {
+	func lock(this: &WeakPtr!<T>) => Optional!<SharedPtr!<T>> {
 		if this.data == ptr!<refc!<T>, true>::null() {
 			return None;
 		}
@@ -147,13 +147,13 @@ struct WeakPtr {
 		return Some(SharedPtr!<T>(this));
 	}
 
-	func forceLock(this: &WeakPtr!<T>) -> SharedPtr!<T> {
+	func forceLock(this: &WeakPtr!<T>) => SharedPtr!<T> {
 		assert(this.data != ptr!<refc!<T>, true>::null(), Error::EOPTNONE);
 		assert(this.data[0u].strong_count > 0, Error::EOPTNONE);
 
 		return SharedPtr!<T>(this);
 	}
 
-	func ==(this: WeakPtr!<T>, other: WeakPtr!<T>) -> bool = default;
-	func <=>(this: WeakPtr!<T>, other: WeakPtr!<T>) -> int = default;
+	func ==(this: WeakPtr!<T>, other: WeakPtr!<T>) => bool = default;
+	func <=>(this: WeakPtr!<T>, other: WeakPtr!<T>) => int = default;
 }

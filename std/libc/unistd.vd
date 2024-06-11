@@ -1,4 +1,4 @@
 import std/core;
 
-func getcwd(buffer: ptr!<byte, true>, buffer_size: uint) -> ptr!<byte, true> = extern;
-func readlink(path: ptr!<byte, false>, buffer: ptr!<byte, true>, buffer_size: uint) -> int = extern;
+func getcwd(buffer: ptr!<byte, true>, buffer_size: uint) => ptr!<byte, true> = extern;
+func readlink(path: ptr!<byte, false>, buffer: ptr!<byte, true>, buffer_size: uint) => int = extern;

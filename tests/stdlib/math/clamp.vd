@@ -1,7 +1,7 @@
 import std/core;
 import std/math;
 
-func main() -> void {
+func main() => void {
 	assert(clamp!<int>(-5, 0, 10) ==  0);
 	assert(clamp!<int>( 0, 0, 10) ==  0);
 	assert(clamp!<int>( 5, 0, 10) ==  5);

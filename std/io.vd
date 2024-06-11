@@ -3,56 +3,56 @@ import std/libc/stdio;
 import std/libc/string;
 import std/string;
 
-func fprint(f: ptr!<FILE, true>, msg: String) -> void {
+func fprint(f: ptr!<FILE, true>, msg: String) => void {
 	discard libc::stdio::fwrite!<byte>(msg.data(), msg.size(), f);
 }
 
-func fprint(f: ptr!<FILE, true>, val: byte) -> void {
+func fprint(f: ptr!<FILE, true>, val: byte) => void {
 	discard libc::stdio::fputc(val as i32, f);
 }
 
-func fprintln(f: ptr!<FILE, true>, msg: String) -> void {
+func fprintln(f: ptr!<FILE, true>, msg: String) => void {
 	fprint(f, msg);
 	fprint(f, '\n'b);
 }
 
-func print(msg: String) -> void {
+func print(msg: String) => void {
 	fprint(libc::stdio::stdout(), msg);
 }
 
-func println(msg: String) -> void {
+func println(msg: String) => void {
 	fprintln(libc::stdio::stdout(), msg);
 }
 
-func print(val: byte) -> void {
+func print(val: byte) => void {
 	fprint(libc::stdio::stdout(), val);
 }
 
-func eprint(msg: String) -> void {
+func eprint(msg: String) => void {
 	fprint(libc::stdio::stderr(), msg);
 }
 
-func eprintln(msg: String) -> void {
+func eprintln(msg: String) => void {
 	fprintln(libc::stdio::stderr(), msg);
 }
 
-func eprint(val: byte) -> void {
+func eprint(val: byte) => void {
 	fprint(libc::stdio::stderr(), val);
 }
 
-func assert(cond: bool, msg: String) -> void {
+func assert(cond: bool, msg: String) => void {
 	if !cond {
 		eprintln(msg);
 		abort();
 	}
 }
 
-func panic(msg: String) -> never {
+func panic(msg: String) => never {
 	eprintln(msg);
 	abort();
 }
 
-func readln() -> String {
+func readln() => String {
 	var buffer = String(1024u, '\0'b);
 	if fgets(buffer.vdata(), buffer.size() as i32, libc::stdio::stdin()) == ptr!<byte, true>::null() {
 		return String();

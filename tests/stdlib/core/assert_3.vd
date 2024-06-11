@@ -2,6 +2,6 @@ import std/core;
 import std/io;
 import std/string;
 
-func main() -> void {
+func main() => void {
 	assert(true, "hello");
 }

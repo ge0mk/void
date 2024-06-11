@@ -2,18 +2,18 @@ import std/core;
 
 template <T: type>
 struct Foo {
-	func constructor(this: &&Foo!<T>) -> void = default;
-	func destructor(this: &&Foo!<T>) -> void = default;
+	func constructor(this: &&Foo!<T>) => void = default;
+	func destructor(this: &&Foo!<T>) => void = default;
 }
 
 template <T: type>
 struct Bar {
 	var v: Foo!<T>;
 
-	func constructor(this: &&Bar!<T>) -> void = default;
-	func destructor(this: &&Bar!<T>) -> void = default;
+	func constructor(this: &&Bar!<T>) => void = default;
+	func destructor(this: &&Bar!<T>) => void = default;
 }
 
-func main() -> void {
+func main() => void {
 	var x: Bar!<uint>;
 }

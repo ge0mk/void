@@ -3,9 +3,9 @@
 import std/core;
 
 template <T: type>
-func foo() {}
+func foo() => void {}
 
 template <T: type>
-func foo() {}
+func foo() => void {}
 
-func main() -> void {}
+func main() => void {}

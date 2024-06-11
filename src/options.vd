@@ -26,17 +26,17 @@ struct ImportedModule {
 	var path: String;
 	var name: String;
 
-	func constructor(this: &&ImportedModule, group: uint, path: String, name: String) -> void {
+	func constructor(this: &&ImportedModule, group: uint, path: String, name: String) => void {
 		this.group := group;
 		this.path := path;
 		this.name := name;
 	}
 
-	func constructor(this: &&ImportedModule, other: ImportedModule) -> void = default;
-	func destructor(this: &&ImportedModule) -> void = default;
+	func constructor(this: &&ImportedModule, other: ImportedModule) => void = default;
+	func destructor(this: &&ImportedModule) => void = default;
 
-	func =(this: &&ImportedModule, other: ImportedModule) -> void = default;
-	func ==(this: ImportedModule, other: ImportedModule) -> bool = default;
+	func =(this: &&ImportedModule, other: ImportedModule) => void = default;
+	func ==(this: ImportedModule, other: ImportedModule) => bool = default;
 }
 
 struct CompilerOptions {
@@ -73,19 +73,19 @@ struct CompilerOptions {
 
 	var secondary_args: List!<String>;
 
-	func constructor(this: &&CompilerOptions) -> void {
+	func constructor(this: &&CompilerOptions) => void {
 		this.mode := Compile;
 		this.symbol_type := Full;
 		this.output_type := LLVMAssembly;
 	}
 
-	func constructor(this: &&CompilerOptions, other: CompilerOptions) -> void = default;
-	func destructor(this: &&CompilerOptions) -> void = default;
+	func constructor(this: &&CompilerOptions, other: CompilerOptions) => void = default;
+	func destructor(this: &&CompilerOptions) => void = default;
 
-	func =(this: &&CompilerOptions, other: CompilerOptions) -> void = default;
-	func ==(this: CompilerOptions, other: CompilerOptions) -> bool = default;
+	func =(this: &&CompilerOptions, other: CompilerOptions) => void = default;
+	func ==(this: CompilerOptions, other: CompilerOptions) => bool = default;
 
-	func getImportPaths(this: &CompilerOptions, module: &String) -> List!<ImportedModule> {
+	func getImportPaths(this: &CompilerOptions, module: &String) => List!<ImportedModule> {
 		var result: List!<ImportedModule>;
 
 		for i in 0u..this.import_search_paths.size() {
@@ -115,15 +115,15 @@ struct CompilerOptions {
 		return result;
 	}
 
-	func getOutputCodePath(this: &CompilerOptions, file_ending: String) -> String {
+	func getOutputCodePath(this: &CompilerOptions, file_ending: String) => String {
 		return this.build_dir + "/" + this.program_name + file_ending;
 	}
 
-	func getOutputBinaryPath(this: &CompilerOptions) -> String {
+	func getOutputBinaryPath(this: &CompilerOptions) => String {
 		return this.build_dir + "/" + this.program_name;
 	}
 
-	func getOptimizationLevelAsClangArg(this: &CompilerOptions) -> String {
+	func getOptimizationLevelAsClangArg(this: &CompilerOptions) => String {
 		match this.optimization_level {
 			case 1 -> return "-O1";
 			case 2 -> return "-O2";

@@ -2,7 +2,7 @@ import std/core;
 
 comptime var x = 10;
 
-func main() -> void {
+func main() => void {
 	assert(x == 10);
 	x = 5;
 	assert(x == 5);

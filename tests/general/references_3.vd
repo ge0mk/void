@@ -2,11 +2,11 @@
 
 import std/core;
 
-func foo(x: &&int) -> void {
+func foo(x: &&int) => void {
 	x = 5;
 }
 
-func main() -> int {
+func main() => int {
 	var a = 0;
 	foo(&&a);
 	return a;

@@ -187,7 +187,7 @@ def main(args):
 			sep = t.find("(*)")
 			return_type = parseType(t[:sep])
 			parameters = [parseType(p) for p in t[sep+4:-1].split(",")]
-			return "(" + ", ".join(parameters) + ")" + " -> " + return_type
+			return "(" + ", ".join(parameters) + ")" + " => " + return_type
 		else:
 			return t
 
@@ -468,15 +468,15 @@ def main(args):
 				if len(decl["fields"]) > 0 and generateAnyStructFunction(decl["name"]):
 					output += "\n"
 					if generateFunction("struct-default-constructor", decl["name"]):
-						output += "\tfunc constructor(this: &&" + decl["name"] + ") -> void = default;\n"
+						output += "\tfunc constructor(this: &&" + decl["name"] + ") => void = default;\n"
 					if generateFunction("struct-copy-constructor", decl["name"]):
-						output += "\tfunc constructor(this: &&" + decl["name"] + ", other: " + decl["name"] + ") -> void = default;\n"
+						output += "\tfunc constructor(this: &&" + decl["name"] + ", other: " + decl["name"] + ") => void = default;\n"
 					if generateFunction("struct-destructor", decl["name"]):
-						output += "\tfunc destructor(this: &&" + decl["name"] + ") -> void = default;\n"
+						output += "\tfunc destructor(this: &&" + decl["name"] + ") => void = default;\n"
 					if generateFunction("struct-op-assign", decl["name"]):
-						output += "\tfunc =(this: &&" + decl["name"] + ", other: " + decl["name"] + ") -> void = default;\n"
+						output += "\tfunc =(this: &&" + decl["name"] + ", other: " + decl["name"] + ") => void = default;\n"
 					if generateFunction("struct-op-equal", decl["name"]):
-						output += "\tfunc ==(this: " + decl["name"] + ", other: " + decl["name"] + ") -> bool = default;\n"
+						output += "\tfunc ==(this: " + decl["name"] + ", other: " + decl["name"] + ") => bool = default;\n"
 
 				output += "}\n"
 			case "enum":
@@ -505,8 +505,8 @@ def main(args):
 
 					if generateFunction("enum-bitwise-ops", decl["name"]):
 						output += "\n"
-						output += "\tfunc &(this: " + decl["name"] + ", other: " + decl["name"] + ") -> " + decl["name"] + " = default;\n"
-						output += "\tfunc |(this: " + decl["name"] + ", other: " + decl["name"] + ") -> " + decl["name"] + " = default;\n"
+						output += "\tfunc &(this: " + decl["name"] + ", other: " + decl["name"] + ") => " + decl["name"] + " = default;\n"
+						output += "\tfunc |(this: " + decl["name"] + ", other: " + decl["name"] + ") => " + decl["name"] + " = default;\n"
 
 					output += "}\n"
 			case "alias":
@@ -532,7 +532,7 @@ def main(args):
 					output += "\n"
 				output += "func " + decl["name"] + "("
 				output += ", ".join(param["name"] + ": " + param["type"] for param in decl["params"])
-				output += ") -> " + decl["return_type"] + " = extern;\n"
+				output += ") => " + decl["return_type"] + " = extern;\n"
 
 		prev_kind = decl["kind"]
 

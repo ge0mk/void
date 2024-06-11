@@ -1,7 +1,7 @@
 import std/core;
 import std/string;
 
-func main() -> void {
+func main() => void {
 	const a = parseNumber("123", 0u);
 	assert(a.toInt() == 123);
 	assert(a.length == 3);

@@ -2,11 +2,11 @@
 
 import std/core;
 
-func foo(x: &&int) -> Result!<&&int, Error> {
+func foo(x: &&int) => Result!<&&int, Error> {
 	return Result!<&&int, Error>::Ok(&&x);
 }
 
-func main() -> int {
+func main() => int {
 	var a = 0;
 	var b = foo(&&a);
 	assert(b is Ok);

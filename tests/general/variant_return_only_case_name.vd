@@ -1,9 +1,9 @@
 import std/core;
 
-func foo() -> Result!<void, Error> {
+func foo() => Result!<void, Error> {
 	return Ok();
 }
 
-func main() -> void {
+func main() => void {
 	assert(foo() is Ok);
 }

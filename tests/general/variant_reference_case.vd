@@ -7,7 +7,7 @@ variant Foo {
 	case B: &&int;
 }
 
-func main() -> int {
+func main() => int {
 	var a = 1;
 	var b = Foo::B(&&a);
 

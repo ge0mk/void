@@ -4,7 +4,7 @@ import std/core;
 import std/format;
 import std/io;
 
-func main() -> int {
+func main() => int {
 	const foo = 1;
 
 	{

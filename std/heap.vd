@@ -5,27 +5,27 @@ template <T: type>
 struct Heap {
 	var elements: List!<T>;
 
-	func constructor(this: &&Heap!<T>) -> void = default;
-	func constructor(this: &&Heap!<T>, other: Heap!<T>) -> void = default;
-	func destructor(this: &&Heap!<T>) -> void = default;
+	func constructor(this: &&Heap!<T>) => void = default;
+	func constructor(this: &&Heap!<T>, other: Heap!<T>) => void = default;
+	func destructor(this: &&Heap!<T>) => void = default;
 
-	func =(this: &&Heap!<T>, other: Heap!<T>) -> void = default;
-	func ==(this: Heap!<T>, other: Heap!<T>) -> bool = default;
+	func =(this: &&Heap!<T>, other: Heap!<T>) => void = default;
+	func ==(this: Heap!<T>, other: Heap!<T>) => bool = default;
 
-	func size(this: &Heap!<T>) -> uint {
+	func size(this: &Heap!<T>) => uint {
 		return this.elements.size();
 	}
 
-	func isEmpty(this: &Heap!<T>) -> bool {
+	func isEmpty(this: &Heap!<T>) => bool {
 		return this.elements.isEmpty();
 	}
 
-	func push(this: &&Heap!<T>, @[shallow] value: T) -> void {
+	func push(this: &&Heap!<T>, @[shallow] value: T) => void {
 		this.elements.append(value);
 		this._siftDown(0u, this.elements.size() - 1);
 	}
 
-	func pop(this: &&Heap!<T>) -> T {
+	func pop(this: &&Heap!<T>) => T {
 		var result = this.elements[this.elements.size() - 1];
 		this.elements.removeLast();
 		if this.elements.isEmpty() {
@@ -37,13 +37,13 @@ struct Heap {
 		return result;
 	}
 
-	func popPush(this: &&Heap!<T>, value: T) -> T {
+	func popPush(this: &&Heap!<T>, value: T) => T {
 		swap!<T>(&&value, &&this.elements[0u]);
 		this._siftUp(0u);
 		return value;
 	}
 
-	func pushPop(this: &&Heap!<T>, value: T) -> T {
+	func pushPop(this: &&Heap!<T>, value: T) => T {
 		if this.elements.isEmpty() {
 			return value;
 		}
@@ -56,7 +56,7 @@ struct Heap {
 		return value;
 	}
 
-	func _siftDown(this: &&Heap!<T>, start: uint, pos: uint) -> void {
+	func _siftDown(this: &&Heap!<T>, start: uint, pos: uint) => void {
 		while pos > start {
 			const parent = (pos - 1) / 2;
 			if this.elements[pos] < this.elements[parent] {
@@ -68,7 +68,7 @@ struct Heap {
 		}
 	}
 
-	func _siftUp(this: &&Heap!<T>, pos: uint) -> void {
+	func _siftUp(this: &&Heap!<T>, pos: uint) => void {
 		const start = pos;
 		const end = this.elements.size();
 

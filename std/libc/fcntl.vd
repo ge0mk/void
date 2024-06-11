@@ -1,4 +1,4 @@
 import std/core;
 
-func open(pathname: ptr!<byte, false>, flags: i32, mode: u32) -> i32 = extern;
-func close(fd: i32) -> i32 = extern;
+func open(pathname: ptr!<byte, false>, flags: i32, mode: u32) => i32 = extern;
+func close(fd: i32) => i32 = extern;

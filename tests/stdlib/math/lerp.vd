@@ -1,7 +1,7 @@
 import std/core;
 import std/math;
 
-func main() -> void {
+func main() => void {
 	assert(lerp!<int>(3, 5, -2) == -1);
 	assert(lerp!<int>(3, 5, -1) == 1);
 	assert(lerp!<int>(3, 5, 0) == 3);

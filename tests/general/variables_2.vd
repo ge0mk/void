@@ -2,7 +2,7 @@
 
 import std/core;
 
-func main() -> int {
+func main() => int {
 	var a = 1;
 	a = 5;
 	return a;

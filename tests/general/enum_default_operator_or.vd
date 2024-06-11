@@ -5,9 +5,9 @@ enum Foo {
 	case B;
 	case C;
 
-	func |(this: Foo, other: Foo) -> Foo = default;
+	func |(this: Foo, other: Foo) => Foo = default;
 }
 
-func main() -> void {
+func main() => void {
 	var x = Foo::A | Foo::C;
 }

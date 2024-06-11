@@ -3,25 +3,25 @@ import std/core;
 struct Bar {
 	var counter: &&int;
 
-	func constructor(this: &&Bar, counter: &&int) -> void {
+	func constructor(this: &&Bar, counter: &&int) => void {
 		this.counter := &&counter;
 		this.counter++;
 	}
 
-	func constructor(this: &&Bar, other: Bar) -> void {
+	func constructor(this: &&Bar, other: Bar) => void {
 		this.counter := &&other.counter;
 		this.counter++;
 	}
 
-	func destructor(this: &&Bar) -> void {
+	func destructor(this: &&Bar) => void {
 		this.counter--;
 	}
 
-	func =(this: &&Bar, other: Bar) -> void = default;
-	func ==(this: Bar, other: Bar) -> bool = default;
+	func =(this: &&Bar, other: Bar) => void = default;
+	func ==(this: Bar, other: Bar) => bool = default;
 }
 
-func main() -> void {
+func main() => void {
 	var counter = 0;
 	if var bar = Optional!<Bar>::Some(Bar(&&counter)) {
 		// should call bar.destructor();

@@ -6,18 +6,18 @@ import std/box;
 struct Foo {
 	var value: int;
 
-	func constructor(this: &&Foo, value: int) -> void {
+	func constructor(this: &&Foo, value: int) => void {
 		this.value := value;
 	}
 
-	func constructor(this: &&Foo, other: Foo) -> void = default;
-	func destructor(this: &&Foo) -> void = default;
+	func constructor(this: &&Foo, other: Foo) => void = default;
+	func destructor(this: &&Foo) => void = default;
 
-	func =(this: &&Foo, other: Foo) -> void = default;
-	func ==(this: Foo, other: Foo) -> bool = default;
+	func =(this: &&Foo, other: Foo) => void = default;
+	func ==(this: Foo, other: Foo) => bool = default;
 }
 
-func main() -> int {
+func main() => int {
 	var a = Box!<Foo>(Foo(0));
 	a.value += 5;
 	return a.value;

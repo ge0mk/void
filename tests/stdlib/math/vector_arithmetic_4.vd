@@ -1,7 +1,7 @@
 import std/core;
 import std/math;
 
-func main() -> void {
+func main() => void {
 	const a = Vector!<f64, 4>(0.0);
 	const b = Vector!<f64, 4>(1.0, 0.0, 0.0, 0.0);
 	assert(a.length() < 0.0001);

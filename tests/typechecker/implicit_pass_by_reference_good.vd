@@ -1,8 +1,8 @@
 import std/core;
 
-func foo(x: &int) -> void {}
+func foo(x: &int) => void {}
 
-func main() -> void {
+func main() => void {
 	var x = 0;
 	foo(x);
 }

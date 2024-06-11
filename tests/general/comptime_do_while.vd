@@ -1,6 +1,6 @@
 import std/core;
 
-func main() -> void {
+func main() => void {
 	comptime var x = 10;
 	comptime do {
 		x--;

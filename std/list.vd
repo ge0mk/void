@@ -9,13 +9,13 @@ struct List {
 	var size: uint;
 	var capacity: uint;
 
-	func constructor(this: &&List!<T>) -> void {
+	func constructor(this: &&List!<T>) => void {
 		this.data := ();
 		this.size := ();
 		this.capacity := ();
 	}
 
-	func constructor(this: &&List!<T>, other: List!<T>) -> void {
+	func constructor(this: &&List!<T>, other: List!<T>) => void {
 		this.data := ();
 		this.size := ();
 		this.capacity := ();
@@ -28,7 +28,7 @@ struct List {
 		this.size = other.size();
 	}
 
-	func constructor(this: &&List!<T>, range: Range!<T, false>) -> void {
+	func constructor(this: &&List!<T>, range: Range!<T, false>) => void {
 		this.data := ();
 		this.size := ();
 		this.capacity := ();
@@ -42,7 +42,7 @@ struct List {
 		this.size = range.size();
 	}
 
-	func constructor(this: &&List!<T>, range: Range!<T, true>) -> void {
+	func constructor(this: &&List!<T>, range: Range!<T, true>) => void {
 		this.data := ();
 		this.size := ();
 		this.capacity := ();
@@ -56,7 +56,7 @@ struct List {
 		this.size = range.size();
 	}
 
-	func constructor(this: &&List!<T>, size: uint, @[shallow] value: T) -> void {
+	func constructor(this: &&List!<T>, size: uint, @[shallow] value: T) => void {
 		this.data := ();
 		this.size := ();
 		this.capacity := ();
@@ -69,7 +69,7 @@ struct List {
 		this.size = size;
 	}
 
-	func =(this: &&List!<T>, other: List!<T>) -> void {
+	func =(this: &&List!<T>, other: List!<T>) => void {
 		this.clear();
 		this.grow(other.size());
 
@@ -79,7 +79,7 @@ struct List {
 		this.size = other.size();
 	}
 
-	func destructor(this: &&List!<T>) -> void {
+	func destructor(this: &&List!<T>) => void {
 		this.clear();
 
 		if this.data != ptr!<T, true>::null() {
@@ -87,23 +87,23 @@ struct List {
 		}
 	}
 
-	func size(this: &List!<T>) -> uint {
+	func size(this: &List!<T>) => uint {
 		return this.size;
 	}
 
-	func isEmpty(this: &List!<T>) -> bool {
+	func isEmpty(this: &List!<T>) => bool {
 		return this.size == 0u;
 	}
 
-	func data(this: &List!<T>) -> ptr!<T, false> {
+	func data(this: &List!<T>) => ptr!<T, false> {
 		return this.data as ptr!<T, false>;
 	}
 
-	func data(this: &&List!<T>) -> ptr!<T, true> {
+	func data(this: &&List!<T>) => ptr!<T, true> {
 		return this.data as ptr!<T, true>;
 	}
 
-	func at(this: &List!<T>, index: uint) -> Optional!<T> {
+	func at(this: &List!<T>, index: uint) => Optional!<T> {
 		if index >= this.size() {
 			return None;
 		}
@@ -111,29 +111,29 @@ struct List {
 		return Some(this.data[index]);
 	}
 
-	func [](this: &List!<T>, index: uint) -> &T {
+	func [](this: &List!<T>, index: uint) => &T {
 		assert(index < this.size(), Error::EBOUNDS);
 		return &this.data[index];
 	}
 
-	func [](this: &&List!<T>, index: uint) -> &&T {
+	func [](this: &&List!<T>, index: uint) => &&T {
 		assert(index < this.size(), Error::EBOUNDS);
 		return &&this.data[index];
 	}
 
-	func [](this: &List!<T>, range: NumericRange!<uint>) -> Range!<T, false> {
+	func [](this: &List!<T>, range: NumericRange!<uint>) => Range!<T, false> {
 		assert(range.end <= this.size(), Error::EBOUNDS);
 		assert(range.start <= range.end && range.step == 1, Error::EINVAL);
 		return Range!<T, false>(this.data as ptr!<T, false> + range.start, range.end - range.start);
 	}
 
-	func [](this: &&List!<T>, range: NumericRange!<uint>) -> Range!<T, true> {
+	func [](this: &&List!<T>, range: NumericRange!<uint>) => Range!<T, true> {
 		assert(range.end <= this.size(), Error::EBOUNDS);
 		assert(range.start <= range.end && range.step == 1, Error::EINVAL);
 		return Range!<T, true>(this.data + range.start, range.end - range.start);
 	}
 
-	func first(this: &List!<T>) -> Optional!<T> {
+	func first(this: &List!<T>) => Optional!<T> {
 		if this.isEmpty() {
 			return None;
 		}
@@ -141,7 +141,7 @@ struct List {
 		return Some(this.data[0u]);
 	}
 
-	func last(this: &List!<T>) -> Optional!<T> {
+	func last(this: &List!<T>) => Optional!<T> {
 		if this.isEmpty() {
 			return None;
 		}
@@ -149,23 +149,23 @@ struct List {
 		return Some(this.data[this.size - 1u]);
 	}
 
-	func range(this: &List!<T>) -> Range!<T, false> {
+	func range(this: &List!<T>) => Range!<T, false> {
 		return Range!<T, false>(this.data as ptr!<T, false>, this.size);
 	}
 
-	func range(this: &&List!<T>) -> Range!<T, true> {
+	func range(this: &&List!<T>) => Range!<T, true> {
 		return Range!<T, true>(this.data, this.size);
 	}
 
-	func iterator(this: &List!<T>) -> RangeIterator!<T, false> {
+	func iterator(this: &List!<T>) => RangeIterator!<T, false> {
 		return RangeIterator!<T, false>(this.data as ptr!<T, false>, this.data as ptr!<T, false> + this.size);
 	}
 
-	func iterator(this: &&List!<T>) -> RangeIterator!<T, true> {
+	func iterator(this: &&List!<T>) => RangeIterator!<T, true> {
 		return RangeIterator!<T, true>(this.data, this.data + this.size);
 	}
 
-	func find(this: &List!<T>, @[shallow] value: T) -> Optional!<uint> {
+	func find(this: &List!<T>, @[shallow] value: T) => Optional!<uint> {
 		for index in 0u..this.size() {
 			if this.data[index] == value {
 				return Some(index);
@@ -175,11 +175,11 @@ struct List {
 		return None;
 	}
 
-	func contains(this: &List!<T>, @[shallow] value: T) -> bool {
+	func contains(this: &List!<T>, @[shallow] value: T) => bool {
 		return this.find(value) is Some;
 	}
 
-	func startsWith(this: &List!<T>, values: Range!<T, false>) -> bool {
+	func startsWith(this: &List!<T>, values: Range!<T, false>) => bool {
 		if values.size() > this.size {
 			return false;
 		}
@@ -193,7 +193,7 @@ struct List {
 		return true;
 	}
 
-	func endsWith(this: &List!<T>, values: Range!<T, false>) -> bool {
+	func endsWith(this: &List!<T>, values: Range!<T, false>) => bool {
 		if values.size() > this.size {
 			return false;
 		}
@@ -207,13 +207,13 @@ struct List {
 		return true;
 	}
 
-	func append(this: &&List!<T>, @[shallow] value: T) -> void {
+	func append(this: &&List!<T>, @[shallow] value: T) => void {
 		this.grow();
 		this.data[this.size].constructor(value);
 		this.size += 1u;
 	}
 
-	func append(this: &&List!<T>, values: Range!<T, false>) -> void {
+	func append(this: &&List!<T>, values: Range!<T, false>) => void {
 		this.grow(this.size() + values.size());
 
 		var index = 0u;
@@ -224,11 +224,11 @@ struct List {
 		this.size += values.size();
 	}
 
-	func append(this: &&List!<T>, @[shallow] values: List!<T>) -> void {
+	func append(this: &&List!<T>, @[shallow] values: List!<T>) => void {
 		this.append(values.range());
 	}
 
-	func insert(this: &&List!<T>, index: uint, @[shallow] value: T) -> void {
+	func insert(this: &&List!<T>, index: uint, @[shallow] value: T) => void {
 		assert(index <= this.size(), Error::EBOUNDS);
 
 		this.grow();
@@ -238,7 +238,7 @@ struct List {
 		this.size += 1u;
 	}
 
-	func insert(this: &&List!<T>, index: uint, values: Range!<T, false>) -> void {
+	func insert(this: &&List!<T>, index: uint, values: Range!<T, false>) => void {
 		assert(index <= this.size(), Error::EBOUNDS);
 
 		this.grow(this.size() + values.size());
@@ -252,11 +252,11 @@ struct List {
 		this.size += values.size();
 	}
 
-	func insert(this: &&List!<T>, index: uint, @[shallow] values: List!<T>) -> void {
+	func insert(this: &&List!<T>, index: uint, @[shallow] values: List!<T>) => void {
 		this.insert(index, values.range());
 	}
 
-	func remove(this: &&List!<T>, index: uint) -> void {
+	func remove(this: &&List!<T>, index: uint) => void {
 		assert(index < this.size(), Error::EBOUNDS);
 
 		this.data[index].destructor();
@@ -264,7 +264,7 @@ struct List {
 		memmove!<T>(this.data + index, this.data as ptr!<T, false> + index + 1, this.size - index);
 	}
 
-	func remove(this: &&List!<T>, range: NumericRange!<uint>) -> void {
+	func remove(this: &&List!<T>, range: NumericRange!<uint>) => void {
 		assert(range.end <= this.size, Error::EBOUNDS);
 		assert(range.start <= range.end && range.step == 1, Error::EINVAL);
 
@@ -276,22 +276,22 @@ struct List {
 		memmove!<T>(this.data + range.start, this.data as ptr!<T, false> + range.end, this.size - range.start);
 	}
 
-	func removeLast(this: &&List!<T>) -> void {
+	func removeLast(this: &&List!<T>) => void {
 		this.remove(this.size - 1);
 	}
 
-	func clear(this: &&List!<T>) -> void {
+	func clear(this: &&List!<T>) => void {
 		for index in 0u..this.size() {
 			this.data[index].destructor();
 		}
 		this.size = 0u;
 	}
 
-	func qsort(this: &&List!<T>, cmp: (T, T) -> int) -> void {
+	func qsort(this: &&List!<T>, cmp: (T, T) => int) => void {
 		this.qsort(0u, this.size, cmp);
 	}
 
-	func qsort(this: &&List!<T>, begin: uint, end: uint, cmp: (T, T) -> int) -> void {
+	func qsort(this: &&List!<T>, begin: uint, end: uint, cmp: (T, T) => int) => void {
 		assert(begin <= end);
 		assert(end <= this.size);
 
@@ -313,7 +313,7 @@ struct List {
 		this.qsort(i + 1, end, cmp)
 	}
 
-	func ==(@[shallow] this: List!<T>, @[shallow] other: List!<T>) -> bool {
+	func ==(@[shallow] this: List!<T>, @[shallow] other: List!<T>) => bool {
 		if this.size() != other.size() {
 			return false;
 		}
@@ -327,26 +327,26 @@ struct List {
 		return true;
 	}
 
-	func +(lhs: List!<T>, @[shallow] rhs: T) -> List!<T> {
+	func +(lhs: List!<T>, @[shallow] rhs: T) => List!<T> {
 		lhs.append(rhs);
 		return lhs;
 	}
 
-	func +(lhs: List!<T>, @[shallow] rhs: List!<T>) -> List!<T> {
+	func +(lhs: List!<T>, @[shallow] rhs: List!<T>) => List!<T> {
 		lhs.append(rhs);
 		return lhs;
 	}
 
-	func +=(this: &&List!<T>, @[shallow] value: T) -> void {
+	func +=(this: &&List!<T>, @[shallow] value: T) => void {
 		this.append(value);
 	}
 
-	func +=(this: &&List!<T>, @[shallow] other: List!<T>) -> void {
+	func +=(this: &&List!<T>, @[shallow] other: List!<T>) => void {
 		this.append(other);
 	}
 
 	// ensure that memory for at least one more element is available
-	func grow(this: &&List!<T>) -> void {
+	func grow(this: &&List!<T>) => void {
 		if this.size < this.capacity {
 			return;
 		}
@@ -355,7 +355,7 @@ struct List {
 	}
 
 	// ensure that memory for at least 'new_capacity' elements is available
-	func grow(this: &&List!<T>, new_capacity: uint) -> void {
+	func grow(this: &&List!<T>, new_capacity: uint) => void {
 		const old_capacity = this.capacity;
 		if old_capacity >= new_capacity {
 			return;

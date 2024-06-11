@@ -7,7 +7,7 @@ import std/string;
 import program;
 import span;
 
-func createPrimitiveCastTemplates(program: &&Program, dest_namespace: SharedHandle!<Namespace>) -> void {
+func createPrimitiveCastTemplates(program: &&Program, dest_namespace: SharedHandle!<Namespace>) => void {
 	var cast_template_parameters = List!<TemplateParameterDecl>();
 	cast_template_parameters.append(TemplateParameterDecl("Source", program.any_concept, false));
 	cast_template_parameters.append(TemplateParameterDecl("Target", program.any_concept, false));
@@ -20,7 +20,7 @@ func createPrimitiveCastTemplates(program: &&Program, dest_namespace: SharedHand
 	discard program.createFunction(dest_namespace, "pointerCast", cast_template_parameters, BuiltinFunction::PointerCast(Type::unknown()));
 }
 
-func createPrimitiveCastInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, name: String, source: Type, target: Type) -> SharedHandle!<FunctionDecl> {
+func createPrimitiveCastInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, name: String, source: Type, target: Type) => SharedHandle!<FunctionDecl> {
 	var template_parameters = List!<TemplateParameterDecl>();
 	template_parameters.append(TemplateParameterDecl("Source", program.any_concept, false, TemplateParameter::Type(source)));
 	template_parameters.append(TemplateParameterDecl("Target", program.any_concept, false, TemplateParameter::Type(target)));
@@ -48,7 +48,7 @@ func createPrimitiveCastInstance(program: &&Program, dest_namespace: SharedHandl
 	return program.createFunction(dest_namespace, name, template_parameters, parameter_types, target, body);
 }
 
-func createCoreReflectionFunctionTemplates(program: &&Program, dest_namespace: SharedHandle!<Namespace>) -> void {
+func createCoreReflectionFunctionTemplates(program: &&Program, dest_namespace: SharedHandle!<Namespace>) => void {
 	var template_parameters = List!<TemplateParameterDecl>();
 	template_parameters.append(TemplateParameterDecl("Type", program.any_concept, false));
 
@@ -59,7 +59,7 @@ func createCoreReflectionFunctionTemplates(program: &&Program, dest_namespace: S
 	discard program.createFunction(dest_namespace, "hasCopyConstructor", template_parameters, BuiltinFunction::HasCopyConstructor(Type::unknown()));
 }
 
-func createTypeRefTypeDecl(program: &&Program, dest_namespace: SharedHandle!<Namespace>) -> void {
+func createTypeRefTypeDecl(program: &&Program, dest_namespace: SharedHandle!<Namespace>) => void {
 	const type_decl = program.createType(dest_namespace, "typeref", TypeBody::Void);
 	const type_namespace = type_decl.linked_namespace;
 	const type = Type(type_decl);
@@ -73,20 +73,20 @@ func createTypeRefTypeDecl(program: &&Program, dest_namespace: SharedHandle!<Nam
 	type_decl.op_equal = program.createBinaryFunction(type_namespace, "==", type, type, program.bool_type, BuiltinFunction::TypeRefOpEqual(type));
 }
 
-func createUnaryFunction(program: &&Program, type_namespace: SharedHandle!<Namespace>, name: String, obj: Type, return_type: Type, body: BuiltinFunction) -> SharedHandle!<FunctionDecl> {
+func createUnaryFunction(program: &&Program, type_namespace: SharedHandle!<Namespace>, name: String, obj: Type, return_type: Type, body: BuiltinFunction) => SharedHandle!<FunctionDecl> {
 	var parameter_types: List!<Type>;
 	parameter_types.append(obj);
 	return program.createFunction(type_namespace, name, parameter_types, return_type, body);
 }
 
-func createBinaryFunction(program: &&Program, type_namespace: SharedHandle!<Namespace>, name: String, lhs: Type, rhs: Type, return_type: Type, body: BuiltinFunction) -> SharedHandle!<FunctionDecl> {
+func createBinaryFunction(program: &&Program, type_namespace: SharedHandle!<Namespace>, name: String, lhs: Type, rhs: Type, return_type: Type, body: BuiltinFunction) => SharedHandle!<FunctionDecl> {
 	var parameter_types: List!<Type>;
 	parameter_types.append(lhs);
 	parameter_types.append(rhs);
 	return program.createFunction(type_namespace, name, parameter_types, return_type, body);
 }
 
-func createTernaryFunction(program: &&Program, type_namespace: SharedHandle!<Namespace>, name: String, first: Type, second: Type, third: Type, return_type: Type, body: BuiltinFunction) -> SharedHandle!<FunctionDecl> {
+func createTernaryFunction(program: &&Program, type_namespace: SharedHandle!<Namespace>, name: String, first: Type, second: Type, third: Type, return_type: Type, body: BuiltinFunction) => SharedHandle!<FunctionDecl> {
 	var parameter_types: List!<Type>;
 	parameter_types.append(first);
 	parameter_types.append(second);
@@ -94,14 +94,14 @@ func createTernaryFunction(program: &&Program, type_namespace: SharedHandle!<Nam
 	return program.createFunction(type_namespace, name, parameter_types, return_type, body);
 }
 
-func createBasicFunctions(program: &&Program, type: Type, type_namespace: SharedHandle!<Namespace>) -> void {
+func createBasicFunctions(program: &&Program, type: Type, type_namespace: SharedHandle!<Namespace>) => void {
 	type.decl.default_constructor = program.createUnaryFunction(type_namespace, "constructor", type.varRef(), program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::ConstNull | Assign, type));
 	type.decl.copy_constructor = program.createBinaryFunction(type_namespace, "constructor", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
 	type.decl.destructor = program.createUnaryFunction(type_namespace, "destructor", type.varRef(), program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::NoOp, type));
 	type.decl.op_assign = program.createBinaryFunction(type_namespace, "=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Copy | Assign, type));
 }
 
-func createComparisonOperators(program: &&Program, type: Type, type_namespace: SharedHandle!<Namespace>, flags: PrimitiveOp) -> void {
+func createComparisonOperators(program: &&Program, type: Type, type_namespace: SharedHandle!<Namespace>, flags: PrimitiveOp) => void {
 	type.decl.op_equal = program.createBinaryFunction(type_namespace, "==", type, type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::EQ | flags, type));
 	discard program.createBinaryFunction(type_namespace, "!=", type, type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::NE | flags, type));
 	discard program.createBinaryFunction(type_namespace, "<", type, type, program.bool_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::LT | flags, type));
@@ -111,7 +111,7 @@ func createComparisonOperators(program: &&Program, type: Type, type_namespace: S
 	type.decl.op_compare = program.createBinaryFunction(type_namespace, "<=>", type, type, program.int_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Cmp | flags, type));
 }
 
-func createBitwiseOperators(program: &&Program, type: Type, type_namespace: SharedHandle!<Namespace>, sign_flag: PrimitiveOp) -> void {
+func createBitwiseOperators(program: &&Program, type: Type, type_namespace: SharedHandle!<Namespace>, sign_flag: PrimitiveOp) => void {
 	discard program.createBinaryFunction(type_namespace, "&", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::And, type));
 	discard program.createBinaryFunction(type_namespace, "|", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Or, type));
 	discard program.createBinaryFunction(type_namespace, "^", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::XOr, type));
@@ -136,7 +136,7 @@ func createBitwiseOperators(program: &&Program, type: Type, type_namespace: Shar
 	discard program.createBinaryFunction(type_namespace, ">>=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Shr | Assign | sign_flag, type));
 }
 
-func createArithmeticOperators(program: &&Program, type: Type, type_namespace: SharedHandle!<Namespace>, flags: PrimitiveOp) -> void {
+func createArithmeticOperators(program: &&Program, type: Type, type_namespace: SharedHandle!<Namespace>, flags: PrimitiveOp) => void {
 	discard program.createBinaryFunction(type_namespace, "+", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Add | flags, type));
 	discard program.createBinaryFunction(type_namespace, "-", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Sub | flags, type));
 	discard program.createBinaryFunction(type_namespace, "*", type, type, type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Mul | flags, type));
@@ -158,7 +158,7 @@ func createArithmeticOperators(program: &&Program, type: Type, type_namespace: S
 	discard program.createBinaryFunction(type_namespace, "%=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::Mod | Assign | flags, type));
 }
 
-func createBoolType(program: &&Program, dest_namespace: SharedHandle!<Namespace>) -> void {
+func createBoolType(program: &&Program, dest_namespace: SharedHandle!<Namespace>) => void {
 	const type = Type(program.createType(dest_namespace, "bool", TypeBody::Bool), ReferenceKind::None);
 	const type_namespace = type.decl.linked_namespace;
 
@@ -181,7 +181,7 @@ func createBoolType(program: &&Program, dest_namespace: SharedHandle!<Namespace>
 	discard program.createBinaryFunction(type_namespace, "^=", type.varRef(), type, program.void_type, BuiltinFunction::PrimitiveOp(PrimitiveOp::XOr | Assign, type));
 }
 
-func createIntTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>, is_signed: bool) -> SharedHandle!<Namespace> {
+func createIntTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>, is_signed: bool) => SharedHandle!<Namespace> {
 	const name = is_signed ? "int" : "uint";
 	const body = is_signed ? TypeBody::Int(0u) : TypeBody::UInt(0u);
 
@@ -191,7 +191,7 @@ func createIntTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Nam
 	return program.createType(dest_namespace, name, template_parameters, body).linked_namespace;
 }
 
-func createIntTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, is_signed: bool, size: int) -> Type {
+func createIntTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, is_signed: bool, size: int) => Type {
 	const name = is_signed ? "int" : "uint";
 	const body = is_signed ? TypeBody::Int(size as uint) : TypeBody::UInt(size as uint);
 
@@ -222,7 +222,7 @@ func createIntTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Nam
 	return type;
 }
 
-func createByteType(program: &&Program, dest_namespace: SharedHandle!<Namespace>) -> void {
+func createByteType(program: &&Program, dest_namespace: SharedHandle!<Namespace>) => void {
 	const type = Type(program.createType(dest_namespace, "byte", TypeBody::Byte), ReferenceKind::None);
 	const type_namespace = type.decl.linked_namespace;
 	program.byte_type = type;
@@ -232,7 +232,7 @@ func createByteType(program: &&Program, dest_namespace: SharedHandle!<Namespace>
 	createBitwiseOperators(&&program, type, type_namespace, PrimitiveOp::Unsigned);
 }
 
-func createErrorType(program: &&Program, dest_namespace: SharedHandle!<Namespace>, i32_type: Type) -> void {
+func createErrorType(program: &&Program, dest_namespace: SharedHandle!<Namespace>, i32_type: Type) => void {
 	var type_decl = program.createType(dest_namespace, "Error", TypeBody::Enum);
 	type_decl.id_type = i32_type;
 	type_decl.addContainedType(i32_type);
@@ -241,7 +241,7 @@ func createErrorType(program: &&Program, dest_namespace: SharedHandle!<Namespace
 	program.createDefaultFunctions(Type(type_decl));
 }
 
-func createPtrTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>) -> void {
+func createPtrTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>) => void {
 	const body = TypeBody::Pointer((pointee_type: Type::unknown(), is_mutable: false));
 
 	var template_parameters: List!<TemplateParameterDecl>;
@@ -251,7 +251,7 @@ func createPtrTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Nam
 	discard program.createType(dest_namespace, "ptr", template_parameters, body);
 }
 
-func createPtrTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, is_mutable: bool, pointee_type: Type) -> Type {
+func createPtrTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, is_mutable: bool, pointee_type: Type) => Type {
 	const body = TypeBody::Pointer((pointee_type: pointee_type, is_mutable: is_mutable));
 
 	var template_parameters: List!<TemplateParameterDecl>;
@@ -285,14 +285,14 @@ func createPtrTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Nam
 	return type;
 }
 
-func createFunctionTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>) -> void {
+func createFunctionTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>) => void {
 	var template_parameters: List!<TemplateParameterDecl>;
 	template_parameters.append(TemplateParameterDecl("ReturnType", program.any_concept, false));
 	template_parameters.append(TemplateParameterDecl("ParameterTypes", program.any_concept, true));
 	discard program.createType(dest_namespace, "function", template_parameters, TypeBody::Function((parameter_types: List!<Type>(), return_type: Type::unknown())));
 }
 
-func createFunctionTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, parameter_types: &List!<Type>, return_type: Type) -> SharedHandle!<TypeDecl> {
+func createFunctionTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, parameter_types: &List!<Type>, return_type: Type) => SharedHandle!<TypeDecl> {
 	var template_parameters: List!<TemplateParameterDecl>;
 	template_parameters.append(TemplateParameterDecl("ReturnType", program.any_concept, false, TemplateParameter::Type(return_type)));
 	for t in parameter_types {
@@ -316,7 +316,7 @@ func createFunctionTypeInstance(program: &&Program, dest_namespace: SharedHandle
 	return type_decl;
 }
 
-func createFloatType(program: &&Program, dest_namespace: SharedHandle!<Namespace>, float_type: FloatType) -> Type {
+func createFloatType(program: &&Program, dest_namespace: SharedHandle!<Namespace>, float_type: FloatType) => Type {
 	const type = Type(program.createType(dest_namespace, format(float_type), List!<TemplateParameterDecl>(), TypeBody::Float(float_type)), ReferenceKind::None);
 	const type_namespace = type.decl.linked_namespace;
 
@@ -327,14 +327,14 @@ func createFloatType(program: &&Program, dest_namespace: SharedHandle!<Namespace
 	return type;
 }
 
-func createVectorTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>) -> void {
+func createVectorTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>) => void {
 	var template_parameters: List!<TemplateParameterDecl>;
 	template_parameters.append(TemplateParameterDecl("T", program.any_concept, false));
 	template_parameters.append(TemplateParameterDecl("Size", program.uint_concept, false));
 	discard program.createType(dest_namespace, "Vector", template_parameters, TypeBody::Vector((element_type: Type::unknown(), size: 0u)));
 }
 
-func createVectorTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, element_type: Type, size: uint) -> SharedHandle!<TypeDecl> {
+func createVectorTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, element_type: Type, size: uint) => SharedHandle!<TypeDecl> {
 	var template_parameters: List!<TemplateParameterDecl>;
 	template_parameters.append(TemplateParameterDecl("T", program.any_concept, false, TemplateParameter::Type(element_type)));
 	template_parameters.append(TemplateParameterDecl("Size", program.uint_concept, false, TemplateParameter::Integer(size as int)));
@@ -399,7 +399,7 @@ func createVectorTypeInstance(program: &&Program, dest_namespace: SharedHandle!<
 	return type_decl;
 }
 
-func createMatrixTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>) -> void {
+func createMatrixTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>) => void {
 	var template_parameters: List!<TemplateParameterDecl>;
 	template_parameters.append(TemplateParameterDecl("T", program.any_concept, false));
 	template_parameters.append(TemplateParameterDecl("Columns", program.uint_concept, false));
@@ -407,7 +407,7 @@ func createMatrixTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<
 	discard program.createType(dest_namespace, "Matrix", template_parameters, TypeBody::Matrix((element_type: Type::unknown(), columns: 0u, rows: 0u)));
 }
 
-func createMatrixTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, element_type: Type, columns: uint, rows: uint) -> SharedHandle!<TypeDecl> {
+func createMatrixTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, element_type: Type, columns: uint, rows: uint) => SharedHandle!<TypeDecl> {
 	var template_parameters: List!<TemplateParameterDecl>;
 	template_parameters.append(TemplateParameterDecl("T", program.any_concept, false, TemplateParameter::Type(element_type)));
 	template_parameters.append(TemplateParameterDecl("Columns", program.uint_concept, false, TemplateParameter::Integer(columns as int)));
@@ -452,14 +452,14 @@ func createMatrixTypeInstance(program: &&Program, dest_namespace: SharedHandle!<
 	return type_decl;
 }
 
-func createArrayTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>) -> void {
+func createArrayTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>) => void {
 	var template_parameters: List!<TemplateParameterDecl>;
 	template_parameters.append(TemplateParameterDecl("T", program.any_concept, false));
 	template_parameters.append(TemplateParameterDecl("Size", program.uint_concept, false));
 	discard program.createType(dest_namespace, "Array", template_parameters, TypeBody::Array((element_type: Type::unknown(), size: 0u)));
 }
 
-func createArrayTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, element_type: Type, size: uint) -> SharedHandle!<TypeDecl> {
+func createArrayTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, element_type: Type, size: uint) => SharedHandle!<TypeDecl> {
 	var template_parameters: List!<TemplateParameterDecl>;
 	template_parameters.append(TemplateParameterDecl("T", program.any_concept, false, TemplateParameter::Type(element_type)));
 	template_parameters.append(TemplateParameterDecl("Size", program.uint_concept, false, TemplateParameter::Integer(size as int)));
@@ -484,14 +484,14 @@ func createArrayTypeInstance(program: &&Program, dest_namespace: SharedHandle!<N
 	return type_decl;
 }
 
-func createRangeTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>) -> void {
+func createRangeTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>) => void {
 	var template_parameters: List!<TemplateParameterDecl>;
 	template_parameters.append(TemplateParameterDecl("Type", program.any_concept, false));
 	template_parameters.append(TemplateParameterDecl("Mutable", program.bool_concept, false));
 	discard program.createType(dest_namespace, "Range", template_parameters, TypeBody::Range((element_type: Type::unknown(), is_mutable: false)));
 }
 
-func createRangeTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, element_type: Type, is_mutable: bool, element_ptr_type: Type, iterator_type: Type, mutable_range_type: Type) -> SharedHandle!<TypeDecl> {
+func createRangeTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, element_type: Type, is_mutable: bool, element_ptr_type: Type, iterator_type: Type, mutable_range_type: Type) => SharedHandle!<TypeDecl> {
 	var template_parameters: List!<TemplateParameterDecl>;
 	template_parameters.append(TemplateParameterDecl("Type", program.any_concept, false, TemplateParameter::Type(element_type)));
 	template_parameters.append(TemplateParameterDecl("Mutable", program.bool_concept, false, TemplateParameter::Boolean(is_mutable)));
@@ -525,14 +525,14 @@ func createRangeTypeInstance(program: &&Program, dest_namespace: SharedHandle!<N
 	return type_decl;
 }
 
-func createRangeIteratorTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>) -> void {
+func createRangeIteratorTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>) => void {
 	var template_parameters: List!<TemplateParameterDecl>;
 	template_parameters.append(TemplateParameterDecl("Type", program.any_concept, false));
 	template_parameters.append(TemplateParameterDecl("Mutable", program.bool_concept, false));
 	discard program.createType(dest_namespace, "RangeIterator", template_parameters, TypeBody::RangeIterator((element_type: Type::unknown(), is_mutable: false)));
 }
 
-func createRangeIteratorTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, element_type: Type, is_mutable: bool, element_ptr_type: Type) -> SharedHandle!<TypeDecl> {
+func createRangeIteratorTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, element_type: Type, is_mutable: bool, element_ptr_type: Type) => SharedHandle!<TypeDecl> {
 	var template_parameters: List!<TemplateParameterDecl>;
 	template_parameters.append(TemplateParameterDecl("Type", program.any_concept, false, TemplateParameter::Type(element_type)));
 	template_parameters.append(TemplateParameterDecl("Mutable", program.bool_concept, false, TemplateParameter::Boolean(is_mutable)));
@@ -560,13 +560,13 @@ func createRangeIteratorTypeInstance(program: &&Program, dest_namespace: SharedH
 	return type_decl;
 }
 
-func createNumericRangeTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>) -> void {
+func createNumericRangeTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>) => void {
 	var template_parameters: List!<TemplateParameterDecl>;
 	template_parameters.append(TemplateParameterDecl("Type", program.any_concept, false));
 	discard program.createType(dest_namespace, "NumericRange", template_parameters, TypeBody::NumericRange(Type::unknown()));
 }
 
-func createNumericRangeTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, numeric_type: Type, iterator_type: Type) -> SharedHandle!<TypeDecl> {
+func createNumericRangeTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, numeric_type: Type, iterator_type: Type) => SharedHandle!<TypeDecl> {
 	var template_parameters: List!<TemplateParameterDecl>;
 	template_parameters.append(TemplateParameterDecl("Type", program.any_concept, false, TemplateParameter::Type(numeric_type)));
 	var type_decl =  program.createType(dest_namespace, "NumericRange", template_parameters, TypeBody::NumericRange(numeric_type));
@@ -592,13 +592,13 @@ func createNumericRangeTypeInstance(program: &&Program, dest_namespace: SharedHa
 	return type_decl;
 }
 
-func createNumericIteratorTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>) -> void {
+func createNumericIteratorTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>) => void {
 	var template_parameters: List!<TemplateParameterDecl>;
 	template_parameters.append(TemplateParameterDecl("Type", program.any_concept, false));
 	discard program.createType(dest_namespace, "NumericIterator", template_parameters, TypeBody::NumericIterator(Type::unknown()));
 }
 
-func createNumericIteratorTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, numeric_type: Type) -> SharedHandle!<TypeDecl> {
+func createNumericIteratorTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, numeric_type: Type) => SharedHandle!<TypeDecl> {
 	var template_parameters: List!<TemplateParameterDecl>;
 	template_parameters.append(TemplateParameterDecl("Type", program.any_concept, false, TemplateParameter::Type(numeric_type)));
 	var type_decl = program.createType(dest_namespace, "NumericIterator", template_parameters, TypeBody::NumericIterator(numeric_type));
@@ -626,14 +626,14 @@ func createNumericIteratorTypeInstance(program: &&Program, dest_namespace: Share
 	return type_decl;
 }
 
-func createTupleTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>) -> void {
+func createTupleTypeTemplate(program: &&Program, dest_namespace: SharedHandle!<Namespace>) => void {
 	var template_parameters: List!<TemplateParameterDecl>;
 	template_parameters.append(TemplateParameterDecl("Names", program.string_concept, false));
 	template_parameters.append(TemplateParameterDecl("Types", program.any_concept, true));
 	discard program.createType(dest_namespace, "Tuple", template_parameters, TypeBody::Tuple);
 }
 
-func createTupleTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, names: &List!<String>, types: &List!<Type>) -> SharedHandle!<TypeDecl> {
+func createTupleTypeInstance(program: &&Program, dest_namespace: SharedHandle!<Namespace>, names: &List!<String>, types: &List!<Type>) => SharedHandle!<TypeDecl> {
 	var template_parameters: List!<TemplateParameterDecl>;
 	template_parameters.append(TemplateParameterDecl("Names", program.string_concept, false, TemplateParameter::String(",".join(names))));
 	for t in types {
@@ -661,7 +661,7 @@ func createTupleTypeInstance(program: &&Program, dest_namespace: SharedHandle!<N
 	return type_decl;
 }
 
-func createDefaultFunctions(program: &&Program, type: Type) -> void {
+func createDefaultFunctions(program: &&Program, type: Type) => void {
 	var type_decl = type.decl;
 	var type_namespace = type_decl.linked_namespace;
 
@@ -679,7 +679,7 @@ func createDefaultFunctions(program: &&Program, type: Type) -> void {
 	}
 }
 
-func createVariantCaseConstructor(program: &&Program, type: SharedHandle!<TypeDecl>, case_id: int, payload_type: Type) -> void {
+func createVariantCaseConstructor(program: &&Program, type: SharedHandle!<TypeDecl>, case_id: int, payload_type: Type) => void {
 	var template_parameters: List!<TemplateParameterDecl>;
 	template_parameters.append(TemplateParameterDecl("Id", program.int_concept, false, TemplateParameter::Integer(case_id)));
 
@@ -704,7 +704,7 @@ func createVariantCaseConstructor(program: &&Program, type: SharedHandle!<TypeDe
 	);
 }
 
-func createVariantOpIs(program: &&Program, type: SharedHandle!<TypeDecl>, case_id: int) -> void {
+func createVariantOpIs(program: &&Program, type: SharedHandle!<TypeDecl>, case_id: int) => void {
 	var template_parameters: List!<TemplateParameterDecl>;
 	template_parameters.append(TemplateParameterDecl("Id", program.int_concept, false, TemplateParameter::Integer(case_id)));
 
@@ -721,7 +721,7 @@ func createVariantOpIs(program: &&Program, type: SharedHandle!<TypeDecl>, case_i
 	);
 }
 
-func createVariantOpUnsafeAs(program: &&Program, type: SharedHandle!<TypeDecl>, reference_kind: ReferenceKind, case_id: int) -> void {
+func createVariantOpUnsafeAs(program: &&Program, type: SharedHandle!<TypeDecl>, reference_kind: ReferenceKind, case_id: int) => void {
 	var template_parameters: List!<TemplateParameterDecl>;
 	template_parameters.append(TemplateParameterDecl("Id", program.int_concept, false, TemplateParameter::Integer(case_id)));
 
@@ -744,7 +744,7 @@ func createVariantOpUnsafeAs(program: &&Program, type: SharedHandle!<TypeDecl>, 
 	);
 }
 
-func getDefaultFunctionBody(this: &FunctionDecl) -> BuiltinFunction {
+func getDefaultFunctionBody(this: &FunctionDecl) => BuiltinFunction {
 	if this.parent_namespace.linked_type.isEmpty() {
 		return BuiltinFunction::Empty(Type::unknown());
 	}
@@ -836,7 +836,7 @@ func getDefaultFunctionBody(this: &FunctionDecl) -> BuiltinFunction {
 	return BuiltinFunction::Empty(Type::unknown());
 }
 
-func getPrimitiveOpParameterTypes(program: &Program, op: PrimitiveOp, base_type: Type) -> List!<Type> {
+func getPrimitiveOpParameterTypes(program: &Program, op: PrimitiveOp, base_type: Type) => List!<Type> {
 	match op.getOp() {
 		case NoOp | ConstNull -> return List!<Type>();
 		case Swap -> return List!<Type>(2u, base_type.varRef());
@@ -857,7 +857,7 @@ func getPrimitiveOpParameterTypes(program: &Program, op: PrimitiveOp, base_type:
 	}
 }
 
-func getPrimitiveOpReturnType(program: &Program, op: PrimitiveOp, base_type: Type) -> Type {
+func getPrimitiveOpReturnType(program: &Program, op: PrimitiveOp, base_type: Type) => Type {
 	if op.isAssignment() {
 		return program.void_type;
 	}

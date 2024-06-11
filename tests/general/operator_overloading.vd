@@ -5,19 +5,19 @@ import std/core;
 struct MyInt {
 	var value: int;
 
-	func constructor(this: &&MyInt, value: int) -> void {
+	func constructor(this: &&MyInt, value: int) => void {
 		this.value := value;
 	}
 
-	func constructor(this: &&MyInt, other: MyInt) -> void = default;
-	func destructor(this: &&MyInt) -> void = default;
+	func constructor(this: &&MyInt, other: MyInt) => void = default;
+	func destructor(this: &&MyInt) => void = default;
 
-	func +(this: MyInt, other: MyInt) -> MyInt {
+	func +(this: MyInt, other: MyInt) => MyInt {
 		return MyInt(this.value + other.value);
 	}
 }
 
-func main() -> int {
+func main() => int {
 	const a = MyInt(1);
 	const b = MyInt(4);
 	const c = a + b;

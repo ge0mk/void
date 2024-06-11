@@ -5,14 +5,14 @@ struct Foo {
 	var b: bool;
 	var c: byte;
 
-	func constructor(this: &&Foo) -> void = default;
-	func constructor(this: &&Foo, other: Foo) -> void = default;
-	func destructor(this: &&Foo) -> void = default;
-	func =(this: &&Foo, other: Foo) -> void = default;
-	func ==(this: Foo, other: Foo) -> bool = default;
+	func constructor(this: &&Foo) => void = default;
+	func constructor(this: &&Foo, other: Foo) => void = default;
+	func destructor(this: &&Foo) => void = default;
+	func =(this: &&Foo, other: Foo) => void = default;
+	func ==(this: Foo, other: Foo) => bool = default;
 }
 
-func main() -> void {
+func main() => void {
 	var a: Foo;
 	assert(a.a == 0);
 	assert(a.b == false);

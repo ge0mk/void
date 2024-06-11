@@ -12,12 +12,12 @@ variant Value {
 	case Array: List!<Value>;
 	case Object: Map!<String, Value>;
 
-	func constructor(this: &&Value) -> void {
+	func constructor(this: &&Value) => void {
 		this.constructor!<0>();
 	}
 }
 
-func skipWhitespace(str: &String, index: &&uint) -> void {
+func skipWhitespace(str: &String, index: &&uint) => void {
 	while index < str.size() {
 		if !isSpace(str[index]) {
 			break;
@@ -26,7 +26,7 @@ func skipWhitespace(str: &String, index: &&uint) -> void {
 	}
 }
 
-func parse(str: &String, index: &&uint) -> Result!<Value> {
+func parse(str: &String, index: &&uint) => Result!<Value> {
 	skipWhitespace(&str, &&index);
 	match str[index] {
 		case '['b -> {
@@ -145,7 +145,7 @@ func parse(str: &String, index: &&uint) -> Result!<Value> {
 	}
 }
 
-func parse(str: String) -> Result!<Value> {
+func parse(str: String) => Result!<Value> {
 	var index = 0u;
 	const result = try parse(&str, &&index);
 	skipWhitespace(&str, &&index);
@@ -155,7 +155,7 @@ func parse(str: String) -> Result!<Value> {
 	return Ok(result);
 }
 
-func format(this: Value) -> String {
+func format(this: Value) => String {
 	match this {
 		case Null -> return "null";
 		case Boolean: val -> return format(val);

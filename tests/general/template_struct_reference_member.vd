@@ -4,7 +4,7 @@ template <T: type>
 struct Foo {
 	var x: T;
 
-	func constructor(this: &&Foo!<T>, val: T) -> void {
+	func constructor(this: &&Foo!<T>, val: T) => void {
 		comptime if referenceKindOf!<T>() == ReferenceKind::Var {
 			this.x := &&val;
 		} else if referenceKindOf!<T>() == ReferenceKind::Const {
@@ -14,11 +14,11 @@ struct Foo {
 		}
 	}
 
-	func constructor(this: &&Foo!<T>, other: Foo!<T>) -> void = default;
-	func destructor(this: &&Foo!<T>) -> void = default;
+	func constructor(this: &&Foo!<T>, other: Foo!<T>) => void = default;
+	func destructor(this: &&Foo!<T>) => void = default;
 }
 
-func main() -> int {
+func main() => int {
 	var a = 0;
 	var b = Foo!<&&int>(&&a);
 	return 0;

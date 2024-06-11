@@ -1,7 +1,7 @@
 import std/core;
 import std/string;
 
-func encode(str: String) -> String {
+func encode(str: String) => String {
 	const lut = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 	var padded = str;
@@ -31,7 +31,7 @@ func encode(str: String) -> String {
 	return result;
 }
 
-func generateDecodeLUT() -> Array!<uint, 256> {
+func generateDecodeLUT() => Array!<uint, 256> {
 	const encode_lut = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 	var result: Array!<uint, 256>;
 
@@ -42,7 +42,7 @@ func generateDecodeLUT() -> Array!<uint, 256> {
 	return result;
 }
 
-func decode(str: String) -> String {
+func decode(str: String) => String {
 	const lut = generateDecodeLUT();
 
 	var result = String(str.size() / 4 * 3, '\0'b);

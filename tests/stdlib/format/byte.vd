@@ -2,7 +2,7 @@ import std/core;
 import std/format;
 import std/string;
 
-func main() -> void {
+func main() => void {
 	assert(format('\0'b) == "0x00");
 	assert(format('A'b) == "0x41");
 	assert(format(0x03 as byte) == "0x03");

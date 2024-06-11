@@ -5,44 +5,44 @@ template <T: type>
 struct Box {
 	var data: ptr!<T, true>;
 
-	func constructor(this: &&Box!<T>, @[shallow] other: Box!<T>) -> void {
+	func constructor(this: &&Box!<T>, @[shallow] other: Box!<T>) => void {
 		this.data := malloc!<T>(1u);
 		assert(this.data != ptr!<T, true>::null(), Error::ENOMEM);
 		this.data[0u].constructor(other.data[0u]);
 	}
 
-	func constructor(this: &&Box!<T>, @[shallow] value: T) -> void {
+	func constructor(this: &&Box!<T>, @[shallow] value: T) => void {
 		this.data := malloc!<T>(1u);
 		assert(this.data != ptr!<T, true>::null(), Error::ENOMEM);
 		this.data[0u].constructor(value);
 	}
 
-	func destructor(this: &&Box!<T>) -> void {
+	func destructor(this: &&Box!<T>) => void {
 		this.data[0u].destructor();
 		free!<T>(this.data);
 	}
 
-	func =(this: &&Box!<T>, @[shallow] other: Box!<T>) -> void {
+	func =(this: &&Box!<T>, @[shallow] other: Box!<T>) => void {
 		this.data[0u] = other.data[0u];
 	}
 
-	func =(this: &&Box!<T>, @[shallow] value: T) -> void {
+	func =(this: &&Box!<T>, @[shallow] value: T) => void {
 		this.data[0u] = value;
 	}
 
-	func ==(@[shallow] this: Box!<T>, @[shallow] other: Box!<T>) -> bool {
+	func ==(@[shallow] this: Box!<T>, @[shallow] other: Box!<T>) => bool {
 		return this.data[0u] == other.data[0u];
 	}
 
-	func ==(@[shallow] this: Box!<T>, @[shallow] value: T) -> bool {
+	func ==(@[shallow] this: Box!<T>, @[shallow] value: T) => bool {
 		return this.data[0u] == value;
 	}
 
-	func unwrap(this: &Box!<T>) -> &T {
+	func unwrap(this: &Box!<T>) => &T {
 		return &this.data[0u];
 	}
 
-	func unwrap(this: &&Box!<T>) -> &&T {
+	func unwrap(this: &&Box!<T>) => &&T {
 		return &&this.data[0u];
 	}
 }

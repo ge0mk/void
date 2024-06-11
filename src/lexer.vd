@@ -115,11 +115,11 @@ enum TokenType: u8 {
 	case Unknown;
 	case EndOfFile;
 
-	func constructor(this: &&TokenType) -> void {
+	func constructor(this: &&TokenType) => void {
 		this.constructor(TokenType::Unknown);
 	}
 
-	func toString(this: TokenType) -> String {
+	func toString(this: TokenType) => String {
 		match this {
 			case Identifier -> return "<identifier>";
 			case CharLiteral -> return "<char literal>";
@@ -222,40 +222,40 @@ struct Token {
 	var data: uint;
 	var span: Span;
 
-	func constructor(this: &&Token, token: TokenType, span: Span) -> void {
+	func constructor(this: &&Token, token: TokenType, span: Span) => void {
 		this.data := token as uint;
 		this.span := span;
 	}
 
-	func constructor(this: &&Token, token: TokenType, data: uint, span: Span) -> void {
+	func constructor(this: &&Token, token: TokenType, data: uint, span: Span) => void {
 		this.data := token as uint | (data << 8);
 		this.span := span;
 	}
 
-	func constructor(this: &&Token, other: Token) -> void = default;
-	func destructor(this: &&Token) -> void = default;
+	func constructor(this: &&Token, other: Token) => void = default;
+	func destructor(this: &&Token) => void = default;
 
-	func =(this: &&Token, other: Token) -> void = default;
-	func ==(this: Token, other: Token) -> bool = default;
+	func =(this: &&Token, other: Token) => void = default;
+	func ==(this: Token, other: Token) => bool = default;
 
-	func type(this: &Token) -> TokenType {
+	func type(this: &Token) => TokenType {
 		return (this.data & 0xFF) as TokenType;
 	}
 
-	func data(this: &Token) -> uint {
+	func data(this: &Token) => uint {
 		return this.data >> 8;
 	}
 
-	func toString(this: &Token) -> String {
+	func toString(this: &Token) => String {
 		return this.type().toString();
 	}
 
-	func dump(this: &Token) -> String {
+	func dump(this: &Token) => String {
 		return "\e[32m" + this.type().toString() + "\e[0m - " + this.span.dump() + "\n";
 	}
 }
 
-func dump(tokens: &List!<Token>) -> String {
+func dump(tokens: &List!<Token>) => String {
 	var result = "";
 
 	for tok in tokens {
@@ -279,7 +279,7 @@ struct Lexer {
 	var line: u32;
 	var file_id: u16;
 
-	func constructor(this: &&Lexer, tokens: &&List!<Token>, strings: &&List!<String>, numbers: &&List!<ParsedNumber>, src: &String, file_id: u16) -> void {
+	func constructor(this: &&Lexer, tokens: &&List!<Token>, strings: &&List!<String>, numbers: &&List!<ParsedNumber>, src: &String, file_id: u16) => void {
 		this.src := src;
 		this.tokens := &&tokens;
 		this.strings := &&strings;
@@ -330,18 +330,18 @@ struct Lexer {
 		this.file_id := file_id;
 	}
 
-	func constructor(this: &&Lexer, other: Lexer) -> void = default;
-	func destructor(this: &&Lexer) -> void = default;
+	func constructor(this: &&Lexer, other: Lexer) => void = default;
+	func destructor(this: &&Lexer) => void = default;
 
-	func eof(this: &Lexer) -> bool {
+	func eof(this: &Lexer) => bool {
 		return this.index >= this.src.size();
 	}
 
-	func span(this: &Lexer, start: uint, end: uint) -> Span {
+	func span(this: &Lexer, start: uint, end: uint) => Span {
 		return Span(start, end, this.line, (start - this.line_start) as u16, this.file_id);
 	}
 
-	func skipWhitespaceAndComments(this: &&Lexer) -> void {
+	func skipWhitespaceAndComments(this: &&Lexer) => void {
 		while this.index < this.src.size() {
 			match this.src[this.index] {
 				case ' 'b | '\t'b | '\r'b -> this.index++;
@@ -368,7 +368,7 @@ struct Lexer {
 		}
 	}
 
-	func skipSinglelineComment(this: &&Lexer) -> void {
+	func skipSinglelineComment(this: &&Lexer) => void {
 		this.index += 2;
 
 		while this.index < this.src.size() {
@@ -380,7 +380,7 @@ struct Lexer {
 		}
 	}
 
-	func skipMultilineComment(this: &&Lexer) -> void {
+	func skipMultilineComment(this: &&Lexer) => void {
 		this.index += 2;
 
 		var comment_completed = false;
@@ -405,7 +405,7 @@ struct Lexer {
 		}
 	}
 
-	func next(this: &&Lexer) -> void {
+	func next(this: &&Lexer) => void {
 		this.skipWhitespaceAndComments();
 
 		if this.index >= this.src.size() {
@@ -482,7 +482,7 @@ struct Lexer {
 		}
 	}
 
-	func lexDot(this: &&Lexer) -> Token {
+	func lexDot(this: &&Lexer) => Token {
 		if this.src.at(this.index + 1) ?? '\0'b == '.'b {
 			this.index += 2;
 			return Token(TokenType::DoubleDot, this.span(this.index - 2, this.index));
@@ -492,7 +492,7 @@ struct Lexer {
 		}
 	}
 
-	func lexQuestionmark(this: &&Lexer) -> Token {
+	func lexQuestionmark(this: &&Lexer) => Token {
 		if this.src.at(this.index + 1) ?? '\0'b == '?'b {
 			if this.src.at(this.index + 2) ?? '\0'b == '='b {
 				this.index += 3;
@@ -507,7 +507,7 @@ struct Lexer {
 		}
 	}
 
-	func lexColon(this: &&Lexer) -> Token {
+	func lexColon(this: &&Lexer) => Token {
 		if this.src.at(this.index + 1) ?? '\0'b == ':'b {
 			this.index += 2;
 			return Token(TokenType::DoubleColon, this.span(this.index - 2, this.index));
@@ -520,7 +520,7 @@ struct Lexer {
 		}
 	}
 
-	func lexEqual(this: &&Lexer) -> Token {
+	func lexEqual(this: &&Lexer) => Token {
 		if this.src.at(this.index + 1) ?? '\0'b == '='b {
 			this.index += 2;
 			return Token(TokenType::Equal, this.span(this.index - 2, this.index));
@@ -533,7 +533,7 @@ struct Lexer {
 		}
 	}
 
-	func lexPlus(this: &&Lexer) -> Token {
+	func lexPlus(this: &&Lexer) => Token {
 		if this.src.at(this.index + 1) ?? '\0'b == '+'b {
 			this.index += 2;
 			return Token(TokenType::DoublePlus, this.span(this.index - 2, this.index));
@@ -546,7 +546,7 @@ struct Lexer {
 		}
 	}
 
-	func lexMinus(this: &&Lexer) -> Token {
+	func lexMinus(this: &&Lexer) => Token {
 		if this.src.at(this.index + 1) ?? '\0'b == '-'b {
 			this.index += 2;
 			return Token(TokenType::DoubleMinus, this.span(this.index - 2, this.index));
@@ -562,7 +562,7 @@ struct Lexer {
 		}
 	}
 
-	func lexAsterisk(this: &&Lexer) -> Token {
+	func lexAsterisk(this: &&Lexer) => Token {
 		if this.src.at(this.index + 1) ?? '\0'b == '='b {
 			this.index += 2;
 			return Token(TokenType::AsteriskAssign, this.span(this.index - 2, this.index));
@@ -572,7 +572,7 @@ struct Lexer {
 		}
 	}
 
-	func lexSlash(this: &&Lexer) -> Token {
+	func lexSlash(this: &&Lexer) => Token {
 		if this.src.at(this.index + 1) ?? '\0'b == '='b {
 			this.index += 2;
 			return Token(TokenType::SlashAssign, this.span(this.index - 2, this.index));
@@ -582,7 +582,7 @@ struct Lexer {
 		}
 	}
 
-	func lexPercent(this: &&Lexer) -> Token {
+	func lexPercent(this: &&Lexer) => Token {
 		if this.src.at(this.index + 1) ?? '\0'b == '='b {
 			this.index += 2;
 			return Token(TokenType::PercentAssign, this.span(this.index - 2, this.index));
@@ -592,7 +592,7 @@ struct Lexer {
 		}
 	}
 
-	func lexAmpersand(this: &&Lexer) -> Token {
+	func lexAmpersand(this: &&Lexer) => Token {
 		if this.src.at(this.index + 1) ?? '\0'b == '&'b {
 			this.index += 2;
 			return Token(TokenType::DoubleAmpersand, this.span(this.index - 2, this.index));
@@ -605,7 +605,7 @@ struct Lexer {
 		}
 	}
 
-	func lexPipe(this: &&Lexer) -> Token {
+	func lexPipe(this: &&Lexer) => Token {
 		if this.src.at(this.index + 1) ?? '\0'b == '|'b {
 			this.index += 2;
 			return Token(TokenType::DoublePipe, this.span(this.index - 2, this.index));
@@ -618,7 +618,7 @@ struct Lexer {
 		}
 	}
 
-	func lexCaret(this: &&Lexer) -> Token {
+	func lexCaret(this: &&Lexer) => Token {
 		if this.src.at(this.index + 1) ?? '\0'b == '='b {
 			this.index += 2;
 			return Token(TokenType::CaretAssign, this.span(this.index - 2, this.index));
@@ -628,7 +628,7 @@ struct Lexer {
 		}
 	}
 
-	func lexLess(this: &&Lexer) -> Token {
+	func lexLess(this: &&Lexer) => Token {
 		if this.src.at(this.index + 1) ?? '\0'b == '='b {
 			if this.src.at(this.index + 2) ?? '\0'b == '>'b {
 				this.index += 3;
@@ -643,7 +643,7 @@ struct Lexer {
 		}
 	}
 
-	func lexGreater(this: &&Lexer) -> Token {
+	func lexGreater(this: &&Lexer) => Token {
 		if this.src.at(this.index + 1) ?? '\0'b == '='b {
 			this.index += 2;
 			return Token(TokenType::GreaterEqual, this.span(this.index - 2, this.index));
@@ -653,7 +653,7 @@ struct Lexer {
 		}
 	}
 
-	func lexExclamationMark(this: &&Lexer) -> Token {
+	func lexExclamationMark(this: &&Lexer) => Token {
 		if this.src.at(this.index + 1) ?? '\0'b == '='b {
 			this.index += 2;
 			return Token(TokenType::NotEqual, this.span(this.index - 2, this.index));
@@ -663,7 +663,7 @@ struct Lexer {
 		}
 	}
 
-	func lexEscapedString(this: &&Lexer, end: byte) -> String {
+	func lexEscapedString(this: &&Lexer, end: byte) => String {
 		const start = this.index;
 		var result = "";
 
@@ -705,7 +705,7 @@ struct Lexer {
 		return result;
 	}
 
-	func lexPostfix(this: &&Lexer) -> String {
+	func lexPostfix(this: &&Lexer) => String {
 		const start = this.index;
 		while this.index < this.src.size() {
 			if !isWordChar(this.src[this.index]) {
@@ -717,7 +717,7 @@ struct Lexer {
 		return this.src.substring(start..this.index);
 	}
 
-	func lexCharLiteral(this: &&Lexer) -> void {
+	func lexCharLiteral(this: &&Lexer) => void {
 		const start = this.index;
 
 		this.index++; // skip '
@@ -735,7 +735,7 @@ struct Lexer {
 		}
 	}
 
-	func lexStringLiteral(this: &&Lexer) -> void {
+	func lexStringLiteral(this: &&Lexer) => void {
 		const start = this.index;
 
 		this.index++; // skip "
@@ -754,7 +754,7 @@ struct Lexer {
 		}
 	}
 
-	func lexNumber(this: &&Lexer) -> void {
+	func lexNumber(this: &&Lexer) => void {
 		const start = this.index;
 		const parsed_number = parseNumber(this.src, start);
 		assert(parsed_number.length != 0);
@@ -773,7 +773,7 @@ struct Lexer {
 		}
 	}
 
-	func lexName(this: &&Lexer) -> void {
+	func lexName(this: &&Lexer) => void {
 		const start = this.index;
 
 		while this.index < this.src.size() {
@@ -796,7 +796,7 @@ struct Lexer {
 		}
 	}
 
-	func isWordChar(char: byte) -> bool {
+	func isWordChar(char: byte) => bool {
 		return isAlpha(char) || isDigit(char) || char == '_'b || char > 127;
 	}
 }

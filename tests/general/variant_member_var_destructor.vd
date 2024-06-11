@@ -11,22 +11,22 @@ import std/io;
 struct Foo {
 	var id: int;
 
-	func constructor(this: &&Foo) -> void {
+	func constructor(this: &&Foo) => void {
 		this.id := 0;
 		println("+" + format(this.id));
 	}
 
-	func constructor(this: &&Foo, other: Foo) -> void {
+	func constructor(this: &&Foo, other: Foo) => void {
 		this.id := other.id + 1;
 		println("+" + format(this.id));
 	}
 
-	func destructor(this: &&Foo) -> void {
+	func destructor(this: &&Foo) => void {
 		println("-" + format(this.id));
 	}
 
-	func =(this: &&Foo, other: Foo) -> void = default;
-	func ==(this: Foo, other: Foo) -> bool = default;
+	func =(this: &&Foo, other: Foo) => void = default;
+	func ==(this: Foo, other: Foo) => bool = default;
 }
 
 variant Bar {
@@ -35,6 +35,6 @@ variant Bar {
 	case A;
 }
 
-func main() -> void {
+func main() => void {
 	var x = Bar::A(Foo());
 }

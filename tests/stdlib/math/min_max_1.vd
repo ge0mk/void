@@ -1,7 +1,7 @@
 import std/core;
 import std/math;
 
-func main() -> void {
+func main() => void {
 	assert(min!<int>(1, 2) == 1);
 	assert(min!<int>(2, 1) == 1);
 

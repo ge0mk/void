@@ -8,14 +8,14 @@ variant Foo {
 struct Bar {
 	var x: Foo;
 
-	func constructor(this: &&Bar) -> void {
+	func constructor(this: &&Bar) => void {
 		this.x := A(5);
 	}
 
-	func destructor(this: &&Bar) -> void = default;
+	func destructor(this: &&Bar) => void = default;
 }
 
-func main() -> void {
+func main() => void {
 	var y: Bar = ();
 	match &&y.x {
 		case A: &&z -> z = 10;

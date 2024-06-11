@@ -1,7 +1,7 @@
 import std/core;
 import std/string;
 
-func main() -> void {
+func main() => void {
 	var a = "abcbe";
 	a.replace('b'b, 'x'b)
 	assert(a == "axcxe");

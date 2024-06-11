@@ -71,7 +71,7 @@ enum Operator {
 
 	case Namespace;		// foo::bar
 
-	func isUnaryOperator(this: Operator) -> bool {
+	func isUnaryOperator(this: Operator) => bool {
 		match this {
 			case Increment
 			| Decrement
@@ -86,7 +86,7 @@ enum Operator {
 		}
 	}
 
-	func isBinaryOperator(this: Operator) -> bool {
+	func isBinaryOperator(this: Operator) => bool {
 		match this {
 			case Add | Sub
 			| Mul | Div | Mod
@@ -123,14 +123,14 @@ enum Operator {
 		}
 	}
 
-	func isTernaryOperator(this: Operator) -> bool {
+	func isTernaryOperator(this: Operator) => bool {
 		match this {
 			case InlineIf -> return true;
 			default -> return false;
 		}
 	}
 
-	func isAssignmentOperator(this: Operator) -> bool {
+	func isAssignmentOperator(this: Operator) => bool {
 		match this {
 			case Assign
 			| Initialize
@@ -149,7 +149,7 @@ enum Operator {
 		}
 	}
 
-	func withoutAssignment(this: Operator) -> Operator {
+	func withoutAssignment(this: Operator) => Operator {
 		match this {
 			case AddAssign -> return Add;
 			case SubAssign -> return Sub;
@@ -166,7 +166,7 @@ enum Operator {
 		}
 	}
 
-	func precedence(this: Operator) -> int {
+	func precedence(this: Operator) => int {
 		match this {
 			case Namespace -> return 19;
 			case MemberAccess -> return 18;
@@ -237,7 +237,7 @@ enum Operator {
 	}
 }
 
-func format(this: Operator) -> String {
+func format(this: Operator) => String {
 	match this {
 		case Add -> return "+";
 		case Sub -> return "-";

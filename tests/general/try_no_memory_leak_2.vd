@@ -6,26 +6,26 @@ import std/string;
 import std/io;
 
 struct Foo {
-	func constructor(this: &&Foo) -> void {
+	func constructor(this: &&Foo) => void {
 		println("+");
 	}
 
-	func destructor(this: &&Foo) -> void {
+	func destructor(this: &&Foo) => void {
 		println("-");
 	}
 }
 
-func foo() -> Result!<void, int> {
+func foo() => Result!<void, int> {
 	throw 0;
 }
 
-func bar() -> Result!<void, int> {
+func bar() => Result!<void, int> {
 	var x: Foo;
 	try foo();
 	return Ok;
 }
 
-func main() -> void {
+func main() => void {
 	const r = bar();
 	assert(r is Error);
 }

@@ -1,14 +1,14 @@
 import std/core;
 import std/string;
 
-func format(value: bool) -> String {
+func format(value: bool) => String {
 	match value {
 		case true -> return "true";
 		case false -> return "false";
 	}
 }
 
-func format(value: byte) -> String {
+func format(value: byte) => String {
 	const to_hex = [
 		'0'b, '1'b, '2'b, '3'b, '4'b, '5'b, '6'b, '7'b,
 		'8'b, '9'b, 'A'b, 'B'b, 'C'b, 'D'b, 'E'b, 'F'b
@@ -17,7 +17,7 @@ func format(value: byte) -> String {
 	return "0x" + to_hex[(value as uint >> 4) & 0xF] + to_hex[value as uint & 0xF]
 }
 
-func format(value: int) -> String {
+func format(value: int) => String {
 	if value < 0 {
 		return "-" + format(-value);
 	} else {
@@ -27,7 +27,7 @@ func format(value: int) -> String {
 	}
 }
 
-func format(value: uint) -> String {
+func format(value: uint) => String {
 	const tmp = value >= 10 ? format(value / 10) : "";
 	const digit = '0'u8 + (value % 10) as u8;
 	return tmp + digit as byte;

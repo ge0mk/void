@@ -1,6 +1,6 @@
 import std/core;
 
-func main() -> void {
+func main() => void {
 	const isize = sizeOf!<int>() as int * 8;
 
 	assert((1 & 2) == 0);

@@ -3,10 +3,10 @@
 
 import std/core;
 
-func foo() -> Result!<int> {
+func foo() => Result!<int> {
 	throw Error::EINVAL;
 }
 
-func main() -> void {
+func main() => void {
 	discard must foo();
 }

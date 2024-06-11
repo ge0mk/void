@@ -9,20 +9,20 @@ struct Set {
 	var size: uint;
 	var capacity: uint;
 
-	func constructor(this: &&Set!<T>) -> void {
+	func constructor(this: &&Set!<T>) => void {
 		this.data := ();
 		this.size := ();
 		this.capacity := ();
 	}
 
-	func constructor(this: &&Set!<T>, range: Range!<T, false>) -> void {
+	func constructor(this: &&Set!<T>, range: Range!<T, false>) => void {
 		this.data := ();
 		this.size := ();
 		this.capacity := ();
 		this.add(range);
 	}
 
-	func constructor(this: &&Set!<T>, other: Set!<T>) -> void {
+	func constructor(this: &&Set!<T>, other: Set!<T>) => void {
 		this.data := ptr!<T, true>::null();
 		this.size := 0;
 		this.capacity := 0;
@@ -34,7 +34,7 @@ struct Set {
 		this.size = other.size();
 	}
 
-	func =(this: &&Set!<T>, other: Set!<T>) -> void {
+	func =(this: &&Set!<T>, other: Set!<T>) => void {
 		this.clear();
 		this.grow(other.size());
 
@@ -44,7 +44,7 @@ struct Set {
 		this.size = other.size();
 	}
 
-	func destructor(this: &&Set!<T>) -> void {
+	func destructor(this: &&Set!<T>) => void {
 		this.clear();
 
 		if this.data != ptr!<T, true>::null() {
@@ -52,27 +52,27 @@ struct Set {
 		}
 	}
 
-	func size(this: &Set!<T>) -> uint {
+	func size(this: &Set!<T>) => uint {
 		return this.size;
 	}
 
-	func isEmpty(this: &Set!<T>) -> bool {
+	func isEmpty(this: &Set!<T>) => bool {
 		return this.size == 0u;
 	}
 
-	func data(this: &Set!<T>) -> ptr!<T, false> {
+	func data(this: &Set!<T>) => ptr!<T, false> {
 		return this.data as ptr!<T, false>;
 	}
 
-	func range(this: &Set!<T>) -> Range!<T, false> {
+	func range(this: &Set!<T>) => Range!<T, false> {
 		return Range!<T, false>(this.data as ptr!<T, false>, this.size);
 	}
 
-	func iterator(this: &Set!<T>) -> RangeIterator!<T, false> {
+	func iterator(this: &Set!<T>) => RangeIterator!<T, false> {
 		return RangeIterator!<T, false>(this.data as ptr!<T, false>, this.data as ptr!<T, false> + this.size);
 	}
 
-	func getInsertPos(this: &Set!<T>, @[shallow] value: T, exact_match: &&bool) -> uint {
+	func getInsertPos(this: &Set!<T>, @[shallow] value: T, exact_match: &&bool) => uint {
 		var min = 0u;
 		var max = this.size;
 		var index = this.size / 2u;
@@ -93,13 +93,13 @@ struct Set {
 		return index;
 	}
 
-	func contains(this: &Set!<T>, @[shallow] value: T) -> bool {
+	func contains(this: &Set!<T>, @[shallow] value: T) => bool {
 		var exact_match = false;
 		discard this.getInsertPos(value, &&exact_match);
 		return exact_match;
 	}
 
-	func add(this: &&Set!<T>, @[shallow] value: T) -> void {
+	func add(this: &&Set!<T>, @[shallow] value: T) => void {
 		var exact_match = false;
 		const index = this.getInsertPos(value, &&exact_match);
 		if exact_match {
@@ -114,19 +114,19 @@ struct Set {
 		this.size += 1u;
 	}
 
-	func add(this: &&Set!<T>, range: Range!<T, false>) -> void {
+	func add(this: &&Set!<T>, range: Range!<T, false>) => void {
 		for value in range {
 			this.add(value);
 		}
 	}
 
-	func add(this: &&Set!<T>, @[shallow] other: Set!<T>) -> void {
+	func add(this: &&Set!<T>, @[shallow] other: Set!<T>) => void {
 		for value in other {
 			this.add(value);
 		}
 	}
 
-	func remove(this: &&Set!<T>, @[shallow] value: T) -> void {
+	func remove(this: &&Set!<T>, @[shallow] value: T) => void {
 		var exact_match = false;
 		const index = this.getInsertPos(value, &&exact_match);
 		if !exact_match {
@@ -138,26 +138,26 @@ struct Set {
 		memmove!<T>(this.data + index, this.data as ptr!<T, false> + index + 1, this.size - index);
 	}
 
-	func remove(this: &&Set!<T>, range: Range!<T, false>) -> void {
+	func remove(this: &&Set!<T>, range: Range!<T, false>) => void {
 		for value in range {
 			this.remove(value);
 		}
 	}
 
-	func remove(this: &&Set!<T>, @[shallow] other: Set!<T>) -> void {
+	func remove(this: &&Set!<T>, @[shallow] other: Set!<T>) => void {
 		for value in other {
 			this.remove(value);
 		}
 	}
 
-	func clear(this: &&Set!<T>) -> void {
+	func clear(this: &&Set!<T>) => void {
 		for index in 0u..this.size() {
 			this.data[index].destructor();
 		}
 		this.size = 0u;
 	}
 
-	func ==(@[shallow] this: Set!<T>, @[shallow] other: Set!<T>) -> bool {
+	func ==(@[shallow] this: Set!<T>, @[shallow] other: Set!<T>) => bool {
 		if this.size() != other.size() {
 			return false;
 		}
@@ -172,7 +172,7 @@ struct Set {
 	}
 
 	// union
-	func |(lhs: Set!<T>, @[shallow] rhs: Set!<T>) -> Set!<T> {
+	func |(lhs: Set!<T>, @[shallow] rhs: Set!<T>) => Set!<T> {
 		for element in rhs {
 			lhs.add(element);
 		}
@@ -181,7 +181,7 @@ struct Set {
 	}
 
 	// intersection
-	func &(@[shallow] lhs: Set!<T>, @[shallow] rhs: Set!<T>) -> Set!<T> {
+	func &(@[shallow] lhs: Set!<T>, @[shallow] rhs: Set!<T>) => Set!<T> {
 		var result = Set!<T>();
 
 		for element in lhs {
@@ -194,7 +194,7 @@ struct Set {
 	}
 
 	// difference
-	func -(@[shallow] lhs: Set!<T>, @[shallow] rhs: Set!<T>) -> Set!<T> {
+	func -(@[shallow] lhs: Set!<T>, @[shallow] rhs: Set!<T>) => Set!<T> {
 		var result = Set!<T>();
 
 		for element in lhs {
@@ -207,7 +207,7 @@ struct Set {
 	}
 
 	// symetric difference
-	func ^(@[shallow] lhs: Set!<T>, @[shallow] rhs: Set!<T>) -> Set!<T> {
+	func ^(@[shallow] lhs: Set!<T>, @[shallow] rhs: Set!<T>) => Set!<T> {
 		var result = Set!<T>();
 
 		for element in lhs {
@@ -226,7 +226,7 @@ struct Set {
 	}
 
 	// ensure that memory for at least one more element is available
-	func grow(this: &&Set!<T>) -> void {
+	func grow(this: &&Set!<T>) => void {
 		if this.size < this.capacity {
 			return;
 		}
@@ -235,7 +235,7 @@ struct Set {
 	}
 
 	// ensure that memory for at least 'new_capacity' elements is available
-	func grow(this: &&Set!<T>, new_capacity: uint) -> void {
+	func grow(this: &&Set!<T>, new_capacity: uint) => void {
 		const old_capacity = this.capacity;
 		if old_capacity >= new_capacity {
 			return;

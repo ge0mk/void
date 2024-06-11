@@ -2,7 +2,7 @@
 
 import std/core;
 
-func main() -> int {
+func main() => int {
 	comptime if referenceKindOf!<int>() == ReferenceKind::Var {
 		some(obvious(garbage_code().that_should_not_typecheck()));
 	} else {

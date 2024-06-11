@@ -44,7 +44,7 @@ struct CGContext {
 	var continue_target: LLVMBasicBlockRef;
 	var yield_target: LLVMBasicBlockRef;
 
-	func constructor(this: &&CGContext, program: &&Program) -> void {
+	func constructor(this: &&CGContext, program: &&Program) => void {
 		this.program := &&program;
 		this.llvm_context := program.llvm_context;
 		this.llvm_module := program.llvm_module;
@@ -64,25 +64,25 @@ struct CGContext {
 		this.noundef_attribute_kind := LLVMGetEnumAttributeKindForName("noundef");
 	}
 
-	func destructor(this: &&CGContext) -> void = default;
+	func destructor(this: &&CGContext) => void = default;
 
-	func error(this: &CGContext, message: String, span: Span) -> void {
+	func error(this: &CGContext, message: String, span: Span) => void {
 		this.program.printError(CompilationError(message, ErrorType::Error, ErrorStage::CodeGenerator, span));
 	}
 
-	func info(this: &CGContext, message: String, span: Span) -> void {
+	func info(this: &CGContext, message: String, span: Span) => void {
 		this.program.printError(CompilationError(message, ErrorType::Info, ErrorStage::CodeGenerator, span));
 	}
 
-	func todo(this: &CGContext, message: String, span: Span) -> void {
+	func todo(this: &CGContext, message: String, span: Span) => void {
 		this.program.printError(CompilationError(message, ErrorType::Todo, ErrorStage::CodeGenerator, span));
 	}
 
-	func getASTNode(this: &&CGContext, id: uint) -> Node {
+	func getASTNode(this: &&CGContext, id: uint) => Node {
 		return this.current_function_decl.parent_namespace.file.nodes[id];
 	}
 
-	func getType(this: &&CGContext, type: Type) -> LLVMTypeRef {
+	func getType(this: &&CGContext, type: Type) => LLVMTypeRef {
 		if type.isUnknown() {
 			return this.void_type;
 		}
@@ -103,7 +103,7 @@ struct CGContext {
 		}
 	}
 
-	func getDIType(this: &&CGContext, type: Type) -> LLVMMetadataRef {
+	func getDIType(this: &&CGContext, type: Type) => LLVMMetadataRef {
 		if type.decl.llvm_di == LLVMMetadataRef::null() {
 			this.codegenTypeDI(type.decl);
 
@@ -119,7 +119,7 @@ struct CGContext {
 		}
 	}
 
-	func getFunction(this: &&CGContext, function: SharedHandle!<FunctionDecl>) -> LLVMValueRef {
+	func getFunction(this: &&CGContext, function: SharedHandle!<FunctionDecl>) => LLVMValueRef {
 		if function.llvm_func != LLVMValueRef::null() {
 			return function.llvm_func;
 		}
@@ -129,7 +129,7 @@ struct CGContext {
 		return function.llvm_func;
 	}
 
-	func getVariable(this: &&CGContext, variable: SharedHandle!<VarDecl>) -> LLVMValueRef {
+	func getVariable(this: &&CGContext, variable: SharedHandle!<VarDecl>) => LLVMValueRef {
 		if variable.is_global {
 			if !this.global_variables.contains(variable) {
 				const impl = LLVMAddGlobal(this.llvm_module, this.getType(variable.type), variable.name);
@@ -154,17 +154,17 @@ struct CGContext {
 		return impl;
 	}
 
-	func getDebugLocation(this: &&CGContext, span: Span) -> LLVMMetadataRef {
+	func getDebugLocation(this: &&CGContext, span: Span) => LLVMMetadataRef {
 		return LLVMDIBuilderCreateDebugLocation(this.llvm_context, span.line as uint + 1, span.column as uint + 1, this.current_di_scope);
 	}
 
-	func setCurrentDebugLocation(this: &&CGContext, span: Span) -> void {
+	func setCurrentDebugLocation(this: &&CGContext, span: Span) => void {
 		if this.program.options.generate_debug_info {
 			LLVMSetCurrentDebugLocation2(this.builder, this.getDebugLocation(span));
 		}
 	}
 
-	func getTypeName(this: &CGContext, type: SharedHandle!<TypeDecl>) -> String {
+	func getTypeName(this: &CGContext, type: SharedHandle!<TypeDecl>) => String {
 		var name = "";
 		match this.program.options.symbol_type {
 			case None -> {}
@@ -175,7 +175,7 @@ struct CGContext {
 		return name;
 	}
 
-	func codegenType(this: &&CGContext, type: SharedHandle!<TypeDecl>) -> void {
+	func codegenType(this: &&CGContext, type: SharedHandle!<TypeDecl>) => void {
 		if type.isIncompleteTemplate() || type.llvm_type != LLVMTypeRef::null() {
 			return;
 		}
@@ -264,7 +264,7 @@ struct CGContext {
 		}
 	}
 
-	func codegenTypeDI(this: &&CGContext, type: SharedHandle!<TypeDecl>) -> void {
+	func codegenTypeDI(this: &&CGContext, type: SharedHandle!<TypeDecl>) => void {
 		if type.isIncompleteTemplate() || type.llvm_di != LLVMMetadataRef::null() {
 			return;
 		}
@@ -471,7 +471,7 @@ struct CGContext {
 		}
 	}
 
-	func codegenFunctionDecl(this: &&CGContext, function: SharedHandle!<FunctionDecl>) -> void {
+	func codegenFunctionDecl(this: &&CGContext, function: SharedHandle!<FunctionDecl>) => void {
 		if function.isIncompleteTemplate() || function.llvm_func != LLVMValueRef::null() {
 			return;
 		}
@@ -534,7 +534,7 @@ struct CGContext {
 		}
 	}
 
-	func codegenFunctionBody(this: &&CGContext, function: SharedHandle!<FunctionDecl>) -> void {
+	func codegenFunctionBody(this: &&CGContext, function: SharedHandle!<FunctionDecl>) => void {
 		if function.isIncompleteTemplate() || function.has_errors {
 			return;
 		}
@@ -725,7 +725,7 @@ struct CGContext {
 		this.variables = prev_variables;
 	}
 
-	func codegenBuiltinFunction(this: &&CGContext, function: BuiltinFunction, parameter_types: List!<Type>, return_type: Type, signature_span: Span) -> void {
+	func codegenBuiltinFunction(this: &&CGContext, function: BuiltinFunction, parameter_types: List!<Type>, return_type: Type, signature_span: Span) => void {
 		const type = this.getType(function.base_type);
 		const decl = function.base_type.decl;
 
@@ -1346,7 +1346,7 @@ struct CGContext {
 		}
 	}
 
-	func codegenPrimitiveOp(this: &&CGContext, type: Type, op: PrimitiveOp, parameters: &List!<LLVMValueRef>) -> LLVMValueRef {
+	func codegenPrimitiveOp(this: &&CGContext, type: Type, op: PrimitiveOp, parameters: &List!<LLVMValueRef>) => LLVMValueRef {
 		const llvm_type = this.getType(type);
 		var lhs = parameters.at(0u) ?? LLVMGetPoison(llvm_type);
 		var rhs = parameters.at(1u) ?? LLVMGetPoison(llvm_type);
@@ -1650,7 +1650,7 @@ struct CGContext {
 		}
 	}
 
-	func codegenInlineBuiltinFunctionCall(this: &&CGContext, function: BuiltinFunction, parameter_types: &List!<Type>, return_type: Type, parameters: List!<LLVMValueRef>, return_var: LLVMValueRef) -> LLVMValueRef {
+	func codegenInlineBuiltinFunctionCall(this: &&CGContext, function: BuiltinFunction, parameter_types: &List!<Type>, return_type: Type, parameters: List!<LLVMValueRef>, return_var: LLVMValueRef) => LLVMValueRef {
 		match function {
 			case PrimitiveOp: op -> {
 				for i in 0u..parameters.size() {
@@ -2036,7 +2036,7 @@ struct CGContext {
 		}
 	}
 
-	func codegenValue(this: &&CGContext, value: &Value) -> LLVMValueRef {
+	func codegenValue(this: &&CGContext, value: &Value) => LLVMValueRef {
 		match value {
 			case Undefined | Void -> return LLVMValueRef();
 			case Integer: v -> return LLVMConstInt(this.getType(value.type), v, value.type.isSigned(false));
@@ -2050,7 +2050,7 @@ struct CGContext {
 		}
 	}
 
-	func codegenNode(this: &&CGContext, node: &Node) -> LLVMValueRef {
+	func codegenNode(this: &&CGContext, node: &Node) => LLVMValueRef {
 		var result = LLVMValueRef();
 		if node.type.isAlive() && node.type != this.program.void_type && node.type != this.program.never_type {
 			result = LLVMGetUndef(this.getType(node.type));
@@ -2294,7 +2294,7 @@ struct CGContext {
 		return result;
 	}
 
-	func codegenIfStmt(this: &&CGContext, if_stmt: &IfStmt, span: Span) -> void {
+	func codegenIfStmt(this: &&CGContext, if_stmt: &IfStmt, span: Span) => void {
 		const condition = this.codegenNode(this.getASTNode(if_stmt.condition));
 		for stmt in if_stmt.condition_cleanup {
 			discard this.codegenNode(this.getASTNode(stmt));
@@ -2333,7 +2333,7 @@ struct CGContext {
 		}
 	}
 
-	func codegenWhileStmt(this: &&CGContext, while_stmt: &WhileStmt, span: Span) -> void {
+	func codegenWhileStmt(this: &&CGContext, while_stmt: &WhileStmt, span: Span) => void {
 		const header_block = LLVMAppendBasicBlockInContext(this.llvm_context, this.current_function, "header");
 		const body_block = LLVMAppendBasicBlockInContext(this.llvm_context, this.current_function, "body");
 		const exit_block = LLVMAppendBasicBlockInContext(this.llvm_context, this.current_function, "exit");
@@ -2379,7 +2379,7 @@ struct CGContext {
 		this.break_target = prev_break_target;
 	}
 
-	func codegenForStmt(this: &&CGContext, for_stmt: &ForStmt, span: Span) -> void {
+	func codegenForStmt(this: &&CGContext, for_stmt: &ForStmt, span: Span) => void {
 		const header_block = LLVMAppendBasicBlockInContext(this.llvm_context, this.current_function, "header");
 		const body_block = LLVMAppendBasicBlockInContext(this.llvm_context, this.current_function, "body");
 		const latch_block = LLVMAppendBasicBlockInContext(this.llvm_context, this.current_function, "latch");
@@ -2478,7 +2478,7 @@ struct CGContext {
 		this.break_target = prev_break_target;
 	}
 
-	func codegenStringGlobal(this: &&CGContext, value: String) -> LLVMValueRef {
+	func codegenStringGlobal(this: &&CGContext, value: String) => LLVMValueRef {
 		match this.program.string_globals.get(value) {
 			case Some: result -> return result;
 			default -> {}
@@ -2496,12 +2496,12 @@ struct CGContext {
 		return result;
 	}
 
-	func codegenCall(this: &&CGContext, function: SharedHandle!<FunctionDecl>, parameters: &List!<LLVMValueRef>, return_kind: ReturnKind, span: Span) -> LLVMValueRef {
+	func codegenCall(this: &&CGContext, function: SharedHandle!<FunctionDecl>, parameters: &List!<LLVMValueRef>, return_kind: ReturnKind, span: Span) => LLVMValueRef {
 		assert(return_kind == ReturnKind::None || return_kind == ReturnKind::Value);
 		return this.codegenCall(function, parameters, return_kind, SharedHandle!<VarDecl>(), span);
 	}
 
-	func codegenCall(this: &&CGContext, function: SharedHandle!<FunctionDecl>, parameters: List!<LLVMValueRef>, return_kind: ReturnKind, result_var: SharedHandle!<VarDecl>, span: Span) -> LLVMValueRef {
+	func codegenCall(this: &&CGContext, function: SharedHandle!<FunctionDecl>, parameters: List!<LLVMValueRef>, return_kind: ReturnKind, result_var: SharedHandle!<VarDecl>, span: Span) => LLVMValueRef {
 		this.setCurrentDebugLocation(span);
 
 		if return_kind is Parameter {
@@ -2546,7 +2546,7 @@ struct CGContext {
 		}
 	}
 
-	func addCallSiteAttributes(this: &&CGContext, call: LLVMValueRef, parameter_types: List!<Type>, return_type: Type) -> void {
+	func addCallSiteAttributes(this: &&CGContext, call: LLVMValueRef, parameter_types: List!<Type>, return_type: Type) => void {
 		if !return_type.isPrimitive() {
 			const sret_attribute = LLVMCreateTypeAttribute(this.llvm_context, this.sret_attribute_kind, this.getType(return_type));
 			LLVMAddCallSiteAttribute(call, 1u as LLVMAttributeIndex, sret_attribute);
@@ -2563,7 +2563,7 @@ struct CGContext {
 		}
 	}
 
-	func codegenMatchExpr(this: &&CGContext, match_expr: &MatchExpr, span: Span) -> LLVMValueRef {
+	func codegenMatchExpr(this: &&CGContext, match_expr: &MatchExpr, span: Span) => LLVMValueRef {
 		const value_type = this.getASTNode(match_expr.value).type;
 		var value = this.codegenNode(this.getASTNode(match_expr.value));
 
@@ -2631,7 +2631,7 @@ struct CGContext {
 		return this.variables.get(match_expr.yield_var) ?? LLVMValueRef();
 	}
 
-	func codegenIntrinsicCall(this: &&CGContext, intrinsic_name: String, parameter_types: &List!<LLVMTypeRef>, parameters: &List!<LLVMValueRef>) -> LLVMValueRef {
+	func codegenIntrinsicCall(this: &&CGContext, intrinsic_name: String, parameter_types: &List!<LLVMTypeRef>, parameters: &List!<LLVMValueRef>) => LLVMValueRef {
 		const id = LLVMLookupIntrinsicID(intrinsic_name);
 		const type = LLVMIntrinsicGetType(this.llvm_context, id, parameter_types);
 		const declaration = LLVMGetIntrinsicDeclaration(this.llvm_module, id, parameter_types);
@@ -2639,14 +2639,14 @@ struct CGContext {
 		return LLVMBuildCall2(this.builder, type, declaration, parameters, "");
 	}
 
-	func codegenLifeTimeStart(this: &&CGContext, address: LLVMValueRef) -> void {
+	func codegenLifeTimeStart(this: &&CGContext, address: LLVMValueRef) => void {
 		var parameters: List!<LLVMValueRef>;
 		parameters.append(LLVMConstInt(this.int_type, 1, false));
 		parameters.append(address);
 		discard this.codegenIntrinsicCall("llvm.lifetime.start", List!<LLVMTypeRef>(1u, this.ptr_type), parameters);
 	}
 
-	func codegenLifeTimeEnd(this: &&CGContext, address: LLVMValueRef) -> void {
+	func codegenLifeTimeEnd(this: &&CGContext, address: LLVMValueRef) => void {
 		var parameters: List!<LLVMValueRef>;
 		parameters.append(LLVMConstInt(this.int_type, 1, false));
 		parameters.append(address);
