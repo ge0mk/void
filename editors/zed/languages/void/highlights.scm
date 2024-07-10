@@ -85,13 +85,13 @@
 (string_literal) @string.quoted.single
 (escape_sequence) @escape
 
-(number_literal (identifier) @type)
-(char_literal (identifier) @type)
-(string_literal (identifier) @type)
+(literal (identifier) @type)
 
 (call_expr callee: (name (identifier) @function))
 (member_access_expr rhs: (name (identifier) @property))
 (call_expr callee: (member_access_expr rhs: (name (identifier) @function)))
 (call_expr callee: (namespace_expr rhs: (name (identifier) @function)))
+
+(attribute name: _ @string)
 
 (comment) @comment
