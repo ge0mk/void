@@ -3945,6 +3945,22 @@ struct TCContext {
 
 				namespaces_to_search.add(matching_namespaces);
 			}
+
+			if name.segments[0u].template_parameters.isEmpty() {
+				for template_parameter in this.lookupTemplateParameter(name_segments[0u].name) {
+					const type = template_parameter as Type else {
+						continue;
+					}
+
+					var matching_namespaces: Set!<SharedHandle!<Namespace>>;
+					matching_namespaces.add(type.decl.linked_namespace);
+					for i in 1u..name_segments.size() {
+						matching_namespaces = this.lookupNamespace(matching_namespaces, name_segments[i], span);
+					}
+
+					namespaces_to_search.add(matching_namespaces);
+				}
+			}
 		}
 
 		return namespaces_to_search;

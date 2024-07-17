@@ -1,0 +1,23 @@
+import std/core;
+
+struct X {
+	func f() => int {
+		return 42;
+	}
+}
+
+struct Y {
+	func f() => int {
+		return 123;
+	}
+}
+
+template <T: type>
+func g() => int {
+	return T::f();
+}
+
+func main() => void {
+	assert(g!<X>() == 42);
+	assert(g!<Y>() == 123);
+}
