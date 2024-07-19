@@ -1,0 +1,19 @@
+import std/core;
+import std/list;
+
+func main() => void {
+	var x: List!<int>;
+	x.fill(3u, 10);
+	assert(x.size() == 3);
+	assert(x[0u] == 10);
+	assert(x[1u] == 10);
+	assert(x[2u] == 10);
+
+	x.fill(5u, 20);
+	assert(x.size() == 5);
+	assert(x[0u] == 10);
+	assert(x[1u] == 10);
+	assert(x[2u] == 10);
+	assert(x[3u] == 20);
+	assert(x[4u] == 20);
+}

@@ -149,6 +149,26 @@ struct List {
 		return Some(this.data[this.size - 1u]);
 	}
 
+	func front(this: &List!<T>) => &T {
+		assert(!this.isEmpty());
+		return &this.data[0u];
+	}
+
+	func front(this: &&List!<T>) => &&T {
+		assert(!this.isEmpty());
+		return &&this.data[0u];
+	}
+
+	func back(this: &List!<T>) => &T {
+		assert(!this.isEmpty());
+		return &this.data[this.size - 1u];
+	}
+
+	func back(this: &&List!<T>) => &&T {
+		assert(!this.isEmpty());
+		return &&this.data[this.size - 1u];
+	}
+
 	func range(this: &List!<T>) => Range!<T, false> {
 		return Range!<T, false>(this.data as ptr!<T, false>, this.size);
 	}
@@ -228,6 +248,18 @@ struct List {
 		this.append(values.range());
 	}
 
+	func fill(this: &&List!<T>, size: uint, @[shallow] value: T) => void {
+		if this.size() >= size {
+			return;
+		}
+
+		this.grow(size);
+		for i in this.size()..size {
+			this.data[i].constructor(value);
+		}
+		this.size = size;
+	}
+
 	func insert(this: &&List!<T>, index: uint, @[shallow] value: T) => void {
 		assert(index <= this.size(), Error::EBOUNDS);
 
@@ -276,8 +308,32 @@ struct List {
 		memmove!<T>(this.data + range.start, this.data as ptr!<T, false> + range.end, this.size - range.start);
 	}
 
+	func removeFirst(this: &&List!<T>) => void {
+		this.remove(0u);
+	}
+
+	func removeFirst(this: &&List!<T>, count: uint) => void {
+		this.remove(0u..count);
+	}
+
 	func removeLast(this: &&List!<T>) => void {
 		this.remove(this.size - 1);
+	}
+
+	func removeLast(this: &&List!<T>, count: uint) => void {
+		this.remove((this.size - count - 1)..this.size);
+	}
+
+	func takeFirst(this: &&List!<T>) => T {
+		const tmp = this.front();
+		this.removeFirst();
+		return tmp;
+	}
+
+	func takeLast(this: &&List!<T>) => T {
+		const tmp = this.back();
+		this.removeLast();
+		return tmp;
 	}
 
 	func clear(this: &&List!<T>) => void {
