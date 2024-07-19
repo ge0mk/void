@@ -338,6 +338,11 @@ variant Result {
 	}
 }
 
+enum Result {
+	case Ok;
+	case Error;
+}
+
 template <Type: type, Mutable: bool>
 namespace Range {
 	func at(this: &Range!<Type, Mutable>, index: uint) => Optional!<&Type> {
